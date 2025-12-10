@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <title>Physipro Moulage – v6.9.0 – FIREBASE AUTH</title>
+  <title>Physipro Moulage – v6.9.1 – FIREBASE AUTH</title>
   <!-- Firebase SDK - Chargement avec fallback -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -8173,7 +8173,7 @@ function getDeptFromRaison(raison){
   }, true);
 })();
 
-console.log("✅ PhysiPro v6.9.0 - Dates département éditables + GitHub Ready");
+console.log("✅ PhysiPro v6.9.1 - Dates département éditables + GitHub Ready");
 // v3.7.0 - Zone notes maximisée, clic employé actif arrête clignotement sans menu, badge durée plus petit
 // v3.7.0+ - Système de recherche activé
 // v3.7.1 - Système de log des suppressions avec export CSV et historique complet
@@ -8270,71 +8270,46 @@ console.log("✅ PhysiPro v6.9.0 - Dates département éditables + GitHub Ready"
         return;
       }
 
-      // Nettoyer l'URL (enlever les paramètres après ?)
-      let cleanUrl = url.split("?")[0];
+      // ========================================
+      // CONVERSION SHAREPOINT / ONEDRIVE SIMPLIFIÉE
+      // Méthode: ajouter ?download=1 au lien
+      // ========================================
+      try {
+        const originalUrl = url.trim();
+        const u = new URL(originalUrl);
 
-      // Extraire le type et le chemin
-      // Format: /:i:/ pour image, /:f:/ pour dossier
-      let pathMatch = cleanUrl.match(/:([if]):\/[^\/]+(.*)$/i);
-      if (!pathMatch) {
-        console.warn("Format SharePoint non reconnu, utilisation du lien original");
-        if(callback) callback([url]);
-        return;
-      }
-
-      let itemType = pathMatch[1]; // 'i' pour image, 'f' pour folder
-      let itemPath = pathMatch[2]; // Le chemin du fichier/dossier
-      let origin = url.split("/").slice(0, 3).join("/"); // https://xxx.sharepoint.com
-      let apiBase = origin + "/_api/v2.0";
-
-      // Si c'est une image unique
-      if (itemType === "i") {
-        // Pour les images SharePoint, on convertit l'URL de prévisualisation
-        // en URL de téléchargement direct compatible avec un <img>.
-        const clean = cleanUrl; // déjà sans paramètres
-        const origin = clean.split("/").slice(0, 3).join("/"); // https://xxx.sharepoint.com
-        const direct = origin + "/_layouts/15/download.aspx?SourceUrl=" + encodeURIComponent(clean);
-        console.log("📸 Lien SharePoint image converti pour viewer:", direct);
-        if (callback) callback([direct]);
-        return;
-      }
-
-      // Si c'est un dossier, récupérer toutes les images
-      
-if (itemType === "f") {
-        let apiUrl = apiBase + "/drive/root:" + itemPath + ":/children";
-
-        try {
-          let response = await fetch(apiUrl, { 
-            headers: { "accept": "application/json" },
-            credentials: 'include'
-          });
-          
-          if(!response.ok){
-            console.warn("Erreur API SharePoint:", response.status);
-            if(callback) callback([url]);
-            return;
-          }
-          
-          let data = await response.json();
-          let images = [];
-
-          if (data.value) {
-            data.value.forEach(item => {
-              if (item["@microsoft.graph.downloadUrl"]) {
-                images.push(item["@microsoft.graph.downloadUrl"]);
-              }
-            });
-          }
-
-          console.log("📁 Dossier SharePoint - " + images.length + " images trouvées");
-          if(callback) callback(images.length > 0 ? images : [url]);
+        // Vérifier si c'est un lien de type :i: (image) ou :f: (dossier)
+        const isImage = u.pathname.includes("/:i:/");
+        const isFolder = u.pathname.includes("/:f:/");
+        
+        if (!isImage && !isFolder) {
+          // Format non reconnu, utiliser tel quel
+          console.warn("Format SharePoint non reconnu, utilisation du lien original");
+          if (callback) callback([originalUrl]);
           return;
-
-        } catch (err) {
-          console.error("Erreur lors de la récupération du dossier SharePoint:", err);
-          if(callback) callback([url]);
         }
+
+        if (isImage) {
+          // Pour une image unique : ajouter download=1 pour obtenir un flux direct
+          const params = u.searchParams;
+          if (!params.has("download")) {
+            params.set("download", "1");
+          }
+          const direct = u.toString();
+          console.log("📸 Lien SharePoint image (avec download=1):", direct);
+          if (callback) callback([direct]);
+          return;
+        } else {
+          // Pour un dossier SharePoint (:f:/), on renvoie le lien original
+          // Le bouton "Ouvrir dans un nouvel onglet" permettra de naviguer
+          console.log("📁 Lien dossier SharePoint utilisé tel quel:", originalUrl);
+          if (callback) callback([originalUrl]);
+          return;
+        }
+      } catch (errShare) {
+        console.error("Erreur conversion SharePoint/OneDrive:", errShare);
+        if (callback) callback([url]);
+        return;
       }
     } catch(e) {
       console.error("Erreur convertLinkPro:", e);
@@ -8347,18 +8322,19 @@ if (itemType === "f") {
     if(!url) return url;
     url = url.trim();
     
-    // Pour SharePoint/OneDrive, construire le lien API direct
+    // Pour SharePoint/OneDrive, ajouter download=1
     if(url.includes("sharepoint.com") || url.includes("onedrive") || url.includes("1drv.ms")){
-      let cleanUrl = url.split("?")[0];
-      let pathMatch = cleanUrl.match(/:([if]):\/[^\/]+(.*)$/i);
-      
-      if(pathMatch && pathMatch[1] === "i"){
-        let itemPath = pathMatch[2];
-        let origin = url.split("/").slice(0, 3).join("/");
-        return origin + "/_api/v2.0/drive/root:" + itemPath + ":/content";
+      try {
+        const u = new URL(url);
+        if (u.pathname.includes("/:i:/")) {
+          if (!u.searchParams.has("download")) {
+            u.searchParams.set("download", "1");
+          }
+          return u.toString();
+        }
+      } catch(e) {
+        console.error("Erreur convertToDirectLink:", e);
       }
-      
-      // Pour les dossiers ou liens non reconnus, garder l'original
       return url;
     }
     
@@ -9297,7 +9273,7 @@ if (itemType === "f") {
   console.log("✅ Representante notification system activated");
 })();
 
-console.log("✅ PhysiPro v6.9.0 - VERSION GITHUB PAGES");
+console.log("✅ PhysiPro v6.9.1 - VERSION GITHUB PAGES");
 
 </script>
 
