@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <title>Physipro Moulage – v6.9.1 – FIREBASE AUTH</title>
+  <title>Physipro Moulage – v6.9.3 – FIREBASE AUTH</title>
   <!-- Firebase SDK - Chargement avec fallback -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -980,6 +980,22 @@
 }
 .photo-viewer-image{
   cursor:pointer;
+}
+/* Iframe pour SharePoint */
+.photo-viewer-iframe{
+  max-width:90%;
+  max-height:70vh;
+  width:800px;
+  height:600px;
+  border:none;
+  border-radius:8px;
+  background:#1a1a2e;
+}
+.photo-viewer-iframe.hidden{
+  display:none;
+}
+.photo-viewer-image.hidden{
+  display:none;
 }
 /* ===== ÉCRAN DE CONNEXION ===== */
 .login-overlay{
@@ -3403,7 +3419,10 @@ html {
     <button class="photo-viewer-close" id="photoViewerClose" aria-label="Fermer">×</button>
     <div class="photo-viewer-main">
       <button class="photo-viewer-nav photo-viewer-prev" id="photoViewerPrev">‹</button>
+      <!-- Image standard (pour Google Drive, Imgur, etc.) -->
       <img id="photoViewerImage" class="photo-viewer-image" src="" alt="Photo du moulage" title="Cliquez pour ouvrir dans un nouvel onglet">
+      <!-- Iframe pour SharePoint -->
+      <iframe id="photoViewerIframe" class="photo-viewer-iframe hidden" src="" title="Photo SharePoint"></iframe>
       <button class="photo-viewer-nav photo-viewer-next" id="photoViewerNext">›</button>
     </div>
     <div class="photo-viewer-thumbs" id="photoViewerThumbs"></div>
@@ -8173,7 +8192,7 @@ function getDeptFromRaison(raison){
   }, true);
 })();
 
-console.log("✅ PhysiPro v6.9.1 - Dates département éditables + GitHub Ready");
+console.log("✅ PhysiPro v6.9.3 - SharePoint API Shares - Images directes");
 // v3.7.0 - Zone notes maximisée, clic employé actif arrête clignotement sans menu, badge durée plus petit
 // v3.7.0+ - Système de recherche activé
 // v3.7.1 - Système de log des suppressions avec export CSV et historique complet
@@ -8200,6 +8219,7 @@ console.log("✅ PhysiPro v6.9.1 - Dates département éditables + GitHub Ready"
   const viewerOverlay = document.getElementById("photoViewerOverlay");
   const viewerClose = document.getElementById("photoViewerClose");
   const viewerImage = document.getElementById("photoViewerImage");
+  const viewerIframe = document.getElementById("photoViewerIframe");
   const viewerThumbs = document.getElementById("photoViewerThumbs");
   const viewerPrev = document.getElementById("photoViewerPrev");
   const viewerNext = document.getElementById("photoViewerNext");
@@ -8271,46 +8291,32 @@ console.log("✅ PhysiPro v6.9.1 - Dates département éditables + GitHub Ready"
       }
 
       // ========================================
-      // CONVERSION SHAREPOINT / ONEDRIVE SIMPLIFIÉE
-      // Méthode: ajouter ?download=1 au lien
+      // SHAREPOINT: Utiliser l'API Shares avec base64
+      // Cette méthode fonctionne pour les liens publics !
       // ========================================
       try {
-        const originalUrl = url.trim();
-        const u = new URL(originalUrl);
-
-        // Vérifier si c'est un lien de type :i: (image) ou :f: (dossier)
-        const isImage = u.pathname.includes("/:i:/");
-        const isFolder = u.pathname.includes("/:f:/");
+        // Encoder le lien en base64url
+        const base64 = btoa(url)
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '');
         
-        if (!isImage && !isFolder) {
-          // Format non reconnu, utiliser tel quel
-          console.warn("Format SharePoint non reconnu, utilisation du lien original");
-          if (callback) callback([originalUrl]);
-          return;
-        }
-
-        if (isImage) {
-          // Pour une image unique : ajouter download=1 pour obtenir un flux direct
-          const params = u.searchParams;
-          if (!params.has("download")) {
-            params.set("download", "1");
-          }
-          const direct = u.toString();
-          console.log("📸 Lien SharePoint image (avec download=1):", direct);
-          if (callback) callback([direct]);
-          return;
-        } else {
-          // Pour un dossier SharePoint (:f:/), on renvoie le lien original
-          // Le bouton "Ouvrir dans un nouvel onglet" permettra de naviguer
-          console.log("📁 Lien dossier SharePoint utilisé tel quel:", originalUrl);
-          if (callback) callback([originalUrl]);
-          return;
-        }
-      } catch (errShare) {
-        console.error("Erreur conversion SharePoint/OneDrive:", errShare);
+        // Extraire l'origine du lien SharePoint
+        const urlObj = new URL(url);
+        const origin = urlObj.origin; // https://physipro-my.sharepoint.com
+        
+        // Construire le lien API direct
+        const directUrl = `${origin}/_api/v2.0/shares/u!${base64}/root/content`;
+        
+        console.log("📸 Lien SharePoint converti via API Shares:", directUrl);
+        if (callback) callback([directUrl]);
+        return;
+      } catch(e) {
+        console.error("Erreur conversion SharePoint:", e);
         if (callback) callback([url]);
         return;
       }
+      
     } catch(e) {
       console.error("Erreur convertLinkPro:", e);
       if(callback) callback([url]);
@@ -8322,20 +8328,25 @@ console.log("✅ PhysiPro v6.9.1 - Dates département éditables + GitHub Ready"
     if(!url) return url;
     url = url.trim();
     
-    // Pour SharePoint/OneDrive, ajouter download=1
+    // Pour SharePoint/OneDrive, utiliser l'API Shares avec base64
     if(url.includes("sharepoint.com") || url.includes("onedrive") || url.includes("1drv.ms")){
       try {
-        const u = new URL(url);
-        if (u.pathname.includes("/:i:/")) {
-          if (!u.searchParams.has("download")) {
-            u.searchParams.set("download", "1");
-          }
-          return u.toString();
-        }
+        // Encoder le lien en base64url
+        const base64 = btoa(url)
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '');
+        
+        // Extraire l'origine
+        const urlObj = new URL(url);
+        const origin = urlObj.origin;
+        
+        // Retourner le lien API direct
+        return `${origin}/_api/v2.0/shares/u!${base64}/root/content`;
       } catch(e) {
-        console.error("Erreur convertToDirectLink:", e);
+        console.error("Erreur convertToDirectLink SharePoint:", e);
+        return url;
       }
-      return url;
     }
     
     // Google Drive
@@ -8575,7 +8586,16 @@ console.log("✅ PhysiPro v6.9.1 - Dates département éditables + GitHub Ready"
       return;
     }
     const url = currentViewerPhotos[currentViewerIndex];
+    
+    // Utiliser l'image normale (les liens sont déjà convertis)
+    viewerImage.classList.remove("hidden");
     viewerImage.src = url;
+    if(viewerIframe){
+      viewerIframe.classList.add("hidden");
+      viewerIframe.src = "";
+    }
+    
+    console.log("📸 Affichage image:", url);
     
     // Compteur
     if(viewerCounter){
@@ -8588,6 +8608,7 @@ console.log("✅ PhysiPro v6.9.1 - Dates département éditables + GitHub Ready"
       const wrap = document.createElement("div");
       wrap.className = "photo-viewer-thumb" + (idx === currentViewerIndex ? " active" : "");
       wrap.dataset.index = String(idx);
+      
       const img = document.createElement("img");
       img.src = u;
       img.onerror = function(){ this.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='56'%3E%3Crect fill='%23333' width='80' height='56'/%3E%3Ctext x='40' y='32' text-anchor='middle' fill='%23666' font-size='10'%3EErreur%3C/text%3E%3C/svg%3E"; };
@@ -8629,6 +8650,11 @@ console.log("✅ PhysiPro v6.9.1 - Dates département éditables + GitHub Ready"
     currentViewerPhotos = [];
     currentViewerIndex = 0;
     viewerImage.src = "";
+    viewerImage.classList.remove("hidden");
+    if(viewerIframe){
+      viewerIframe.src = "";
+      viewerIframe.classList.add("hidden");
+    }
     viewerThumbs.innerHTML = "";
   }
 
@@ -9273,7 +9299,7 @@ console.log("✅ PhysiPro v6.9.1 - Dates département éditables + GitHub Ready"
   console.log("✅ Representante notification system activated");
 })();
 
-console.log("✅ PhysiPro v6.9.1 - VERSION GITHUB PAGES");
+console.log("✅ PhysiPro v6.9.3 - VERSION GITHUB PAGES");
 
 </script>
 
