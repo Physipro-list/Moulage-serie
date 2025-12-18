@@ -12344,6 +12344,13 @@ function loginUserSuccess(userInfo, email) {
   if (userInfo.role === 'admin') {
     performAutoBackup(userInfo.name);
   }
+  
+  // Initialiser l'interface mobile après connexion (avec délai pour laisser les données charger)
+  setTimeout(() => {
+    if (typeof initMobileAfterLogin === 'function') {
+      initMobileAfterLogin();
+    }
+  }, 2000);
 }
 
 // Générer le badge de rôle HTML
@@ -21591,6 +21598,17 @@ let mobileSwipeCurrentPage = 1; // 0=Notes, 1=Info, 2=Suivi
 function initMobileInterface() {
   if (!isMobileDevice()) return;
   
+  // NE PAS afficher l'interface mobile tant que l'utilisateur n'est pas connecté
+  // L'interface sera initialisée après le login via initMobileAfterLogin()
+  console.log('📱 Mobile détecté, en attente de connexion...');
+}
+
+// Fonction appelée APRÈS la connexion réussie
+function initMobileAfterLogin() {
+  if (!isMobileDevice()) return;
+  
+  console.log('📱 Connexion réussie, initialisation mobile...');
+  
   // Créer l'overlay mobile s'il n'existe pas
   if (!document.getElementById('mobileHomeOverlay')) {
     createMobileHomeHTML();
@@ -21599,8 +21617,23 @@ function initMobileInterface() {
   // Afficher l'écran d'accueil mobile
   showMobileHome();
   
-  // Mettre à jour le compteur de moulages
-  updateMobileDataCount();
+  // Mettre à jour le compteur plusieurs fois pour s'assurer que les données sont chargées
+  let checkCount = 0;
+  const checkInterval = setInterval(() => {
+    updateMobileDataCount();
+    checkCount++;
+    const dataCount = Object.keys(cardsData).length;
+    console.log(`📱 Vérification ${checkCount}: ${dataCount} moulages`);
+    if (checkCount >= 10 || dataCount > 0) {
+      clearInterval(checkInterval);
+      if (dataCount > 0) {
+        console.log('📱 Données chargées avec succès!');
+      }
+    }
+  }, 1000);
+  
+  // Configurer le listener Firebase
+  setupMobileFirebaseListener();
 }
 
 // Variable pour suivre si les données sont chargées
@@ -22222,27 +22255,17 @@ function updateMobileDots(pageIndex) {
 
 // Initialiser l'interface mobile au chargement de la page
 document.addEventListener('DOMContentLoaded', () => {
-  // Attendre que les données soient chargées
-  setTimeout(() => {
-    initMobileInterface();
-    // Configurer le listener Firebase pour mettre à jour le compteur
-    setupMobileFirebaseListener();
-    // Mettre à jour le compteur toutes les 2 secondes pendant les 10 premières secondes
-    let checkCount = 0;
-    const checkInterval = setInterval(() => {
-      updateMobileDataCount();
-      checkCount++;
-      if (checkCount >= 5 || Object.keys(cardsData).length > 0) {
-        clearInterval(checkInterval);
-      }
-    }, 2000);
-  }, 1500);
+  // L'interface mobile sera initialisée après la connexion via initMobileAfterLogin()
+  // On vérifie juste si on est sur mobile pour le log
+  if (isMobileDevice()) {
+    console.log('📱 Appareil mobile détecté - en attente de connexion...');
+  }
 });
 
-// Réinitialiser si la taille change (rotation écran)
+// Réinitialiser si la taille change (rotation écran) - seulement si connecté
 window.addEventListener('resize', () => {
-  if (isMobileDevice() && !document.getElementById('mobileHomeOverlay')) {
-    initMobileInterface();
+  if (isMobileDevice() && currentUser && !document.getElementById('mobileHomeOverlay')) {
+    initMobileAfterLogin();
   }
 });
 </script>
