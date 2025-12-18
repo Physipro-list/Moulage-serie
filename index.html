@@ -10271,12 +10271,12 @@ input.cmd-pill-input {
   font-weight: 600;
 }
 
-/* Container des pages swipe */
+/* Container des pages swipe - PLEIN ÉCRAN */
 .mobile-fiche-swipe-container {
   flex: 1;
-  display: flex;
-  overflow: hidden;
   position: relative;
+  overflow: hidden;
+  width: 100%;
 }
 
 .mobile-fiche-swipe-wrapper {
@@ -10293,6 +10293,7 @@ input.cmd-pill-input {
 
 .mobile-fiche-page {
   width: 33.333%;
+  min-width: 33.333%;
   height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -10301,6 +10302,47 @@ input.cmd-pill-input {
   display: flex;
   flex-direction: column;
   background: #ffffff;
+  flex-shrink: 0;
+}
+
+/* Flèches de navigation */
+.mobile-nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 12px 8px;
+  background: rgba(59, 130, 246, 0.95);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  white-space: nowrap;
+}
+
+.mobile-nav-arrow:active {
+  transform: translateY(-50%) scale(0.95);
+  background: rgba(37, 99, 235, 1);
+}
+
+.mobile-nav-arrow.left {
+  left: 8px;
+  border-radius: 8px 20px 20px 8px;
+}
+
+.mobile-nav-arrow.right {
+  right: 8px;
+  border-radius: 20px 8px 8px 20px;
+}
+
+.mobile-nav-arrow.hidden {
+  display: none;
 }
 
 /* Page Notes (gauche) - PLEINE PAGE BLANCHE */
@@ -12461,12 +12503,10 @@ function loginUserSuccess(userInfo, email) {
     performAutoBackup(userInfo.name);
   }
   
-  // Initialiser l'interface mobile après connexion (avec délai pour laisser les données charger)
-  setTimeout(() => {
-    if (typeof initMobileAfterLogin === 'function') {
-      initMobileAfterLogin();
-    }
-  }, 2000);
+  // Initialiser l'interface mobile après connexion (immédiatement pour cacher le board)
+  if (typeof initMobileAfterLogin === 'function') {
+    initMobileAfterLogin();
+  }
 }
 
 // Générer le badge de rôle HTML
@@ -21725,6 +21765,14 @@ function initMobileAfterLogin() {
   
   console.log('📱 Connexion réussie, initialisation mobile...');
   
+  // Cacher immédiatement le board et header sur mobile
+  const mainBoard = document.getElementById('mainBoard');
+  const header = document.querySelector('.header');
+  const robotView = document.getElementById('robotTableView');
+  if (mainBoard) mainBoard.style.display = 'none';
+  if (header) header.style.display = 'none';
+  if (robotView) robotView.style.display = 'none';
+  
   // Créer l'overlay mobile s'il n'existe pas
   if (!document.getElementById('mobileHomeOverlay')) {
     createMobileHomeHTML();
@@ -21854,6 +21902,10 @@ function createMobileHomeHTML() {
       </div>
       
       <div class="mobile-fiche-swipe-container" id="mobileFicheSwipeContainer">
+        <!-- Flèches de navigation -->
+        <button class="mobile-nav-arrow left hidden" id="mobileNavLeft" onclick="goToMobilePage(mobileSwipeCurrentPage - 1)">‹</button>
+        <button class="mobile-nav-arrow right" id="mobileNavRight" onclick="goToMobilePage(mobileSwipeCurrentPage + 1)">›</button>
+        
         <div class="mobile-fiche-swipe-wrapper" id="mobileFicheSwipeWrapper">
           
           <!-- PAGE NOTES (gauche - index 0) -->
@@ -22100,6 +22152,7 @@ function openMobileFiche(cardId) {
   // Positionner sur la page Info (centre)
   updateMobileSwipePosition(1, false);
   updateMobileDots(1);
+  updateMobileNavArrows(1);
   
   // Masquer le hint après 3 secondes
   setTimeout(() => {
@@ -22375,9 +22428,14 @@ function handleSwipeEnd(e) {
 }
 
 function goToMobilePage(pageIndex) {
+  // Limiter entre 0 et 2
+  if (pageIndex < 0) pageIndex = 0;
+  if (pageIndex > 2) pageIndex = 2;
+  
   mobileSwipeCurrentPage = pageIndex;
   updateMobileSwipePosition(pageIndex, true);
   updateMobileDots(pageIndex);
+  updateMobileNavArrows(pageIndex);
 }
 
 function updateMobileSwipePosition(pageIndex, animate) {
@@ -22395,12 +22453,31 @@ function updateMobileDots(pageIndex) {
   });
 }
 
+function updateMobileNavArrows(pageIndex) {
+  const leftArrow = document.getElementById('mobileNavLeft');
+  const rightArrow = document.getElementById('mobileNavRight');
+  
+  if (leftArrow) {
+    leftArrow.classList.toggle('hidden', pageIndex === 0);
+    leftArrow.innerHTML = pageIndex === 1 ? '‹ Notes' : '‹ Info';
+  }
+  if (rightArrow) {
+    rightArrow.classList.toggle('hidden', pageIndex === 2);
+    rightArrow.innerHTML = pageIndex === 1 ? 'Suivi ›' : 'Info ›';
+  }
+}
+
 // Initialiser l'interface mobile au chargement de la page
 document.addEventListener('DOMContentLoaded', () => {
   // L'interface mobile sera initialisée après la connexion via initMobileAfterLogin()
-  // On vérifie juste si on est sur mobile pour le log
+  // On vérifie juste si on est sur mobile pour le log et cacher le board
   if (isMobileDevice()) {
     console.log('📱 Appareil mobile détecté - en attente de connexion...');
+    // Cacher le board immédiatement sur mobile
+    const mainBoard = document.getElementById('mainBoard');
+    const header = document.querySelector('.header');
+    if (mainBoard) mainBoard.style.display = 'none';
+    if (header) header.style.display = 'none';
   }
 });
 
