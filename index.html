@@ -6952,8 +6952,14 @@ function handleImportMoulageJson(event) {
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
-      const data = JSON.parse(e.target.result);
+      const rawData = JSON.parse(e.target.result);
+      
+      // Déterminer si c'est un tableau ou un objet simple
+      const moulages = Array.isArray(rawData) ? rawData : [rawData];
+      
       let newValuesAdded = [];
+      let createdCount = 0;
+      let createdNames = [];
       
       // Ajouter valeur à une liste si nouvelle
       function addToListIfNew(listKey, value) {
@@ -6975,38 +6981,43 @@ function handleImportMoulageJson(event) {
         return false;
       }
       
-      // Ajouter les nouvelles valeurs aux listes
-      if (data.client) addToListIfNew('moulageClients', data.client);
-      if (data.representante || data.representant) addToListIfNew('representantes', data.representante || data.representant);
-      if (data.intervenant) addToListIfNew('intervenants', data.intervenant);
-      if (data.region) addToListIfNew('regions', data.region);
+      // Traiter chaque moulage
+      moulages.forEach(data => {
+        // Ajouter les nouvelles valeurs aux listes
+        if (data.client) addToListIfNew('moulageClients', data.client);
+        if (data.representante || data.representant) addToListIfNew('representantes', data.representante || data.representant);
+        if (data.intervenant) addToListIfNew('intervenants', data.intervenant);
+        if (data.region) addToListIfNew('regions', data.region);
+        
+        // Créer la carte
+        const name = data.name || data.nom || 'Sans nom';
+        const order = data.order || data.commande || data.numeroCommande || '000000';
+        const region = data.region || 'Quebec';
+        
+        const cardId = createCard(name, order, region, 0);
+        
+        // Ajouter toutes les données
+        if (cardsData[cardId]) {
+          cardsData[cardId].client = data.client || '';
+          cardsData[cardId].representant = data.representante || data.representant || '';
+          cardsData[cardId].intervenant = data.intervenant || '';
+          cardsData[cardId].numeroSoumission = data.numeroSoumission || data.soumission || '';
+          cardsData[cardId].numeroPO = data.numeroPO || data.po || '';
+          cardsData[cardId].dateRecue = data.dateRecue || new Date().toISOString().split('T')[0];
+          cardsData[cardId].dateRobot = data.dateRobot || '';
+          cardsData[cardId].dateLivraison = data.dateLivraison || data.livraison || '';
+          cardsData[cardId].dateEssayage = data.dateEssayage || '';
+          cardsData[cardId].item = data.item || '';
+          cardsData[cardId].notes = data.notes || '';
+          saveCardToFirebase(cardId);
+          createdCount++;
+          createdNames.push(name + ' (#' + order + ')');
+        }
+      });
       
       // Sauvegarder les listes si nouvelles valeurs
       if (newValuesAdded.length > 0) {
         saveCustomLists();
-      }
-      
-      // Créer la carte
-      const name = data.name || data.nom || 'Sans nom';
-      const order = data.order || data.commande || data.numeroCommande || '000000';
-      const region = data.region || 'Quebec';
-      
-      const cardId = createCard(name, order, region, 0);
-      
-      // Ajouter toutes les données
-      if (cardsData[cardId]) {
-        cardsData[cardId].client = data.client || '';
-        cardsData[cardId].representant = data.representante || data.representant || '';
-        cardsData[cardId].intervenant = data.intervenant || '';
-        cardsData[cardId].numeroSoumission = data.numeroSoumission || data.soumission || '';
-        cardsData[cardId].numeroPO = data.numeroPO || data.po || '';
-        cardsData[cardId].dateRecue = data.dateRecue || new Date().toISOString().split('T')[0];
-        cardsData[cardId].dateRobot = data.dateRobot || '';
-        cardsData[cardId].dateLivraison = data.dateLivraison || data.livraison || '';
-        cardsData[cardId].dateEssayage = data.dateEssayage || '';
-        cardsData[cardId].item = data.item || '';
-        cardsData[cardId].notes = data.notes || '';
-        saveCardToFirebase(cardId);
       }
       
       closeAddMoulageModal();
@@ -7017,9 +7028,21 @@ function handleImportMoulageJson(event) {
       }
       
       // Message succès
-      let msg = 'Moulage "' + name + '" créé via JSON!';
+      let msg = '';
+      if (createdCount === 1) {
+        msg = 'Moulage "' + createdNames[0] + '" créé!';
+      } else {
+        msg = createdCount + ' moulages créés:\n• ' + createdNames.slice(0, 10).join('\n• ');
+        if (createdNames.length > 10) {
+          msg += '\n• ... et ' + (createdNames.length - 10) + ' autres';
+        }
+      }
+      
       if (newValuesAdded.length > 0) {
-        msg += '\n\nNouvelles valeurs ajoutées:\n• ' + newValuesAdded.join('\n• ');
+        msg += '\n\nNouvelles valeurs ajoutées aux listes:\n• ' + newValuesAdded.slice(0, 10).join('\n• ');
+        if (newValuesAdded.length > 10) {
+          msg += '\n• ... et ' + (newValuesAdded.length - 10) + ' autres';
+        }
       }
       alert('✅ ' + msg);
       
