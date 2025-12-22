@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PhysiPro Moulage v10.1</title>
+  <title>PhysiPro Moulage v10.3</title>
   
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -1228,12 +1228,17 @@ html, body {
 }
 
 .notes-page-content img {
-  max-width: 100%;
-  max-height: 200px;
+  max-width: 300px;
   border-radius: 4px;
-  margin: 4px 0;
-  cursor: pointer;
-  display: block;
+  margin: 2px;
+  cursor: nwse-resize;
+  border: 2px solid transparent;
+  transition: border-color 0.2s;
+  vertical-align: top;
+}
+
+.notes-page-content img:hover {
+  border-color: #3b82f6;
 }
 
 .notes-photos-links {
@@ -5947,21 +5952,19 @@ html, body {
 .job-notes-content img:hover { border-color: #3b82f6; }
 .job-notes-content img.resizing { border-color: #22c55e; }
 
-/* Images inline uploadées */
-.uploaded-image-inline {
-  display: block;
-  margin: 4px 0;
-}
-
-.uploaded-image-inline img {
-  display: block;
+/* Images redimensionnables par drag */
+.resizable-inline-image {
+  display: inline-block;
   border-radius: 4px;
-  cursor: pointer;
+  cursor: nwse-resize;
+  border: 2px solid transparent;
+  transition: border-color 0.2s, opacity 0.2s;
+  vertical-align: top;
+  margin: 2px;
 }
 
-.uploaded-image-inline a {
-  font-size: 10px;
-  color: #2563eb;
+.resizable-inline-image:hover {
+  border-color: #3b82f6;
 }
 
 .note-timestamp {
@@ -8053,8 +8056,12 @@ html, body {
           <input type="text" id="cmdAddDesc" placeholder="Description de la commande...">
         </div>
         <div class="cmd-add-field">
-          <label>Date livraison</label>
-          <input type="date" id="cmdAddDateLivraison">
+          <label>📦 Date livraison</label>
+          <div class="date-picker-field" onclick="openCmdCalendar('cmdAddDateLivraison')">
+            <span id="cmdAddDateLivraisonDisplay">-- Sélectionner --</span>
+            <span class="date-picker-icon">📅</span>
+          </div>
+          <input type="hidden" id="cmdAddDateLivraison">
         </div>
         <div class="cmd-add-field">
           <label>N° PO</label>
@@ -10213,35 +10220,55 @@ function openTrackingDatesMenu(cardId, deptKey, deptName, event) {
 }
 
 function setTrackingDate(cardId, deptKey, dateType) {
-  const today = new Date().toISOString().split('T')[0];
-  const currentDate = cardsData[cardId]?.tracking?.[deptKey]?.[dateType];
+  const currentDate = cardsData[cardId]?.tracking?.[deptKey]?.[dateType] || '';
   
-  const newDate = prompt('Entrer la date (' + dateType + '):\nFormat: AAAA-MM-JJ\n\nLaisser vide pour aujourdhui', currentDate || today);
+  // Fermer le menu tracking
+  document.getElementById('trackingDatesMenu')?.remove();
   
-  if (newDate !== null) {
-    if (!cardsData[cardId].tracking) cardsData[cardId].tracking = {};
-    if (!cardsData[cardId].tracking[deptKey]) cardsData[cardId].tracking[deptKey] = {};
-    
-    cardsData[cardId].tracking[deptKey][dateType] = newDate || today;
-    saveCardToFirebase(cardId);
-    
-    // Fermer le menu et rafraichir la fiche
-    document.getElementById('trackingDatesMenu')?.remove();
-    
-    // Mettre a jour l'affichage dans le menu si encore ouvert
-    const card = document.querySelector(`.mcard[data-card-id="${cardId}"]`);
-    if (card && card.classList.contains('mcard-expanded')) {
-      // Regenerer la sidebar tracking
-      const sidebar = card.querySelector('.mcard-tracking-sidebar');
-      if (sidebar) {
-        const newSidebar = document.createElement('div');
-        newSidebar.innerHTML = generateTrackingSidebar(cardId, cardsData[cardId]);
-        sidebar.replaceWith(newSidebar.firstElementChild);
+  // Ouvrir le calendrier
+  showCalendar({
+    value: currentDate,
+    mode: 'modal',
+    onSelect: (dateStr) => {
+      if (!cardsData[cardId].tracking) cardsData[cardId].tracking = {};
+      if (!cardsData[cardId].tracking[deptKey]) cardsData[cardId].tracking[deptKey] = {};
+      
+      cardsData[cardId].tracking[deptKey][dateType] = dateStr;
+      saveCardToFirebase(cardId);
+      
+      // Mettre a jour l'affichage de la fiche
+      const card = document.querySelector(`.mcard[data-card-id="${cardId}"]`);
+      if (card && card.classList.contains('mcard-expanded')) {
+        const sidebar = card.querySelector('.mcard-tracking-sidebar');
+        if (sidebar) {
+          const newSidebar = document.createElement('div');
+          newSidebar.innerHTML = generateTrackingSidebar(cardId, cardsData[cardId]);
+          sidebar.replaceWith(newSidebar.firstElementChild);
+        }
+      }
+      
+      showToast('📅 Date ' + (dateType === 'entree' ? 'entrée' : 'sortie') + ' mise à jour');
+    },
+    onClear: () => {
+      if (cardsData[cardId]?.tracking?.[deptKey]) {
+        delete cardsData[cardId].tracking[deptKey][dateType];
+        saveCardToFirebase(cardId);
+        
+        // Mettre a jour l'affichage
+        const card = document.querySelector(`.mcard[data-card-id="${cardId}"]`);
+        if (card && card.classList.contains('mcard-expanded')) {
+          const sidebar = card.querySelector('.mcard-tracking-sidebar');
+          if (sidebar) {
+            const newSidebar = document.createElement('div');
+            newSidebar.innerHTML = generateTrackingSidebar(cardId, cardsData[cardId]);
+            sidebar.replaceWith(newSidebar.firstElementChild);
+          }
+        }
+        
+        showToast('📅 Date effacée');
       }
     }
-    
-    showToast('Date ' + dateType + ' mise a jour');
-  }
+  });
 }
 
 // ===== GESTION DES LISTES PERSONNALISABLES =====
@@ -13205,13 +13232,19 @@ async function uploadImageToFirebase(blob, placeholder, saveCallback, folderName
     // Obtenir l'URL de téléchargement
     const downloadURL = await snapshot.ref.getDownloadURL();
     
-    // Créer juste une image simple avec lien en dessous (inline)
-    const span = document.createElement('span');
-    span.className = 'uploaded-image-inline';
-    span.innerHTML = `<img src="${downloadURL}" style="max-width:100%;max-height:250px;border-radius:4px;display:block;margin:4px 0;"><a href="${downloadURL}" target="_blank" style="font-size:10px;color:#2563eb;">📎 Lien image</a>`;
+    // Créer juste une image simple redimensionnable
+    const img = document.createElement('img');
+    img.src = downloadURL;
+    img.className = 'resizable-inline-image';
+    img.style.cssText = 'max-width:300px;max-height:200px;border-radius:4px;cursor:nwse-resize;';
+    img.title = 'Cliquer et glisser un coin pour redimensionner';
+    img.onclick = (e) => { e.preventDefault(); window.open(downloadURL, '_blank'); };
+    
+    // Ajouter le redimensionnement par drag
+    makeImageResizable(img, saveCallback);
     
     // Remplacer le placeholder
-    placeholder.replaceWith(span);
+    placeholder.replaceWith(img);
     
     // Appeler le callback de sauvegarde
     if (typeof saveCallback === 'function') {
@@ -13226,16 +13259,82 @@ async function uploadImageToFirebase(blob, placeholder, saveCallback, folderName
     // Fallback: afficher l'image en base64
     const reader = new FileReader();
     reader.onload = function(event) {
-      const span = document.createElement('span');
-      span.className = 'uploaded-image-inline';
-      span.innerHTML = `<img src="${event.target.result}" style="max-width:100%;max-height:250px;border-radius:4px;display:block;margin:4px 0;">`;
-      placeholder.replaceWith(span);
+      const img = document.createElement('img');
+      img.src = event.target.result;
+      img.className = 'resizable-inline-image';
+      img.style.cssText = 'max-width:300px;max-height:200px;border-radius:4px;cursor:nwse-resize;';
+      img.title = 'Cliquer et glisser un coin pour redimensionner';
+      makeImageResizable(img, saveCallback);
+      placeholder.replaceWith(img);
       if (typeof saveCallback === 'function') {
         saveCallback();
       }
       showToast('📷 Image affichée (stockage local)');
     };
     reader.readAsDataURL(blob);
+  }
+}
+
+// Rendre une image redimensionnable par drag
+function makeImageResizable(img, saveCallback) {
+  let isResizing = false;
+  let startX, startY, startWidth, startHeight;
+  
+  img.addEventListener('mousedown', function(e) {
+    // Vérifier si on clique près du coin (30px)
+    const rect = img.getBoundingClientRect();
+    const cornerSize = 30;
+    const isNearCorner = (
+      (e.clientX > rect.right - cornerSize && e.clientY > rect.bottom - cornerSize) ||
+      (e.clientX > rect.right - cornerSize && e.clientY < rect.top + cornerSize) ||
+      (e.clientX < rect.left + cornerSize && e.clientY > rect.bottom - cornerSize) ||
+      (e.clientX < rect.left + cornerSize && e.clientY < rect.top + cornerSize)
+    );
+    
+    if (isNearCorner) {
+      e.preventDefault();
+      e.stopPropagation();
+      isResizing = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startWidth = img.offsetWidth;
+      startHeight = img.offsetHeight;
+      img.style.opacity = '0.8';
+      
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    }
+  });
+  
+  function onMouseMove(e) {
+    if (!isResizing) return;
+    
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    
+    // Garder le ratio
+    const ratio = startHeight / startWidth;
+    let newWidth = Math.max(50, Math.min(600, startWidth + dx));
+    let newHeight = newWidth * ratio;
+    
+    img.style.width = newWidth + 'px';
+    img.style.height = newHeight + 'px';
+    img.style.maxWidth = newWidth + 'px';
+    img.style.maxHeight = newHeight + 'px';
+  }
+  
+  function onMouseUp() {
+    if (isResizing) {
+      isResizing = false;
+      img.style.opacity = '1';
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      
+      // Sauvegarder
+      if (typeof saveCallback === 'function') {
+        saveCallback();
+      }
+    }
   }
 }
 
@@ -17759,6 +17858,7 @@ function showCmdAddModal() {
   document.getElementById('cmdAddDesc').value = '';
   document.getElementById('cmdAddPO').value = '';
   document.getElementById('cmdAddDateLivraison').value = '';
+  document.getElementById('cmdAddDateLivraisonDisplay').textContent = '-- Sélectionner --';
   // Focus sur le champ numéro de commande
   setTimeout(() => {
     document.getElementById('cmdAddOrder').focus();
@@ -17767,6 +17867,27 @@ function showCmdAddModal() {
 
 function closeCmdAddModal() {
   document.getElementById('cmdAddModal').classList.remove('active');
+}
+
+// Calendrier pour modal commande
+function openCmdCalendar(targetId) {
+  const hiddenInput = document.getElementById(targetId);
+  const currentValue = hiddenInput?.value || '';
+  
+  showCalendar({
+    value: currentValue,
+    mode: 'modal',
+    onSelect: (dateStr) => {
+      if (hiddenInput) hiddenInput.value = dateStr;
+      const displayEl = document.getElementById(targetId + 'Display');
+      if (displayEl) displayEl.textContent = formatDateFR(dateStr);
+    },
+    onClear: () => {
+      if (hiddenInput) hiddenInput.value = '';
+      const displayEl = document.getElementById(targetId + 'Display');
+      if (displayEl) displayEl.textContent = '-- Sélectionner --';
+    }
+  });
 }
 
 function confirmAddCommande() {
@@ -17832,6 +17953,7 @@ window.openCmdFiche = openCmdFiche;
 window.closeCmdFiche = closeCmdFiche;
 window.showCmdAddModal = showCmdAddModal;
 window.closeCmdAddModal = closeCmdAddModal;
+window.openCmdCalendar = openCmdCalendar;
 window.confirmAddCommande = confirmAddCommande;
 window.confirmDeleteCmd = confirmDeleteCmd;
 window.updateCmdField = updateCmdField;
