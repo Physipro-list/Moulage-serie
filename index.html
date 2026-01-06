@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PhysiPro Moulage v22.9</title>
+  <title>PhysiPro Moulage v22.10</title>
   
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -13,11 +13,11 @@
   
   <style>
 /* =====================================================
-   PHYSIPRO MOULAGE v22.9 - OPTIMISÉ
-   - ATM: Types de chaises avec couleurs
-   - Inventaire: Hauteur rangées augmentée
-   - Patrick Bouchard: Accès admin complet
-   - Jobs: Moulages en attente synchronisés
+   PHYSIPRO MOULAGE v22.10 - MOBILE COMPLET
+   - ATM Mobile: 5 colonnes swipeable
+   - PSM Mobile: 3 onglets (Liste/Atelier/Couture)
+   - Inventaire Mobile: Filtré par utilisateur (Pablo/Checkna)
+   - Jobs Mobile: Filtré par utilisateur (Sonia/Jacynthe/Nadia/Jonathan)
    ===================================================== */
 
 /* === MODE FABRIQUER SEULEMENT (pour opérateurs Checkna/Pablo) === */
@@ -5937,6 +5937,24 @@ html, body {
   text-shadow: 0 1px 0 rgba(255,255,255,0.3);
 }
 
+.mobile-menu-btn.btn-atm {
+  background: linear-gradient(145deg, #22c55e, #16a34a);
+  color: white;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.mobile-menu-btn.btn-psm {
+  background: linear-gradient(145deg, #8b5cf6, #6d28d9);
+  color: white;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.mobile-menu-btn.btn-inv {
+  background: linear-gradient(145deg, #f97316, #ea580c);
+  color: white;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
 .mobile-menu-btn-icon {
   font-size: 28px;
   flex-shrink: 0;
@@ -7040,6 +7058,617 @@ html, body {
 .mobile-swipe-hint-arrow {
   font-size: 18px;
   color: #3b82f6;
+}
+
+/* =============================================================================
+   ATM MOBILE - Liste avec colonnes swipeable
+============================================================================= */
+.mobile-atm-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, #0a1628 0%, #1a365d 50%, #2d4a6f 100%);
+  z-index: 100000;
+  flex-direction: column;
+  display: none;
+}
+.mobile-atm-overlay.active { display: flex; }
+
+.mobile-atm-header {
+  padding: 10px 15px;
+  background: rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-atm-back {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 5px 8px;
+}
+
+.mobile-atm-title {
+  flex: 1;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.mobile-atm-add {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border: 2px solid #000;
+  color: white;
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.mobile-atm-search {
+  padding: 8px 15px;
+  background: rgba(0,0,0,0.2);
+}
+
+.mobile-atm-search input {
+  width: 100%;
+  padding: 10px 15px;
+  border-radius: 25px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.1);
+  color: white;
+  font-size: 14px;
+}
+
+.mobile-atm-search input::placeholder {
+  color: rgba(255,255,255,0.5);
+}
+
+/* Indicateur de colonne */
+.mobile-atm-col-indicator {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(0,0,0,0.2);
+}
+
+.mobile-atm-col-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  transition: all 0.3s;
+}
+
+.mobile-atm-col-dot.active {
+  background: #3b82f6;
+  transform: scale(1.3);
+}
+
+/* Container swipeable */
+.mobile-atm-swipe-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.mobile-atm-swipe-wrapper {
+  display: flex;
+  width: 500%; /* 5 colonnes */
+  height: 100%;
+  transition: transform 0.3s ease-out;
+}
+
+.mobile-atm-swipe-wrapper.dragging {
+  transition: none;
+}
+
+/* Colonne ATM mobile */
+.mobile-atm-column {
+  width: 20%; /* 100%/5 colonnes */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mobile-atm-col-header {
+  padding: 10px 15px;
+  background: linear-gradient(to bottom, #04152c, #4a8ef5);
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-atm-col-count {
+  background: rgba(255,255,255,0.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.mobile-atm-col-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Carte ATM mobile */
+.mobile-atm-card {
+  background: linear-gradient(135deg, #04152c, #4a8ef5);
+  border-radius: 10px;
+  border: 2px solid #000;
+  padding: 10px 12px;
+  color: white;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.mobile-atm-card:active {
+  transform: scale(0.98);
+}
+
+.mobile-atm-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.mobile-atm-card-type {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(251,191,36,0.3);
+  color: #fbbf24;
+}
+
+.mobile-atm-card-order {
+  font-size: 14px;
+  font-weight: 800;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+.mobile-atm-card-client {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.mobile-atm-card-btn {
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}
+
+/* =============================================================================
+   PSM MOBILE - Pages séparées (Liste, Atelier, Couture)
+============================================================================= */
+.mobile-psm-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, #0a1628 0%, #1a365d 50%, #2d4a6f 100%);
+  z-index: 100000;
+  flex-direction: column;
+  display: none;
+}
+.mobile-psm-overlay.active { display: flex; }
+
+.mobile-psm-header {
+  padding: 10px 15px;
+  background: rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-psm-back {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 5px 8px;
+}
+
+.mobile-psm-title {
+  flex: 1;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.mobile-psm-add {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border: 2px solid #000;
+  color: white;
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* Tabs PSM mobile */
+.mobile-psm-tabs {
+  display: flex;
+  background: rgba(0,0,0,0.3);
+  padding: 0 10px;
+}
+
+.mobile-psm-tab {
+  flex: 1;
+  padding: 12px 8px;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.6);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+}
+
+.mobile-psm-tab.active {
+  color: white;
+  border-bottom-color: #3b82f6;
+}
+
+/* Page liste PSM */
+.mobile-psm-page {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mobile-psm-page.active {
+  display: flex;
+}
+
+.mobile-psm-search {
+  padding: 10px 15px;
+}
+
+.mobile-psm-search input {
+  width: 100%;
+  padding: 10px 15px;
+  border-radius: 25px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.1);
+  color: white;
+  font-size: 14px;
+}
+
+.mobile-psm-search input::placeholder {
+  color: rgba(255,255,255,0.5);
+}
+
+.mobile-psm-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Carte PSM mobile */
+.mobile-psm-card {
+  background: linear-gradient(135deg, #1e3a5f, #3b82f6);
+  border-radius: 10px;
+  border: 2px solid #000;
+  padding: 12px 15px;
+  color: white;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.mobile-psm-card:active {
+  transform: scale(0.98);
+}
+
+.mobile-psm-card.completed {
+  background: linear-gradient(135deg, #166534, #22c55e);
+}
+
+.mobile-psm-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.mobile-psm-card-status {
+  font-size: 11px;
+  text-align: center;
+  margin-top: 4px;
+  opacity: 0.8;
+}
+
+/* Page détail PSM (Atelier/Couture) */
+.mobile-psm-detail {
+  flex: 1;
+  overflow-y: auto;
+  padding: 15px;
+}
+
+.mobile-psm-no-selection {
+  text-align: center;
+  color: rgba(255,255,255,0.5);
+  padding: 40px 20px;
+}
+
+.mobile-psm-field {
+  margin-bottom: 12px;
+}
+
+.mobile-psm-field label {
+  display: block;
+  color: rgba(255,255,255,0.7);
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.mobile-psm-field input,
+.mobile-psm-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.1);
+  color: white;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.mobile-psm-field textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.mobile-psm-checkbox-row {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 12px;
+}
+
+.mobile-psm-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+  font-size: 13px;
+}
+
+.mobile-psm-checkbox input {
+  width: 20px;
+  height: 20px;
+  accent-color: #3b82f6;
+}
+
+.mobile-psm-complete-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border: 2px solid #1e40af;
+  border-radius: 10px;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 15px;
+}
+
+.mobile-psm-complete-btn.completed {
+  background: linear-gradient(135deg, #22c55e, #15803d);
+  border-color: #166534;
+}
+
+/* =============================================================================
+   INVENTAIRE MOBILE - Affiche seulement la rangée de l'utilisateur
+============================================================================= */
+.mobile-inv-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, #0a1628 0%, #1a365d 50%, #2d4a6f 100%);
+  z-index: 100000;
+  flex-direction: column;
+  display: none;
+}
+.mobile-inv-overlay.active { display: flex; }
+
+.mobile-inv-header {
+  padding: 10px 15px;
+  background: rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-inv-back {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 5px 8px;
+}
+
+.mobile-inv-title {
+  flex: 1;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.mobile-inv-user {
+  background: rgba(59,130,246,0.3);
+  padding: 4px 10px;
+  border-radius: 12px;
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Section À faire */
+.mobile-inv-afaire {
+  background: rgba(0,0,0,0.2);
+  padding: 10px;
+  border-bottom: 2px solid rgba(59,130,246,0.3);
+}
+
+.mobile-inv-afaire-title {
+  color: #60a5fa;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.mobile-inv-afaire-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 5px;
+}
+
+/* Section Production - colonnes swipeable */
+.mobile-inv-prod-indicator {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(0,0,0,0.2);
+}
+
+.mobile-inv-prod-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  transition: all 0.3s;
+}
+
+.mobile-inv-prod-dot.active {
+  background: #22c55e;
+  transform: scale(1.3);
+}
+
+.mobile-inv-swipe-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.mobile-inv-swipe-wrapper {
+  display: flex;
+  height: 100%;
+  transition: transform 0.3s ease-out;
+}
+
+.mobile-inv-swipe-wrapper.dragging {
+  transition: none;
+}
+
+.mobile-inv-column {
+  min-width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mobile-inv-col-header {
+  padding: 10px 15px;
+  background: linear-gradient(135deg, #166534, #22c55e);
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mobile-inv-col-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Carte inventaire mobile */
+.mobile-inv-card {
+  background: linear-gradient(135deg, #78350f, #d97706);
+  border-radius: 10px;
+  border: 2px solid #000;
+  padding: 10px 12px;
+  color: white;
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.mobile-inv-card-order {
+  font-size: 13px;
+  font-weight: 800;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+.mobile-inv-card-name {
+  font-size: 11px;
+  opacity: 0.9;
+  margin: 4px 0;
+}
+
+.mobile-inv-card-qty {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mobile-inv-card-btn {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+}
+
+/* =============================================================================
+   JOBS MOBILE FILTRÉS - Affiche selon l'utilisateur connecté
+============================================================================= */
+.mobile-jobs-filter-info {
+  padding: 8px 15px;
+  background: rgba(0,0,0,0.2);
+  color: #fbbf24;
+  font-size: 12px;
+  text-align: center;
 }
 
 
@@ -24717,7 +25346,7 @@ var mobileJobSwipePage = 0;
 // Créer le HTML du menu mobile
 function createMobileMenuHTML() {
   const menuHTML = `
-    <!-- MENU MOBILE - CHOIX MOULAGES / JOBS -->
+    <!-- MENU MOBILE - CHOIX MOULAGES / JOBS / ATM / PSM -->
     <div class="mobile-menu-overlay" id="mobileMenuOverlay">
       <div class="mobile-menu-title">Outil de gestion simplifiée</div>
       <div class="mobile-menu-author">par Daniel Charest</div>
@@ -24731,6 +25360,21 @@ function createMobileMenuHTML() {
           <span class="mobile-menu-btn-icon">⏳</span>
           <span class="mobile-menu-btn-text">Job en attente</span>
           <span class="mobile-menu-btn-count" id="menuJobsCount"></span>
+        </button>
+        <button class="mobile-menu-btn btn-atm" onclick="openMobileATM()">
+          <span class="mobile-menu-btn-icon">🦽</span>
+          <span class="mobile-menu-btn-text">ATM</span>
+          <span class="mobile-menu-btn-count" id="menuAtmCount"></span>
+        </button>
+        <button class="mobile-menu-btn btn-psm" onclick="openMobilePSM()">
+          <span class="mobile-menu-btn-icon">🔧</span>
+          <span class="mobile-menu-btn-text">Produits sur mesure</span>
+          <span class="mobile-menu-btn-count" id="menuPsmCount"></span>
+        </button>
+        <button class="mobile-menu-btn btn-inv" onclick="openMobileInventaire()">
+          <span class="mobile-menu-btn-icon">📦</span>
+          <span class="mobile-menu-btn-text">Inventaire</span>
+          <span class="mobile-menu-btn-count" id="menuInvCount"></span>
         </button>
       </div>
       <div class="mobile-desktop-btn" onclick="switchToDesktopMode()">
@@ -24768,9 +25412,113 @@ function createMobileMenuHTML() {
         <button class="mobile-job-fiche-btn btn-email" onclick="emailMobileJob()">✉️ Email</button>
       </div>
     </div>
+    
+    <!-- ATM MOBILE -->
+    <div class="mobile-atm-overlay" id="mobileAtmOverlay">
+      <div class="mobile-atm-header">
+        <button class="mobile-atm-back" onclick="closeMobileATM()">←</button>
+        <div class="mobile-atm-title">Gestion ATM</div>
+        <button class="mobile-atm-add" onclick="showMobileAddAtm()">+</button>
+      </div>
+      <div class="mobile-atm-search">
+        <input type="text" id="mobileAtmSearchInput" placeholder="🔍 Rechercher..." oninput="filterMobileAtmCards()">
+      </div>
+      <div class="mobile-atm-col-indicator" id="mobileAtmColIndicator">
+        <div class="mobile-atm-col-dot active" data-col="0"></div>
+        <div class="mobile-atm-col-dot" data-col="1"></div>
+        <div class="mobile-atm-col-dot" data-col="2"></div>
+        <div class="mobile-atm-col-dot" data-col="3"></div>
+        <div class="mobile-atm-col-dot" data-col="4"></div>
+      </div>
+      <div class="mobile-atm-swipe-container" id="mobileAtmSwipeContainer">
+        <div class="mobile-atm-swipe-wrapper" id="mobileAtmSwipeWrapper">
+          <div class="mobile-atm-column" data-col="0">
+            <div class="mobile-atm-col-header">📁 Dossier <span class="mobile-atm-col-count" id="mobileAtmCount0">0</span></div>
+            <div class="mobile-atm-col-content" id="mobileAtmCol0"></div>
+          </div>
+          <div class="mobile-atm-column" data-col="1">
+            <div class="mobile-atm-col-header">📦 Bac <span class="mobile-atm-col-count" id="mobileAtmCount1">0</span></div>
+            <div class="mobile-atm-col-content" id="mobileAtmCol1"></div>
+          </div>
+          <div class="mobile-atm-column" data-col="2">
+            <div class="mobile-atm-col-header">🔧 Assemblage <span class="mobile-atm-col-count" id="mobileAtmCount2">0</span></div>
+            <div class="mobile-atm-col-content" id="mobileAtmCol2"></div>
+          </div>
+          <div class="mobile-atm-column" data-col="3">
+            <div class="mobile-atm-col-header">🔍 Inspection <span class="mobile-atm-col-count" id="mobileAtmCount3">0</span></div>
+            <div class="mobile-atm-col-content" id="mobileAtmCol3"></div>
+          </div>
+          <div class="mobile-atm-column" data-col="4">
+            <div class="mobile-atm-col-header">🚚 Shipping <span class="mobile-atm-col-count" id="mobileAtmCount4">0</span></div>
+            <div class="mobile-atm-col-content" id="mobileAtmCol4"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- PSM MOBILE -->
+    <div class="mobile-psm-overlay" id="mobilePsmOverlay">
+      <div class="mobile-psm-header">
+        <button class="mobile-psm-back" onclick="closeMobilePSM()">←</button>
+        <div class="mobile-psm-title">Produits sur mesure</div>
+        <button class="mobile-psm-add" onclick="showMobileAddPsm()">+</button>
+      </div>
+      <div class="mobile-psm-tabs">
+        <button class="mobile-psm-tab active" onclick="showMobilePsmPage('liste')">📋 Liste</button>
+        <button class="mobile-psm-tab" onclick="showMobilePsmPage('atelier')">🔨 Atelier</button>
+        <button class="mobile-psm-tab" onclick="showMobilePsmPage('couture')">🧵 Couture</button>
+      </div>
+      
+      <!-- Page Liste -->
+      <div class="mobile-psm-page active" id="mobilePsmPageListe">
+        <div class="mobile-psm-search">
+          <input type="text" id="mobilePsmSearchInput" placeholder="🔍 Rechercher un produit..." oninput="filterMobilePsmCards()">
+        </div>
+        <div class="mobile-psm-list" id="mobilePsmList"></div>
+      </div>
+      
+      <!-- Page Atelier -->
+      <div class="mobile-psm-page" id="mobilePsmPageAtelier">
+        <div class="mobile-psm-detail" id="mobilePsmDetailAtelier">
+          <div class="mobile-psm-no-selection">Sélectionnez un produit dans la liste</div>
+        </div>
+      </div>
+      
+      <!-- Page Couture -->
+      <div class="mobile-psm-page" id="mobilePsmPageCouture">
+        <div class="mobile-psm-detail" id="mobilePsmDetailCouture">
+          <div class="mobile-psm-no-selection">Sélectionnez un produit dans la liste</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- INVENTAIRE MOBILE -->
+    <div class="mobile-inv-overlay" id="mobileInvOverlay">
+      <div class="mobile-inv-header">
+        <button class="mobile-inv-back" onclick="closeMobileInventaire()">←</button>
+        <div class="mobile-inv-title">Inventaire</div>
+        <div class="mobile-inv-user" id="mobileInvUser">-</div>
+      </div>
+      
+      <!-- Section À faire -->
+      <div class="mobile-inv-afaire">
+        <div class="mobile-inv-afaire-title">📦 À faire</div>
+        <div class="mobile-inv-afaire-scroll" id="mobileInvAfaire"></div>
+      </div>
+      
+      <!-- Indicateur de colonne -->
+      <div class="mobile-inv-prod-indicator" id="mobileInvProdIndicator"></div>
+      
+      <!-- Production swipeable -->
+      <div class="mobile-inv-swipe-container" id="mobileInvSwipeContainer">
+        <div class="mobile-inv-swipe-wrapper" id="mobileInvSwipeWrapper"></div>
+      </div>
+    </div>
   `;
   document.body.insertAdjacentHTML('beforeend', menuHTML);
   initMobileJobSwipe();
+  initMobileAtmSwipe();
+  initMobileInvSwipe();
 }
 
 // Ouvrir le menu mobile (au lieu de l'écran moulages directement)
@@ -24783,21 +25531,34 @@ function showMobileMenu() {
   // Mettre à jour les compteurs
   updateMobileMenuCounts();
   
-  // Afficher le menu
+  // Afficher le menu et cacher les autres overlays
   document.getElementById('mobileMenuOverlay').classList.add('active');
   document.getElementById('mobileHomeOverlay')?.classList.remove('active');
   document.getElementById('mobileJobsOverlay')?.classList.remove('active');
+  document.getElementById('mobileAtmOverlay')?.classList.remove('active');
+  document.getElementById('mobilePsmOverlay')?.classList.remove('active');
+  document.getElementById('mobileInvOverlay')?.classList.remove('active');
 }
 
 // Mettre à jour les compteurs du menu mobile
 function updateMobileMenuCounts() {
   const moulagesCount = Object.keys(cardsData || {}).length;
   const jobsCount = Object.keys(jobsData || {}).filter(k => jobsData[k] && jobsData[k].type === 'question').length;
+  const atmCount = Object.keys(atmData || {}).length;
+  const psmCount = Object.keys(psmCards || {}).length;
+  const invCount = Object.keys(inventaireData || {}).length;
   
   const moulagesCountEl = document.getElementById('menuMoulagesCount');
   const jobsCountEl = document.getElementById('menuJobsCount');
+  const atmCountEl = document.getElementById('menuAtmCount');
+  const psmCountEl = document.getElementById('menuPsmCount');
+  const invCountEl = document.getElementById('menuInvCount');
+  
   if (moulagesCountEl) moulagesCountEl.textContent = `(${moulagesCount})`;
   if (jobsCountEl) jobsCountEl.textContent = `(${jobsCount})`;
+  if (atmCountEl) atmCountEl.textContent = `(${atmCount})`;
+  if (psmCountEl) psmCountEl.textContent = `(${psmCount})`;
+  if (invCountEl) invCountEl.textContent = `(${invCount})`;
 }
 
 // Ouvrir les Moulages depuis le menu
@@ -24825,26 +25586,661 @@ function closeMobileJobs() {
   document.getElementById('mobileMenuOverlay')?.classList.add('active');
 }
 
+// ===== ATM MOBILE =====
+var mobileAtmCurrentCol = 0;
+var mobileAtmSwipeStartX = 0;
+var mobileAtmSwiping = false;
+
+function openMobileATM() {
+  document.getElementById('mobileMenuOverlay')?.classList.remove('active');
+  document.getElementById('mobileAtmOverlay')?.classList.add('active');
+  renderMobileAtmCards();
+}
+
+function closeMobileATM() {
+  document.getElementById('mobileAtmOverlay')?.classList.remove('active');
+  document.getElementById('mobileMenuOverlay')?.classList.add('active');
+}
+
+function renderMobileAtmCards() {
+  const counts = [0, 0, 0, 0, 0];
+  
+  // Vider les colonnes
+  for (let i = 0; i < 5; i++) {
+    const col = document.getElementById('mobileAtmCol' + i);
+    if (col) col.innerHTML = '';
+  }
+  
+  // Remplir les colonnes
+  const searchTerm = (document.getElementById('mobileAtmSearchInput')?.value || '').toLowerCase();
+  
+  Object.entries(atmData || {}).forEach(([id, card]) => {
+    if (!card) return;
+    
+    // Filtrer par recherche
+    if (searchTerm) {
+      const searchText = [card.order, card.client, card.chaiseType, card.description].join(' ').toLowerCase();
+      if (!searchText.includes(searchTerm)) return;
+    }
+    
+    const colIndex = card.colonne || 0;
+    if (colIndex < 0 || colIndex > 4) return;
+    
+    const col = document.getElementById('mobileAtmCol' + colIndex);
+    if (!col) return;
+    
+    counts[colIndex]++;
+    
+    const cardHtml = `
+      <div class="mobile-atm-card" onclick="openMobileAtmFiche('${id}')">
+        <div class="mobile-atm-card-header">
+          <span class="mobile-atm-card-type">${card.chaiseType || '-'}</span>
+          <span class="mobile-atm-card-order">#${card.order || '000000'}</span>
+        </div>
+        <div class="mobile-atm-card-client">${card.client || 'Client'}</div>
+        <button class="mobile-atm-card-btn" onclick="event.stopPropagation(); moveMobileAtmNext('${id}')">
+          ${colIndex < 4 ? '→ Suivant' : '✓ Terminé'}
+        </button>
+      </div>
+    `;
+    col.insertAdjacentHTML('beforeend', cardHtml);
+  });
+  
+  // Mettre à jour les compteurs
+  for (let i = 0; i < 5; i++) {
+    const countEl = document.getElementById('mobileAtmCount' + i);
+    if (countEl) countEl.textContent = counts[i];
+  }
+}
+
+function filterMobileAtmCards() {
+  renderMobileAtmCards();
+}
+
+function moveMobileAtmNext(id) {
+  if (!atmData[id]) return;
+  const currentCol = atmData[id].colonne || 0;
+  if (currentCol >= 4) return;
+  
+  atmData[id].colonne = currentCol + 1;
+  
+  // Sauvegarder
+  if (firebaseDb) {
+    firebaseDb.ref('atm/' + id).set(atmData[id]);
+  }
+  
+  renderMobileAtmCards();
+  showToast('✓ Carte déplacée');
+}
+
+function openMobileAtmFiche(id) {
+  // Pour l'instant, juste un toast - on peut ajouter une fiche détaillée plus tard
+  const card = atmData[id];
+  if (card) {
+    showToast(`📋 ${card.order} - ${card.client}`);
+  }
+}
+
+function showMobileAddAtm() {
+  // Utiliser le modal desktop pour l'instant
+  showAddAtmModal();
+}
+
+function initMobileAtmSwipe() {
+  setTimeout(() => {
+    const container = document.getElementById('mobileAtmSwipeContainer');
+    if (!container) return;
+    
+    container.addEventListener('touchstart', handleMobileAtmSwipeStart, { passive: true });
+    container.addEventListener('touchmove', handleMobileAtmSwipeMove, { passive: false });
+    container.addEventListener('touchend', handleMobileAtmSwipeEnd);
+  }, 500);
+}
+
+function handleMobileAtmSwipeStart(e) {
+  mobileAtmSwiping = true;
+  mobileAtmSwipeStartX = e.touches[0].clientX;
+}
+
+function handleMobileAtmSwipeMove(e) {
+  if (!mobileAtmSwiping) return;
+  const diff = e.touches[0].clientX - mobileAtmSwipeStartX;
+  
+  if (Math.abs(diff) > 10) {
+    e.preventDefault();
+  }
+}
+
+function handleMobileAtmSwipeEnd(e) {
+  if (!mobileAtmSwiping) return;
+  mobileAtmSwiping = false;
+  
+  const diff = e.changedTouches[0].clientX - mobileAtmSwipeStartX;
+  const threshold = 50;
+  
+  if (diff > threshold && mobileAtmCurrentCol > 0) {
+    mobileAtmCurrentCol--;
+  } else if (diff < -threshold && mobileAtmCurrentCol < 4) {
+    mobileAtmCurrentCol++;
+  }
+  
+  updateMobileAtmPosition();
+}
+
+function updateMobileAtmPosition() {
+  const wrapper = document.getElementById('mobileAtmSwipeWrapper');
+  if (wrapper) {
+    wrapper.style.transform = `translateX(${mobileAtmCurrentCol * -20}%)`;
+  }
+  
+  // Mettre à jour les dots
+  document.querySelectorAll('.mobile-atm-col-dot').forEach((dot, i) => {
+    dot.classList.toggle('active', i === mobileAtmCurrentCol);
+  });
+}
+
+// ===== PSM MOBILE =====
+var currentMobilePsmId = null;
+
+function openMobilePSM() {
+  document.getElementById('mobileMenuOverlay')?.classList.remove('active');
+  document.getElementById('mobilePsmOverlay')?.classList.add('active');
+  renderMobilePsmList();
+}
+
+function closeMobilePSM() {
+  document.getElementById('mobilePsmOverlay')?.classList.remove('active');
+  document.getElementById('mobileMenuOverlay')?.classList.add('active');
+}
+
+function showMobilePsmPage(page) {
+  // Mettre à jour les tabs
+  document.querySelectorAll('.mobile-psm-tab').forEach(tab => tab.classList.remove('active'));
+  document.querySelector(`.mobile-psm-tab[onclick*="${page}"]`)?.classList.add('active');
+  
+  // Afficher la bonne page
+  document.querySelectorAll('.mobile-psm-page').forEach(p => p.classList.remove('active'));
+  
+  if (page === 'liste') {
+    document.getElementById('mobilePsmPageListe')?.classList.add('active');
+  } else if (page === 'atelier') {
+    document.getElementById('mobilePsmPageAtelier')?.classList.add('active');
+    renderMobilePsmAtelier();
+  } else if (page === 'couture') {
+    document.getElementById('mobilePsmPageCouture')?.classList.add('active');
+    renderMobilePsmCouture();
+  }
+}
+
+function renderMobilePsmList() {
+  const list = document.getElementById('mobilePsmList');
+  if (!list) return;
+  
+  const searchTerm = (document.getElementById('mobilePsmSearchInput')?.value || '').toLowerCase();
+  
+  const cards = Object.entries(psmCards || {}).filter(([id, card]) => {
+    if (!card) return false;
+    if (searchTerm && !(card.nomPsm || '').toLowerCase().includes(searchTerm)) return false;
+    return true;
+  });
+  
+  if (cards.length === 0) {
+    list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,0.5);padding:40px;">Aucun produit</div>';
+    return;
+  }
+  
+  list.innerHTML = cards.map(([id, card]) => {
+    const isComplete = card.completeAtelier && card.completeCouture;
+    const status = isComplete ? '✓ Complet' : 
+                   (card.completeAtelier ? '🔨 Atelier OK' : 
+                   (card.completeCouture ? '🧵 Couture OK' : ''));
+    
+    return `
+      <div class="mobile-psm-card ${isComplete ? 'completed' : ''}" onclick="selectMobilePsm('${id}')">
+        <div class="mobile-psm-card-name">${card.nomPsm || 'Sans nom'}</div>
+        ${status ? `<div class="mobile-psm-card-status">${status}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function filterMobilePsmCards() {
+  renderMobilePsmList();
+}
+
+function selectMobilePsm(id) {
+  currentMobilePsmId = id;
+  
+  // Mettre en surbrillance
+  document.querySelectorAll('.mobile-psm-card').forEach(c => c.style.border = '2px solid #000');
+  event.currentTarget.style.border = '2px solid #3b82f6';
+  
+  // Mettre à jour les pages Atelier et Couture
+  renderMobilePsmAtelier();
+  renderMobilePsmCouture();
+  
+  showToast('📋 ' + (psmCards[id]?.nomPsm || 'Sélectionné'));
+}
+
+function renderMobilePsmAtelier() {
+  const container = document.getElementById('mobilePsmDetailAtelier');
+  if (!container) return;
+  
+  if (!currentMobilePsmId || !psmCards[currentMobilePsmId]) {
+    container.innerHTML = '<div class="mobile-psm-no-selection">Sélectionnez un produit dans la liste</div>';
+    return;
+  }
+  
+  const card = psmCards[currentMobilePsmId];
+  
+  container.innerHTML = `
+    <div style="font-size:16px;font-weight:700;color:white;margin-bottom:15px;text-align:center;">
+      🔨 ${card.nomPsm || 'Sans nom'}
+    </div>
+    
+    <div class="mobile-psm-checkbox-row">
+      <label class="mobile-psm-checkbox">
+        <input type="checkbox" ${card.checkPsmAtelier ? 'checked' : ''} onchange="updateMobilePsmField('checkPsmAtelier', this.checked)">
+        <span>PSM</span>
+      </label>
+      <label class="mobile-psm-checkbox">
+        <input type="checkbox" ${card.checkPrixMajoreAtelier ? 'checked' : ''} onchange="updateMobilePsmField('checkPrixMajoreAtelier', this.checked)">
+        <span>Prix majoré</span>
+      </label>
+    </div>
+    
+    <div class="mobile-psm-field">
+      <label>Temps:</label>
+      <input type="text" value="${card.tempsAtelier || ''}" placeholder="Ex: 45 min" onchange="updateMobilePsmField('tempsAtelier', this.value)">
+    </div>
+    
+    <div class="mobile-psm-field">
+      <label>Évalué par:</label>
+      <input type="text" value="${card.evaluateurAtelier || ''}" placeholder="Nom..." onchange="updateMobilePsmField('evaluateurAtelier', this.value)">
+    </div>
+    
+    <div class="mobile-psm-field">
+      <label>❓ Questionnement:</label>
+      <textarea placeholder="Questions..." onchange="updateMobilePsmField('questionAtelier', this.value)">${card.questionAtelier || ''}</textarea>
+    </div>
+    
+    <div class="mobile-psm-field">
+      <label>📝 Notes:</label>
+      <textarea placeholder="Notes..." onchange="updateMobilePsmField('notesAtelier', this.value)">${card.notesAtelier || ''}</textarea>
+    </div>
+    
+    <button class="mobile-psm-complete-btn ${card.completeAtelier ? 'completed' : ''}" onclick="toggleMobilePsmComplete('Atelier')">
+      ${card.completeAtelier ? '✓ Atelier Complété' : '✓ Marquer Complet'}
+    </button>
+  `;
+}
+
+function renderMobilePsmCouture() {
+  const container = document.getElementById('mobilePsmDetailCouture');
+  if (!container) return;
+  
+  if (!currentMobilePsmId || !psmCards[currentMobilePsmId]) {
+    container.innerHTML = '<div class="mobile-psm-no-selection">Sélectionnez un produit dans la liste</div>';
+    return;
+  }
+  
+  const card = psmCards[currentMobilePsmId];
+  
+  container.innerHTML = `
+    <div style="font-size:16px;font-weight:700;color:white;margin-bottom:15px;text-align:center;">
+      🧵 ${card.nomPsm || 'Sans nom'}
+    </div>
+    
+    <div class="mobile-psm-checkbox-row">
+      <label class="mobile-psm-checkbox">
+        <input type="checkbox" ${card.checkPsmCouture ? 'checked' : ''} onchange="updateMobilePsmField('checkPsmCouture', this.checked)">
+        <span>PSM</span>
+      </label>
+      <label class="mobile-psm-checkbox">
+        <input type="checkbox" ${card.checkPrixMajoreCouture ? 'checked' : ''} onchange="updateMobilePsmField('checkPrixMajoreCouture', this.checked)">
+        <span>Prix majoré</span>
+      </label>
+    </div>
+    
+    <div class="mobile-psm-field">
+      <label>Temps:</label>
+      <input type="text" value="${card.tempsCouture || ''}" placeholder="Ex: 30 min" onchange="updateMobilePsmField('tempsCouture', this.value)">
+    </div>
+    
+    <div class="mobile-psm-field">
+      <label>Évalué par:</label>
+      <input type="text" value="${card.evaluateurCouture || ''}" placeholder="Nom..." onchange="updateMobilePsmField('evaluateurCouture', this.value)">
+    </div>
+    
+    <div class="mobile-psm-field">
+      <label>❓ Questionnement:</label>
+      <textarea placeholder="Questions..." onchange="updateMobilePsmField('questionCouture', this.value)">${card.questionCouture || ''}</textarea>
+    </div>
+    
+    <div class="mobile-psm-field">
+      <label>📝 Notes:</label>
+      <textarea placeholder="Notes..." onchange="updateMobilePsmField('notesCouture', this.value)">${card.notesCouture || ''}</textarea>
+    </div>
+    
+    <button class="mobile-psm-complete-btn ${card.completeCouture ? 'completed' : ''}" onclick="toggleMobilePsmComplete('Couture')">
+      ${card.completeCouture ? '✓ Couture Complété' : '✓ Marquer Complet'}
+    </button>
+  `;
+}
+
+function updateMobilePsmField(field, value) {
+  if (!currentMobilePsmId || !psmCards[currentMobilePsmId]) return;
+  
+  psmCards[currentMobilePsmId][field] = value;
+  savePsmCard(currentMobilePsmId);
+}
+
+function toggleMobilePsmComplete(section) {
+  if (!currentMobilePsmId || !psmCards[currentMobilePsmId]) return;
+  
+  const field = 'complete' + section;
+  psmCards[currentMobilePsmId][field] = !psmCards[currentMobilePsmId][field];
+  savePsmCard(currentMobilePsmId);
+  
+  // Rafraîchir
+  if (section === 'Atelier') {
+    renderMobilePsmAtelier();
+  } else {
+    renderMobilePsmCouture();
+  }
+  renderMobilePsmList();
+  
+  showToast(psmCards[currentMobilePsmId][field] ? '✓ Marqué complet' : '↩ Marqué incomplet');
+}
+
+function showMobileAddPsm() {
+  // Utiliser le modal desktop
+  showAddPsmModal();
+}
+
+// Exposer les fonctions ATM/PSM mobile
+window.openMobileATM = openMobileATM;
+window.closeMobileATM = closeMobileATM;
+window.filterMobileAtmCards = filterMobileAtmCards;
+window.moveMobileAtmNext = moveMobileAtmNext;
+window.openMobileAtmFiche = openMobileAtmFiche;
+window.showMobileAddAtm = showMobileAddAtm;
+
+window.openMobilePSM = openMobilePSM;
+window.closeMobilePSM = closeMobilePSM;
+window.showMobilePsmPage = showMobilePsmPage;
+window.filterMobilePsmCards = filterMobilePsmCards;
+window.selectMobilePsm = selectMobilePsm;
+window.updateMobilePsmField = updateMobilePsmField;
+window.toggleMobilePsmComplete = toggleMobilePsmComplete;
+window.showMobileAddPsm = showMobileAddPsm;
+
+// ===== INVENTAIRE MOBILE =====
+var mobileInvCurrentCol = 0;
+var mobileInvSwipeStartX = 0;
+var mobileInvSwiping = false;
+var mobileInvUserRang = null; // 'pablo' ou 'checkna'
+
+function getMobileInvUserRang() {
+  if (!currentUser) return null;
+  const name = (currentUser.name || '').toLowerCase();
+  const email = (currentUser.email || '').toLowerCase();
+  
+  if (name.includes('pablo') || email.includes('pablo')) return 'pablo';
+  if (name.includes('checkna') || email.includes('checkna')) return 'checkna';
+  
+  // Admin voit tout, mais on montre Pablo par défaut
+  if (currentUser.role === 'admin') return 'all';
+  
+  return null;
+}
+
+function openMobileInventaire() {
+  mobileInvUserRang = getMobileInvUserRang();
+  
+  document.getElementById('mobileMenuOverlay')?.classList.remove('active');
+  document.getElementById('mobileInvOverlay')?.classList.add('active');
+  
+  // Afficher le nom de l'utilisateur
+  const userEl = document.getElementById('mobileInvUser');
+  if (userEl) {
+    if (mobileInvUserRang === 'pablo') userEl.textContent = 'Pablo';
+    else if (mobileInvUserRang === 'checkna') userEl.textContent = 'Checkna';
+    else if (mobileInvUserRang === 'all') userEl.textContent = 'Admin';
+    else userEl.textContent = 'Non assigné';
+  }
+  
+  renderMobileInventaire();
+}
+
+function closeMobileInventaire() {
+  document.getElementById('mobileInvOverlay')?.classList.remove('active');
+  document.getElementById('mobileMenuOverlay')?.classList.add('active');
+}
+
+function renderMobileInventaire() {
+  // Rendre la section À faire
+  const afaireContainer = document.getElementById('mobileInvAfaire');
+  if (afaireContainer) {
+    const afaireItems = Object.entries(inventaireData || {}).filter(([id, item]) => {
+      return item && item.rang === 'main';
+    });
+    
+    if (afaireItems.length === 0) {
+      afaireContainer.innerHTML = '<div style="color:rgba(255,255,255,0.5);padding:10px;">Aucun item</div>';
+    } else {
+      afaireContainer.innerHTML = afaireItems.map(([id, item]) => `
+        <div class="mobile-inv-card" onclick="mobileInvTakeItem('${id}')">
+          <div class="mobile-inv-card-order">#${item.code || '---'}</div>
+          <div class="mobile-inv-card-name">${item.nom || 'Sans nom'}</div>
+          <div class="mobile-inv-card-qty">Qté: ${item.qte || 0}</div>
+          <button class="mobile-inv-card-btn">📥 Prendre</button>
+        </div>
+      `).join('');
+    }
+  }
+  
+  // Rendre les colonnes de production
+  const wrapper = document.getElementById('mobileInvSwipeWrapper');
+  const indicator = document.getElementById('mobileInvProdIndicator');
+  if (!wrapper) return;
+  
+  // Déterminer quels rangs afficher
+  let rangsToShow = [];
+  if (mobileInvUserRang === 'pablo') {
+    rangsToShow = ['pablo'];
+  } else if (mobileInvUserRang === 'checkna') {
+    rangsToShow = ['checkna'];
+  } else {
+    rangsToShow = ['pablo', 'checkna'];
+  }
+  
+  // Créer les colonnes (positions 0-5 pour chaque rang)
+  let columnsHtml = '';
+  let dotsHtml = '';
+  let colIndex = 0;
+  
+  rangsToShow.forEach(rang => {
+    const rangName = rang.charAt(0).toUpperCase() + rang.slice(1);
+    
+    for (let pos = 0; pos <= 5; pos++) {
+      const items = Object.entries(inventaireData || {}).filter(([id, item]) => {
+        return item && item.rang === rang && item.pos === pos;
+      });
+      
+      columnsHtml += `
+        <div class="mobile-inv-column" data-rang="${rang}" data-pos="${pos}">
+          <div class="mobile-inv-col-header">
+            ${rangName} - Position ${pos}
+            <span>${items.length}</span>
+          </div>
+          <div class="mobile-inv-col-content">
+            ${items.length === 0 ? '<div style="color:rgba(255,255,255,0.5);text-align:center;padding:20px;">Vide</div>' :
+              items.map(([id, item]) => `
+                <div class="mobile-inv-card">
+                  <div class="mobile-inv-card-order">#${item.code || '---'}</div>
+                  <div class="mobile-inv-card-name">${item.nom || 'Sans nom'}</div>
+                  <div class="mobile-inv-card-qty">Qté: ${item.qte || 0}</div>
+                  <button class="mobile-inv-card-btn" onclick="mobileInvComplete('${id}')">✓ FABRIQUÉ</button>
+                </div>
+              `).join('')
+            }
+          </div>
+        </div>
+      `;
+      
+      dotsHtml += `<div class="mobile-inv-prod-dot ${colIndex === 0 ? 'active' : ''}" data-col="${colIndex}"></div>`;
+      colIndex++;
+    }
+  });
+  
+  wrapper.innerHTML = columnsHtml;
+  wrapper.style.width = `${colIndex * 100}%`;
+  
+  if (indicator) {
+    indicator.innerHTML = dotsHtml;
+  }
+  
+  // Mettre à jour la position
+  updateMobileInvPosition();
+}
+
+function mobileInvTakeItem(id) {
+  if (!inventaireData[id]) return;
+  if (!mobileInvUserRang || mobileInvUserRang === 'all') {
+    showToast('⚠️ Utilisateur non assigné');
+    return;
+  }
+  
+  inventaireData[id].rang = mobileInvUserRang;
+  inventaireData[id].pos = 0;
+  
+  if (firebaseDb) {
+    firebaseDb.ref('inventaire/' + id).set(inventaireData[id]);
+  }
+  
+  renderMobileInventaire();
+  showToast('✓ Item pris');
+}
+
+function mobileInvComplete(id) {
+  if (!inventaireData[id]) return;
+  
+  // Supprimer l'item
+  delete inventaireData[id];
+  
+  if (firebaseDb) {
+    firebaseDb.ref('inventaire/' + id).remove();
+  }
+  
+  renderMobileInventaire();
+  showToast('✓ Fabriqué!');
+}
+
+function initMobileInvSwipe() {
+  setTimeout(() => {
+    const container = document.getElementById('mobileInvSwipeContainer');
+    if (!container) return;
+    
+    container.addEventListener('touchstart', handleMobileInvSwipeStart, { passive: true });
+    container.addEventListener('touchmove', handleMobileInvSwipeMove, { passive: false });
+    container.addEventListener('touchend', handleMobileInvSwipeEnd);
+  }, 500);
+}
+
+function handleMobileInvSwipeStart(e) {
+  mobileInvSwiping = true;
+  mobileInvSwipeStartX = e.touches[0].clientX;
+}
+
+function handleMobileInvSwipeMove(e) {
+  if (!mobileInvSwiping) return;
+  const diff = e.touches[0].clientX - mobileInvSwipeStartX;
+  if (Math.abs(diff) > 10) e.preventDefault();
+}
+
+function handleMobileInvSwipeEnd(e) {
+  if (!mobileInvSwiping) return;
+  mobileInvSwiping = false;
+  
+  const diff = e.changedTouches[0].clientX - mobileInvSwipeStartX;
+  const threshold = 50;
+  const maxCol = document.querySelectorAll('.mobile-inv-column').length - 1;
+  
+  if (diff > threshold && mobileInvCurrentCol > 0) {
+    mobileInvCurrentCol--;
+  } else if (diff < -threshold && mobileInvCurrentCol < maxCol) {
+    mobileInvCurrentCol++;
+  }
+  
+  updateMobileInvPosition();
+}
+
+function updateMobileInvPosition() {
+  const wrapper = document.getElementById('mobileInvSwipeWrapper');
+  const numCols = document.querySelectorAll('.mobile-inv-column').length || 1;
+  const colWidth = 100 / numCols;
+  
+  if (wrapper) {
+    wrapper.style.transform = `translateX(${mobileInvCurrentCol * -colWidth}%)`;
+  }
+  
+  document.querySelectorAll('.mobile-inv-prod-dot').forEach((dot, i) => {
+    dot.classList.toggle('active', i === mobileInvCurrentCol);
+  });
+}
+
+// Exposer les fonctions Inventaire mobile
+window.openMobileInventaire = openMobileInventaire;
+window.closeMobileInventaire = closeMobileInventaire;
+window.mobileInvTakeItem = mobileInvTakeItem;
+window.mobileInvComplete = mobileInvComplete;
+
 // Rendre la liste des jobs mobile (seulement type question)
 function renderMobileJobsList() {
   const list = document.getElementById('mobileJobsList');
   if (!list) return;
   
-  const questionJobs = Object.entries(jobsData || {})
-    .filter(([id, job]) => job && job.type === 'question')
-    // Trier par temps d'attente décroissant (plus ancien = plus de jours en haut)
-    .sort((a, b) => {
-      const daysA = calcJobDays(a[1].dateAmene);
-      const daysB = calcJobDays(b[1].dateAmene);
-      return daysB - daysA; // Plus de jours = en haut
-    });
+  // Déterminer l'assignee de l'utilisateur connecté
+  let userAssignee = null;
+  if (currentUser) {
+    const name = (currentUser.name || '').toLowerCase();
+    const email = (currentUser.email || '').toLowerCase();
+    
+    if (name.includes('sonia') || email.includes('sonia')) userAssignee = 'Sonia';
+    else if (name.includes('jacynthe') || email.includes('service3')) userAssignee = 'Jacynthe';
+    else if (name.includes('nadia') || email.includes('ngagne')) userAssignee = 'Nadia';
+    else if (name.includes('jonathan') || email.includes('service1')) userAssignee = 'Jonathan Perreault';
+  }
+  
+  // Filtrer les jobs
+  let questionJobs = Object.entries(jobsData || {})
+    .filter(([id, job]) => job && job.type === 'question');
+  
+  // Si l'utilisateur a un assignee, filtrer seulement ses jobs
+  // Sinon (admin ou autre), montrer tous les jobs
+  if (userAssignee) {
+    questionJobs = questionJobs.filter(([id, job]) => job.assignee === userAssignee);
+  }
+  
+  // Trier par temps d'attente décroissant (plus ancien = plus de jours en haut)
+  questionJobs.sort((a, b) => {
+    const daysA = calcJobDays(a[1].dateAmene);
+    const daysB = calcJobDays(b[1].dateAmene);
+    return daysB - daysA; // Plus de jours = en haut
+  });
+  
+  // Afficher l'info de filtrage
+  const filterInfo = userAssignee ? 
+    `<div class="mobile-jobs-filter-info">👤 Jobs de ${userAssignee} (${questionJobs.length})</div>` : 
+    `<div class="mobile-jobs-filter-info">📋 Tous les jobs (${questionJobs.length})</div>`;
   
   if (questionJobs.length === 0) {
-    list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,0.6);padding:40px;">Aucun job en attente</div>';
+    list.innerHTML = filterInfo + '<div style="text-align:center;color:rgba(255,255,255,0.6);padding:40px;">Aucun job en attente</div>';
     return;
   }
   
-  list.innerHTML = questionJobs.map(([id, job]) => {
+  list.innerHTML = filterInfo + questionJobs.map(([id, job]) => {
     const regionClass = job.region === 'Canada anglais' ? 'region-on' : job.region === 'France' ? 'region-fr' : '';
     const days = calcJobDays(job.dateAmene);
     const daysClass = getDaysClass(days);
