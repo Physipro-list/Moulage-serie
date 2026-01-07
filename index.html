@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhysiPro Moulage v23.0</title>
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+  
+  <!-- CSS Modules -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/cards.css">
+  <link rel="stylesheet" href="css/fiches.css">
+  <link rel="stylesheet" href="css/modals.css">
+  <link rel="stylesheet" href="css/pages.css">
+  <link rel="stylesheet" href="css/commandes.css">
+</head>
+<body>
+
+<div class="app-root">
+  <header class="topbar">
+    <div class="tb-left">
+      <div class="logo-flip-container" id="logoFlipContainer">
+        <div class="logo-main">
+          <div class="logo-top-fixed">
+            <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro"/>
+          </div>
+          <div class="logo-bottom-text" id="logoBottomText">Moulage</div>
+        </div>
+        <div class="logo-menu" id="logoMenu"></div>
+      </div>
+    </div>
+    
+    <div class="tb-center">
+      <span class="top-title" id="pageMainTitle">Outil de gestion des moulages</span>
+      <button class="settings-btn" id="btnSettings" title="Parametres">⚙️</button>
+    </div>
+    
+    <div class="tb-right">
+      <button class="header-btn" id="btnAddItem" onclick="handleAddButton()">+ Ajouter moulage</button>
+      <div class="user-status" id="userStatus">
+        <span class="status-dot"></span>
+        <span class="user-name">Non connecte</span>
+      </div>
+    </div>
+    
+    <div id="invTableauContainerCenter" class="inv-tableau-center"></div>
+    
+    <div class="search-row" id="searchRow">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" id="searchInput" placeholder="Rechercher (nom, commande, client...)">
+        <button class="search-clear hidden" id="searchClear">✕</button>
+      </div>
+    </div>
+  </header>
+  
+  <!-- Page Moulages -->
+  <div class="page active" id="pageMoulages">
+    <div class="board-wrapper">
+      <div class="board" id="boardMoulages">
+        <div class="col"><div class="col-header clickable" onclick="toggleRobotView()" title="Cliquer pour vue tableau"><span class="col-icon">⚙️</span><span class="col-title">Robot</span><span class="col-count" id="countRobot">0</span></div><div class="col-content" id="colRobot"></div></div>
+        <div class="col"><div class="col-header"><span class="col-icon">🪚</span><span class="col-title">Dégauchage</span><span class="col-count" id="countDégauchage">0</span></div><div class="col-content" id="colDégauchage"></div></div>
+        <div class="col"><div class="col-header"><span class="col-icon">♿</span><span class="col-title">Essayage</span><span class="col-count" id="countEssayage">0</span></div><div class="col-content" id="colEssayage"></div></div>
+        <div class="col"><div class="col-header"><span class="col-icon">🔨</span><span class="col-title">Atelier</span><span class="col-count" id="countAtelier">0</span></div><div class="col-content" id="colAtelier"></div></div>
+        <div class="col"><div class="col-header"><span class="col-icon">🧵</span><span class="col-title">Couture</span><span class="col-count" id="countCouture">0</span></div><div class="col-content" id="colCouture"></div></div>
+        <div class="col"><div class="col-header"><span class="col-icon">🎨</span><span class="col-title">Peinture</span><span class="col-count" id="countPeinture">0</span></div><div class="col-content" id="colPeinture"></div></div>
+        <div class="col"><div class="col-header"><span class="col-icon">🚚</span><span class="col-title">Expédition</span><span class="col-count" id="countExpedition">0</span></div><div class="col-content" id="colExpedition"></div></div>
+        <div class="col"><div class="col-header en-attente"><span class="col-icon">⏳</span><span class="col-title">En attente</span><span class="col-count" id="countAttente">0</span></div><div class="col-content" id="colAttente"></div></div>
+      </div>
+    </div>
+    
+    <!-- Vue Robot Horizontale -->
+    <div id="robotHorizontalView" class="robot-horizontal-container">
+      <div class="robot-horizontal-header">
+        <h2>📊 Robot - Vue Tableau</h2>
+        <div style="display:flex;gap:10px;">
+          <button class="header-btn" onclick="showAddMoulageModal()" style="background:linear-gradient(to bottom,#22c55e,#16a34a);padding:8px 16px;font-size:13px;font-weight:600;border-radius:6px;">+ Ajouter</button>
+          <button class="header-btn" onclick="toggleRobotView()" style="background:linear-gradient(to bottom,#3b82f6,#1e40af);padding:8px 16px;font-size:13px;font-weight:600;border-radius:6px;">← Kanban</button>
+        </div>
+      </div>
+      <div class="robot-horizontal-scroll" id="robotScrollContainer">
+        <table class="robot-horizontal-table" id="robotTable">
+          <thead>
+            <tr>
+              <th style="width:30px">⋮⋮</th>
+              <th style="width:100px">Nom<div class="resize-handle"></div></th>
+              <th style="width:90px"># Commande<div class="resize-handle"></div></th>
+              <th style="width:90px"># Soumission<div class="resize-handle"></div></th>
+              <th style="width:80px"># PO<div class="resize-handle"></div></th>
+              <th style="width:90px">Centre<div class="resize-handle"></div></th>
+              <th style="width:80px">État<div class="resize-handle"></div></th>
+              <th style="width:90px">Priorité<div class="resize-handle"></div></th>
+              <th style="width:50px">Rang<div class="resize-handle"></div></th>
+              <th style="width:70px">Région<div class="resize-handle"></div></th>
+              <th style="width:80px">Item<div class="resize-handle"></div></th>
+              <th style="width:85px">Reçue<div class="resize-handle"></div></th>
+              <th style="width:85px">Livraison<div class="resize-handle"></div></th>
+              <th style="width:85px">Essayage<div class="resize-handle"></div></th>
+              <th style="width:90px">Représent.<div class="resize-handle"></div></th>
+              <th style="width:50px">File<div class="resize-handle"></div></th>
+              <th style="width:50px">Angle<div class="resize-handle"></div></th>
+              <th style="width:50px">RUSH<div class="resize-handle"></div></th>
+              <th style="width:40px">Notes</th>
+            </tr>
+          </thead>
+          <tbody id="robotTableBody"></tbody>
+        </table>
+      </div>
+      <div class="robot-resize-bar" id="robotResizeBar">
+        <div class="robot-resize-grip">⋯</div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Page Série+ -->
+  <div class="page" id="pageSerie">
+    <div class="serie-split-container" id="serieSplitContainer">
+      <div class="serie-left-panel" id="serieLeftPanel">
+        <div class="serie-left-header">
+          <h3>📦 Commandes</h3>
+          <button class="serie-add-cmd-btn" onclick="showCmdAddModal()">+ Ajouter</button>
+        </div>
+        <div class="serie-search-box">
+          <input type="text" id="serieSearchInput" placeholder="Rechercher..." oninput="filterSerieCards()">
+        </div>
+        <div class="serie-filter-tabs" id="serieFilterTabs"></div>
+        <div class="serie-cards-list" id="serieCardsList"></div>
+      </div>
+      <div class="serie-divider" id="serieDivider"></div>
+      <div class="serie-right-panel" id="serieRightPanel">
+        <div class="serie-placeholder" id="seriePlaceholder">
+          <div class="serie-placeholder-icon">📋</div>
+          <div class="serie-placeholder-text">Sélectionnez une commande pour voir les détails</div>
+        </div>
+        <div class="serie-fiche-container hidden" id="serieFicheContainer"></div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Page Inventaire -->
+  <div class="page" id="pageInventaire">
+    <div class="fabriquer-only-info" id="fabriquerOnlyInfo">🔧 Mode Fabrication - Sélectionnez un item à fabriquer</div>
+    <div class="inv-grid-wrapper" id="invGridWrapper">
+      <div class="inv-grid" id="invGrid"></div>
+    </div>
+  </div>
+  
+  <!-- Page Jobs -->
+  <div class="page" id="pageJobs">
+    <div class="jobs-container" id="jobsContainer"></div>
+  </div>
+  
+  <!-- Page ATM -->
+  <div class="page" id="pageATM">
+    <div class="atm-board-wrapper">
+      <div class="atm-board" id="atmBoard"></div>
+    </div>
+  </div>
+  
+  <!-- Page PSM -->
+  <div class="page" id="pagePSM">
+    <div class="psm-container" id="psmContainer"></div>
+  </div>
+  
+  <!-- Page Calculateur -->
+  <div class="page" id="pageCalculateur">
+    <div class="calc-container" id="calcContainer"></div>
+  </div>
+  
+  <!-- Overlays et Modals -->
+  <div class="settings-overlay hidden" id="settingsOverlay">
+    <div class="settings-popup">
+      <div class="settings-header">
+        <span>⚙️ Paramètres</span>
+        <button class="settings-close-btn" onclick="toggleSettings()">✕</button>
+      </div>
+      <div class="settings-content" id="settingsContent"></div>
+    </div>
+  </div>
+  
+  <div id="addMoulageModal" class="add-moulage-modal hidden">
+    <div class="add-moulage-popup">
+      <div class="add-moulage-header">
+        <h3>➕ Nouveau Moulage</h3>
+        <button class="add-moulage-close" onclick="closeAddMoulageModal()">✕</button>
+      </div>
+      <div class="add-moulage-content" id="addMoulageContent"></div>
+    </div>
+  </div>
+  
+  <div id="cmdAddModal" class="cmd-add-modal hidden">
+    <div class="cmd-add-popup">
+      <div class="cmd-add-header">
+        <h3>➕ Nouvelle Commande</h3>
+        <button class="cmd-add-close" onclick="closeCmdAddModal()">✕</button>
+      </div>
+      <div class="cmd-add-content">
+        <div class="cmd-add-field">
+          <label>Client</label>
+          <select id="cmdAddClient"></select>
+        </div>
+        <div class="cmd-add-field">
+          <label>Numéro de commande *</label>
+          <input type="text" id="cmdAddOrder" placeholder="123456">
+        </div>
+        <div class="cmd-add-field">
+          <label>Description</label>
+          <input type="text" id="cmdAddDesc" placeholder="Description...">
+        </div>
+        <div class="cmd-add-field">
+          <label>Numéro PO</label>
+          <input type="text" id="cmdAddPO" placeholder="PO...">
+        </div>
+        <div class="cmd-add-field">
+          <label>Date de livraison</label>
+          <div class="cmd-add-date-trigger" onclick="openCmdAddCalendar('cmdAddDateLivraison')">
+            <span id="cmdAddDateLivraisonDisplay">-- Sélectionner --</span>
+            <span>📅</span>
+          </div>
+          <input type="hidden" id="cmdAddDateLivraison">
+        </div>
+        <div class="cmd-add-buttons">
+          <button class="cmd-add-cancel" onclick="closeCmdAddModal()">Annuler</button>
+          <button class="cmd-add-confirm" onclick="confirmAddCommande()">Créer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div id="cmdFicheOverlay" class="cmd-fiche-overlay"></div>
+  
+  <div id="priorityMenu" class="priority-menu hidden"></div>
+  <div id="moveMenu" class="move-menu hidden"></div>
+  <div id="calendarPopup" class="calendar-popup hidden"></div>
+  <div id="contextMenu" class="context-menu hidden"></div>
+  
+  <div class="confirm-overlay hidden" id="confirmOverlay">
+    <div class="confirm-popup">
+      <div class="confirm-message" id="confirmMessage"></div>
+      <div class="confirm-buttons">
+        <button class="confirm-btn confirm-yes" id="confirmYes">Oui</button>
+        <button class="confirm-btn confirm-no" id="confirmNo">Non</button>
+      </div>
+    </div>
+  </div>
+  
+  <div id="toast" class="toast hidden"></div>
+  
+  <div class="card-overlay" id="cardOverlay" onclick="closeFiche()"></div>
+  
+  <div class="list-manager-overlay overlay-base overlay-z-higher hidden" id="listManagerOverlay">
+    <div class="list-manager-popup">
+      <div class="list-manager-header">
+        <h3 id="listManagerTitle">⚙ Gérer les valeurs</h3>
+        <button class="list-manager-close-btn" onclick="closeListManager()">✕</button>
+      </div>
+      <div class="list-manager-content">
+        <div class="list-manager-items" id="listManagerItems"></div>
+      </div>
+      <div class="list-manager-footer">
+        <div class="list-manager-input-wrapper">
+          <input type="text" id="listManagerNewItem" placeholder="Nouvelle valeur..." onkeypress="if(event.key==='Enter'){addListItem();}">
+          <button class="btn-add-inside" onclick="addListItem()" title="Ajouter">+</button>
+        </div>
+        <button class="btn-close-list" onclick="closeListManager()">Fermer</button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="image-fullscreen-overlay" id="imageFullscreenOverlay" onclick="closeImageFullscreen()">
+    <div class="image-fullscreen-container">
+      <img id="imageFullscreenImg" src="" alt="Image agrandie">
+      <button class="image-fullscreen-close" onclick="closeImageFullscreen()">✕</button>
+    </div>
+  </div>
+  
+  <!-- Login Overlay -->
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-panel">
+      <div class="login-logo-flip-container">
+        <div class="login-logo-flip-inner">
+          <div class="login-logo-flip-front">
+            <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro">
+          </div>
+        </div>
+      </div>
+      <div class="login-title-container">
+        <div class="login-title">Outil de gestion simplifiée</div>
+        <div class="login-author">par Daniel Charest</div>
+      </div>
+      <div class="login-subtitle">Connectez-vous avec votre email d'entreprise</div>
+      <form id="loginForm" autocomplete="on">
+        <input type="email" id="loginEmail" name="email" class="login-input login-input-email" placeholder="Email d'entreprise" autocomplete="username">
+        <input type="password" id="loginPassword" name="password" class="login-input" placeholder="Mot de passe" maxlength="50" autocomplete="current-password">
+        <div class="login-remember">
+          <input type="checkbox" id="rememberMe" name="remember" checked>
+          <label for="rememberMe">Se souvenir de moi sur cet ordinateur</label>
+        </div>
+        <button type="submit" class="login-btn" id="loginBtn">Se connecter</button>
+      </form>
+      <button class="login-forgot-btn" id="forgotPasswordBtn">Mot de passe oublie?</button>
+      <div class="login-error" id="loginError"></div>
+    </div>
+  </div>
+</div>
+
+<!-- JavaScript Modules -->
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/moulages.js"></script>
+<script src="js/robotview.js"></script>
+<script src="js/pages.js"></script>
+<script src="js/inventaire.js"></script>
+<script src="js/commandes.js"></script>
+
+</body>
+</html>
