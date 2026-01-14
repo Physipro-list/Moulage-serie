@@ -18448,7 +18448,7 @@ body {
     </button>
   </div>
   
-  <div class="mobile-menu-version">PhysiPro v599</div>
+  <div class="mobile-menu-version">PhysiPro v601</div>
 </div>
 
 <!-- ================================================================
@@ -20626,6 +20626,9 @@ function selectRaisonAttente(raison) {
 
   // Sauvegarder la raison
   moulageCardsData[cardId].raisonAttente = raison;
+  
+  // SAUVEGARDER DANS FIREBASE
+  saveMoulageCardData(cardId);
 
   // Mettre à jour la pastille DIRECTEMENT
   const delayPill = card.querySelector('.mcard-delay-pill');
@@ -20713,6 +20716,9 @@ function clearRaisonAttente() {
   // Effacer la raison
   if (moulageCardsData[currentAttenteCardId]) {
     delete moulageCardsData[currentAttenteCardId].raisonAttente;
+    
+    // SAUVEGARDER DANS FIREBASE
+    saveMoulageCardData(currentAttenteCardId);
   }
 
   // Mettre à jour la pastille
@@ -20876,6 +20882,9 @@ function selectRaisonFromModal(raison) {
 
   // Sauvegarder la raison
   moulageCardsData[cardId].raisonAttente = raison;
+  
+  // SAUVEGARDER DANS FIREBASE
+  saveMoulageCardData(cardId);
 
   // Mettre à jour la pastille - afficher la raison
   const delayPill = card.querySelector('.mcard-delay-pill');
@@ -22272,8 +22281,8 @@ function updateRobotField(cardId, field, value) {
   if (!moulageCardsData[cardId]) initMoulageCardData(cardId);
   moulageCardsData[cardId][field] = value;
   syncCardFromRobotTable(cardId);
-  // IMPORTANT: Sauvegarder dans localStorage
-  saveMoulageDataToLocalStorage();
+  // IMPORTANT: Sauvegarder dans localStorage + Firebase
+  saveMoulageCardData(cardId);
 }
 
 function updateRobotEssayage(cardId, value) {
@@ -22281,8 +22290,8 @@ function updateRobotEssayage(cardId, value) {
   if (!moulageCardsData[cardId].tracking) moulageCardsData[cardId].tracking = {};
   if (!moulageCardsData[cardId].tracking.essayage) moulageCardsData[cardId].tracking.essayage = {};
   moulageCardsData[cardId].tracking.essayage.entree = value;
-  // IMPORTANT: Sauvegarder dans localStorage
-  saveMoulageDataToLocalStorage();
+  // IMPORTANT: Sauvegarder dans localStorage + Firebase
+  saveMoulageCardData(cardId);
 }
 
 function syncCardFromRobotTable(cardId) {
@@ -37128,10 +37137,29 @@ function loadMoulageDataFromLocalStorage() {
 // Sauvegarder les données dans localStorage
 function saveMoulageDataToLocalStorage() {
   try {
-    localStorage.setItem('physipro_moulage_data', JSON.stringify(moulageCardsData));
-    console.log('💾 Données sauvegardées dans localStorage:', Object.keys(moulageCardsData).length, 'cartes');
+    const jsonData = JSON.stringify(moulageCardsData);
+    // Vérifier la taille approximative (1 char ≈ 2 bytes en UTF-16)
+    const sizeKB = (jsonData.length * 2) / 1024;
+    
+    if (sizeKB > 4500) { // Limite localStorage ≈ 5MB, on avertit à 4.5MB
+      console.warn('⚠️ localStorage proche de la limite:', Math.round(sizeKB), 'KB');
+      if (typeof showToast === 'function') {
+        showToast('⚠️ Mémoire locale bientôt pleine - Contactez support', 'warning');
+      }
+    }
+    
+    localStorage.setItem('physipro_moulage_data', jsonData);
+    console.log('💾 Données sauvegardées:', Object.keys(moulageCardsData).length, 'cartes,', Math.round(sizeKB), 'KB');
   } catch (e) {
-    console.error('Erreur sauvegarde localStorage:', e);
+    console.error('❌ Erreur sauvegarde localStorage:', e);
+    
+    // Notifier l'utilisateur si quota dépassé
+    if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+      if (typeof showToast === 'function') {
+        showToast('🚨 Mémoire locale pleine! Supprimez des anciennes cartes ou contactez support', 'error');
+      }
+      alert('ERREUR CRITIQUE: Mémoire locale pleine!\n\nLes nouvelles modifications ne seront pas sauvegardées localement.\nContactez le support technique.');
+    }
   }
 }
 
@@ -37143,10 +37171,21 @@ function saveMoulageCardData(cardId) {
   // Sauvegarder sur Firebase si activé et connecté
   if (isFirebaseEnabled && firebaseDb && isFirebaseConnected && cardId && moulageCardsData[cardId]) {
     try {
-      firebaseDb.ref('moulages/' + cardId).update(moulageCardsData[cardId]);
-      console.log('☁️ Moulage sync Firebase:', cardId);
+      // NETTOYER les undefined/null avant Firebase (sinon Firebase crash silencieusement)
+      const cleanData = JSON.parse(JSON.stringify(moulageCardsData[cardId]));
+      
+      firebaseDb.ref('moulages/' + cardId).update(cleanData)
+        .then(() => {
+          console.log('☁️ Moulage sync Firebase:', cardId);
+        })
+        .catch(e => {
+          console.error('❌ Erreur Firebase sync:', cardId, e);
+          if (typeof showToast === 'function') {
+            showToast('⚠️ Erreur synchronisation cloud - Vérifiez connexion', 'warning');
+          }
+        });
     } catch (e) {
-      console.error('Erreur sauvegarde Firebase moulage:', e);
+      console.error('❌ Erreur préparation données Firebase:', e);
     }
   }
 }
@@ -41454,6 +41493,38 @@ function loadAllDataFromFirebase() {
   // Écouter les moulages (nouveau chemin)
   firebaseDb.ref('moulages').on('value', (snapshot) => {
     const data = snapshot.val();
+    
+    // GESTION DES SUPPRESSIONS : vérifier les cartes qui n'existent plus dans Firebase
+    if (data) {
+      const firebaseCardIds = new Set(Object.keys(data)); // SET pour O(1) lookup au lieu de O(n)
+      const localCardIds = Object.keys(moulageCardsData);
+      
+      // Trouver les cartes qui sont en local mais PAS dans Firebase (= supprimées)
+      localCardIds.forEach(localId => {
+        if (!firebaseCardIds.has(localId)) { // .has() est O(1) au lieu de .includes() qui est O(n)
+          console.log('🗑️ Carte supprimée détectée:', localId);
+          
+          // Supprimer de mémoire
+          delete moulageCardsData[localId];
+          
+          // Supprimer du DOM
+          const cardElement = document.querySelector(`.mcard[data-card-id="${localId}"]`);
+          if (cardElement) {
+            cardElement.remove();
+            console.log('🗑️ Carte retirée du DOM:', localId);
+          }
+        }
+      });
+    } else {
+      // Si Firebase est vide, vider tout
+      console.log('🗑️ Firebase vide - suppression de toutes les cartes locales');
+      Object.keys(moulageCardsData).forEach(cardId => {
+        const cardElement = document.querySelector(`.mcard[data-card-id="${cardId}"]`);
+        if (cardElement) cardElement.remove();
+      });
+      moulageCardsData = {};
+    }
+    
     if (data) {
       // Fusionner avec les données existantes et NORMALISER COMPLÈTEMENT
       Object.keys(data).forEach(cardId => {
