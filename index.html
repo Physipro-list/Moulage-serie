@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PhysiPro v128.0 - LOCAL TEST (v563)</title>
+  <title>PhysiPro v128.0 - LOCAL TEST (v564)</title>
 
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -1471,6 +1471,61 @@ body {
 .mcard-region-pill:hover {
   transform: translateY(-50%) scale(1.05);
   filter: brightness(1.1);
+}
+
+/* === PASTILLE NOTES (remplace région) === */
+.mcard-notes-pill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: linear-gradient(to bottom, #6b7280, #374151);
+  color: #fff;
+  font-size: 7px;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 12px;
+  border: 2px solid #000;
+  text-shadow: 1px 1px 0 #000;
+  text-align: center;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 10;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.3), 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.mcard-notes-pill:hover {
+  transform: translateY(-50%) scale(1.1);
+  filter: brightness(1.2);
+}
+
+/* Clignotement jaune - nouvelle note non lue */
+.mcard-notes-pill.blink-yellow {
+  animation: blinkYellow 0.8s ease-in-out infinite;
+}
+@keyframes blinkYellow {
+  0%, 100% { background: linear-gradient(to bottom, #fbbf24, #b45309); box-shadow: 0 0 8px #fbbf24; }
+  50% { background: linear-gradient(to bottom, #fef3c7, #fbbf24); box-shadow: 0 0 15px #fbbf24; }
+}
+
+/* Clignotement rouge - questionnement en attente */
+.mcard-notes-pill.blink-red {
+  animation: blinkRed 0.6s ease-in-out infinite;
+}
+@keyframes blinkRed {
+  0%, 100% { background: linear-gradient(to bottom, #ef4444, #991b1b); box-shadow: 0 0 8px #ef4444; }
+  50% { background: linear-gradient(to bottom, #fecaca, #ef4444); box-shadow: 0 0 15px #ef4444; }
+}
+
+/* Clignotement vert - réponse reçue */
+.mcard-notes-pill.blink-green {
+  animation: blinkGreen 0.8s ease-in-out infinite;
+}
+@keyframes blinkGreen {
+  0%, 100% { background: linear-gradient(to bottom, #22c55e, #166534); box-shadow: 0 0 8px #22c55e; }
+  50% { background: linear-gradient(to bottom, #bbf7d0, #22c55e); box-shadow: 0 0 15px #22c55e; }
 }
 
 /* Pastille région par couleur de carte */
@@ -15688,6 +15743,27 @@ body {
   border-radius: 3px; 
 }
 
+/* Bouton supprimer commande */
+.magent-order-delete-btn {
+  background: rgba(239, 68, 68, 0.8);
+  border: 1px solid #b91c1c;
+  color: white;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  transition: all 0.2s;
+}
+.magent-order-delete-btn:hover {
+  background: #ef4444;
+  transform: scale(1.1);
+}
+
 /* === CONTENU COMMANDE === */
 .magent-order-content {
   background: #fef3c7;
@@ -21548,9 +21624,9 @@ function renderRecettesList(allRecettes) {
         let optionsHtml = '<option value="">-- Sélectionner --</option>';
         MATERIAUX_DISPONIBLES.forEach(m => {
           const selected = (m.code === mat.code) ? 'selected' : '';
-          const descSafe = m.description.replace(/"/g, '&quot;');
+          const descSafe = (m.materiau || '').replace(/"/g, '&quot;');
           const epSafe = (m.epaisseur || '').replace(/"/g, '&quot;');
-          optionsHtml += `<option value="${m.code}" data-desc="${descSafe}" data-ep="${epSafe}" ${selected}>${m.code} - ${m.description}</option>`;
+          optionsHtml += `<option value="${m.code}" data-desc="${descSafe}" data-ep="${epSafe}" ${selected}>${m.code} - ${m.materiau || ''}</option>`;
         });
         
         html += `
@@ -21807,13 +21883,13 @@ function openMateriauSelector(itemName) {
     `;
     mats.forEach(m => {
       const safeCode = m.code.replace(/'/g, "\\'");
-      const safeDesc = m.description.replace(/'/g, "\\'");
+      const safeDesc = (m.materiau || '').replace(/'/g, "\\'");
       const safeEp = (m.epaisseur || '').replace(/'/g, "\\'");
       categoriesHtml += `
         <div class="mat-selector-item" onclick="selectMateriau('${safeCode}', '${safeDesc}', '${safeEp}')" 
              style="padding:6px 10px;border-bottom:1px dotted #e5e7eb;cursor:pointer;font-size:11px;display:flex;justify-content:space-between;align-items:center;"
              onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='white'">
-          <span><strong style="color:#1e3a5f;">${m.code}</strong> - ${m.description}</span>
+          <span><strong style="color:#1e3a5f;">${m.code}</strong> - ${m.materiau || ''}</span>
           <span style="color:#64748b;font-size:10px;">${m.epaisseur || ''}</span>
         </div>
       `;
@@ -32052,7 +32128,7 @@ function magentInitPanel() {
       const currentQty = m.defaultQty || 1;
       html += `<div class="magent-mat ${isSelected ? 'selected' : ''}" data-code="${m.code}" onclick="magentToggleMat('${safeCode}')">
         <span class="magent-mat-code">${m.code}</span>
-        <span class="magent-mat-name">${m.description}</span>
+        <span class="magent-mat-name">${m.materiau || m.description || ''}</span>
         <input type="number" class="magent-mat-qty" value="${currentQty}" min="1" 
                ${magentEditMode ? '' : 'disabled'} 
                onclick="event.stopPropagation()" 
@@ -32138,7 +32214,7 @@ function magentToggleMat(code) {
     if (mat) {
       order.items.push({ 
         code: mat.code, 
-        name: mat.description, 
+        name: mat.materiau || mat.description || code, 
         qty: mat.defaultQty || 1,
         status: null,
         reason: null,
@@ -32188,6 +32264,15 @@ function magentStartOrder() {
   
   magentRenderOrders();
   magentInitPanel();
+  
+  // Scroller vers la nouvelle commande
+  setTimeout(() => {
+    const newCard = document.querySelector(`.magent-order-card[data-order-id="${order.id}"]`);
+    if (newCard) {
+      newCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 100);
+  
   showToast('📦 Sélectionnez vos matériaux', 'success');
 }
 
@@ -32468,6 +32553,7 @@ function magentRenderOrders() {
           <div class="magent-order-header">
             <span class="magent-order-title">📦 ${order.date} ${order.time} - Créé par ${order.createdBy}</span>
             ${headerRightHtml}
+            <button class="magent-order-delete-btn" onclick="event.stopPropagation(); magentDeleteOrder(${orderIdx})" title="Supprimer cette commande">✕</button>
           </div>
           <div class="magent-order-content">
             ${contentHtml}
@@ -32478,6 +32564,45 @@ function magentRenderOrders() {
     `;
   }).join('');
 }
+
+// Supprimer une commande
+function magentDeleteOrder(orderIdx) {
+  const order = magentOrders[orderIdx];
+  if (!order) return;
+  
+  if (!confirm(`Supprimer la commande du ${order.date} ${order.time}?`)) {
+    return;
+  }
+  
+  // Logger la suppression
+  const now = new Date();
+  const logEntry = {
+    date: order.date,
+    time: order.time,
+    deletedAt: now.toLocaleDateString('fr-CA') + ' ' + now.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }),
+    deletedBy: currentUser?.name || 'Inconnu',
+    createdBy: order.createdBy,
+    items: order.items.map(i => ({ code: i.code, name: i.name, qty: i.qty })),
+    action: 'deleted',
+    reason: 'Suppression manuelle'
+  };
+  
+  // Ajouter au log
+  if (typeof magentLog === 'undefined') {
+    window.magentLog = [];
+  }
+  magentLog.unshift(logEntry);
+  
+  // Supprimer la commande
+  magentOrders.splice(orderIdx, 1);
+  
+  // Sauvegarder
+  magentSaveData();
+  magentRenderOrders();
+  
+  showToast('🗑️ Commande supprimée et loggée', 'info');
+}
+window.magentDeleteOrder = magentDeleteOrder;
 
 // Vérifier si on peut ajouter des items (moins de 45 min depuis création)
 function magentCanAddLastMinute(order) {
@@ -36183,6 +36308,115 @@ window.initExistingPsmCards = initExistingPsmCards;
 window.togglePsmColumn = togglePsmColumn;
 window.togglePsmComplete = togglePsmComplete;
 window.addPsmMaterial = addPsmMaterial;
+// === PASTILLE NOTES - CLIGNOTEMENT ===
+// Ouvrir le panneau notes d'une carte moulage
+function openMoulageNotesPanel(cardId) {
+  console.log('📝 Ouvrir notes:', cardId);
+  
+  // Marquer les notes comme lues
+  if (moulageCardsData[cardId]) {
+    moulageCardsData[cardId].notesRead = true;
+    moulageCardsData[cardId].notesReadAt = new Date().toISOString();
+    moulageCardsData[cardId].notesReadBy = getCurrentUserName();
+    saveMoulageCardData(cardId);
+  }
+  
+  // Mettre à jour la pastille (plus de clignotement)
+  updateMoulageNotesPill(cardId);
+  
+  // Ouvrir la fiche complète
+  openFiche(cardId);
+  
+  // Scroller vers la zone notes après un délai
+  setTimeout(() => {
+    const notesZone = document.querySelector(`#ficheOverlay_${cardId} .fiche-notes-zone`);
+    if (notesZone) {
+      notesZone.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 300);
+}
+
+// Mettre à jour l'état de la pastille Notes d'une carte
+function updateMoulageNotesPill(cardId) {
+  const card = document.querySelector(`.mcard[data-card-id="${cardId}"]`);
+  if (!card) return;
+  
+  const pill = card.querySelector('.mcard-notes-pill');
+  if (!pill) return;
+  
+  const data = moulageCardsData[cardId];
+  if (!data) {
+    pill.classList.remove('blink-yellow', 'blink-red', 'blink-green');
+    return;
+  }
+  
+  // Vérifier l'état des notes
+  const pinnedNotes = data.pinnedNotes || [];
+  const hasUnreadNotes = pinnedNotes.length > 0 && !data.notesRead;
+  const hasQuestion = pinnedNotes.some(n => n.isQuestion && !n.answered);
+  const hasAnswer = pinnedNotes.some(n => n.isAnswer && !n.answerRead);
+  
+  // Appliquer le bon clignotement
+  pill.classList.remove('blink-yellow', 'blink-red', 'blink-green');
+  
+  if (hasQuestion) {
+    pill.classList.add('blink-red');
+  } else if (hasAnswer) {
+    pill.classList.add('blink-green');
+  } else if (hasUnreadNotes) {
+    pill.classList.add('blink-yellow');
+  }
+}
+
+// Marquer une note comme question
+function markNoteAsQuestion(cardId, noteIndex) {
+  if (!moulageCardsData[cardId] || !moulageCardsData[cardId].pinnedNotes) return;
+  
+  const note = moulageCardsData[cardId].pinnedNotes[noteIndex];
+  if (note) {
+    note.isQuestion = true;
+    note.questionAt = new Date().toISOString();
+    note.questionBy = getCurrentUserName();
+    moulageCardsData[cardId].notesRead = false; // Forcer relecture
+    saveMoulageCardData(cardId);
+    updateMoulageNotesPill(cardId);
+  }
+}
+
+// Marquer une note comme réponse
+function markNoteAsAnswer(cardId, noteIndex) {
+  if (!moulageCardsData[cardId] || !moulageCardsData[cardId].pinnedNotes) return;
+  
+  const note = moulageCardsData[cardId].pinnedNotes[noteIndex];
+  if (note) {
+    note.isAnswer = true;
+    note.answerAt = new Date().toISOString();
+    note.answerBy = getCurrentUserName();
+    // Trouver et marquer la question correspondante comme répondue
+    moulageCardsData[cardId].pinnedNotes.forEach(n => {
+      if (n.isQuestion && !n.answered) {
+        n.answered = true;
+        n.answeredAt = new Date().toISOString();
+      }
+    });
+    saveMoulageCardData(cardId);
+    updateMoulageNotesPill(cardId);
+  }
+}
+
+// Rafraîchir toutes les pastilles Notes
+function refreshAllNotesPills() {
+  Object.keys(moulageCardsData).forEach(cardId => {
+    updateMoulageNotesPill(cardId);
+  });
+}
+
+window.openMoulageNotesPanel = openMoulageNotesPanel;
+window.updateMoulageNotesPill = updateMoulageNotesPill;
+window.markNoteAsQuestion = markNoteAsQuestion;
+window.markNoteAsAnswer = markNoteAsAnswer;
+window.refreshAllNotesPills = refreshAllNotesPills;
+
 window.openFiche = openFiche;
 window.closeFiche = closeFiche;
 window.openNotesOverlay = openNotesOverlay;
@@ -36888,7 +37122,7 @@ function createMoulageCard(cardId, data) {
           <span class="mcard-title-text" data-field="name">${data.name || 'Sans nom'}</span>
         </div>
         <div class="mcard-order-line">
-          <span class="mcard-region-pill" onclick="showCardPriorityMenu(this.closest('.mcard'), '${cardId}', event)" title="Cliquer pour priorité">${regionDisplay}</span>
+          <span class="mcard-notes-pill" onclick="event.stopPropagation(); openMoulageNotesPanel('${cardId}')" title="Voir les notes">Notes</span>
           <span class="mcard-order-text" data-field="order">${data.order || '------'}</span>
           <button class="mcard-fiche-btn" onclick="openFiche('${cardId}')" title="Ouvrir la fiche">Fiche</button>
         </div>
