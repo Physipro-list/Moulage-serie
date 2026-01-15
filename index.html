@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PhysiPro v128.0 - LOCAL TEST (v608)</title>
+  <title>PhysiPro v128.0 - LOCAL TEST (v609)</title>
 
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -18973,6 +18973,7 @@ body {
           <!-- En-tête 56px -->
           <div class="serie-col-cmd-header" id="serieColCmdHeader">
             <button class="serie-hr-btn-add" onclick="openAddSerieCommandeModal()">Créer Commande</button>
+            <button class="serie-hr-json-btn" onclick="openSerieJsonModal()" title="Importer JSON">📥 JSON</button>
             <span class="serie-hr-count-badge" id="serieCommandesCount">4</span>
           </div>
           <!-- Cartes -->
@@ -22828,6 +22829,12 @@ function onKanbanDrop(e, targetColIndex) {
     
     // SAUVEGARDE FIREBASE après déplacement
     saveMoulageCardData(cardId);
+    
+    // v609: TOUJOURS sauvegarder l'ordre des deux colonnes (ancienne et nouvelle)
+    if (oldColIndex >= 0 && oldColIndex !== targetColIndex) {
+      saveKanbanColumnOrder(oldColIndex);
+    }
+    saveKanbanColumnOrder(targetColIndex);
   }
 
   cleanupDragState();
@@ -24661,7 +24668,7 @@ function openSerieJsonModal() {
 }
 window.openSerieJsonModal = openSerieJsonModal;
 
-// Valider le JSON
+// Valider le JSON (v609 - supporte plusieurs commandes)
 function validateSerieJson() {
   const input = document.getElementById('serieJsonInput').value.trim();
   const validation = document.getElementById('serieJsonValidation');
@@ -24676,23 +24683,49 @@ function validateSerieJson() {
   try {
     const data = JSON.parse(input);
     
-    // Vérifications
-    const errors = [];
-    if (!data.commande) errors.push('Manque: commande');
-    if (!data.commande?.numero) errors.push('Manque: commande.numero');
-    if (!data.commande?.client) errors.push('Manque: commande.client');
-    if (!data.items || !Array.isArray(data.items)) errors.push('Manque: items (tableau)');
-    if (data.items?.length === 0) errors.push('Aucun item dans la commande');
-    
-    if (errors.length > 0) {
-      validation.style.background = '#7f1d1d';
-      validation.innerHTML = '❌ Erreurs: ' + errors.join(', ');
-      return null;
+    // Vérifier si c'est un tableau de commandes ou une seule commande
+    if (Array.isArray(data)) {
+      // PLUSIEURS COMMANDES
+      const errors = [];
+      let totalItems = 0;
+      
+      data.forEach((cmd, idx) => {
+        if (!cmd.commande) errors.push(`Commande ${idx + 1}: manque "commande"`);
+        if (!cmd.commande?.numero) errors.push(`Commande ${idx + 1}: manque "numero"`);
+        if (!cmd.commande?.client) errors.push(`Commande ${idx + 1}: manque "client"`);
+        if (!cmd.items || !Array.isArray(cmd.items)) errors.push(`Commande ${idx + 1}: manque "items"`);
+        totalItems += cmd.items?.length || 0;
+      });
+      
+      if (errors.length > 0) {
+        validation.style.background = '#7f1d1d';
+        validation.innerHTML = '❌ Erreurs: ' + errors.slice(0, 5).join(', ') + (errors.length > 5 ? '...' : '');
+        return null;
+      }
+      
+      validation.style.background = '#14532d';
+      validation.innerHTML = `✅ JSON valide! ${data.length} commandes, ${totalItems} items au total`;
+      return { multiple: true, commandes: data };
+      
+    } else {
+      // UNE SEULE COMMANDE
+      const errors = [];
+      if (!data.commande) errors.push('Manque: commande');
+      if (!data.commande?.numero) errors.push('Manque: commande.numero');
+      if (!data.commande?.client) errors.push('Manque: commande.client');
+      if (!data.items || !Array.isArray(data.items)) errors.push('Manque: items (tableau)');
+      if (data.items?.length === 0) errors.push('Aucun item dans la commande');
+      
+      if (errors.length > 0) {
+        validation.style.background = '#7f1d1d';
+        validation.innerHTML = '❌ Erreurs: ' + errors.join(', ');
+        return null;
+      }
+      
+      validation.style.background = '#14532d';
+      validation.innerHTML = `✅ JSON valide! 1 commande, ${data.items.length} items`;
+      return { multiple: false, commandes: [data] };
     }
-    
-    validation.style.background = '#14532d';
-    validation.innerHTML = `✅ JSON valide! ${data.items.length} items trouvés`;
-    return data;
     
   } catch (e) {
     validation.style.background = '#7f1d1d';
@@ -24702,63 +24735,72 @@ function validateSerieJson() {
 }
 window.validateSerieJson = validateSerieJson;
 
-// Prévisualiser le JSON
+// Prévisualiser le JSON (v609 - supporte plusieurs commandes)
 function previewSerieJson() {
-  const data = validateSerieJson();
-  if (!data) return;
+  const result = validateSerieJson();
+  if (!result) return;
   
   const preview = document.getElementById('serieJsonPreview');
   preview.style.display = 'block';
   preview.style.background = '#1a1a1a';
   preview.style.padding = '10px';
   preview.style.borderRadius = '6px';
+  preview.style.maxHeight = '300px';
+  preview.style.overflowY = 'auto';
   
-  const atelierItems = data.items.filter(i => i.departement === 'atelier');
-  const coutureItems = data.items.filter(i => i.departement === 'couture');
-  const inspectionItems = data.items.filter(i => i.departement === 'inspection');
+  let html = `<h4 style="color: #60a5fa; margin-bottom: 8px;">Prévisualisation - ${result.commandes.length} commande(s)</h4>`;
   
-  preview.innerHTML = `
-    <h4 style="color: #60a5fa; margin-bottom: 8px;">Prévisualisation de la commande</h4>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px;">
-      <div>
-        <strong>Numéro:</strong> ${data.commande.numero}<br>
-        <strong>Client:</strong> ${data.commande.client}<br>
-        <strong>Région:</strong> ${data.commande.region || 'QC'}<br>
-        <strong>Date commande:</strong> ${data.commande.dateCommande || 'N/A'}<br>
-        <strong>Date livraison:</strong> ${data.commande.dateLivraison || 'N/A'}
+  result.commandes.forEach((data, idx) => {
+    const atelierItems = data.items.filter(i => i.departement === 'atelier');
+    const coutureItems = data.items.filter(i => i.departement === 'couture');
+    const inspectionItems = data.items.filter(i => i.departement === 'inspection');
+    
+    html += `
+      <div style="background: #252525; border-radius: 6px; padding: 8px; margin-bottom: 8px; border-left: 3px solid #3b82f6;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px;">
+          <div>
+            <strong style="color: #f59e0b;">#${idx + 1}</strong> - <strong>${data.commande.numero}</strong><br>
+            <strong>Client:</strong> ${data.commande.client}<br>
+            <strong>Région:</strong> ${data.commande.region || 'QC'}
+          </div>
+          <div>
+            <span style="color: #3b82f6;">Atelier: ${atelierItems.length}</span> | 
+            <span style="color: #22c55e;">Couture: ${coutureItems.length}</span> | 
+            <span style="color: #f59e0b;">Insp: ${inspectionItems.length}</span>
+          </div>
+        </div>
+        ${atelierItems.length > 0 ? `
+        <div style="margin-top: 6px; font-size: 10px; color: #94a3b8;">
+          Items: ${atelierItems.map(i => `${i.code || 'N/A'} (x${i.quantite})`).join(', ')}
+        </div>` : ''}
       </div>
-      <div>
-        <strong style="color: #3b82f6;">Atelier:</strong> ${atelierItems.length} items<br>
-        <strong style="color: #22c55e;">Couture:</strong> ${coutureItems.length} items<br>
-        <strong style="color: #f59e0b;">Inspection:</strong> ${inspectionItems.length} items
-      </div>
-    </div>
-    <div style="margin-top: 10px;">
-      <strong>Items Atelier:</strong>
-      <ul style="margin: 5px 0 0 20px; font-size: 10px;">
-        ${atelierItems.map(i => `<li>${i.code || 'N/A'} - ${i.description} (x${i.quantite})</li>`).join('')}
-      </ul>
-    </div>
-  `;
+    `;
+  });
+  
+  preview.innerHTML = html;
 }
 window.previewSerieJson = previewSerieJson;
 
-// Importer le JSON
+// Importer le JSON (v609 - supporte plusieurs commandes)
 function importSerieJson() {
-  const data = validateSerieJson();
-  if (!data) return;
+  const result = validateSerieJson();
+  if (!result) return;
   
-  if (!confirm(`Importer la commande #${data.commande.numero} pour ${data.commande.client}?\\n\\n${data.items.length} items seront créés.`)) {
+  const totalItems = result.commandes.reduce((sum, cmd) => sum + (cmd.items?.length || 0), 0);
+  
+  if (!confirm(`Importer ${result.commandes.length} commande(s) avec ${totalItems} items au total?`)) {
     return;
   }
   
-  // Créer la carte de commande
-  const cardId = 'serie-' + Date.now();
   const regionMap = { 'QC': 'qc', 'ON': 'on', 'MA': 'ma', 'Quebec': 'qc', 'Ontario': 'on', 'Maritime': 'ma' };
-  const region = regionMap[data.commande.region] || 'qc';
+  let createdCards = [];
   
-  // Initialiser les données
-  if (!serieCardsData[cardId]) {
+  result.commandes.forEach((data, idx) => {
+    // Créer la carte de commande
+    const cardId = 'serie-' + Date.now() + '-' + idx;
+    const region = regionMap[data.commande.region] || 'qc';
+    
+    // Initialiser les données
     serieCardsData[cardId] = {
       client: data.commande.client,
       order: data.commande.numero,
@@ -24770,37 +24812,38 @@ function importSerieJson() {
       coutureItems: [],
       inspectionItems: []
     };
-  }
-  
-  // Ajouter les items par département
-  data.items.forEach(item => {
-    const newItem = {
-      id: Date.now() + Math.random().toString(36).substr(2, 9),
-      code: item.code || '',
-      description: item.description || '',
-      quantite: item.quantite || 1,
-      dimensions: item.dimensions || '',
-      epaisseur: item.epaisseur || '',
-      options: item.options || [],
-      couleur: item.couleur || '',
-      tissu: item.tissu || '',
-      notes: item.notes || '',
-      produit: false,
-      fait: false,
-      inspecte: false
-    };
     
-    if (item.departement === 'atelier') {
-      serieCardsData[cardId].atelierItems.push(newItem);
-    } else if (item.departement === 'couture') {
-      serieCardsData[cardId].coutureItems.push(newItem);
-    } else if (item.departement === 'inspection') {
-      serieCardsData[cardId].inspectionItems.push(newItem);
-    }
+    // Ajouter les items par département
+    data.items.forEach(item => {
+      const newItem = {
+        id: Date.now() + Math.random().toString(36).substr(2, 9),
+        code: item.code || '',
+        description: item.description || '',
+        quantite: item.quantite || 1,
+        dimensions: item.dimensions || '',
+        epaisseur: item.epaisseur || '',
+        options: item.options || [],
+        couleur: item.couleur || '',
+        tissu: item.tissu || '',
+        notes: item.notes || '',
+        produit: false,
+        fait: false,
+        inspecte: false
+      };
+      
+      if (item.departement === 'atelier') {
+        serieCardsData[cardId].atelierItems.push(newItem);
+      } else if (item.departement === 'couture') {
+        serieCardsData[cardId].coutureItems.push(newItem);
+      } else if (item.departement === 'inspection') {
+        serieCardsData[cardId].inspectionItems.push(newItem);
+      }
+    });
+    
+    // Créer la carte visuelle
+    createSerieCardFromData(cardId, serieCardsData[cardId]);
+    createdCards.push(cardId);
   });
-  
-  // Créer la carte visuelle
-  createSerieCardFromData(cardId, serieCardsData[cardId]);
   
   // Sauvegarder
   saveSerieData();
@@ -24808,10 +24851,12 @@ function importSerieJson() {
   // Fermer le modal
   document.getElementById('serieJsonModal')?.remove();
   
-  showToast(`✅ Commande #${data.commande.numero} importée (${data.items.length} items)`, 'success');
+  showToast(`✅ ${result.commandes.length} commande(s) importée(s) (${totalItems} items)`, 'success');
   
-  // Sélectionner la nouvelle carte
-  setTimeout(() => selectSerieCard(cardId), 100);
+  // Sélectionner la première carte créée
+  if (createdCards.length > 0) {
+    setTimeout(() => selectSerieCard(createdCards[0]), 100);
+  }
 }
 window.importSerieJson = importSerieJson;
 
@@ -38052,6 +38097,11 @@ function loadMoulageDataFromLocalStorage() {
       
       // Mettre à jour les compteurs
       updateAllMoulageColumnCounts();
+      
+      // v609: Trier les cartes par columnOrder dans chaque colonne
+      setTimeout(() => {
+        sortCardsInAllColumns();
+      }, 200);
     } else {
       console.log('📂 Aucune donnée dans localStorage - en attente de Firebase');
     }
@@ -38066,6 +38116,32 @@ function loadMoulageDataFromLocalStorage() {
     }
   }, 500);
 }
+
+// v609: Trier les cartes dans toutes les colonnes par columnOrder
+function sortCardsInAllColumns() {
+  if (typeof COL_IDS === 'undefined') return;
+  
+  COL_IDS.forEach((colId, colIndex) => {
+    const col = document.getElementById(colId);
+    if (!col) return;
+    
+    const cards = Array.from(col.querySelectorAll('.mcard[data-card-id]'));
+    if (cards.length < 2) return;
+    
+    // Trier par columnOrder
+    cards.sort((a, b) => {
+      const orderA = moulageCardsData[a.dataset.cardId]?.columnOrder ?? 9999;
+      const orderB = moulageCardsData[b.dataset.cardId]?.columnOrder ?? 9999;
+      return orderA - orderB;
+    });
+    
+    // Réinsérer dans l'ordre
+    cards.forEach(card => col.appendChild(card));
+  });
+  
+  console.log('🔢 Cartes triées par columnOrder');
+}
+window.sortCardsInAllColumns = sortCardsInAllColumns;
 
 // Sauvegarder les données dans localStorage
 function saveMoulageDataToLocalStorage() {
