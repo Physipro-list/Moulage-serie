@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PhysiPro v128.0 - LOCAL TEST (v606)</title>
+  <title>PhysiPro v128.0 - LOCAL TEST (v608)</title>
 
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -3796,12 +3796,18 @@ body {
 }
 
 .robot-horizontal-table tr.dragging {
-  opacity: 0.5;
+  opacity: 0.7;
   background: #e8f5e9 !important;
+  transition: opacity 0.15s ease;
 }
 
 .robot-horizontal-table tr.drag-over {
   border-top: 3px solid #217346 !important;
+}
+
+/* Amélioration fluidité drag v607 */
+.robot-horizontal-table tr {
+  transition: transform 0.1s ease, background-color 0.1s ease;
 }
 
 /* États avec couleurs */
@@ -5938,6 +5944,25 @@ body {
 
 .serie-hr-info-btn:hover {
   background: linear-gradient(135deg, #fcd34d 0%, #f59e0b 100%);
+}
+
+/* Bouton JSON - vert */
+.serie-hr-json-btn {
+  padding: 4px 8px;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border: 1px solid #15803d;
+  border-radius: 4px;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.serie-hr-json-btn:hover {
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
 }
 
 /* Conteneur des 2 rows - hauteur fixe 56px */
@@ -19018,6 +19043,7 @@ body {
                 <div class="serie-hr1-btns-group">
                   <button class="serie-hr-mat-btn" id="serieCmdMatBtn" onclick="toggleSerieMatView()">📦 Matériaux</button>
                   <button class="serie-hr-info-btn" onclick="openSerieInfoModal()">📋 Info</button>
+                  <button class="serie-hr-json-btn" onclick="openSerieJsonModal()">📥 JSON</button>
                 </div>
                 <span class="serie-hr1-title">Atelier</span>
               </div>
@@ -21978,30 +22004,50 @@ function handleEtatSelect(sel, cardId) {
 
 // --- Drag and Drop pour réordonner les lignes ---
 let draggedRow = null;
+let dragStartTime = null;
 
 function onRobotRowDragStart(e) {
   // Activer le flag pour bloquer les mises à jour Firebase
   window.isKanbanDragging = true;
+  dragStartTime = Date.now();
   
   draggedRow = e.target.closest('tr');
   if (draggedRow) {
-    draggedRow.classList.add('dragging');
+    // Ajouter la classe immédiatement
+    requestAnimationFrame(() => {
+      draggedRow.classList.add('dragging');
+    });
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', draggedRow.dataset.cardId);
+    
+    // Image de drag personnalisée pour éviter le semi-transparent
+    const dragImage = draggedRow.cloneNode(true);
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-1000px';
+    dragImage.style.opacity = '0.9';
+    dragImage.style.background = '#e8f5e9';
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 0, 0);
+    setTimeout(() => dragImage.remove(), 100);
   }
 }
 
 function onRobotRowDragOver(e) {
   e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
   const tr = e.target.closest('tr');
   if (tr && tr !== draggedRow) {
+    // Nettoyer les autres drag-over d'abord
+    document.querySelectorAll('.drag-over').forEach(el => {
+      if (el !== tr) el.classList.remove('drag-over');
+    });
     tr.classList.add('drag-over');
   }
 }
 
 function onRobotRowDragLeave(e) {
   const tr = e.target.closest('tr');
-  if (tr) {
+  if (tr && !tr.contains(e.relatedTarget)) {
     tr.classList.remove('drag-over');
   }
 }
@@ -22009,11 +22055,19 @@ function onRobotRowDragLeave(e) {
 function onRobotRowDrop(e) {
   e.preventDefault();
   const targetRow = e.target.closest('tr');
+  
   if (targetRow && draggedRow && targetRow !== draggedRow) {
     const tbody = document.getElementById('robotTableBody');
     const allRows = Array.from(tbody.querySelectorAll('tr'));
     const draggedIndex = allRows.indexOf(draggedRow);
     const targetIndex = allRows.indexOf(targetRow);
+    
+    // Récupérer les infos pour le log AVANT le déplacement
+    const cardId = draggedRow.dataset.cardId;
+    const cardData = moulageCardsData[cardId];
+    const cardName = cardData ? `${cardData.client || 'Client'} #${cardData.order || '?'}` : cardId;
+    const oldPosition = draggedIndex + 1;
+    const newPosition = targetIndex + 1;
 
     if (draggedIndex < targetIndex) {
       targetRow.after(draggedRow);
@@ -22030,21 +22084,31 @@ function onRobotRowDrop(e) {
     // NOUVEAU: Sauvegarder l'ordre des cartes Robot
     saveRobotRowOrder();
     
-    showToast('Ordre sauvegardé', 'success');
+    // LOG du changement d'ordre (v607)
+    logActivity('reorder', `"${cardName}" - Rang: ${oldPosition} → ${newPosition} (Vue Robot)`, {
+      cardId: cardId,
+      cardName: cardName,
+      fromPosition: oldPosition,
+      toPosition: newPosition,
+      view: 'Robot'
+    });
+    
+    showToast(`Rang: ${oldPosition} → ${newPosition}`, 'success');
   }
 
-  // Nettoyer
-  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-  if (draggedRow) {
-    draggedRow.classList.remove('dragging');
-    draggedRow = null;
-  }
+  // Nettoyer immédiatement
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    if (draggedRow) {
+      draggedRow.classList.remove('dragging');
+      draggedRow = null;
+    }
+  });
   
-  // NOUVEAU: Désactiver le flag après un court délai
+  // Désactiver le flag après un court délai
   setTimeout(() => {
     window.isKanbanDragging = false;
-    console.log('✅ Drag Robot terminé, Firebase réactivé');
-  }, 500);
+  }, 300);
 }
 
 function setupRobotRowDragDrop() {
@@ -22636,6 +22700,11 @@ function onKanbanDrop(e, targetColIndex) {
   const targetCol = document.getElementById(COL_IDS[targetColIndex]);
   const oldCol = card.closest('.moulages-col-content');
   const oldColIndex = COL_IDS.indexOf(oldCol?.id);
+  
+  // v607: Capturer la position AVANT le déplacement
+  const oldPosition = oldCol ? Array.from(oldCol.children).indexOf(card) + 1 : 0;
+  const cardData = moulageCardsData[cardId];
+  const cardName = cardData ? `${cardData.client || 'Client'} #${cardData.order || '?'}` : cardId;
 
   if (targetCol) {
     // Insérer à la bonne position
@@ -22646,6 +22715,9 @@ function onKanbanDrop(e, targetColIndex) {
     } else {
       targetCol.appendChild(card);
     }
+    
+    // v607: Capturer la nouvelle position APRÈS le déplacement
+    const newPosition = Array.from(targetCol.children).indexOf(card) + 1;
 
     // Mettre à jour tracking si changement de colonne
     if (oldColIndex !== targetColIndex) {
@@ -22724,7 +22796,6 @@ function onKanbanDrop(e, targetColIndex) {
         showToast(`Carte déplacée vers ${COL_NAMES_MOULAGE[targetColIndex]}`, 'success');
         
         // Log du déplacement avec la nouvelle fonction
-        const cardName = moulageCardsData[cardId]?.name || cardId;
         const fromCol = oldColIndex >= 0 ? COL_NAMES_MOULAGE[oldColIndex] : 'inconnu';
         const toCol = COL_NAMES_MOULAGE[targetColIndex];
         logCardMove(cardId, cardName, fromCol, toCol);
@@ -22733,6 +22804,23 @@ function onKanbanDrop(e, targetColIndex) {
       // Si on entre dans Robot (colonne 0) et pas de dateRobot
       if (targetColIndex === 0 && !moulageCardsData[cardId].dateRobot) {
         moulageCardsData[cardId].dateRobot = today;
+      }
+    } else {
+      // v607: MÊME COLONNE - Log du changement de position/rang
+      if (oldPosition !== newPosition) {
+        const colName = COL_NAMES_MOULAGE[targetColIndex] || 'Colonne';
+        logActivity('reorder', `"${cardName}" - Rang: ${oldPosition} → ${newPosition} (${colName})`, {
+          cardId: cardId,
+          cardName: cardName,
+          fromPosition: oldPosition,
+          toPosition: newPosition,
+          column: colName,
+          view: 'Kanban'
+        });
+        showToast(`Rang: ${oldPosition} → ${newPosition}`, 'success');
+        
+        // Sauvegarder l'ordre de la colonne
+        saveKanbanColumnOrder(targetColIndex);
       }
     }
 
@@ -22753,11 +22841,34 @@ function cleanupDragState() {
   dropTarget = null;
   dropPosition = null;
   
-  // NOUVEAU: Désactiver le flag après un court délai pour laisser Firebase se stabiliser
+  // Désactiver le flag après un court délai pour laisser Firebase se stabiliser
   setTimeout(() => {
     window.isKanbanDragging = false;
-    console.log('✅ Drag terminé, Firebase réactivé');
-  }, 500);
+  }, 300);
+}
+
+// v607: Sauvegarder l'ordre des cartes dans une colonne Kanban
+function saveKanbanColumnOrder(colIndex) {
+  const colId = COL_IDS[colIndex];
+  const col = document.getElementById(colId);
+  if (!col) return;
+  
+  const cards = col.querySelectorAll('.mcard[data-card-id]');
+  cards.forEach((card, index) => {
+    const cardId = card.dataset.cardId;
+    if (cardId && moulageCardsData[cardId]) {
+      moulageCardsData[cardId].columnOrder = index;
+      
+      // Sauvegarder sur Firebase
+      if (isFirebaseEnabled && firebaseDb && isFirebaseConnected) {
+        firebaseDb.ref('moulages/' + cardId + '/columnOrder').set(index)
+          .catch(e => console.error('Erreur sync ordre colonne Firebase:', e));
+      }
+    }
+  });
+  
+  saveMoulageDataToLocalStorage();
+  console.log(`💾 Ordre colonne ${colIndex} sauvegardé:`, cards.length, 'cartes');
 }
 
 function initKanbanDragDrop() {
@@ -24408,6 +24519,434 @@ function selectSerieCard(cardId, fromUserClick = false) {
     openSerieCardInfoModal(cardId);
   }
 }
+
+// ================================================================
+// SYSTÈME JSON - Import automatique de commandes (v608)
+// Base de données des coussins PhysiPro
+// ================================================================
+
+const PHYSIPRO_COUSSINS = {
+  // Coussins standard
+  "S5000": { nom: "Coussin Physiair", dims: ["14x14", "16x16", "16x18", "17x17", "18x16", "18x18", "20x20"], epaisseurs: ["2.5\"", "3\""], horsStandard: ">=21\" largeur" },
+  "S5360": { nom: "Coussin Air Foam", dims: ["14x14", "16x16", "16x18", "17x17", "18x16", "18x18", "20x20"], epaisseurs: ["2.5\"", "3\"", "3.5\"", "4\""], horsStandard: ">=21\" largeur" },
+  "S2455": { nom: "Coussin LXA", dims: ["14x14", "16x16", "16x18", "17x17", "18x16", "18x18", "20x20"], epaisseurs: ["2\"", "3\""], horsStandard: ">=21\" largeur" },
+  "S5300": { nom: "Coussin Temper-Flo", dims: ["14x14", "16x16", "16x18", "17x17", "18x16", "18x18", "20x20"], epaisseurs: ["3\"", "4\""], horsStandard: ">=21\" largeur" },
+  "S2950": { nom: "Coussin Brio", dims: ["16x18", "17x17", "18x18", "20x20"], epaisseurs: [], horsStandard: ">=21\" L ou P", notes: "Min 14x14, Max 21x21" },
+  "S2985": { nom: "Coussin C3S", dims: ["16x16", "17x17"], epaisseurs: ["3.5\""], horsStandard: "autres formats" },
+  "S2991": { nom: "Coussin Ellipse", dims: ["17x17", "18x18", "20x20"], epaisseurs: ["2.5\""], horsStandard: ">=21\" L ou P", notes: "Options gel" },
+  "S1266": { nom: "Coussin Ultra", dims: ["14-26\" x 14-22\""], epaisseurs: ["3\""], horsStandard: "plage libre" },
+  
+  // Coussins Resolve
+  "S2300": { nom: "Resolve (avec appuis-pelviens)", dims: ["10x10", "10x12", "12x10", "12x12", "12x14", "14x12", "14x14", "14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "hors liste", notes: "BC 2025 Québec" },
+  "S2305": { nom: "Resolve (sans appui-pelvien)", dims: ["10x10", "10x12", "12x10", "12x12", "12x14", "14x12", "14x14", "14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "hors liste", notes: "BC 2025 Québec" },
+  "S2310": { nom: "Resolve profil abaissé (avec appuis-pelviens)", dims: ["10x10", "10x12", "12x10", "12x12", "12x14", "14x12", "14x14", "14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "hors liste" },
+  "S2315": { nom: "Resolve profil abaissé (sans appui-pelvien)", dims: ["10x10", "10x12", "12x10", "12x12", "12x14", "14x12", "14x14", "14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "hors liste" },
+  "S2605": { nom: "Resolve Air (sans appui-pelvien)", dims: ["14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "autres formats", notes: "Insert cellules d'air BC 2025" },
+  "S2615": { nom: "Resolve Air profil abaissé (sans appui-pelvien)", dims: ["14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "autres formats", notes: "Insert cellules d'air BC 2025" },
+  
+  // Autres coussins
+  "S5100": { nom: "Coussin Siliko", dims: ["12-20\" x 12-20\""], epaisseurs: [], horsStandard: ">20\" L ou P", notes: "BC 2024 Québec / Forfait B EU" },
+  "S1265": { nom: "Coussin Pression Zero", dims: ["12-20\" x 12-20\""], epaisseurs: [], horsStandard: "forfait B", notes: "Grille par plages EU" },
+  "S1270": { nom: "Coussin Pression Zero", dims: ["12-20\" x 12-20\""], epaisseurs: [], horsStandard: "forfait B", notes: "Grille par plages EU" },
+  "S5400": { nom: "Coussin Easy Fit", dims: ["14x14", "14x16", "15x16", "15x17", "16x16", "16x17", "16x18", "17x16", "17x17", "17x18", "18x16", "18x17", "18x18", "18x19", "18x20", "19x17", "19x18", "19x19", "19x20", "20x16", "20x17", "20x18", "20x19", "20x20"], epaisseurs: [], horsStandard: "hors 26 formats = soumission" },
+  "S2955": { nom: "Coussin Fusion (personnalisé <=20\")", dims: ["10-20\" x 10-22\""], epaisseurs: [], horsStandard: "sur mesure", notes: "Composition sur mesure" },
+  "S2956": { nom: "Coussin Fusion (personnalisé >=21\")", dims: ["21-26\" x 10-22\""], epaisseurs: [], horsStandard: "sur mesure", notes: "Composition sur mesure" },
+  "S2361": { nom: "Contour Insert 2\"", dims: ["14x14", "16x14", "16x16", "16x18", "18x16"], epaisseurs: ["2\""], horsStandard: ">=21\" ou hors liste", notes: "Min 14x14, Max 24x24" },
+  "S2366": { nom: "Contour Insert 3\"", dims: ["14x14", "16x14", "16x16", "16x18", "18x16"], epaisseurs: ["3\""], horsStandard: ">=21\" ou hors liste", notes: "Min 14x14, Max 24x24" },
+  "S2371": { nom: "Contour Insert 4\"", dims: ["14x14", "16x14", "16x16", "16x18", "18x16"], epaisseurs: ["4\""], horsStandard: ">=21\" ou hors liste", notes: "Min 14x14, Max 24x24" }
+};
+
+// Structure JSON attendue pour l'import
+const JSON_TEMPLATE = {
+  commande: {
+    numero: "123456",
+    client: "Nom du client",
+    dateCommande: "2025-01-15",
+    dateLivraison: "2025-02-15",
+    region: "QC", // QC, ON, MA
+    notes: "Notes générales de la commande"
+  },
+  items: [
+    {
+      // Atelier
+      departement: "atelier",
+      code: "S5000-1616",
+      description: "Coussin Physiair 16x16",
+      quantite: 2,
+      dimensions: "16x16",
+      epaisseur: "3\"",
+      options: ["Option 1", "Option 2"],
+      notes: "Notes spécifiques à l'item"
+    },
+    {
+      // Couture
+      departement: "couture",
+      code: "HOUSSE-STD",
+      description: "Housse standard",
+      quantite: 2,
+      couleur: "Noir",
+      tissu: "Spacer",
+      notes: ""
+    },
+    {
+      // Inspection
+      departement: "inspection",
+      code: "INSP-FIN",
+      description: "Inspection finale",
+      quantite: 1,
+      notes: ""
+    }
+  ]
+};
+
+// Ouvrir le modal JSON
+function openSerieJsonModal() {
+  const modal = document.createElement('div');
+  modal.className = 'settings-overlay';
+  modal.id = 'serieJsonModal';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  
+  modal.innerHTML = `
+    <div class="settings-panel" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+      <div class="settings-header">
+        <span class="settings-title">📥 Import JSON - Commande Série+</span>
+        <button class="settings-close-btn" onclick="document.getElementById('serieJsonModal').remove()">✕</button>
+      </div>
+      
+      <div class="settings-section">
+        <h3 style="color: #60a5fa; margin-bottom: 10px;">1. Coller le JSON généré par ChatGPT</h3>
+        <textarea id="serieJsonInput" style="width: 100%; height: 200px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #444; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px;" placeholder='{"commande": {...}, "items": [...]}'></textarea>
+        <div style="margin-top: 10px; display: flex; gap: 8px;">
+          <button class="settings-btn" onclick="validateSerieJson()">✓ Valider JSON</button>
+          <button class="settings-btn settings-btn-secondary" onclick="previewSerieJson()">👁️ Prévisualiser</button>
+          <button class="settings-btn" style="background: #22c55e;" onclick="importSerieJson()">📥 Importer</button>
+        </div>
+        <div id="serieJsonValidation" style="margin-top: 10px; padding: 8px; border-radius: 4px; display: none;"></div>
+        <div id="serieJsonPreview" style="margin-top: 10px; display: none;"></div>
+      </div>
+      
+      <div class="settings-section">
+        <h3 style="color: #f59e0b; margin-bottom: 10px;">2. Codes des coussins disponibles</h3>
+        <div style="max-height: 200px; overflow-y: auto; background: #1a1a1a; border-radius: 6px; padding: 10px;">
+          <table style="width: 100%; font-size: 10px; border-collapse: collapse;">
+            <thead>
+              <tr style="background: #2a2a2a;">
+                <th style="padding: 4px; text-align: left; border-bottom: 1px solid #444;">Code</th>
+                <th style="padding: 4px; text-align: left; border-bottom: 1px solid #444;">Nom</th>
+                <th style="padding: 4px; text-align: left; border-bottom: 1px solid #444;">Dimensions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${Object.entries(PHYSIPRO_COUSSINS).map(([code, data]) => `
+                <tr style="border-bottom: 1px solid #333;">
+                  <td style="padding: 3px; color: #22c55e; font-weight: 600;">${code}</td>
+                  <td style="padding: 3px;">${data.nom}</td>
+                  <td style="padding: 3px; font-size: 9px; color: #94a3b8;">${Array.isArray(data.dims) ? data.dims.slice(0,5).join(', ') + (data.dims.length > 5 ? '...' : '') : data.dims}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="settings-section">
+        <h3 style="color: #a855f7; margin-bottom: 10px;">3. Copier le prompt pour ChatGPT</h3>
+        <button class="settings-btn" style="background: #a855f7;" onclick="copyJsonPrompt()">📋 Copier le prompt ChatGPT</button>
+        <button class="settings-btn settings-btn-secondary" onclick="showJsonTemplate()">📄 Voir template JSON</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+}
+window.openSerieJsonModal = openSerieJsonModal;
+
+// Valider le JSON
+function validateSerieJson() {
+  const input = document.getElementById('serieJsonInput').value.trim();
+  const validation = document.getElementById('serieJsonValidation');
+  validation.style.display = 'block';
+  
+  if (!input) {
+    validation.style.background = '#7f1d1d';
+    validation.innerHTML = '❌ Aucun JSON fourni';
+    return null;
+  }
+  
+  try {
+    const data = JSON.parse(input);
+    
+    // Vérifications
+    const errors = [];
+    if (!data.commande) errors.push('Manque: commande');
+    if (!data.commande?.numero) errors.push('Manque: commande.numero');
+    if (!data.commande?.client) errors.push('Manque: commande.client');
+    if (!data.items || !Array.isArray(data.items)) errors.push('Manque: items (tableau)');
+    if (data.items?.length === 0) errors.push('Aucun item dans la commande');
+    
+    if (errors.length > 0) {
+      validation.style.background = '#7f1d1d';
+      validation.innerHTML = '❌ Erreurs: ' + errors.join(', ');
+      return null;
+    }
+    
+    validation.style.background = '#14532d';
+    validation.innerHTML = `✅ JSON valide! ${data.items.length} items trouvés`;
+    return data;
+    
+  } catch (e) {
+    validation.style.background = '#7f1d1d';
+    validation.innerHTML = '❌ JSON invalide: ' + e.message;
+    return null;
+  }
+}
+window.validateSerieJson = validateSerieJson;
+
+// Prévisualiser le JSON
+function previewSerieJson() {
+  const data = validateSerieJson();
+  if (!data) return;
+  
+  const preview = document.getElementById('serieJsonPreview');
+  preview.style.display = 'block';
+  preview.style.background = '#1a1a1a';
+  preview.style.padding = '10px';
+  preview.style.borderRadius = '6px';
+  
+  const atelierItems = data.items.filter(i => i.departement === 'atelier');
+  const coutureItems = data.items.filter(i => i.departement === 'couture');
+  const inspectionItems = data.items.filter(i => i.departement === 'inspection');
+  
+  preview.innerHTML = `
+    <h4 style="color: #60a5fa; margin-bottom: 8px;">Prévisualisation de la commande</h4>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px;">
+      <div>
+        <strong>Numéro:</strong> ${data.commande.numero}<br>
+        <strong>Client:</strong> ${data.commande.client}<br>
+        <strong>Région:</strong> ${data.commande.region || 'QC'}<br>
+        <strong>Date commande:</strong> ${data.commande.dateCommande || 'N/A'}<br>
+        <strong>Date livraison:</strong> ${data.commande.dateLivraison || 'N/A'}
+      </div>
+      <div>
+        <strong style="color: #3b82f6;">Atelier:</strong> ${atelierItems.length} items<br>
+        <strong style="color: #22c55e;">Couture:</strong> ${coutureItems.length} items<br>
+        <strong style="color: #f59e0b;">Inspection:</strong> ${inspectionItems.length} items
+      </div>
+    </div>
+    <div style="margin-top: 10px;">
+      <strong>Items Atelier:</strong>
+      <ul style="margin: 5px 0 0 20px; font-size: 10px;">
+        ${atelierItems.map(i => `<li>${i.code || 'N/A'} - ${i.description} (x${i.quantite})</li>`).join('')}
+      </ul>
+    </div>
+  `;
+}
+window.previewSerieJson = previewSerieJson;
+
+// Importer le JSON
+function importSerieJson() {
+  const data = validateSerieJson();
+  if (!data) return;
+  
+  if (!confirm(`Importer la commande #${data.commande.numero} pour ${data.commande.client}?\\n\\n${data.items.length} items seront créés.`)) {
+    return;
+  }
+  
+  // Créer la carte de commande
+  const cardId = 'serie-' + Date.now();
+  const regionMap = { 'QC': 'qc', 'ON': 'on', 'MA': 'ma', 'Quebec': 'qc', 'Ontario': 'on', 'Maritime': 'ma' };
+  const region = regionMap[data.commande.region] || 'qc';
+  
+  // Initialiser les données
+  if (!serieCardsData[cardId]) {
+    serieCardsData[cardId] = {
+      client: data.commande.client,
+      order: data.commande.numero,
+      region: region,
+      dateCommande: data.commande.dateCommande || new Date().toISOString().split('T')[0],
+      dateLivraison: data.commande.dateLivraison || '',
+      notes: data.commande.notes || '',
+      atelierItems: [],
+      coutureItems: [],
+      inspectionItems: []
+    };
+  }
+  
+  // Ajouter les items par département
+  data.items.forEach(item => {
+    const newItem = {
+      id: Date.now() + Math.random().toString(36).substr(2, 9),
+      code: item.code || '',
+      description: item.description || '',
+      quantite: item.quantite || 1,
+      dimensions: item.dimensions || '',
+      epaisseur: item.epaisseur || '',
+      options: item.options || [],
+      couleur: item.couleur || '',
+      tissu: item.tissu || '',
+      notes: item.notes || '',
+      produit: false,
+      fait: false,
+      inspecte: false
+    };
+    
+    if (item.departement === 'atelier') {
+      serieCardsData[cardId].atelierItems.push(newItem);
+    } else if (item.departement === 'couture') {
+      serieCardsData[cardId].coutureItems.push(newItem);
+    } else if (item.departement === 'inspection') {
+      serieCardsData[cardId].inspectionItems.push(newItem);
+    }
+  });
+  
+  // Créer la carte visuelle
+  createSerieCardFromData(cardId, serieCardsData[cardId]);
+  
+  // Sauvegarder
+  saveSerieData();
+  
+  // Fermer le modal
+  document.getElementById('serieJsonModal')?.remove();
+  
+  showToast(`✅ Commande #${data.commande.numero} importée (${data.items.length} items)`, 'success');
+  
+  // Sélectionner la nouvelle carte
+  setTimeout(() => selectSerieCard(cardId), 100);
+}
+window.importSerieJson = importSerieJson;
+
+// Créer une carte série depuis les données
+function createSerieCardFromData(cardId, data) {
+  const container = document.getElementById('serieCardsContent');
+  if (!container) return;
+  
+  const regionClass = `region-${data.region || 'qc'}`;
+  
+  const cardHtml = `
+    <div class="mcard serie-card ${regionClass}" data-card-id="${cardId}" onclick="selectSerieCard('${cardId}')">
+      <div class="mcard-header">
+        <div class="mcard-info">
+          <div class="mcard-title-line">
+            <span class="mcard-title">${escapeHtml(data.client || 'Client')}</span>
+          </div>
+          <div class="mcard-order-line">
+            <span class="mcard-order">#${escapeHtml(data.order || '------')}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  container.insertAdjacentHTML('beforeend', cardHtml);
+  updateSerieCount();
+}
+
+// Copier le prompt ChatGPT
+function copyJsonPrompt() {
+  const prompt = generateChatGPTPrompt();
+  navigator.clipboard.writeText(prompt).then(() => {
+    showToast('📋 Prompt copié!', 'success');
+  }).catch(() => {
+    // Fallback
+    const textarea = document.createElement('textarea');
+    textarea.value = prompt;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    textarea.remove();
+    showToast('📋 Prompt copié!', 'success');
+  });
+}
+window.copyJsonPrompt = copyJsonPrompt;
+
+// Générer le prompt ChatGPT
+function generateChatGPTPrompt() {
+  return `# PROMPT POUR GÉNÉRER UN JSON DE COMMANDE PHYSIPRO
+
+Tu es un assistant qui analyse des devis/bons de commande PhysiPro et génère un fichier JSON structuré pour import automatique.
+
+## CODES DES COUSSINS DISPONIBLES
+
+${Object.entries(PHYSIPRO_COUSSINS).map(([code, data]) => 
+  `- **${code}**: ${data.nom} (Dims: ${Array.isArray(data.dims) ? data.dims.join(', ') : data.dims})${data.epaisseurs?.length ? ' | Épaisseurs: ' + data.epaisseurs.join(', ') : ''}`
+).join('\n')}
+
+## STRUCTURE JSON À GÉNÉRER
+
+\`\`\`json
+{
+  "commande": {
+    "numero": "XXXXXX",
+    "client": "Nom du client",
+    "dateCommande": "AAAA-MM-JJ",
+    "dateLivraison": "AAAA-MM-JJ",
+    "region": "QC",
+    "notes": "Notes générales"
+  },
+  "items": [
+    {
+      "departement": "atelier",
+      "code": "S5000-1616",
+      "description": "Coussin Physiair 16x16 3po",
+      "quantite": 1,
+      "dimensions": "16x16",
+      "epaisseur": "3\\"",
+      "options": [],
+      "notes": ""
+    },
+    {
+      "departement": "couture",
+      "code": "HOUSSE-STD",
+      "description": "Housse standard noir",
+      "quantite": 1,
+      "couleur": "Noir",
+      "tissu": "Spacer",
+      "notes": ""
+    },
+    {
+      "departement": "inspection",
+      "code": "INSP-FIN",
+      "description": "Inspection finale",
+      "quantite": 1,
+      "notes": ""
+    }
+  ]
+}
+\`\`\`
+
+## RÈGLES D'EXTRACTION
+
+1. **Numéro de commande**: Cherche le numéro à 6 chiffres (ex: 123456, #300001)
+2. **Client**: Nom complet du client ou de l'établissement
+3. **Région**: QC (Québec), ON (Ontario), MA (Maritime) - par défaut QC
+4. **Code coussin**: Utilise les codes de la liste ci-dessus (S5000, S5360, S2300, etc.)
+5. **Dimensions**: Format LxP en pouces (ex: "16x16", "18x20")
+6. **Épaisseur**: En pouces avec guillemets (ex: "3\\"", "2.5\\"")
+7. **Départements**:
+   - \`atelier\`: Coussins, mousses, assemblages
+   - \`couture\`: Housses, tissus, coutures
+   - \`inspection\`: Contrôle qualité, vérifications
+
+## INSTRUCTIONS
+
+Analyse le document/devis fourni et génère UNIQUEMENT le JSON (pas d'explications).
+Si une information est manquante, utilise une valeur par défaut raisonnable.
+Assure-toi que le JSON est valide et peut être parsé directement.
+
+---
+
+DOCUMENT À ANALYSER:
+[COLLE TON DEVIS/BON DE COMMANDE ICI]
+`;
+}
+
+// Afficher le template JSON
+function showJsonTemplate() {
+  const template = JSON.stringify(JSON_TEMPLATE, null, 2);
+  document.getElementById('serieJsonInput').value = template;
+  showToast('📄 Template chargé', 'info');
+}
+window.showJsonTemplate = showJsonTemplate;
 
 // Ouvrir le modal d'infos pour la commande sélectionnée (depuis le bouton dans l'en-tête)
 function openSerieInfoModal() {
@@ -39038,12 +39577,47 @@ function prepareNoteWithSignature(cardId) {
   }, 10);
 }
 
-// Sauvegarder les notes
+// Sauvegarder les notes (v607: avec log des changements)
 function saveFicheNotes(cardId) {
   const textarea = document.getElementById('ficheNotes_' + cardId);
   if (textarea && moulageCardsData[cardId]) {
-    moulageCardsData[cardId].notes = textarea.value;
-    console.log('💾 Notes sauvegardées:', cardId);
+    const oldNotes = moulageCardsData[cardId].notes || '';
+    const newNotes = textarea.value;
+    
+    // Sauvegarder seulement si changement
+    if (oldNotes !== newNotes) {
+      moulageCardsData[cardId].notes = newNotes;
+      
+      // Log du changement
+      const cardName = moulageCardsData[cardId].client 
+        ? `${moulageCardsData[cardId].client} #${moulageCardsData[cardId].order || '?'}`
+        : cardId;
+      
+      // Résumer le changement
+      const oldLength = oldNotes.length;
+      const newLength = newNotes.length;
+      let changeDesc = '';
+      if (oldLength === 0 && newLength > 0) {
+        changeDesc = 'Note ajoutée';
+      } else if (newLength === 0 && oldLength > 0) {
+        changeDesc = 'Note supprimée';
+      } else {
+        changeDesc = `Note modifiée (${oldLength} → ${newLength} car.)`;
+      }
+      
+      logActivity('change', `"${cardName}": ${changeDesc}`, {
+        cardId: cardId,
+        cardName: cardName,
+        field: 'notes',
+        oldValue: oldNotes.substring(0, 100) + (oldNotes.length > 100 ? '...' : ''),
+        newValue: newNotes.substring(0, 100) + (newNotes.length > 100 ? '...' : '')
+      });
+      
+      console.log('💾 Notes sauvegardées:', cardId);
+      
+      // Sauvegarder sur Firebase
+      saveMoulageCardData(cardId);
+    }
   }
 }
 
@@ -42117,74 +42691,225 @@ function logDataChange(cardId, cardName, field, oldValue, newValue) {
 }
 
 function showActivityLogs() {
-  const logs = JSON.parse(localStorage.getItem('physipro_activity_logs') || '[]');
+  // v607: Charger depuis Firebase pour avoir tous les logs (pas juste locaux)
+  let logs = JSON.parse(localStorage.getItem('physipro_activity_logs') || '[]');
   
-  let html = `<div style="margin-bottom: 10px; font-size: 12px; color: #94a3b8;">
-    Total: ${logs.length} logs (max: ${MAX_LOGS_LOCAL})
-  </div>`;
-  html += '<div style="max-height: 400px; overflow-y: auto; font-size: 11px; font-family: monospace;">';
-  
-  if (logs.length === 0) {
-    html += '<p style="color: #888;">Aucun log enregistré</p>';
-  } else {
-    logs.slice(0, 200).forEach(log => {
-      const date = new Date(log.timestamp).toLocaleString('fr-CA');
-      const typeColors = { 
-        login: '#22c55e', 
-        logout: '#dc2626', 
-        change: '#3b82f6', 
-        move: '#f59e0b',    // Orange pour les déplacements
-        backup: '#a855f7', 
-        import: '#06b6d4', 
-        export: '#ec4899',
-        delete: '#ef4444'
-      };
-      const color = typeColors[log.type] || '#888';
-      const userName = log.user || 'Inconnu';
-      
-      html += `<div style="padding: 4px 0; border-bottom: 1px solid #333;">
-        <span style="color: #888;">${date}</span>
-        <span style="color: #60a5fa; margin-left: 6px;">[${userName}]</span>
-        <span style="color: ${color}; margin-left: 6px;">[${log.type}]</span>
-        <span style="margin-left: 6px;">${log.message}</span>
-      </div>`;
-    });
-    
-    if (logs.length > 200) {
-      html += `<div style="padding: 8px; text-align: center; color: #94a3b8;">
-        ... et ${logs.length - 200} autres logs
-      </div>`;
-    }
+  // Charger aussi depuis Firebase si disponible
+  if (isFirebaseEnabled && firebaseDb && isFirebaseConnected) {
+    firebaseDb.ref('logs').orderByKey().limitToLast(500).once('value').then(snapshot => {
+      const firebaseLogs = snapshot.val();
+      if (firebaseLogs) {
+        const fbLogArray = Object.values(firebaseLogs);
+        // Fusionner et dédupliquer par timestamp
+        const allLogs = [...logs, ...fbLogArray];
+        const uniqueLogs = allLogs.reduce((acc, log) => {
+          if (!acc.find(l => l.timestamp === log.timestamp && l.message === log.message)) {
+            acc.push(log);
+          }
+          return acc;
+        }, []);
+        // Trier par date décroissante
+        uniqueLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        logs = uniqueLogs.slice(0, MAX_LOGS_LOCAL);
+        // Mettre à jour l'affichage
+        updateLogsDisplay(logs);
+      }
+    }).catch(e => console.error('Erreur chargement logs Firebase:', e));
   }
   
+  showLogsModal(logs);
+}
+
+function showLogsModal(logs) {
+  let html = `<div style="margin-bottom: 10px; font-size: 12px; color: #94a3b8;">
+    Total: ${logs.length} logs (max: ${MAX_LOGS_LOCAL}) | 🔄 Inclut les logs de tous les utilisateurs
+  </div>`;
+  
+  // Filtre par type
+  html += `<div style="margin-bottom: 10px; display: flex; gap: 4px; flex-wrap: wrap;">
+    <button class="log-filter-btn active" onclick="filterLogs('all')" data-filter="all">Tous</button>
+    <button class="log-filter-btn" onclick="filterLogs('login')" data-filter="login">🟢 Login</button>
+    <button class="log-filter-btn" onclick="filterLogs('move')" data-filter="move">🟠 Move</button>
+    <button class="log-filter-btn" onclick="filterLogs('reorder')" data-filter="reorder">🟣 Reorder</button>
+    <button class="log-filter-btn" onclick="filterLogs('change')" data-filter="change">🔵 Change</button>
+    <button class="log-filter-btn" onclick="filterLogs('delete')" data-filter="delete">🔴 Delete</button>
+  </div>`;
+  
+  html += '<div id="logsListContainer" style="max-height: 400px; overflow-y: auto; font-size: 11px;">';
+  html += renderLogsList(logs, 'all');
   html += '</div>';
+  
+  // Stocker les logs pour le filtrage
+  window.currentLogsData = logs;
   
   // Afficher dans un modal simple
   const modal = document.createElement('div');
   modal.className = 'settings-overlay';
   modal.id = 'logsModal';
   modal.innerHTML = `
-    <div class="settings-panel" style="max-width: 700px;">
+    <div class="settings-panel" style="max-width: 800px;">
       <div class="settings-header">
-        <span class="settings-title">📊 Logs d'activité</span>
+        <span class="settings-title">📊 Logs d'activité (tous les utilisateurs)</span>
         <button class="settings-close-btn" onclick="document.getElementById('logsModal').remove()">✕</button>
       </div>
       <div class="settings-section">
-        <div style="margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
-          <span style="padding: 2px 8px; background: #22c55e; border-radius: 4px; font-size: 10px;">login</span>
-          <span style="padding: 2px 8px; background: #f59e0b; border-radius: 4px; font-size: 10px;">move</span>
-          <span style="padding: 2px 8px; background: #3b82f6; border-radius: 4px; font-size: 10px;">change</span>
-          <span style="padding: 2px 8px; background: #ef4444; border-radius: 4px; font-size: 10px;">delete</span>
-        </div>
         ${html}
         <div style="margin-top: 12px; display: flex; gap: 8px;">
-          <button class="settings-btn settings-btn-danger" onclick="clearActivityLogs()">🗑️ Effacer les logs</button>
+          <button class="settings-btn settings-btn-danger" onclick="clearActivityLogs()">🗑️ Effacer mes logs</button>
           <button class="settings-btn settings-btn-secondary" onclick="exportActivityLogs()">📥 Exporter CSV</button>
+          <button class="settings-btn settings-btn-secondary" onclick="refreshActivityLogs()">🔄 Actualiser</button>
         </div>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
+  
+  // Ajouter le style des boutons de filtre
+  if (!document.getElementById('logFilterStyles')) {
+    const style = document.createElement('style');
+    style.id = 'logFilterStyles';
+    style.textContent = `
+      .log-filter-btn {
+        padding: 4px 8px;
+        border: 1px solid #444;
+        border-radius: 4px;
+        background: #2a2a2a;
+        color: #ccc;
+        font-size: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .log-filter-btn:hover { background: #3a3a3a; }
+      .log-filter-btn.active { background: #3b82f6; border-color: #3b82f6; color: white; }
+      .log-entry { 
+        padding: 6px 8px; 
+        border-bottom: 1px solid #333; 
+        cursor: pointer; 
+        transition: background 0.15s;
+        border-radius: 4px;
+        margin: 2px 0;
+      }
+      .log-entry:hover { background: rgba(59,130,246,0.15); }
+      .log-entry.expanded { background: rgba(59,130,246,0.1); }
+      .log-details { 
+        display: none; 
+        margin-top: 6px; 
+        padding: 8px; 
+        background: rgba(0,0,0,0.3); 
+        border-radius: 4px; 
+        font-size: 10px;
+        color: #94a3b8;
+      }
+      .log-entry.expanded .log-details { display: block; }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
+function renderLogsList(logs, filterType) {
+  if (logs.length === 0) {
+    return '<p style="color: #888;">Aucun log enregistré</p>';
+  }
+  
+  const typeColors = { 
+    login: '#22c55e', 
+    logout: '#dc2626', 
+    change: '#3b82f6', 
+    move: '#f59e0b',
+    reorder: '#a855f7',
+    backup: '#a855f7', 
+    import: '#06b6d4', 
+    export: '#ec4899',
+    delete: '#ef4444'
+  };
+  
+  const typeEmojis = {
+    login: '🟢',
+    logout: '🔴',
+    change: '🔵',
+    move: '🟠',
+    reorder: '🟣',
+    backup: '💾',
+    import: '📥',
+    export: '📤',
+    delete: '🗑️'
+  };
+  
+  let html = '';
+  const filteredLogs = filterType === 'all' ? logs : logs.filter(l => l.type === filterType);
+  
+  filteredLogs.slice(0, 300).forEach((log, idx) => {
+    const date = new Date(log.timestamp).toLocaleString('fr-CA');
+    const color = typeColors[log.type] || '#888';
+    const emoji = typeEmojis[log.type] || '📋';
+    const userName = log.user || 'Inconnu';
+    
+    // Construire les détails
+    let detailsHtml = '';
+    if (log.cardId) detailsHtml += `<div><strong>ID:</strong> ${log.cardId}</div>`;
+    if (log.cardName) detailsHtml += `<div><strong>Carte:</strong> ${log.cardName}</div>`;
+    if (log.fromColumn) detailsHtml += `<div><strong>De:</strong> ${log.fromColumn}</div>`;
+    if (log.toColumn) detailsHtml += `<div><strong>Vers:</strong> ${log.toColumn}</div>`;
+    if (log.fromPosition) detailsHtml += `<div><strong>Position avant:</strong> ${log.fromPosition}</div>`;
+    if (log.toPosition) detailsHtml += `<div><strong>Position après:</strong> ${log.toPosition}</div>`;
+    if (log.column) detailsHtml += `<div><strong>Colonne:</strong> ${log.column}</div>`;
+    if (log.view) detailsHtml += `<div><strong>Vue:</strong> ${log.view}</div>`;
+    if (log.field) detailsHtml += `<div><strong>Champ:</strong> ${log.field}</div>`;
+    if (log.oldValue !== undefined) detailsHtml += `<div><strong>Ancienne valeur:</strong> ${log.oldValue || '(vide)'}</div>`;
+    if (log.newValue !== undefined) detailsHtml += `<div><strong>Nouvelle valeur:</strong> ${log.newValue || '(vide)'}</div>`;
+    if (log.reason) detailsHtml += `<div><strong>Raison:</strong> ${log.reason}</div>`;
+    
+    html += `
+      <div class="log-entry" onclick="this.classList.toggle('expanded')">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 14px;">${emoji}</span>
+          <span style="color: #666; min-width: 130px;">${date}</span>
+          <span style="color: #60a5fa; font-weight: 600; min-width: 80px;">${userName}</span>
+          <span style="color: ${color}; min-width: 60px;">[${log.type}]</span>
+          <span style="flex: 1;">${log.message}</span>
+          <span style="color: #666; font-size: 9px;">▼</span>
+        </div>
+        ${detailsHtml ? `<div class="log-details">${detailsHtml}</div>` : ''}
+      </div>
+    `;
+  });
+  
+  if (filteredLogs.length > 300) {
+    html += `<div style="padding: 8px; text-align: center; color: #94a3b8;">
+      ... et ${filteredLogs.length - 300} autres logs
+    </div>`;
+  }
+  
+  return html;
+}
+
+function filterLogs(type) {
+  // Mettre à jour les boutons actifs
+  document.querySelectorAll('.log-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === type);
+  });
+  
+  // Mettre à jour la liste
+  const container = document.getElementById('logsListContainer');
+  if (container && window.currentLogsData) {
+    container.innerHTML = renderLogsList(window.currentLogsData, type);
+  }
+}
+window.filterLogs = filterLogs;
+
+function refreshActivityLogs() {
+  document.getElementById('logsModal')?.remove();
+  showActivityLogs();
+  showToast('Logs actualisés', 'success');
+}
+window.refreshActivityLogs = refreshActivityLogs;
+
+function updateLogsDisplay(logs) {
+  const container = document.getElementById('logsListContainer');
+  if (container) {
+    window.currentLogsData = logs;
+    container.innerHTML = renderLogsList(logs, 'all');
+  }
 }
 
 // Exporter les logs en CSV
