@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PhysiPro v128.0 - LOCAL TEST (v609)</title>
+  <title>PhysiPro v128.0 - LOCAL TEST (v610)</title>
 
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -24622,8 +24622,8 @@ function openSerieJsonModal() {
       
       <div class="settings-section">
         <h3 style="color: #60a5fa; margin-bottom: 10px;">1. Coller le JSON généré par ChatGPT</h3>
-        <textarea id="serieJsonInput" style="width: 100%; height: 200px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #444; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px;" placeholder='{"commande": {...}, "items": [...]}'></textarea>
-        <div style="margin-top: 10px; display: flex; gap: 8px;">
+        <textarea id="serieJsonInput" style="width: 100%; height: 200px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #444; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px;" placeholder='[{"commande": {...}, "items": [...]}]'></textarea>
+        <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="settings-btn" onclick="validateSerieJson()">✓ Valider JSON</button>
           <button class="settings-btn settings-btn-secondary" onclick="previewSerieJson()">👁️ Prévisualiser</button>
           <button class="settings-btn" style="background: #22c55e;" onclick="importSerieJson()">📥 Importer</button>
@@ -24633,8 +24633,14 @@ function openSerieJsonModal() {
       </div>
       
       <div class="settings-section">
+        <h3 style="color: #ef4444; margin-bottom: 10px;">🗑️ Nettoyer les cartes importées</h3>
+        <p style="font-size: 11px; color: #94a3b8; margin-bottom: 8px;">Supprime les cartes créées par import JSON (commençant par "serie-")</p>
+        <button class="settings-btn settings-btn-danger" onclick="cleanupImportedSerieCards()">🗑️ Supprimer cartes importées</button>
+      </div>
+      
+      <div class="settings-section">
         <h3 style="color: #f59e0b; margin-bottom: 10px;">2. Codes des coussins disponibles</h3>
-        <div style="max-height: 200px; overflow-y: auto; background: #1a1a1a; border-radius: 6px; padding: 10px;">
+        <div style="max-height: 150px; overflow-y: auto; background: #1a1a1a; border-radius: 6px; padding: 10px;">
           <table style="width: 100%; font-size: 10px; border-collapse: collapse;">
             <thead>
               <tr style="background: #2a2a2a;">
@@ -24667,6 +24673,47 @@ function openSerieJsonModal() {
   document.body.appendChild(modal);
 }
 window.openSerieJsonModal = openSerieJsonModal;
+
+// Nettoyer les cartes importées (commençant par "serie-")
+function cleanupImportedSerieCards() {
+  const importedIds = Object.keys(serieCardsData || {}).filter(id => id.startsWith('serie-'));
+  
+  if (importedIds.length === 0) {
+    showToast('Aucune carte importée à supprimer', 'info');
+    return;
+  }
+  
+  if (!confirm(`Supprimer ${importedIds.length} carte(s) importée(s)?`)) {
+    return;
+  }
+  
+  importedIds.forEach(cardId => {
+    // Supprimer des données
+    delete serieCardsData[cardId];
+    
+    // Supprimer du DOM
+    const card = document.querySelector(`.mcard[data-id="${cardId}"]`);
+    if (card) card.remove();
+    const card2 = document.querySelector(`.mcard[data-card-id="${cardId}"]`);
+    if (card2) card2.remove();
+  });
+  
+  // Sauvegarder
+  if (typeof saveSerieDataToLocalStorage === 'function') {
+    saveSerieDataToLocalStorage();
+  }
+  if (typeof saveSerieData === 'function') {
+    saveSerieData();
+  }
+  
+  // Mettre à jour les compteurs
+  if (typeof updateSerieCounters === 'function') {
+    updateSerieCounters();
+  }
+  
+  showToast(`✅ ${importedIds.length} carte(s) supprimée(s)`, 'success');
+}
+window.cleanupImportedSerieCards = cleanupImportedSerieCards;
 
 // Valider le JSON (v609 - supporte plusieurs commandes)
 function validateSerieJson() {
@@ -24781,7 +24828,7 @@ function previewSerieJson() {
 }
 window.previewSerieJson = previewSerieJson;
 
-// Importer le JSON (v609 - supporte plusieurs commandes)
+// Importer le JSON (v610 - CORRIGÉ avec la bonne structure de données)
 function importSerieJson() {
   const result = validateSerieJson();
   if (!result) {
@@ -24800,72 +24847,82 @@ function importSerieJson() {
     window.serieCardsData = {};
   }
   
-  const regionMap = { 
-    'QC': 'qc', 'ON': 'on', 'MA': 'ma', 
-    'Quebec': 'qc', 'Ontario': 'on', 'Maritime': 'ma',
-    'INT': 'qc', 'INTERNATIONAL': 'qc' // International -> défaut QC
-  };
   let createdCards = [];
   let errors = [];
   
-  result.commandes.forEach((data, idx) => {
+  result.commandes.forEach((cmdData, idx) => {
     try {
-      // Créer la carte de commande avec timestamp unique
+      // Créer un ID unique pour la carte
       const cardId = 'serie-' + Date.now() + '-' + idx + '-' + Math.random().toString(36).substr(2, 5);
-      const region = regionMap[data.commande.region?.toUpperCase()] || 'qc';
       
-      // Initialiser les données
-      serieCardsData[cardId] = {
-        client: data.commande.client || 'Client inconnu',
-        order: data.commande.numero || '000000',
-        region: region,
-        dateCommande: data.commande.dateCommande || new Date().toISOString().split('T')[0],
-        dateLivraison: data.commande.dateLivraison || '',
-        notes: data.commande.notes || '',
-        atelierItems: [],
-        coutureItems: [],
-        inspectionItems: []
-      };
+      // Grouper les items par nom/description pour créer la structure correcte
+      const itemsGrouped = {};
       
-      // Ajouter les items par département
-      if (data.items && Array.isArray(data.items)) {
-        data.items.forEach(item => {
-          const newItem = {
-            id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
-            code: item.code || '',
-            description: item.description || '',
-            quantite: parseInt(item.quantite) || 1,
-            dimensions: item.dimensions || '',
-            epaisseur: item.epaisseur || '',
-            options: item.options || [],
-            couleur: item.couleur || '',
-            tissu: item.tissu || '',
-            notes: item.notes || '',
-            produit: false,
-            fait: false,
-            inspecte: false
-          };
+      if (cmdData.items && Array.isArray(cmdData.items)) {
+        cmdData.items.forEach(item => {
+          // Utiliser le code ou la description comme clé de groupe
+          const itemKey = item.code || item.description || 'Item';
+          const itemName = item.description || item.code || 'Item';
           
-          const dept = (item.departement || 'atelier').toLowerCase();
-          if (dept === 'atelier') {
-            serieCardsData[cardId].atelierItems.push(newItem);
-          } else if (dept === 'couture') {
-            serieCardsData[cardId].coutureItems.push(newItem);
-          } else if (dept === 'inspection') {
-            serieCardsData[cardId].inspectionItems.push(newItem);
+          if (!itemsGrouped[itemKey]) {
+            itemsGrouped[itemKey] = {
+              name: itemName,
+              code: item.code || '',
+              grandeurs: []
+            };
+          }
+          
+          // Ajouter la grandeur (dimension + quantité)
+          const grandeurName = item.dimensions || item.epaisseur || 'Standard';
+          const qty = parseInt(item.quantite) || 1;
+          
+          // Chercher si cette grandeur existe déjà
+          let existingGrandeur = itemsGrouped[itemKey].grandeurs.find(g => g.name === grandeurName);
+          if (existingGrandeur) {
+            existingGrandeur.qty += qty;
           } else {
-            // Par défaut -> atelier
-            serieCardsData[cardId].atelierItems.push(newItem);
+            itemsGrouped[itemKey].grandeurs.push({
+              name: grandeurName,
+              qty: qty,
+              notes: item.notes || '',
+              atelier: { qtyFait: 0, inspected: false },
+              couture: { qtyFait: 0 },
+              inspection: { qtyFait: 0, qtyRecu: 0 }
+            });
           }
         });
       }
+      
+      // Convertir en tableau d'items
+      const itemsArray = Object.values(itemsGrouped);
+      
+      // Créer les données de la carte avec la VRAIE structure
+      serieCardsData[cardId] = {
+        id: cardId,
+        client: cmdData.commande.client || 'Client',
+        name: cmdData.commande.client || '',
+        order: cmdData.commande.numero || '',
+        po: cmdData.commande.po || '',
+        soumission: '',
+        dateRecue: cmdData.commande.dateCommande || new Date().toISOString().split('T')[0],
+        dateLivraison: cmdData.commande.dateLivraison || '',
+        notes: cmdData.commande.notes || '',
+        isBO: false,
+        raisonBO: '',
+        items: itemsArray,
+        materiaux: {},
+        createdAt: new Date().toISOString()
+      };
+      
+      console.log('📦 Carte créée:', cardId, 'avec', itemsArray.length, 'items');
+      console.log('   Items:', itemsArray.map(i => i.name + ' (' + i.grandeurs.length + ' grandeurs)').join(', '));
       
       // Créer la carte visuelle
       const created = createSerieCardFromData(cardId, serieCardsData[cardId]);
       if (created) {
         createdCards.push(cardId);
       } else {
-        errors.push(`Carte ${data.commande.numero}: erreur création visuelle`);
+        errors.push(`Carte ${cmdData.commande.numero}: erreur création visuelle`);
       }
       
     } catch (e) {
@@ -24878,7 +24935,6 @@ function importSerieJson() {
   if (typeof saveSerieData === 'function') {
     saveSerieData();
   } else {
-    // Fallback localStorage
     localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
   }
   
