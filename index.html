@@ -24668,6 +24668,14 @@ select.mf-input {
         <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Récupère les données locales ET Firebase, les fusionne intelligemment</div>
       </div>
       <div style="margin-top: 8px;">
+        <button class="settings-btn settings-btn-primary" onclick="diagnoseFirebase()" style="width: 100%; background: linear-gradient(to bottom, #ef4444 0%, #dc2626 100%);">🔍 Diagnostic Firebase (v1052)</button>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Teste la connexion, lecture et écriture Firebase</div>
+      </div>
+      <div style="margin-top: 8px;">
+        <button class="settings-btn settings-btn-primary" onclick="systemHealthCheck()" style="width: 100%; background: linear-gradient(to bottom, #06b6d4 0%, #0891b2 100%);">🏥 Vérification complète du système (v1052)</button>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Vérifie Firebase, localStorage, données, backups - tout!</div>
+      </div>
+      <div style="margin-top: 8px;">
         <button class="settings-btn settings-btn-primary" onclick="applyCorrectCardOrder()" style="width: 100%; background: linear-gradient(to bottom, #22c55e 0%, #16a34a 100%);">✅ Appliquer l'ordre de référence (v1051)</button>
         <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Applique l'ordre correct basé sur l'image de Valérie</div>
       </div>
@@ -39127,7 +39135,8 @@ function loadJobsFromFirebase() {
   // D'abord charger depuis localStorage
   let localData = null;
   try {
-    const stored = localStorage.getItem('physipro_jobs');
+    // v1052: Corriger la clé - utiliser physipro_jobs_data (même clé que la sauvegarde)
+    const stored = localStorage.getItem('physipro_jobs_data') || localStorage.getItem('physipro_jobs');
     if (stored) {
       localData = JSON.parse(stored);
       // Fusionner avec les exemples
@@ -48460,6 +48469,348 @@ async function recoverAndMergeAllData() {
   }
 }
 window.recoverAndMergeAllData = recoverAndMergeAllData;
+
+// v1052: Diagnostic Firebase - Vérifie les permissions et la connexion
+async function diagnoseFirebase() {
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('🔍 v1052: DIAGNOSTIC FIREBASE');
+  console.log('═══════════════════════════════════════════════════════════');
+  
+  const results = {
+    firebaseEnabled: isFirebaseEnabled,
+    firebaseDbExists: !!firebaseDb,
+    firebaseConnected: isFirebaseConnected,
+    firebaseAuthExists: !!firebaseAuth,
+    currentUser: currentUser ? currentUser.email : 'Non connecté',
+    authUser: null,
+    canRead: false,
+    canWrite: false,
+    errorRead: null,
+    errorWrite: null
+  };
+  
+  // Vérifier l'utilisateur Firebase Auth
+  if (firebaseAuth && firebaseAuth.currentUser) {
+    results.authUser = firebaseAuth.currentUser.email;
+    results.authUid = firebaseAuth.currentUser.uid;
+  }
+  
+  console.log('📊 État Firebase:');
+  console.log('   - Firebase activé:', results.firebaseEnabled);
+  console.log('   - Firebase DB existe:', results.firebaseDbExists);
+  console.log('   - Firebase connecté:', results.firebaseConnected);
+  console.log('   - Utilisateur app:', results.currentUser);
+  console.log('   - Utilisateur Firebase Auth:', results.authUser || 'NON AUTHENTIFIÉ');
+  console.log('   - UID Firebase:', results.authUid || 'N/A');
+  
+  if (!firebaseDb) {
+    console.error('❌ Firebase Database non initialisé!');
+    showToast('❌ Firebase non initialisé', 'error');
+    return results;
+  }
+  
+  // Test de lecture
+  console.log('');
+  console.log('📖 Test de LECTURE...');
+  try {
+    const testRead = await firebaseDb.ref('cards').limitToFirst(1).once('value');
+    results.canRead = true;
+    console.log('   ✅ Lecture OK - Données:', testRead.exists() ? 'Présentes' : 'Vides');
+  } catch (e) {
+    results.canRead = false;
+    results.errorRead = e.message;
+    console.error('   ❌ Lecture ÉCHOUÉE:', e.message);
+  }
+  
+  // Test d'écriture
+  console.log('');
+  console.log('✏️ Test d\'ÉCRITURE...');
+  const testKey = '_diagnostic_test_' + Date.now();
+  try {
+    await firebaseDb.ref('_tests/' + testKey).set({
+      timestamp: new Date().toISOString(),
+      user: currentUser?.email || 'unknown',
+      test: 'v1052 diagnostic'
+    });
+    results.canWrite = true;
+    console.log('   ✅ Écriture OK');
+    
+    // Nettoyer le test
+    await firebaseDb.ref('_tests/' + testKey).remove();
+    console.log('   🧹 Test nettoyé');
+  } catch (e) {
+    results.canWrite = false;
+    results.errorWrite = e.message;
+    console.error('   ❌ Écriture ÉCHOUÉE:', e.message);
+    console.error('   📋 Code erreur:', e.code);
+  }
+  
+  // Résumé
+  console.log('');
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('📋 RÉSUMÉ DIAGNOSTIC:');
+  
+  if (!results.authUser) {
+    console.error('❌ PROBLÈME: Pas authentifié sur Firebase Auth!');
+    console.log('   → Solution: Se reconnecter à l\'application');
+    showToast('❌ Non authentifié sur Firebase! Reconnectez-vous.', 'error');
+  } else if (!results.canRead) {
+    console.error('❌ PROBLÈME: Impossible de LIRE Firebase!');
+    console.log('   → Erreur:', results.errorRead);
+    console.log('   → Solution: Vérifier les règles Firebase Database');
+    showToast('❌ Impossible de lire Firebase: ' + results.errorRead, 'error');
+  } else if (!results.canWrite) {
+    console.error('❌ PROBLÈME: Impossible d\'ÉCRIRE sur Firebase!');
+    console.log('   → Erreur:', results.errorWrite);
+    console.log('   → Solution: Vérifier les règles Firebase Database');
+    showToast('❌ Impossible d\'écrire sur Firebase: ' + results.errorWrite, 'error');
+  } else {
+    console.log('✅ Tout fonctionne correctement!');
+    showToast('✅ Firebase fonctionne correctement!', 'success');
+  }
+  
+  console.log('═══════════════════════════════════════════════════════════');
+  
+  return results;
+}
+window.diagnoseFirebase = diagnoseFirebase;
+
+// v1052: Vérification complète du système de synchronisation
+async function systemHealthCheck() {
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════╗');
+  console.log('║          🏥 VÉRIFICATION COMPLÈTE DU SYSTÈME v1052                ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════╝');
+  console.log('');
+  
+  const results = {
+    timestamp: new Date().toISOString(),
+    errors: [],
+    warnings: [],
+    success: []
+  };
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // 1. VÉRIFICATION FIREBASE
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('📡 1. VÉRIFICATION FIREBASE');
+  console.log('─────────────────────────────────────────────');
+  
+  if (!isFirebaseEnabled) {
+    results.warnings.push('Firebase désactivé');
+    console.log('   ⚠️ Firebase est DÉSACTIVÉ');
+  } else {
+    console.log('   ✅ Firebase activé');
+    results.success.push('Firebase activé');
+  }
+  
+  if (!firebaseDb) {
+    results.errors.push('Firebase Database non initialisé');
+    console.log('   ❌ Firebase Database NON INITIALISÉ');
+  } else {
+    console.log('   ✅ Firebase Database initialisé');
+    results.success.push('Firebase Database initialisé');
+  }
+  
+  if (!isFirebaseConnected) {
+    results.errors.push('Firebase non connecté');
+    console.log('   ❌ Firebase NON CONNECTÉ');
+  } else {
+    console.log('   ✅ Firebase connecté');
+    results.success.push('Firebase connecté');
+  }
+  
+  if (firebaseAuth && firebaseAuth.currentUser) {
+    console.log('   ✅ Authentifié comme:', firebaseAuth.currentUser.email);
+    results.success.push('Authentifié: ' + firebaseAuth.currentUser.email);
+  } else {
+    results.errors.push('Non authentifié sur Firebase Auth');
+    console.log('   ❌ NON AUTHENTIFIÉ sur Firebase Auth');
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // 2. VÉRIFICATION DONNÉES LOCALES
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('💾 2. VÉRIFICATION DONNÉES LOCALES');
+  console.log('─────────────────────────────────────────────');
+  
+  const localMoulages = Object.keys(moulageCardsData || {}).length;
+  console.log('   📋 Moulages en mémoire:', localMoulages);
+  
+  const localJobs = Object.keys(jobsData || {}).length;
+  console.log('   📝 Jobs en mémoire:', localJobs);
+  
+  // Vérifier localStorage
+  try {
+    const storedMoulages = localStorage.getItem('physipro_moulage_data');
+    const storedMoulagesCount = storedMoulages ? Object.keys(JSON.parse(storedMoulages)).length : 0;
+    console.log('   💾 Moulages dans localStorage:', storedMoulagesCount);
+    
+    if (localMoulages > 0 && storedMoulagesCount === 0) {
+      results.warnings.push('Moulages en mémoire mais pas dans localStorage');
+      console.log('   ⚠️ Moulages en mémoire MAIS PAS dans localStorage!');
+    }
+  } catch (e) {
+    results.errors.push('Erreur lecture localStorage moulages: ' + e.message);
+    console.log('   ❌ Erreur localStorage moulages:', e.message);
+  }
+  
+  try {
+    const storedJobs = localStorage.getItem('physipro_jobs_data');
+    const storedJobsCount = storedJobs ? Object.keys(JSON.parse(storedJobs)).length : 0;
+    console.log('   💾 Jobs dans localStorage:', storedJobsCount);
+  } catch (e) {
+    results.errors.push('Erreur lecture localStorage jobs: ' + e.message);
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // 3. VÉRIFICATION DONNÉES FIREBASE (si connecté)
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('☁️ 3. VÉRIFICATION DONNÉES FIREBASE');
+  console.log('─────────────────────────────────────────────');
+  
+  if (firebaseDb && isFirebaseConnected) {
+    try {
+      const cardsSnap = await firebaseDb.ref('cards').once('value');
+      const firebaseMoulages = cardsSnap.exists() ? Object.keys(cardsSnap.val()).length : 0;
+      console.log('   ☁️ Moulages sur Firebase:', firebaseMoulages);
+      
+      if (localMoulages !== firebaseMoulages) {
+        results.warnings.push(`Différence moulages: local=${localMoulages}, Firebase=${firebaseMoulages}`);
+        console.log(`   ⚠️ DIFFÉRENCE: local=${localMoulages}, Firebase=${firebaseMoulages}`);
+      } else {
+        results.success.push('Moulages synchronisés: ' + localMoulages);
+        console.log('   ✅ Moulages synchronisés');
+      }
+      
+      const jobsSnap = await firebaseDb.ref('jobs').once('value');
+      const firebaseJobs = jobsSnap.exists() ? Object.keys(jobsSnap.val()).length : 0;
+      console.log('   ☁️ Jobs sur Firebase:', firebaseJobs);
+      
+    } catch (e) {
+      results.errors.push('Erreur lecture Firebase: ' + e.message);
+      console.log('   ❌ Erreur lecture Firebase:', e.message);
+    }
+  } else {
+    console.log('   ⏭️ Ignoré (Firebase non connecté)');
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // 4. VÉRIFICATION INTÉGRITÉ DES DONNÉES
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('🔍 4. VÉRIFICATION INTÉGRITÉ DES DONNÉES');
+  console.log('─────────────────────────────────────────────');
+  
+  let cardsWithMessages = 0;
+  let cardsWithNotes = 0;
+  let cardsWithTracking = 0;
+  let cardsWithoutColumn = 0;
+  
+  Object.keys(moulageCardsData || {}).forEach(cardId => {
+    const card = moulageCardsData[cardId];
+    if ((card.chatMessages || []).length > 0) cardsWithMessages++;
+    if ((card.pinnedNotes || []).length > 0 || (card.notesEntries || []).length > 0) cardsWithNotes++;
+    if (card.tracking && Object.keys(card.tracking).length > 0) cardsWithTracking++;
+    if (card.columnIndex === undefined || card.columnIndex === null) cardsWithoutColumn++;
+  });
+  
+  console.log('   💬 Cartes avec messages:', cardsWithMessages);
+  console.log('   📌 Cartes avec notes:', cardsWithNotes);
+  console.log('   📊 Cartes avec tracking:', cardsWithTracking);
+  
+  if (cardsWithoutColumn > 0) {
+    results.warnings.push(cardsWithoutColumn + ' cartes sans colonne définie');
+    console.log('   ⚠️ Cartes sans colonne:', cardsWithoutColumn);
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // 5. VÉRIFICATION CARTES EN ATTENTE DE SYNC
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('🔄 5. CARTES EN ATTENTE DE SYNCHRONISATION');
+  console.log('─────────────────────────────────────────────');
+  
+  const pendingCount = window.pendingFirebaseSync ? window.pendingFirebaseSync.size : 0;
+  if (pendingCount > 0) {
+    results.warnings.push(pendingCount + ' cartes en attente de sync');
+    console.log('   ⚠️ Cartes en attente:', pendingCount);
+    console.log('   📋 IDs:', [...window.pendingFirebaseSync].join(', '));
+  } else {
+    console.log('   ✅ Aucune carte en attente');
+    results.success.push('Aucune carte en attente de sync');
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // 6. VÉRIFICATION BACKUPS
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('📦 6. VÉRIFICATION BACKUPS');
+  console.log('─────────────────────────────────────────────');
+  
+  try {
+    const backups = JSON.parse(localStorage.getItem('physipro_backups') || '[]');
+    console.log('   📦 Backups disponibles:', backups.length);
+    
+    if (backups.length > 0) {
+      const lastBackup = backups[backups.length - 1];
+      const lastBackupDate = new Date(lastBackup.timestamp);
+      const hoursSince = (Date.now() - lastBackupDate.getTime()) / (1000 * 60 * 60);
+      console.log('   📅 Dernier backup:', lastBackupDate.toLocaleString('fr-CA'));
+      console.log('   ⏱️ Il y a:', Math.round(hoursSince) + ' heures');
+      
+      if (hoursSince > 24) {
+        results.warnings.push('Backup de plus de 24h');
+        console.log('   ⚠️ Backup ancien (> 24h)');
+      }
+    } else {
+      results.warnings.push('Aucun backup');
+      console.log('   ⚠️ Aucun backup!');
+    }
+  } catch (e) {
+    results.errors.push('Erreur vérification backups: ' + e.message);
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // RÉSUMÉ FINAL
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════╗');
+  console.log('║                        📊 RÉSUMÉ FINAL                            ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════╝');
+  console.log('');
+  console.log('   ✅ Succès:', results.success.length);
+  console.log('   ⚠️ Avertissements:', results.warnings.length);
+  console.log('   ❌ Erreurs:', results.errors.length);
+  console.log('');
+  
+  if (results.errors.length > 0) {
+    console.log('   ERREURS:');
+    results.errors.forEach(e => console.log('      ❌ ' + e));
+  }
+  
+  if (results.warnings.length > 0) {
+    console.log('   AVERTISSEMENTS:');
+    results.warnings.forEach(w => console.log('      ⚠️ ' + w));
+  }
+  
+  console.log('');
+  console.log('═══════════════════════════════════════════════════════════════════');
+  
+  // Afficher toast
+  if (results.errors.length > 0) {
+    showToast(`❌ ${results.errors.length} erreur(s) détectée(s) - Voir console F12`, 'error');
+  } else if (results.warnings.length > 0) {
+    showToast(`⚠️ ${results.warnings.length} avertissement(s) - Voir console F12`, 'warning');
+  } else {
+    showToast('✅ Système OK - Tout fonctionne correctement!', 'success');
+  }
+  
+  return results;
+}
+window.systemHealthCheck = systemHealthCheck;
 
 // Charger les données depuis localStorage au démarrage
 function loadMoulageDataFromLocalStorage() {
