@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro v1051 - Version production</title>
+  <title>PhysiPro v1052 - Version production</title>
 
   <!-- ================================================================
        PWA META TAGS - Configuration Progressive Web App
@@ -24660,6 +24660,14 @@ select.mf-input {
         <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Force la mise à jour de l'ordre des cartes depuis Firebase</div>
       </div>
       <div style="margin-top: 8px;">
+        <button class="settings-btn settings-btn-primary" onclick="pushLocalDataToFirebase()" style="width: 100%; background: linear-gradient(to bottom, #3b82f6 0%, #1d4ed8 100%);">☁️ Envoyer mes données vers le cloud (v1052)</button>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Envoie vos messages, notes et modifications locales vers Firebase</div>
+      </div>
+      <div style="margin-top: 8px;">
+        <button class="settings-btn settings-btn-primary" onclick="recoverAndMergeAllData()" style="width: 100%; background: linear-gradient(to bottom, #8b5cf6 0%, #6d28d9 100%);">🔧 Récupérer &amp; Fusionner toutes les données (v1052)</button>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Récupère les données locales ET Firebase, les fusionne intelligemment</div>
+      </div>
+      <div style="margin-top: 8px;">
         <button class="settings-btn settings-btn-primary" onclick="applyCorrectCardOrder()" style="width: 100%; background: linear-gradient(to bottom, #22c55e 0%, #16a34a 100%);">✅ Appliquer l'ordre de référence (v1051)</button>
         <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Applique l'ordre correct basé sur l'image de Valérie</div>
       </div>
@@ -48119,6 +48127,340 @@ window.normalizeRegionToCode = normalizeRegionToCode;
 window.normalizeRegionToDisplay = normalizeRegionToDisplay;
 window.normalizeMoulageData = normalizeMoulageData;
 
+// v1052: FUSION INTELLIGENTE - Fusionner les données Firebase avec les données locales
+// Cette fonction préserve les données importantes (messages, notes, tracking) qui pourraient
+// être perdues lors d'une synchronisation si elles n'ont pas encore été envoyées à Firebase
+function mergeCardData(localData, firebaseData) {
+  if (!localData) return firebaseData;
+  if (!firebaseData) return localData;
+  
+  // Commencer avec les données Firebase (source de vérité pour la plupart des champs)
+  const merged = { ...firebaseData };
+  
+  // === FUSION DES MESSAGES CHAT ===
+  // Garder tous les messages uniques (basé sur timestamp + user)
+  const localMessages = localData.chatMessages || [];
+  const firebaseMessages = firebaseData.chatMessages || [];
+  
+  if (localMessages.length > 0 || firebaseMessages.length > 0) {
+    const messageMap = new Map();
+    
+    // Ajouter d'abord les messages Firebase
+    firebaseMessages.forEach(msg => {
+      const key = `${msg.timestamp}_${msg.user}_${msg.text?.substring(0, 50)}`;
+      messageMap.set(key, msg);
+    });
+    
+    // Ajouter les messages locaux qui n'existent pas dans Firebase
+    localMessages.forEach(msg => {
+      const key = `${msg.timestamp}_${msg.user}_${msg.text?.substring(0, 50)}`;
+      if (!messageMap.has(key)) {
+        messageMap.set(key, msg);
+        console.log('📝 v1052: Message local préservé:', msg.text?.substring(0, 30));
+      }
+    });
+    
+    // Trier par timestamp
+    merged.chatMessages = Array.from(messageMap.values())
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  }
+  
+  // === FUSION DES NOTES ÉPINGLÉES ===
+  const localPinned = localData.pinnedNotes || [];
+  const firebasePinned = firebaseData.pinnedNotes || [];
+  
+  if (localPinned.length > 0 || firebasePinned.length > 0) {
+    const pinnedMap = new Map();
+    
+    firebasePinned.forEach(note => {
+      const key = `${note.timestamp}_${note.user}_${note.text?.substring(0, 50)}`;
+      pinnedMap.set(key, note);
+    });
+    
+    localPinned.forEach(note => {
+      const key = `${note.timestamp}_${note.user}_${note.text?.substring(0, 50)}`;
+      if (!pinnedMap.has(key)) {
+        pinnedMap.set(key, note);
+        console.log('📌 v1052: Note épinglée locale préservée:', note.text?.substring(0, 30));
+      }
+    });
+    
+    merged.pinnedNotes = Array.from(pinnedMap.values())
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Plus récent en premier
+  }
+  
+  // === FUSION DES ENTRÉES DE NOTES ===
+  const localNotes = localData.notesEntries || [];
+  const firebaseNotes = firebaseData.notesEntries || [];
+  
+  if (localNotes.length > 0 || firebaseNotes.length > 0) {
+    const notesMap = new Map();
+    
+    firebaseNotes.forEach(note => {
+      const key = `${note.timestamp}_${note.user}_${note.text?.substring(0, 50)}`;
+      notesMap.set(key, note);
+    });
+    
+    localNotes.forEach(note => {
+      const key = `${note.timestamp}_${note.user}_${note.text?.substring(0, 50)}`;
+      if (!notesMap.has(key)) {
+        notesMap.set(key, note);
+        console.log('📝 v1052: Entrée de note locale préservée');
+      }
+    });
+    
+    merged.notesEntries = Array.from(notesMap.values())
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+  
+  // === FUSION DU TRACKING ===
+  // Prendre la date la plus récente pour chaque entrée/sortie de département
+  const localTracking = localData.tracking || {};
+  const firebaseTracking = firebaseData.tracking || {};
+  
+  merged.tracking = { ...firebaseTracking };
+  
+  Object.keys(localTracking).forEach(dept => {
+    if (!merged.tracking[dept]) {
+      merged.tracking[dept] = localTracking[dept];
+    } else {
+      // Pour chaque département, garder les dates les plus récentes
+      ['entree', 'sortie'].forEach(field => {
+        const localDate = localTracking[dept]?.[field];
+        const firebaseDate = firebaseTracking[dept]?.[field];
+        
+        if (localDate && !firebaseDate) {
+          merged.tracking[dept][field] = localDate;
+          console.log(`📊 v1052: Tracking ${dept}.${field} local préservé: ${localDate}`);
+        } else if (localDate && firebaseDate && localDate !== firebaseDate) {
+          // Si dates différentes, garder la plus récente
+          const localTime = new Date(localDate).getTime();
+          const firebaseTime = new Date(firebaseDate).getTime();
+          if (localTime > firebaseTime) {
+            merged.tracking[dept][field] = localDate;
+            console.log(`📊 v1052: Tracking ${dept}.${field} mis à jour: ${localDate}`);
+          }
+        }
+      });
+    }
+  });
+  
+  // === FUSION DE L'HISTORIQUE ATTENTE ===
+  const localHist = localData.historiqueAttente || [];
+  const firebaseHist = firebaseData.historiqueAttente || [];
+  
+  if (localHist.length > 0 || firebaseHist.length > 0) {
+    const histMap = new Map();
+    
+    firebaseHist.forEach(h => {
+      const key = `${h.date}_${h.raison}`;
+      histMap.set(key, h);
+    });
+    
+    localHist.forEach(h => {
+      const key = `${h.date}_${h.raison}`;
+      if (!histMap.has(key)) {
+        histMap.set(key, h);
+      }
+    });
+    
+    merged.historiqueAttente = Array.from(histMap.values())
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+  }
+  
+  // === PRÉSERVER LES NOTES TEXTE SI PLUS LONGUES LOCALEMENT ===
+  if (localData.notes && (!firebaseData.notes || localData.notes.length > firebaseData.notes.length)) {
+    merged.notes = localData.notes;
+    console.log('📝 v1052: Notes texte locales préservées (plus longues)');
+  }
+  
+  // === PRÉSERVER LES PHOTOS DE NOTES ===
+  for (let i = 1; i <= 6; i++) {
+    const photoKey = `notePhoto${i}`;
+    if (localData[photoKey] && !firebaseData[photoKey]) {
+      merged[photoKey] = localData[photoKey];
+      console.log(`📷 v1052: ${photoKey} locale préservée`);
+    }
+  }
+  
+  // === PRÉSERVER robotSortOrder (spécifique à la vue locale) ===
+  if (localData.robotSortOrder !== undefined) {
+    merged.robotSortOrder = localData.robotSortOrder;
+  }
+  
+  // === PRENDRE columnOrder DE FIREBASE (pour synchronisation entre utilisateurs) ===
+  // C'est intentionnel - l'ordre des colonnes doit être synchronisé
+  
+  return merged;
+}
+window.mergeCardData = mergeCardData;
+
+// v1052: Forcer la synchronisation bidirectionnelle avec Firebase
+// Envoie les données locales vers Firebase si elles sont plus récentes/complètes
+function pushLocalDataToFirebase() {
+  if (!isFirebaseEnabled || !firebaseDb || !isFirebaseConnected) {
+    showToast('❌ Firebase non connecté', 'error');
+    return;
+  }
+  
+  console.log('🔄 v1052: Push des données locales vers Firebase...');
+  showToast('🔄 Synchronisation vers le cloud...', 'info');
+  
+  let pushCount = 0;
+  const cardIds = Object.keys(moulageCardsData);
+  
+  cardIds.forEach(cardId => {
+    if (cardId.startsWith('demo-') || cardId.startsWith('test-')) return;
+    
+    const cardData = moulageCardsData[cardId];
+    if (!cardData) return;
+    
+    // Nettoyer les undefined/null
+    const cleanData = JSON.parse(JSON.stringify(cardData));
+    
+    firebaseDb.ref('cards/' + cardId).update(cleanData)
+      .then(() => {
+        pushCount++;
+        if (pushCount === cardIds.length) {
+          console.log('✅ v1052: Push terminé -', pushCount, 'cartes');
+          showToast(`✅ ${pushCount} cartes synchronisées vers le cloud`, 'success');
+        }
+      })
+      .catch(e => console.error('❌ Erreur push:', cardId, e));
+  });
+}
+window.pushLocalDataToFirebase = pushLocalDataToFirebase;
+
+// v1052: Récupérer et fusionner toutes les données (local + Firebase)
+// Cette fonction est utile quand des données ont été perdues
+async function recoverAndMergeAllData() {
+  if (!isFirebaseEnabled || !firebaseDb || !isFirebaseConnected) {
+    showToast('❌ Firebase non connecté', 'error');
+    return;
+  }
+  
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('🔧 v1052: RÉCUPÉRATION ET FUSION DE TOUTES LES DONNÉES');
+  console.log('═══════════════════════════════════════════════════════════');
+  
+  showToast('🔧 Récupération en cours...', 'info');
+  
+  try {
+    // 1. Sauvegarder les données locales actuelles
+    const localBackup = JSON.parse(JSON.stringify(moulageCardsData));
+    console.log('📦 Backup local:', Object.keys(localBackup).length, 'cartes');
+    
+    // 2. Récupérer les données de Firebase
+    const snapshot = await firebaseDb.ref('cards').once('value');
+    const firebaseData = snapshot.val() || {};
+    console.log('☁️ Données Firebase:', Object.keys(firebaseData).length, 'cartes');
+    
+    // 3. Créer un ensemble de tous les IDs de cartes
+    const allCardIds = new Set([
+      ...Object.keys(localBackup),
+      ...Object.keys(firebaseData)
+    ]);
+    
+    // Filtrer les cartes de test
+    const validCardIds = [...allCardIds].filter(id => 
+      !id.startsWith('demo-') && !id.startsWith('test-')
+    );
+    
+    console.log('🔢 Total cartes uniques:', validCardIds.length);
+    
+    // 4. Fusionner chaque carte
+    let mergedCount = 0;
+    let newFromLocal = 0;
+    let newFromFirebase = 0;
+    let messagesRecovered = 0;
+    let notesRecovered = 0;
+    
+    validCardIds.forEach(cardId => {
+      const local = localBackup[cardId];
+      const firebase = firebaseData[cardId];
+      
+      if (local && firebase) {
+        // Fusionner les deux sources
+        const merged = mergeCardData(local, normalizeMoulageData(firebase));
+        
+        // Compter les récupérations
+        const localMsgCount = (local.chatMessages || []).length;
+        const firebaseMsgCount = (firebase.chatMessages || []).length;
+        const mergedMsgCount = (merged.chatMessages || []).length;
+        
+        if (mergedMsgCount > Math.max(localMsgCount, firebaseMsgCount)) {
+          messagesRecovered += mergedMsgCount - Math.max(localMsgCount, firebaseMsgCount);
+        }
+        
+        const localNotesCount = (local.pinnedNotes || []).length + (local.notesEntries || []).length;
+        const firebaseNotesCount = (firebase.pinnedNotes || []).length + (firebase.notesEntries || []).length;
+        const mergedNotesCount = (merged.pinnedNotes || []).length + (merged.notesEntries || []).length;
+        
+        if (mergedNotesCount > Math.max(localNotesCount, firebaseNotesCount)) {
+          notesRecovered += mergedNotesCount - Math.max(localNotesCount, firebaseNotesCount);
+        }
+        
+        moulageCardsData[cardId] = merged;
+        mergedCount++;
+      } else if (local && !firebase) {
+        // Carte existe seulement en local - la garder
+        moulageCardsData[cardId] = normalizeMoulageData(local);
+        newFromLocal++;
+        console.log('📱 Carte locale uniquement:', cardId);
+      } else if (!local && firebase) {
+        // Carte existe seulement sur Firebase - la récupérer
+        moulageCardsData[cardId] = normalizeMoulageData(firebase);
+        newFromFirebase++;
+        console.log('☁️ Carte Firebase uniquement:', cardId);
+      }
+    });
+    
+    // 5. Sauvegarder localement
+    window.moulageCardsData = moulageCardsData;
+    saveMoulageDataToLocalStorage(true);
+    
+    // 6. Mettre à jour l'affichage
+    if (typeof updateAllMoulageCards === 'function') {
+      updateAllMoulageCards();
+    }
+    if (typeof sortCardsInAllColumns === 'function') {
+      setTimeout(() => sortCardsInAllColumns(), 100);
+    }
+    if (typeof updateAllMoulageColumnCounts === 'function') {
+      updateAllMoulageColumnCounts();
+    }
+    
+    // 7. Envoyer les données fusionnées vers Firebase
+    console.log('☁️ Envoi des données fusionnées vers Firebase...');
+    
+    const updates = {};
+    validCardIds.forEach(cardId => {
+      if (moulageCardsData[cardId]) {
+        updates['cards/' + cardId] = JSON.parse(JSON.stringify(moulageCardsData[cardId]));
+      }
+    });
+    
+    await firebaseDb.ref().update(updates);
+    
+    // 8. Rapport final
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('✅ RÉCUPÉRATION TERMINÉE');
+    console.log('   Cartes fusionnées:', mergedCount);
+    console.log('   Cartes locales uniquement:', newFromLocal);
+    console.log('   Cartes Firebase uniquement:', newFromFirebase);
+    console.log('   Messages récupérés:', messagesRecovered);
+    console.log('   Notes récupérées:', notesRecovered);
+    console.log('═══════════════════════════════════════════════════════════');
+    
+    showToast(`✅ Récupération terminée! ${mergedCount} fusionnées, ${messagesRecovered} messages, ${notesRecovered} notes récupérés`, 'success');
+    
+  } catch (e) {
+    console.error('❌ Erreur récupération:', e);
+    showToast('❌ Erreur: ' + e.message, 'error');
+  }
+}
+window.recoverAndMergeAllData = recoverAndMergeAllData;
+
 // Charger les données depuis localStorage au démarrage
 function loadMoulageDataFromLocalStorage() {
   try {
@@ -48496,9 +48838,10 @@ function saveMoulageDataToLocalStorage(force = false) {
 }
 
 // Sauvegarder une carte moulage spécifique (Mode hybride v1048)
-function saveMoulageCardData(cardId) {
+// v1052: Amélioré avec meilleure gestion d'erreur et retry
+function saveMoulageCardData(cardId, forceImmediate = false) {
   // v1048: Sauvegarder dans localStorage (cache local)
-  saveMoulageDataToLocalStorage();
+  saveMoulageDataToLocalStorage(forceImmediate);
   
   // Sauvegarder sur Firebase si activé et connecté
   if (isFirebaseEnabled && firebaseDb && isFirebaseConnected && cardId && moulageCardsData[cardId]) {
@@ -48506,21 +48849,45 @@ function saveMoulageCardData(cardId) {
       // NETTOYER les undefined/null avant Firebase (sinon Firebase crash silencieusement)
       const cleanData = JSON.parse(JSON.stringify(moulageCardsData[cardId]));
       
+      // v1052: Log détaillé pour le débogage
+      const msgCount = (cleanData.chatMessages || []).length;
+      const notesCount = (cleanData.pinnedNotes || []).length;
+      if (msgCount > 0 || notesCount > 0) {
+        console.log(`☁️ v1052: Sauvegarde ${cardId} avec ${msgCount} messages, ${notesCount} notes épinglées`);
+      }
+      
       firebaseDb.ref('cards/' + cardId).update(cleanData)
         .then(() => {
           console.log('☁️ Moulage sync Firebase:', cardId);
         })
         .catch(e => {
           console.error('❌ Erreur Firebase sync:', cardId, e);
+          
+          // v1052: Marquer la carte pour retry ultérieur
+          if (!window.pendingFirebaseSync) window.pendingFirebaseSync = new Set();
+          window.pendingFirebaseSync.add(cardId);
+          
           if (typeof showToast === 'function') {
-            showToast('⚠️ Erreur synchronisation cloud - Vérifiez connexion', 'warning');
+            showToast('⚠️ Erreur synchronisation cloud - Réessai automatique', 'warning');
           }
+          
+          // v1052: Retry après 5 secondes
+          setTimeout(() => {
+            if (window.pendingFirebaseSync && window.pendingFirebaseSync.has(cardId)) {
+              console.log('🔄 v1052: Retry sync pour', cardId);
+              window.pendingFirebaseSync.delete(cardId);
+              saveMoulageCardData(cardId, true);
+            }
+          }, 5000);
         });
     } catch (e) {
       console.error('❌ Erreur préparation données Firebase:', e);
     }
   } else if (!isFirebaseConnected) {
     console.warn('⚠️ Firebase non connecté - données sauvegardées localement uniquement');
+    // v1052: Marquer pour sync ultérieure
+    if (!window.pendingFirebaseSync) window.pendingFirebaseSync = new Set();
+    window.pendingFirebaseSync.add(cardId);
   }
 }
 
@@ -54481,6 +54848,21 @@ function initFirebase() {
             setupNotificationsListener();
           }
         }
+        
+        // v1052: Synchroniser les cartes en attente quand Firebase se reconnecte
+        if (window.pendingFirebaseSync && window.pendingFirebaseSync.size > 0) {
+          console.log('🔄 v1052: Synchronisation de', window.pendingFirebaseSync.size, 'cartes en attente...');
+          const pending = [...window.pendingFirebaseSync];
+          window.pendingFirebaseSync.clear();
+          
+          pending.forEach(cardId => {
+            if (moulageCardsData[cardId]) {
+              setTimeout(() => saveMoulageCardData(cardId, true), Math.random() * 2000);
+            }
+          });
+          
+          showToast(`🔄 Synchronisation de ${pending.length} cartes en cours...`, 'info');
+        }
       } else {
         console.log('⚠️ Firebase déconnecté');
       }
@@ -55214,7 +55596,7 @@ function loadAllDataFromFirebase() {
     }
     
     if (data) {
-      // Fusionner avec les données existantes et NORMALISER COMPLÈTEMENT
+      // v1052: Fusionner avec les données existantes en préservant les données locales importantes
       Object.keys(data).forEach(cardId => {
         // IGNORER les cartes de test
         if (cardId.startsWith('demo-') || cardId.startsWith('test-')) {
@@ -55222,7 +55604,23 @@ function loadAllDataFromFirebase() {
         }
         
         const oldData = moulageCardsData[cardId];
-        const newData = normalizeMoulageData(data[cardId]);
+        const firebaseData = normalizeMoulageData(data[cardId]);
+        
+        // v1052: FUSION INTELLIGENTE au lieu de remplacement brutal
+        // Cela préserve les messages, notes, tracking qui pourraient être perdus
+        let newData;
+        if (oldData) {
+          newData = mergeCardData(oldData, firebaseData);
+          
+          // Compter les différences pour le log
+          const oldMsgCount = (oldData.chatMessages || []).length;
+          const newMsgCount = (newData.chatMessages || []).length;
+          if (newMsgCount > (firebaseData.chatMessages || []).length) {
+            console.log(`🔄 v1052: Carte ${cardId} - ${newMsgCount - (firebaseData.chatMessages || []).length} messages locaux préservés`);
+          }
+        } else {
+          newData = firebaseData;
+        }
         
         // PRÉSERVER l'ordre Robot sauvegardé localement (vue tableau Robot uniquement)
         // robotSortOrder est spécifique à la vue tableau, pas au Kanban
