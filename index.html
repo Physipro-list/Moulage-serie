@@ -24680,6 +24680,10 @@ select.mf-input {
         <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Libère de l'espace en supprimant les anciennes données</div>
       </div>
       <div style="margin-top: 8px;">
+        <button class="settings-btn settings-btn-primary" onclick="deepCleanupLocalStorage()" style="width: 100%; background: linear-gradient(to bottom, #dc2626 0%, #991b1b 100%);">🔥 Nettoyage PROFOND (v1052)</button>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">⚠️ Supprime backups, logs, messages - Libère beaucoup d'espace</div>
+      </div>
+      <div style="margin-top: 8px;">
         <button class="settings-btn settings-btn-primary" onclick="applyCorrectCardOrder()" style="width: 100%; background: linear-gradient(to bottom, #22c55e 0%, #16a34a 100%);">✅ Appliquer l'ordre de référence (v1051)</button>
         <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Applique l'ordre correct basé sur l'image de Valérie</div>
       </div>
@@ -48821,7 +48825,6 @@ function cleanupLocalStorage() {
   console.log('🧹 v1052: Nettoyage du localStorage...');
   
   const before = {};
-  const toDelete = [];
   let totalSize = 0;
   
   // Calculer la taille de chaque clé
@@ -48842,57 +48845,95 @@ function cleanupLocalStorage() {
     console.log(`   ${key}: ${(size / 1024).toFixed(1)} KB`);
   });
   
-  // Supprimer les anciennes clés non utilisées
-  const keysToClean = [
+  // === NETTOYAGE AGRESSIF v1052 ===
+  
+  // 1. Supprimer TOUTES les anciennes clés de backup orphelines (physipro_backup_backup_*)
+  const keysToDelete = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('physipro_backup_backup_')) {
+      keysToDelete.push(key);
+    }
+  }
+  keysToDelete.forEach(key => {
+    const size = localStorage.getItem(key)?.length * 2 || 0;
+    console.log(`🗑️ Suppression backup orphelin: ${key} (${(size / 1024).toFixed(1)} KB)`);
+    localStorage.removeItem(key);
+  });
+  
+  // 2. Supprimer les anciennes clés non utilisées
+  const oldKeysToClean = [
     'physipro_jobs', // Ancienne clé (remplacée par physipro_jobs_data)
     'physipro_inv_atelier', // Ancienne clé
     'physipro_serie_commandes', // Ancienne clé
     'physipro_materiaux_stock', // Ancienne clé
+    'physipro_commandes', // Potentiellement ancienne
   ];
   
-  keysToClean.forEach(key => {
+  oldKeysToClean.forEach(key => {
     if (localStorage.getItem(key)) {
       const size = localStorage.getItem(key).length * 2;
       console.log(`🗑️ Suppression ancienne clé: ${key} (${(size / 1024).toFixed(1)} KB)`);
       localStorage.removeItem(key);
-      toDelete.push(key);
     }
   });
   
-  // Limiter les backups à 2 (au lieu de potentiellement beaucoup plus)
+  // 3. Supprimer TOUS les backups locaux (ils sont sur Firebase de toute façon)
   try {
-    const backups = JSON.parse(localStorage.getItem('physipro_backups') || '[]');
-    if (backups.length > 2) {
-      const kept = backups.slice(-2); // Garder seulement les 2 derniers
-      localStorage.setItem('physipro_backups', JSON.stringify(kept));
-      console.log(`🗑️ Backups réduits: ${backups.length} → 2`);
+    const backupsSize = localStorage.getItem('physipro_backups')?.length * 2 || 0;
+    if (backupsSize > 50000) { // Plus de 50 KB
+      console.log(`🗑️ Suppression backups volumineux: ${(backupsSize / 1024).toFixed(1)} KB`);
+      localStorage.removeItem('physipro_backups');
     }
   } catch (e) {
     console.error('Erreur nettoyage backups:', e);
   }
   
-  // Limiter les logs d'activité
+  // 4. Limiter les logs d'activité à 50 (au lieu de 100)
   try {
     const logs = JSON.parse(localStorage.getItem('physipro_activity_logs') || '[]');
-    if (logs.length > 100) {
-      const kept = logs.slice(-100);
+    if (logs.length > 50) {
+      const kept = logs.slice(-50);
       localStorage.setItem('physipro_activity_logs', JSON.stringify(kept));
-      console.log(`🗑️ Logs réduits: ${logs.length} → 100`);
+      console.log(`🗑️ Logs réduits: ${logs.length} → 50`);
     }
   } catch (e) {
     console.error('Erreur nettoyage logs:', e);
   }
   
-  // Limiter l'historique de notifications
+  // 5. Limiter l'historique de notifications à 10
   try {
     const notifHist = JSON.parse(localStorage.getItem('physipro_notif_history') || '[]');
-    if (notifHist.length > 20) {
-      const kept = notifHist.slice(-20);
+    if (notifHist.length > 10) {
+      const kept = notifHist.slice(-10);
       localStorage.setItem('physipro_notif_history', JSON.stringify(kept));
-      console.log(`🗑️ Historique notifs réduit: ${notifHist.length} → 20`);
+      console.log(`🗑️ Historique notifs réduit: ${notifHist.length} → 10`);
     }
   } catch (e) {
     console.error('Erreur nettoyage notif history:', e);
+  }
+  
+  // 6. Nettoyer les messages dans les jobs (garder seulement les 3 derniers par job)
+  try {
+    const jobsData = JSON.parse(localStorage.getItem('physipro_jobs_data') || '{}');
+    let jobsCleaned = 0;
+    Object.keys(jobsData).forEach(jobId => {
+      const job = jobsData[jobId];
+      if (job.chatMessages && job.chatMessages.length > 3) {
+        job.chatMessages = job.chatMessages.slice(-3);
+        jobsCleaned++;
+      }
+      if (job.pinnedNotes && job.pinnedNotes.length > 3) {
+        job.pinnedNotes = job.pinnedNotes.slice(-3);
+        jobsCleaned++;
+      }
+    });
+    if (jobsCleaned > 0) {
+      localStorage.setItem('physipro_jobs_data', JSON.stringify(jobsData));
+      console.log(`🗑️ Jobs nettoyés: ${jobsCleaned} messages/notes réduits`);
+    }
+  } catch (e) {
+    console.error('Erreur nettoyage jobs:', e);
   }
   
   // Recalculer la taille
@@ -48914,6 +48955,84 @@ function cleanupLocalStorage() {
   return { before: totalSize, after: newTotalSize, freed };
 }
 window.cleanupLocalStorage = cleanupLocalStorage;
+
+// v1052: Nettoyage PROFOND - supprime plus de données pour libérer beaucoup d'espace
+function deepCleanupLocalStorage() {
+  console.log('🔥 v1052: NETTOYAGE PROFOND du localStorage...');
+  
+  if (!confirm('⚠️ ATTENTION: Ceci va supprimer:\n\n' +
+    '- Tous les backups locaux (ils sont sur Firebase)\n' +
+    '- Les messages de chat des jobs (gardés sur Firebase)\n' +
+    '- Les logs d\'activité\n' +
+    '- L\'historique des notifications\n\n' +
+    'Les données principales (moulages, jobs) seront conservées.\n\n' +
+    'Continuer?')) {
+    return;
+  }
+  
+  let freedTotal = 0;
+  
+  // Supprimer tous les backups
+  const backupsSize = localStorage.getItem('physipro_backups')?.length * 2 || 0;
+  localStorage.removeItem('physipro_backups');
+  freedTotal += backupsSize;
+  console.log(`🗑️ Backups supprimés: ${(backupsSize / 1024).toFixed(1)} KB`);
+  
+  // Supprimer tous les backups orphelins
+  const keysToDelete = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('physipro_backup_')) {
+      keysToDelete.push(key);
+    }
+  }
+  keysToDelete.forEach(key => {
+    const size = localStorage.getItem(key)?.length * 2 || 0;
+    localStorage.removeItem(key);
+    freedTotal += size;
+  });
+  console.log(`🗑️ ${keysToDelete.length} backups orphelins supprimés`);
+  
+  // Supprimer les logs
+  const logsSize = localStorage.getItem('physipro_activity_logs')?.length * 2 || 0;
+  localStorage.removeItem('physipro_activity_logs');
+  freedTotal += logsSize;
+  console.log(`🗑️ Logs supprimés: ${(logsSize / 1024).toFixed(1)} KB`);
+  
+  // Supprimer l'historique des notifications
+  localStorage.removeItem('physipro_notif_history');
+  
+  // Supprimer physipro_commandes si présent
+  const commandesSize = localStorage.getItem('physipro_commandes')?.length * 2 || 0;
+  localStorage.removeItem('physipro_commandes');
+  freedTotal += commandesSize;
+  
+  // Nettoyer les jobs (garder seulement les données essentielles)
+  try {
+    const jobsData = JSON.parse(localStorage.getItem('physipro_jobs_data') || '{}');
+    Object.keys(jobsData).forEach(jobId => {
+      const job = jobsData[jobId];
+      // Supprimer tous les messages et notes (ils sont sur Firebase)
+      delete job.chatMessages;
+      delete job.pinnedNotes;
+    });
+    localStorage.setItem('physipro_jobs_data', JSON.stringify(jobsData));
+    console.log('🗑️ Messages jobs supprimés');
+  } catch (e) {
+    console.error('Erreur nettoyage jobs:', e);
+  }
+  
+  console.log(`✅ Nettoyage profond terminé - ${(freedTotal / 1024).toFixed(0)} KB libérés`);
+  showToast(`✅ Nettoyage profond - ${(freedTotal / 1024).toFixed(0)} KB libérés`, 'success');
+  
+  // Recharger la page pour prendre en compte les changements
+  setTimeout(() => {
+    if (confirm('Voulez-vous recharger la page pour appliquer les changements?')) {
+      location.reload();
+    }
+  }, 1000);
+}
+window.deepCleanupLocalStorage = deepCleanupLocalStorage;
 
 // v1052: Vérifier et nettoyer automatiquement si localStorage proche du quota
 function checkAndCleanLocalStorageIfNeeded() {
