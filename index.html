@@ -45780,22 +45780,35 @@ let mcComposeType = null;
 let mcComposeImage = null;
 
 // Ouvrir la zone de composition mobile
+// v1045: CORRIGÉ avec logs détaillés
 function openMcCompose(cardId, type) {
-  console.log('📱 Ouvrir composition mobile:', type);
+  console.log('');
+  console.log('📱 ═══════════════════════════════════════════════════════');
+  console.log('📱 [Mobile] openMcCompose v1045');
+  console.log('📱 cardId:', cardId);
+  console.log('📱 type:', type);
   
   mcComposeType = type;
   mcComposeImage = null;
   
-  const zone = document.getElementById(`mcComposeZone_${cardId}`);
-  const typeLabel = document.getElementById(`mcComposeType_${cardId}`);
-  const authorLabel = document.getElementById(`mcComposeAuthor_${cardId}`);
-  const textarea = document.getElementById(`mcComposeText_${cardId}`);
-  const imageZone = document.getElementById(`mcComposeImageZone_${cardId}`);
+  const zone = document.getElementById('mcComposeZone_' + cardId);
+  const typeLabel = document.getElementById('mcComposeType_' + cardId);
+  const authorLabel = document.getElementById('mcComposeAuthor_' + cardId);
+  const textarea = document.getElementById('mcComposeText_' + cardId);
+  const imageZone = document.getElementById('mcComposeImageZone_' + cardId);
   
-  if (!zone) return;
+  console.log('📱 zone trouvée:', !!zone);
+  console.log('📱 typeLabel trouvé:', !!typeLabel);
+  console.log('📱 textarea trouvé:', !!textarea);
   
-  // v1019: RÉINITIALISER le style inline et afficher
-  zone.style.display = '';
+  if (!zone) {
+    console.error('❌ Zone de composition non trouvée pour cardId:', cardId);
+    showToast('❌ Erreur: zone non trouvée', 'error');
+    return;
+  }
+  
+  // v1045: FORCER l'affichage
+  zone.style.display = 'block';
   zone.classList.remove('problem', 'solution', 'normal', 'pinned');
   zone.classList.add(type, 'active');
   
@@ -45819,6 +45832,8 @@ function openMcCompose(cardId, type) {
   }
   
   zone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  console.log('📱 Zone ouverte avec succès');
+  console.log('📱 ═══════════════════════════════════════════════════════');
 }
 window.openMcCompose = openMcCompose;
 
@@ -45879,18 +45894,41 @@ function removeMcComposeImage(cardId) {
 window.removeMcComposeImage = removeMcComposeImage;
 
 // Envoyer le message depuis la composition mobile
+// v1045: CORRIGÉ avec logs détaillés et vérifications
 function sendMcComposeMessage(cardId) {
-  console.log('📤 Envoi message mobile:', cardId);
+  console.log('');
+  console.log('📤 ═══════════════════════════════════════════════════════');
+  console.log('📤 [Mobile] sendMcComposeMessage v1045');
+  console.log('📤 cardId:', cardId);
+  console.log('📤 mcComposeType:', mcComposeType);
   
-  const textarea = document.getElementById(`mcComposeText_${cardId}`);
+  if (!cardId) {
+    console.error('❌ cardId manquant!');
+    showToast('❌ Erreur: carte non identifiée', 'error');
+    return;
+  }
+  
+  const textarea = document.getElementById('mcComposeText_' + cardId);
+  console.log('📤 textarea trouvé:', !!textarea);
+  
   const content = textarea?.value?.trim() || '';
+  console.log('📤 contenu:', content.substring(0, 50));
+  
   const type = mcComposeType || 'normal';
+  console.log('📤 type final:', type);
   
   const data = moulageCardsData[cardId];
-  if (!data) return;
+  console.log('📤 data trouvée:', !!data);
+  
+  if (!data) {
+    console.error('❌ Aucune donnée pour cardId:', cardId);
+    showToast('❌ Erreur: données non trouvées', 'error');
+    return;
+  }
   
   if (!content && !mcComposeImage) {
-    showToast('Écrivez un message ou ajoutez une image', 'warning');
+    console.warn('⚠️ Message vide');
+    showToast('⚠️ Écrivez un message ou ajoutez une image', 'warning');
     return;
   }
   
@@ -45912,38 +45950,53 @@ function sendMcComposeMessage(cardId) {
     viewedAt: null
   };
   
+  console.log('📤 Nouveau message:', newMessage);
+  
   data.chatMessages.push(newMessage);
+  console.log('📤 Total messages:', data.chatMessages.length);
   
-  // v1019: Triple sauvegarde
-  saveMoulageCardData(cardId);
-  saveAllData();
-  
-  if (typeof syncMoulageToFirebase === 'function') {
-    syncMoulageToFirebase(cardId);
+  // v1045: Triple sauvegarde avec logs
+  console.log('💾 Sauvegarde...');
+  if (typeof saveMoulageCardData === 'function') {
+    saveMoulageCardData(cardId);
+    console.log('💾 saveMoulageCardData OK');
+  }
+  if (typeof saveAllData === 'function') {
+    saveAllData();
+    console.log('💾 saveAllData OK');
   }
   
-  // v1019: FORCER la fermeture de la zone
-  const zone = document.getElementById(`mcComposeZone_${cardId}`);
+  // v1045: FORCER la fermeture de la zone
+  const zone = document.getElementById('mcComposeZone_' + cardId);
   if (zone) {
     zone.style.display = 'none';
     zone.classList.remove('active', 'problem', 'solution', 'normal', 'pinned');
+    console.log('📤 Zone fermée');
   }
   mcComposeType = null;
   mcComposeImage = null;
   
   const typeEmoji = type === 'problem' ? '❓' : type === 'solution' ? '✅' : type === 'pinned' ? '📌' : '💬';
-  showToast(`${typeEmoji} Message envoyé!`, 'success');
+  showToast(typeEmoji + ' Message envoyé!', 'success');
   
-  // v1019: Rafraîchir et afficher menu destinataire
-  if (type !== 'pinned') {
-    console.log('📬 Ouverture menu destinataire mobile...');
-    setTimeout(() => {
-      openMobileDestMenu(cardId, encodeURIComponent(content), type);
-    }, 300);
-  } else {
+  // v1045: Rafraîchir le chat mobile
+  console.log('🔄 Rafraîchissement chat...');
+  
+  // Rafraîchir l'affichage du chat
+  setTimeout(() => {
     openMobileFiche(cardId);
     switchMficheTab('chat');
-  }
+    
+    // v1045: Afficher menu destinataire si pas épinglé
+    if (type !== 'pinned') {
+      console.log('📬 Ouverture menu destinataire...');
+      setTimeout(() => {
+        openMobileDestMenu(cardId, encodeURIComponent(content), type);
+      }, 300);
+    }
+  }, 100);
+  
+  console.log('📤 ═══════════════════════════════════════════════════════');
 }
 window.sendMcComposeMessage = sendMcComposeMessage;
 
