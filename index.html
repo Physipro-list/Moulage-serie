@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro v1047 - Version production</title>
+  <title>PhysiPro v1048 - Version production</title>
 
   <!-- ================================================================
        PWA META TAGS - Configuration Progressive Web App
@@ -24353,7 +24353,7 @@ select.mf-input {
     </button>
   </div>
   
-  <div class="mobile-menu-version">PhysiPro v1047</div>
+  <div class="mobile-menu-version">PhysiPro v1048</div>
 </div>
 
 <!-- ================================================================
@@ -28951,7 +28951,7 @@ function confirmDelete() {
     
     // Supprimer de Firebase si connecté
     if (isFirebaseEnabled && firebaseDb && isFirebaseConnected) {
-      firebaseDb.ref('moulages/' + cardIdToDelete).remove()
+      firebaseDb.ref('physipro/moulages/' + cardIdToDelete).remove()
         .then(() => console.log('☁️ Moulage supprimé de Firebase:', cardIdToDelete))
         .catch(e => console.error('Erreur suppression Firebase:', e));
     }
@@ -29259,7 +29259,7 @@ function saveCustomLists(lists) {
       typeof firebaseDb !== 'undefined' && firebaseDb && 
       typeof isFirebaseConnected !== 'undefined' && isFirebaseConnected) {
     try {
-      firebaseDb.ref('customLists').set(lists)
+      firebaseDb.ref('physipro/customLists').set(lists)
         .then(() => {
           console.log('☁️ Listes personnalisées synchronisées vers Firebase');
         })
@@ -29628,7 +29628,7 @@ function saveRobotRowOrder() {
         
         // Sauvegarder sur Firebase aussi
         if (isFirebaseEnabled && firebaseDb && isFirebaseConnected) {
-          firebaseDb.ref('moulages/' + cardId + '/robotSortOrder').set(index)
+          firebaseDb.ref('physipro/moulages/' + cardId + '/robotSortOrder').set(index)
             .catch(e => console.error('Erreur sync ordre Firebase:', e));
         }
       }
@@ -30523,7 +30523,7 @@ function saveKanbanColumnOrder(colIndex) {
       
       // Sauvegarder sur Firebase
       if (isFirebaseEnabled && firebaseDb && isFirebaseConnected) {
-        firebaseDb.ref('moulages/' + cardId + '/columnOrder').set(index)
+        firebaseDb.ref('physipro/moulages/' + cardId + '/columnOrder').set(index)
           .catch(e => console.error('Erreur sync ordre colonne Firebase:', e));
       }
     }
@@ -32019,7 +32019,7 @@ function saveSerieDataToLocalStorage() {
     
     // Sauvegarder aussi dans Firebase si disponible
     if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
-      firebaseDb.ref('serieCommandes').set(serieCardsData)
+      firebaseDb.ref('physipro/serieCommandes').set(serieCardsData)
         .then(() => console.log('☁️ Série+ synced to Firebase'))
         .catch(e => console.error('Erreur Firebase Série+:', e));
     }
@@ -32055,7 +32055,7 @@ function loadSerieDataFromLocalStorage() {
   
   // Ajouter listener Firebase si disponible
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
-    firebaseDb.ref('serieCommandes').on('value', (snapshot) => {
+    firebaseDb.ref('physipro/serieCommandes').on('value', (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
         Object.keys(data).forEach(cardId => {
@@ -35947,7 +35947,7 @@ function saveInventaireDataToLocalStorage() {
     
     // Sauvegarder aussi dans Firebase si disponible
     if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled && isFirebaseConnected) {
-      firebaseDb.ref('inventaire').set(inventaireData)
+      firebaseDb.ref('physipro/inventaire').set(inventaireData)
         .then(() => console.log('☁️ Inventaire synced to Firebase'))
         .catch(e => console.error('Erreur Firebase Inventaire:', e));
     }
@@ -35970,7 +35970,7 @@ function loadInventaireDataFromLocalStorage() {
   
   // Ajouter listener Firebase si disponible
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
-    firebaseDb.ref('inventaire').on('value', (snapshot) => {
+    firebaseDb.ref('physipro/inventaire').on('value', (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
         Object.keys(data).forEach(itemId => {
@@ -38637,7 +38637,7 @@ function loadMateriauxBO() {
   
   // Ajouter listener Firebase si disponible
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
-    firebaseDb.ref('materiauxBO').on('value', (snapshot) => {
+    firebaseDb.ref('physipro/materiauxBO').on('value', (snapshot) => {
       if (snapshot.exists()) {
         materiauxBOData = snapshot.val();
         console.log('☁️ Matériaux BO chargés depuis Firebase:', Object.keys(materiauxBOData).length);
@@ -38654,7 +38654,7 @@ function saveMateriauxBO() {
     
     // Sauvegarder aussi dans Firebase si disponible
     if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled && isFirebaseConnected) {
-      firebaseDb.ref('materiauxBO').set(materiauxBOData)
+      firebaseDb.ref('physipro/materiauxBO').set(materiauxBOData)
         .then(() => console.log('☁️ Matériaux BO synced to Firebase'))
         .catch(e => console.error('Erreur Firebase Matériaux BO:', e));
     }
@@ -39090,19 +39090,37 @@ function cleanCorruptedNotes(dataObj, type) {
 }
 
 function saveJobsToLocalStorage() {
-  // v1027: localStorage désactivé - Firebase uniquement
-  console.log('💾 localStorage Jobs désactivé - utilisation Firebase uniquement');
+  // v1048: Mode hybride - localStorage + Firebase
+  try {
+    const dataToSave = {};
+    const keys = Object.keys(jobsData);
+    const maxJobs = 50; // Limiter pour éviter quota exceeded
+    const keysToSave = keys.slice(-maxJobs);
+    
+    keysToSave.forEach(key => {
+      dataToSave[key] = jobsData[key];
+    });
+    
+    localStorage.setItem('physipro_jobs_data', JSON.stringify(dataToSave));
+    console.log('💾 localStorage Jobs sauvegardé:', keysToSave.length, 'jobs');
+  } catch (e) {
+    if (e.name === 'QuotaExceededError') {
+      console.warn('⚠️ localStorage Jobs plein - nettoyage...');
+      localStorage.removeItem('physipro_jobs_data');
+    }
+  }
 }
 
 // Sauvegarder un job
 function saveJobToFirebase(jobId) {
   if (!jobsData[jobId]) return;
   
-  // v1027: localStorage désactivé
+  // v1048: Mode hybride - sauvegarder localement aussi
+  saveJobsToLocalStorage();
   
   // Si Firebase activé et connecté, sauvegarder
   if (isFirebaseEnabled && firebaseDb && isFirebaseConnected) {
-    firebaseDb.ref('jobs/' + jobId).set(jobsData[jobId])
+    firebaseDb.ref('physipro/jobs/' + jobId).set(jobsData[jobId])
       .then(() => console.log('☁️ Job sync Firebase:', jobId))
       .catch(e => console.error('❌ Erreur Firebase job:', e));
   }
@@ -39120,11 +39138,12 @@ function deleteJobFromFirebase(jobId) {
   // Supprimer des données locales
   delete jobsData[jobId];
   
-  // v1027: localStorage désactivé
+  // v1048: Mode hybride - sauvegarder localement
+  saveJobsToLocalStorage();
   
   // Si Firebase activé et connecté, supprimer aussi là
   if (isFirebaseEnabled && firebaseDb && isFirebaseConnected) {
-    firebaseDb.ref('jobs/' + jobId).remove()
+    firebaseDb.ref('physipro/jobs/' + jobId).remove()
       .catch(e => console.error('Erreur suppression Firebase:', e));
   }
   
@@ -39300,7 +39319,7 @@ function deleteJobIfRegle(jobId) {
   
   // Supprimer de Firebase
   if (isFirebaseEnabled && firebaseDb && isFirebaseConnected) {
-    firebaseDb.ref('jobs/' + jobId).remove();
+    firebaseDb.ref('physipro/jobs/' + jobId).remove();
   }
   
   saveJobsToLocalStorage();
@@ -43742,7 +43761,7 @@ function moveJobToColumn(jobId, column) {
     if (LOCAL_MODE) {
       localStorage.setItem('physipro_jobs', JSON.stringify(jobsData));
     } else if (typeof firebaseDb !== 'undefined' && firebaseDb) {
-      firebaseDb.ref('jobs/' + jobId).set(job);
+      firebaseDb.ref('physipro/jobs/' + jobId).set(job);
     }
     
     renderJobs();
@@ -46767,7 +46786,7 @@ window.completeMobileJob = completeMobileJob;
    ================================================================ */
 
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🚀 PhysiPro v1047 - Initialisation...');
+  console.log('🚀 PhysiPro v1048 - Initialisation...');
 
   // Initialiser le menu
   initLogoMenu();
@@ -46797,7 +46816,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initMobileView();
   }
 
-  console.log('✅ PhysiPro v1047 - Prêt!');
+  console.log('✅ PhysiPro v1048 - Prêt!');
 });
 
 // ============================================================
@@ -46816,7 +46835,7 @@ function savePsmDataToLocalStorage() {
     
     // Sauvegarder aussi dans Firebase si disponible
     if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled && isFirebaseConnected) {
-      firebaseDb.ref('psmCards').set(psmCardsData)
+      firebaseDb.ref('physipro/psmCards').set(psmCardsData)
         .then(() => console.log('☁️ PSM synced to Firebase'))
         .catch(e => console.error('Erreur Firebase PSM:', e));
     }
@@ -48130,7 +48149,7 @@ function sortCardsInAllColumns() {
     // IMPORTANT: Aussi sauvegarder dans Firebase pour synchroniser avec les autres utilisateurs
     if (isFirebaseEnabled && firebaseDb && isFirebaseConnected && cardsNeedingFirebaseSync.length > 0) {
       cardsNeedingFirebaseSync.forEach(({ cardId, order }) => {
-        firebaseDb.ref('moulages/' + cardId + '/columnOrder').set(order)
+        firebaseDb.ref('physipro/moulages/' + cardId + '/columnOrder').set(order)
           .then(() => console.log(`☁️ columnOrder sync Firebase: ${cardId} → ${order}`))
           .catch(e => console.error('Erreur sync columnOrder Firebase:', e));
       });
@@ -48143,17 +48162,47 @@ function sortCardsInAllColumns() {
 }
 window.sortCardsInAllColumns = sortCardsInAllColumns;
 
-// v1027: Fonction désactivée - on utilise uniquement Firebase maintenant
-// Anciennement: Sauvegarder les données dans localStorage
+// v1048: Mode hybride - localStorage + Firebase pour robustesse
 function saveMoulageDataToLocalStorage() {
-  // v1027: localStorage désactivé pour éviter "Mémoire locale pleine"
-  // Toutes les données sont maintenant sauvegardées uniquement dans Firebase
-  console.log('💾 localStorage désactivé - utilisation Firebase uniquement');
+  try {
+    // Nettoyer les données avant sauvegarde (limiter la taille)
+    const dataToSave = {};
+    const keys = Object.keys(moulageCardsData);
+    
+    // Garder seulement les 100 dernières cartes si trop nombreuses
+    const maxCards = 100;
+    const keysToSave = keys.slice(-maxCards);
+    
+    keysToSave.forEach(key => {
+      // Copier sans les messages (trop volumineux)
+      const card = { ...moulageCardsData[key] };
+      if (card.messages && card.messages.length > 5) {
+        card.messages = card.messages.slice(-5); // Garder seulement les 5 derniers messages
+      }
+      dataToSave[key] = card;
+    });
+    
+    localStorage.setItem('physipro_moulage_data', JSON.stringify(dataToSave));
+    console.log('💾 localStorage sauvegardé:', keysToSave.length, 'cartes');
+  } catch (e) {
+    if (e.name === 'QuotaExceededError') {
+      console.warn('⚠️ localStorage plein - nettoyage...');
+      try {
+        localStorage.removeItem('physipro_moulage_data');
+        console.log('🧹 localStorage nettoyé');
+      } catch (e2) {
+        console.error('❌ Impossible de nettoyer localStorage:', e2);
+      }
+    } else {
+      console.error('❌ Erreur sauvegarde localStorage:', e);
+    }
+  }
 }
 
-// Sauvegarder une carte moulage spécifique (Firebase uniquement v1027)
+// Sauvegarder une carte moulage spécifique (Mode hybride v1048)
 function saveMoulageCardData(cardId) {
-  // v1027: localStorage désactivé - Firebase uniquement
+  // v1048: Sauvegarder dans localStorage (cache local)
+  saveMoulageDataToLocalStorage();
   
   // Sauvegarder sur Firebase si activé et connecté
   if (isFirebaseEnabled && firebaseDb && isFirebaseConnected && cardId && moulageCardsData[cardId]) {
@@ -48161,7 +48210,7 @@ function saveMoulageCardData(cardId) {
       // NETTOYER les undefined/null avant Firebase (sinon Firebase crash silencieusement)
       const cleanData = JSON.parse(JSON.stringify(moulageCardsData[cardId]));
       
-      firebaseDb.ref('moulages/' + cardId).update(cleanData)
+      firebaseDb.ref('physipro/moulages/' + cardId).update(cleanData)
         .then(() => {
           console.log('☁️ Moulage sync Firebase:', cardId);
         })
@@ -48175,7 +48224,7 @@ function saveMoulageCardData(cardId) {
       console.error('❌ Erreur préparation données Firebase:', e);
     }
   } else if (!isFirebaseConnected) {
-    console.warn('⚠️ Firebase non connecté - données non sauvegardées');
+    console.warn('⚠️ Firebase non connecté - données sauvegardées localement uniquement');
   }
 }
 
@@ -50493,7 +50542,7 @@ function cleanTestCardsFromFirebase() {
     Object.keys(data).forEach(cardId => {
       if (cardId.startsWith('demo-') || cardId.startsWith('test-')) {
         console.log('🗑️ Suppression de Firebase:', cardId);
-        deletePromises.push(firebaseDb.ref('moulages/' + cardId).remove());
+        deletePromises.push(firebaseDb.ref('physipro/moulages/' + cardId).remove());
         deletedCount++;
       }
     });
@@ -50650,7 +50699,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(checkAllAttenteCardsForMissingRaison, 5000);
   }, 1000);
 
-  console.log('✅ PhysiPro v1047 initialisé');
+  console.log('✅ PhysiPro v1048 initialisé');
   console.log('💾 Auto-sauvegarde activée (toutes les 10 secondes)');
   console.log('🔍 Check-up attente activé (toutes les 30 secondes)');
   console.log('🔗 Associations de cartes activées');
@@ -54495,7 +54544,7 @@ async function importFromFirebase() {
     
     // ===== 3. IMPORTER PSM =====
     console.log('🔍 Recherche des cartes PSM...');
-    const psmSnap = await firebaseDb.ref('psmCards').once('value');
+    const psmSnap = await firebaseDb.ref('physipro/psmCards').once('value');
     const psmFromFB = psmSnap.val();
     
     if (psmFromFB && Object.keys(psmFromFB).length > 0) {
@@ -54514,7 +54563,7 @@ async function importFromFirebase() {
     
     // ===== 4. IMPORTER LES LISTES PERSONNALISÉES =====
     console.log('🔍 Recherche des listes personnalisées...');
-    const listsSnap = await firebaseDb.ref('customLists').once('value');
+    const listsSnap = await firebaseDb.ref('physipro/customLists').once('value');
     const listsFromFB = listsSnap.val();
     
     if (listsFromFB) {
@@ -54565,7 +54614,7 @@ async function migrateOldCardsToNewPath() {
     // Optionnel: créer un backup de l'ancien chemin avant suppression
     const oldCardsSnap = await firebaseDb.ref('cards').once('value');
     if (oldCardsSnap.val()) {
-      await firebaseDb.ref('backups/cards_migration_' + Date.now()).set(oldCardsSnap.val());
+      await firebaseDb.ref('physipro/backups/cards_migration_' + Date.now()).set(oldCardsSnap.val());
       console.log('💾 Backup créé avant migration');
     }
     
@@ -54720,7 +54769,7 @@ async function exportToFirebase() {
     
     // Exporter PSM
     if (typeof psmCardsData !== 'undefined' && Object.keys(psmCardsData).length > 0) {
-      await firebaseDb.ref('psmCards').set(psmCardsData);
+      await firebaseDb.ref('physipro/psmCards').set(psmCardsData);
       exported.psm = Object.keys(psmCardsData).length;
       console.log(`✅ ${exported.psm} PSM exportés`);
     }
@@ -54728,7 +54777,7 @@ async function exportToFirebase() {
     // Exporter les listes personnalisées
     const customLists = localStorage.getItem('physipro_custom_lists');
     if (customLists) {
-      await firebaseDb.ref('customLists').set(JSON.parse(customLists));
+      await firebaseDb.ref('physipro/customLists').set(JSON.parse(customLists));
       console.log('✅ Listes personnalisées exportées');
     }
     
@@ -54908,7 +54957,7 @@ function loadAllDataFromFirebase() {
   });
   
   // Écouter PSM
-  firebaseDb.ref('psmCards').on('value', (snapshot) => {
+  firebaseDb.ref('physipro/psmCards').on('value', (snapshot) => {
     const data = snapshot.val();
     if (data && typeof psmCardsData !== 'undefined') {
       Object.keys(data).forEach(id => {
@@ -54920,7 +54969,7 @@ function loadAllDataFromFirebase() {
   });
   
   // Écouter les listes personnalisées
-  firebaseDb.ref('customLists').on('value', (snapshot) => {
+  firebaseDb.ref('physipro/customLists').on('value', (snapshot) => {
     const data = snapshot.val();
     if (data) {
       localStorage.setItem('physipro_custom_lists', JSON.stringify(data));
@@ -54965,7 +55014,7 @@ function logActivity(type, message, details = {}) {
   // Sauvegarder aussi sur Firebase si activé (avec nettoyage)
   if (isFirebaseEnabled && firebaseDb && isFirebaseConnected) {
     const logId = Date.now().toString();
-    firebaseDb.ref('logs/' + logId).set(log);
+    firebaseDb.ref('physipro/logs/' + logId).set(log);
     
     // Nettoyer les vieux logs Firebase périodiquement (1 chance sur 20)
     if (Math.random() < 0.05) {
@@ -54981,7 +55030,7 @@ async function cleanupFirebaseLogs() {
   if (!firebaseDb) return;
   
   try {
-    const snapshot = await firebaseDb.ref('logs').orderByKey().once('value');
+    const snapshot = await firebaseDb.ref('physipro/logs').orderByKey().once('value');
     const logs = snapshot.val();
     if (!logs) return;
     
@@ -54993,7 +55042,7 @@ async function cleanupFirebaseLogs() {
       console.log(`🧹 Nettoyage ${toDelete.length} vieux logs Firebase...`);
       
       for (const logId of toDelete) {
-        await firebaseDb.ref('logs/' + logId).remove();
+        await firebaseDb.ref('physipro/logs/' + logId).remove();
       }
       console.log('✅ Logs Firebase nettoyés');
     }
@@ -55030,7 +55079,7 @@ function showActivityLogs() {
   
   // Charger aussi depuis Firebase si disponible
   if (isFirebaseEnabled && firebaseDb && isFirebaseConnected) {
-    firebaseDb.ref('logs').orderByKey().limitToLast(500).once('value').then(snapshot => {
+    firebaseDb.ref('physipro/logs').orderByKey().limitToLast(500).once('value').then(snapshot => {
       const firebaseLogs = snapshot.val();
       if (firebaseLogs) {
         const fbLogArray = Object.values(firebaseLogs);
@@ -55317,7 +55366,7 @@ function createManualBackup() {
     const backupId = 'backup_' + Date.now();
     
     // Sauvegarder le backup complet
-    firebaseDb.ref('backups/' + backupId).set(backup).then(() => {
+    firebaseDb.ref('physipro/backups/' + backupId).set(backup).then(() => {
       console.log('✅ Backup sauvegardé dans Firebase: backups/' + backupId);
     }).catch(err => {
       console.error('❌ Erreur sauvegarde backup:', err);

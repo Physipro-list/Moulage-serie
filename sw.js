@@ -1,11 +1,11 @@
-// PhysiPro Service Worker v1046
+// PhysiPro Service Worker v1048
 // ================================
-// Scope: /Moulage-serie/
+// Mode hybride: Cache + Network
 
-const CACHE_NAME = 'physipro-v1046';
+const CACHE_NAME = 'physipro-v1048';
 const OFFLINE_URL = './index.html';
 
-// Fichiers à mettre en cache pour le fonctionnement hors-ligne
+// Fichiers à mettre en cache
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -14,14 +14,14 @@ const STATIC_ASSETS = [
   './icons/icon-512x512.png'
 ];
 
-// Installation du Service Worker
+// Installation
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installation PhysiPro v1046');
+  console.log('[SW] Installation PhysiPro v1048');
   
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('[SW] Mise en cache des ressources statiques');
+        console.log('[SW] Mise en cache des ressources');
         return cache.addAll(STATIC_ASSETS);
       })
       .then(() => {
@@ -34,9 +34,9 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activation du Service Worker
+// Activation
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activation PhysiPro v1046');
+  console.log('[SW] Activation PhysiPro v1048');
   
   event.waitUntil(
     caches.keys()
@@ -57,15 +57,13 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Interception des requêtes - Stratégie Network First
+// Fetch - Network First avec fallback cache
 self.addEventListener('fetch', (event) => {
-  // Ignorer les requêtes non-GET
-  if (event.request.method !== 'GET') {
-    return;
-  }
+  if (event.request.method !== 'GET') return;
   
-  // Ignorer les requêtes vers Firebase et autres APIs
   const url = new URL(event.request.url);
+  
+  // Ignorer Firebase et APIs externes
   if (
     url.hostname.includes('firebase') ||
     url.hostname.includes('googleapis') ||
@@ -78,115 +76,78 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Cloner la réponse pour la mettre en cache
         if (response && response.status === 200) {
           const responseClone = response.clone();
-          caches.open(CACHE_NAME)
-            .then((cache) => {
-              cache.put(event.request, responseClone);
-            });
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
         }
         return response;
       })
       .catch(() => {
-        // En cas d'échec réseau, utiliser le cache
-        return caches.match(event.request)
-          .then((cachedResponse) => {
-            if (cachedResponse) {
-              return cachedResponse;
-            }
-            // Si la ressource n'est pas en cache, retourner la page offline
-            if (event.request.mode === 'navigate') {
-              return caches.match(OFFLINE_URL);
-            }
-            return new Response('Offline', { status: 503 });
-          });
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) return cachedResponse;
+          if (event.request.mode === 'navigate') {
+            return caches.match(OFFLINE_URL);
+          }
+          return new Response('Offline', { status: 503 });
+        });
       })
   );
 });
 
-// Gestion des notifications push Firebase
+// Push notifications
 self.addEventListener('push', (event) => {
-  console.log('[SW] Notification push reçue');
+  console.log('[SW] Push reçu');
   
-  let notificationData = {
+  let data = {
     title: 'PhysiPro',
     body: 'Nouvelle notification',
     icon: './icons/icon-192x192.png',
-    badge: './icons/icon-72x72.png',
-    tag: 'physipro-notification',
-    data: {}
+    badge: './icons/icon-72x72.png'
   };
 
   if (event.data) {
     try {
-      const data = event.data.json();
-      notificationData = {
-        ...notificationData,
-        ...data.notification,
-        data: data.data || {}
-      };
+      const payload = event.data.json();
+      data = { ...data, ...payload.notification };
     } catch (e) {
-      notificationData.body = event.data.text();
+      data.body = event.data.text();
     }
   }
 
   event.waitUntil(
-    self.registration.showNotification(notificationData.title, {
-      body: notificationData.body,
-      icon: notificationData.icon,
-      badge: notificationData.badge,
-      tag: notificationData.tag,
-      data: notificationData.data,
-      vibrate: [200, 100, 200],
-      actions: [
-        { action: 'open', title: 'Ouvrir' },
-        { action: 'close', title: 'Fermer' }
-      ]
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: data.icon,
+      badge: data.badge,
+      vibrate: [200, 100, 200]
     })
   );
 });
 
-// Gestion du clic sur les notifications
+// Clic notification
 self.addEventListener('notificationclick', (event) => {
-  console.log('[SW] Clic sur notification');
-  
   event.notification.close();
-  
-  if (event.action === 'close') {
-    return;
-  }
-
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
-        // Si une fenêtre est déjà ouverte, la focus
-        for (const client of clientList) {
-          if (client.url.includes('physipro') && 'focus' in client) {
-            return client.focus();
-          }
+    clients.matchAll({ type: 'window' }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes('physipro') && 'focus' in client) {
+          return client.focus();
         }
-        // Sinon, ouvrir une nouvelle fenêtre
-        if (clients.openWindow) {
-          return clients.openWindow('./');
-        }
-      })
+      }
+      if (clients.openWindow) {
+        return clients.openWindow('./');
+      }
+    })
   );
 });
 
-// Message depuis l'application principale
+// Messages
 self.addEventListener('message', (event) => {
-  console.log('[SW] Message reçu:', event.data);
-  
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-  
-  if (event.data && event.data.type === 'CLEAR_CACHE') {
-    caches.delete(CACHE_NAME).then(() => {
-      console.log('[SW] Cache vidé');
-    });
-  }
+  console.log('[SW] Message:', event.data);
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data?.type === 'CLEAR_CACHE') caches.delete(CACHE_NAME);
 });
 
-console.log('[SW] Service Worker PhysiPro v1046 chargé');
+console.log('[SW] PhysiPro v1048 chargé');
