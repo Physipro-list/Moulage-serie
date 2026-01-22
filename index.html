@@ -24676,6 +24676,10 @@ select.mf-input {
         <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Vérifie Firebase, localStorage, données, backups - tout!</div>
       </div>
       <div style="margin-top: 8px;">
+        <button class="settings-btn settings-btn-primary" onclick="cleanupLocalStorage()" style="width: 100%; background: linear-gradient(to bottom, #f97316 0%, #ea580c 100%);">🧹 Nettoyer le localStorage (v1052)</button>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Libère de l'espace en supprimant les anciennes données</div>
+      </div>
+      <div style="margin-top: 8px;">
         <button class="settings-btn settings-btn-primary" onclick="applyCorrectCardOrder()" style="width: 100%; background: linear-gradient(to bottom, #22c55e 0%, #16a34a 100%);">✅ Appliquer l'ordre de référence (v1051)</button>
         <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; text-align: center;">Applique l'ordre correct basé sur l'image de Valérie</div>
       </div>
@@ -48812,6 +48816,130 @@ async function systemHealthCheck() {
 }
 window.systemHealthCheck = systemHealthCheck;
 
+// v1052: Nettoyer le localStorage pour libérer de l'espace
+function cleanupLocalStorage() {
+  console.log('🧹 v1052: Nettoyage du localStorage...');
+  
+  const before = {};
+  const toDelete = [];
+  let totalSize = 0;
+  
+  // Calculer la taille de chaque clé
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    const value = localStorage.getItem(key);
+    const size = (key.length + value.length) * 2; // UTF-16 = 2 bytes par caractère
+    before[key] = size;
+    totalSize += size;
+  }
+  
+  console.log('📊 Taille totale localStorage:', (totalSize / 1024 / 1024).toFixed(2), 'MB');
+  
+  // Lister les clés par taille
+  const sorted = Object.entries(before).sort((a, b) => b[1] - a[1]);
+  console.log('📋 Top 10 clés les plus volumineuses:');
+  sorted.slice(0, 10).forEach(([key, size]) => {
+    console.log(`   ${key}: ${(size / 1024).toFixed(1)} KB`);
+  });
+  
+  // Supprimer les anciennes clés non utilisées
+  const keysToClean = [
+    'physipro_jobs', // Ancienne clé (remplacée par physipro_jobs_data)
+    'physipro_inv_atelier', // Ancienne clé
+    'physipro_serie_commandes', // Ancienne clé
+    'physipro_materiaux_stock', // Ancienne clé
+  ];
+  
+  keysToClean.forEach(key => {
+    if (localStorage.getItem(key)) {
+      const size = localStorage.getItem(key).length * 2;
+      console.log(`🗑️ Suppression ancienne clé: ${key} (${(size / 1024).toFixed(1)} KB)`);
+      localStorage.removeItem(key);
+      toDelete.push(key);
+    }
+  });
+  
+  // Limiter les backups à 2 (au lieu de potentiellement beaucoup plus)
+  try {
+    const backups = JSON.parse(localStorage.getItem('physipro_backups') || '[]');
+    if (backups.length > 2) {
+      const kept = backups.slice(-2); // Garder seulement les 2 derniers
+      localStorage.setItem('physipro_backups', JSON.stringify(kept));
+      console.log(`🗑️ Backups réduits: ${backups.length} → 2`);
+    }
+  } catch (e) {
+    console.error('Erreur nettoyage backups:', e);
+  }
+  
+  // Limiter les logs d'activité
+  try {
+    const logs = JSON.parse(localStorage.getItem('physipro_activity_logs') || '[]');
+    if (logs.length > 100) {
+      const kept = logs.slice(-100);
+      localStorage.setItem('physipro_activity_logs', JSON.stringify(kept));
+      console.log(`🗑️ Logs réduits: ${logs.length} → 100`);
+    }
+  } catch (e) {
+    console.error('Erreur nettoyage logs:', e);
+  }
+  
+  // Limiter l'historique de notifications
+  try {
+    const notifHist = JSON.parse(localStorage.getItem('physipro_notif_history') || '[]');
+    if (notifHist.length > 20) {
+      const kept = notifHist.slice(-20);
+      localStorage.setItem('physipro_notif_history', JSON.stringify(kept));
+      console.log(`🗑️ Historique notifs réduit: ${notifHist.length} → 20`);
+    }
+  } catch (e) {
+    console.error('Erreur nettoyage notif history:', e);
+  }
+  
+  // Recalculer la taille
+  let newTotalSize = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    const value = localStorage.getItem(key);
+    newTotalSize += (key.length + value.length) * 2;
+  }
+  
+  const freed = totalSize - newTotalSize;
+  console.log('✅ Nettoyage terminé!');
+  console.log(`   Avant: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
+  console.log(`   Après: ${(newTotalSize / 1024 / 1024).toFixed(2)} MB`);
+  console.log(`   Libéré: ${(freed / 1024).toFixed(1)} KB`);
+  
+  showToast(`✅ Nettoyage terminé - ${(freed / 1024).toFixed(0)} KB libérés`, 'success');
+  
+  return { before: totalSize, after: newTotalSize, freed };
+}
+window.cleanupLocalStorage = cleanupLocalStorage;
+
+// v1052: Vérifier et nettoyer automatiquement si localStorage proche du quota
+function checkAndCleanLocalStorageIfNeeded() {
+  try {
+    let totalSize = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      const value = localStorage.getItem(key);
+      totalSize += (key.length + value.length) * 2;
+    }
+    
+    // localStorage a généralement une limite de 5-10 MB
+    // Si on dépasse 4 MB, nettoyer automatiquement
+    const limitMB = 4;
+    if (totalSize > limitMB * 1024 * 1024) {
+      console.warn('⚠️ v1052: localStorage proche du quota (' + (totalSize / 1024 / 1024).toFixed(2) + ' MB) - nettoyage auto...');
+      cleanupLocalStorage();
+      return true;
+    }
+  } catch (e) {
+    console.error('Erreur vérification quota:', e);
+  }
+  return false;
+}
+window.checkAndCleanLocalStorageIfNeeded = checkAndCleanLocalStorageIfNeeded;
+
 // Charger les données depuis localStorage au démarrage
 function loadMoulageDataFromLocalStorage() {
   try {
@@ -51671,6 +51799,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Charger les données depuis localStorage (avec délai pour que createMoulageCard soit disponible)
   setTimeout(() => {
+    // v1052: Vérifier et nettoyer le localStorage si nécessaire AVANT de charger
+    if (typeof checkAndCleanLocalStorageIfNeeded === 'function') {
+      checkAndCleanLocalStorageIfNeeded();
+    }
+    
     loadMoulageDataFromLocalStorage();
     loadJobsFromFirebase(); // Charger les jobs en attente
 
@@ -56438,7 +56571,7 @@ window.cleanupFirebaseLogs = cleanupFirebaseLogs;
 function createManualBackup() {
   const backup = {
     timestamp: new Date().toISOString(),
-    version: 'v1035',
+    version: 'v1052',
     user: currentUser.name,
     data: {
       moulages: moulageCardsData,
@@ -56448,19 +56581,44 @@ function createManualBackup() {
     }
   };
   
-  // Sauvegarder le backup localement
-  let backups = JSON.parse(localStorage.getItem('physipro_backups') || '[]');
-  backups.unshift(backup);
-  
-  // Garder max 10 backups
-  if (backups.length > 10) backups = backups.slice(0, 10);
-  
-  localStorage.setItem('physipro_backups', JSON.stringify(backups));
-  
-  // Mettre à jour l'affichage
-  const lastBackupEl = document.getElementById('settingsLastBackup');
-  if (lastBackupEl) {
-    lastBackupEl.textContent = new Date().toLocaleString('fr-CA');
+  // v1052: Limiter les backups à 2 pour économiser l'espace
+  try {
+    let backups = JSON.parse(localStorage.getItem('physipro_backups') || '[]');
+    backups.unshift(backup);
+    
+    // v1052: Garder max 2 backups (au lieu de 10) pour éviter le quota exceeded
+    if (backups.length > 2) backups = backups.slice(0, 2);
+    
+    localStorage.setItem('physipro_backups', JSON.stringify(backups));
+    
+    // Mettre à jour l'affichage
+    const lastBackupEl = document.getElementById('settingsLastBackup');
+    if (lastBackupEl) {
+      lastBackupEl.textContent = new Date().toLocaleString('fr-CA');
+    }
+    
+    showToast('💾 Backup créé!', 'success');
+  } catch (e) {
+    if (e.name === 'QuotaExceededError') {
+      console.warn('⚠️ v1052: Quota localStorage dépassé - nettoyage...');
+      // Nettoyer et réessayer
+      if (typeof cleanupLocalStorage === 'function') {
+        cleanupLocalStorage();
+      }
+      // Supprimer tous les anciens backups
+      localStorage.removeItem('physipro_backups');
+      // Sauvegarder seulement ce backup
+      try {
+        localStorage.setItem('physipro_backups', JSON.stringify([backup]));
+        showToast('💾 Backup créé (après nettoyage)', 'success');
+      } catch (e2) {
+        console.error('❌ Impossible de créer le backup même après nettoyage');
+        showToast('❌ Impossible de créer le backup local', 'error');
+      }
+    } else {
+      console.error('Erreur backup:', e);
+      showToast('❌ Erreur backup: ' + e.message, 'error');
+    }
   }
   
   // v1035: Sauvegarder sur Firebase dans DEUX chemins pour compatibilité
@@ -56485,7 +56643,6 @@ function createManualBackup() {
   }
   
   logActivity('backup', 'Backup manuel créé');
-  showToast('💾 Backup créé!', 'success');
 }
 
 function checkAndCreateDailyBackup() {
@@ -56496,6 +56653,10 @@ function checkAndCreateDailyBackup() {
   const today = new Date().toISOString().split('T')[0];
   
   if (lastBackupDate !== today) {
+    // v1052: Nettoyer avant de créer un backup
+    if (typeof checkAndCleanLocalStorageIfNeeded === 'function') {
+      checkAndCleanLocalStorageIfNeeded();
+    }
     createManualBackup();
     localStorage.setItem('physipro_last_auto_backup', today);
     console.log('📦 Backup automatique quotidien créé');
