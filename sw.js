@@ -1,5 +1,6 @@
 // PhysiPro Service Worker v1046
 // ================================
+// Scope: /Moulage-serie/
 
 const CACHE_NAME = 'physipro-v1046';
 const OFFLINE_URL = './index.html';
