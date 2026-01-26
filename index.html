@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1427</title>
+  <title>PhysiPro Moulages v1432</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -3416,6 +3416,55 @@
       }
     }
     
+    // ===== NETTOYAGE DES ASSOCIATIONS ORPHELINES =====
+    // Appelé au démarrage pour nettoyer les associations qui référencent des cartes supprimées
+    function cleanOrphanedAssociations() {
+      let modified = false;
+      
+      // 1. Nettoyer les groupes qui contiennent des cartes inexistantes
+      for (const groupId in associationGroups) {
+        const validCards = associationGroups[groupId].filter(cardId => cardsData[cardId]);
+        
+        if (validCards.length < 2) {
+          // Supprimer le groupe entier si moins de 2 cartes valides
+          console.log(`🧹 Nettoyage: Groupe ${groupId} supprimé (${associationGroups[groupId].length} → ${validCards.length} cartes)`);
+          associationGroups[groupId].forEach(cid => {
+            delete cardAssociations[cid];
+          });
+          delete associationGroups[groupId];
+          modified = true;
+        } else if (validCards.length !== associationGroups[groupId].length) {
+          // Nettoyer les références invalides
+          const removedCards = associationGroups[groupId].filter(cid => !validCards.includes(cid));
+          console.log(`🧹 Nettoyage: Groupe ${groupId} - cartes orphelines supprimées:`, removedCards);
+          removedCards.forEach(cid => {
+            delete cardAssociations[cid];
+          });
+          associationGroups[groupId] = validCards;
+          modified = true;
+        }
+      }
+      
+      // 2. Nettoyer les cardAssociations orphelines (référencent des groupes inexistants)
+      for (const cardId in cardAssociations) {
+        const groupId = cardAssociations[cardId];
+        if (!associationGroups[groupId] || !cardsData[cardId]) {
+          console.log(`🧹 Nettoyage: Association orpheline supprimée pour carte ${cardId}`);
+          delete cardAssociations[cardId];
+          modified = true;
+        }
+      }
+      
+      // 3. Sauvegarder si des modifications ont été faites
+      if (modified) {
+        console.log('💾 Associations nettoyées sauvegardées dans Firebase');
+        saveAssociationsToFirebase();
+        showToast('🧹 Associations orphelines nettoyées', 'info');
+      } else {
+        console.log('✅ Aucune association orpheline détectée');
+      }
+    }
+    
     // ===== OPTIMISATION STOCKAGE - MIGRATION IMAGES VERS FIREBASE =====
     
     // Compter les images base64 vs URLs
@@ -3589,6 +3638,9 @@
           cardAssociations = data.cardAssociations || {};
           associationGroups = data.associationGroups || {};
         }
+        
+        // Nettoyer les associations orphelines (cartes qui n'existent plus dans cardsData)
+        cleanOrphanedAssociations();
         
         lastSyncTime = new Date();
         updateSyncIndicator('online', 'En ligne');
@@ -4873,9 +4925,11 @@
       });
       
       // 2. Nettoyer les associations invalides (cartes qui n'existent plus)
+      let associationsModified = false;
       for (const groupId in associationGroups) {
         const validCards = associationGroups[groupId].filter(cardId => {
-          return document.querySelector(`[data-card-id="${cardId}"]`) !== null;
+          // Vérifier si la carte existe dans cardsData ET dans le DOM
+          return cardsData[cardId] && document.querySelector(`[data-card-id="${cardId}"]`) !== null;
         });
         
         if (validCards.length < 2) {
@@ -4884,10 +4938,26 @@
             delete cardAssociations[cid];
           });
           delete associationGroups[groupId];
+          associationsModified = true;
+          console.log(`🧹 Groupe ${groupId} supprimé (cartes manquantes)`);
         } else if (validCards.length !== associationGroups[groupId].length) {
           // Mettre à jour avec seulement les cartes valides
+          // Supprimer aussi les cardAssociations des cartes invalides
+          associationGroups[groupId].forEach(cid => {
+            if (!validCards.includes(cid)) {
+              delete cardAssociations[cid];
+            }
+          });
           associationGroups[groupId] = validCards;
+          associationsModified = true;
+          console.log(`🧹 Groupe ${groupId} nettoyé, reste ${validCards.length} cartes`);
         }
+      }
+      
+      // Sauvegarder dans Firebase si des modifications ont été faites
+      if (associationsModified) {
+        saveAssociationsToFirebase();
+        console.log('💾 Associations nettoyées sauvegardées dans Firebase');
       }
       
       // 3. Créer les nouveaux groupes visuels
@@ -9339,8 +9409,9 @@
       document.getElementById('photoArchiveName').textContent = card.name || '-';
       document.getElementById('photoArchiveOrder').textContent = card.order || '-';
       
-      // Créer le nom du dossier
-      const folderName = `${card.order || 'SANS-NUM'} - ${card.name || 'Sans nom'}`;
+      // Créer le nom du dossier avec la région au début (format: "R 284719 - PLOD 3832")
+      const region = normalizeRegion(card.region) || 'X';
+      const folderName = `${region} ${card.order || 'SANS-NUM'} - ${card.name || 'Sans nom'}`;
       document.getElementById('photoArchiveFolder').textContent = folderName;
       
       // Vider la grille
@@ -9432,7 +9503,9 @@
       statusEl.textContent = '⏳ Envoi en cours...';
       
       try {
-        const folderName = `${card.order || 'SANS-NUM'} - ${card.name || 'Sans nom'}`;
+        // Créer le nom du dossier avec la région au début (format: "R 284719 - PLOD 3832")
+        const region = normalizeRegion(card.region) || 'X';
+        const folderName = `${region} ${card.order || 'SANS-NUM'} - ${card.name || 'Sans nom'}`;
         const timestamp = Date.now();
         
         // Préparer les photos en base64 avec leurs noms
