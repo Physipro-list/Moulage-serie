@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1434</title>
+  <title>PhysiPro Moulages v1439</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -2049,7 +2049,7 @@
     <div class="tb-center"><span class="top-title">Outil de gestion des moulages</span></div>
     <div class="tb-right">
       <div class="tb-buttons-row">
-        <button class="btn-associate" id="btnAssociate" onclick="toggleAssociationMode()"><span>🔗</span><span>Associer</span></button>
+        <button class="btn-associate" id="btnAssociate" onclick="event.stopPropagation(); toggleAssociationMode()"><span>🔗</span><span>Associer</span></button>
         <div class="user-status"><span class="status-dot" id="statusDot"></span><span class="user-name" id="currentUserName">--</span></div>
       </div>
       <div class="tb-search-row">
@@ -3355,22 +3355,57 @@
         return;
       }
       
+      // Vérifier que cardData est un objet valide
+      if (typeof cardData !== 'object' || Array.isArray(cardData)) {
+        console.error(`❌ saveCardToFirebaseImmediate: cardData invalide pour ${cardId}`);
+        logSaveOperation(cardId, 'save', false, new Error('cardData invalide'));
+        return;
+      }
+      
       const dataToSave = { ...cardData };
       
       // Nettoyer le timestamp local (ne pas envoyer à Firebase)
       delete dataToSave.localModifiedAt;
       
-      // Vérifier les champs essentiels avant sauvegarde
+      // ═══════════════════════════════════════════════════════════════════
+      // VALIDATIONS CRITIQUES AVANT SAUVEGARDE
+      // ═══════════════════════════════════════════════════════════════════
+      
+      // Vérifier la colonne
       if (!dataToSave.colonne) {
         console.warn(`⚠️ Carte ${cardId} sans colonne, défaut: colAttente`);
         dataToSave.colonne = 'colAttente';
+      }
+      
+      // Vérifier que la colonne est valide
+      const colonneValide = COLONNES.find(c => c.id === dataToSave.colonne);
+      if (!colonneValide) {
+        console.warn(`⚠️ Carte ${cardId}: colonne '${dataToSave.colonne}' invalide, défaut: colAttente`);
+        dataToSave.colonne = 'colAttente';
+      }
+      
+      // Vérifier le sortOrder
+      if (dataToSave.sortOrder !== undefined && typeof dataToSave.sortOrder !== 'number') {
+        dataToSave.sortOrder = parseInt(dataToSave.sortOrder) || 0;
+      }
+      
+      // Vérifier les messages (doit être un tableau)
+      if (dataToSave.messages && !Array.isArray(dataToSave.messages)) {
+        console.warn(`⚠️ Carte ${cardId}: messages n'est pas un tableau, correction`);
+        dataToSave.messages = [];
+      }
+      
+      // Vérifier le tracking (doit être un objet)
+      if (dataToSave.tracking && (typeof dataToSave.tracking !== 'object' || Array.isArray(dataToSave.tracking))) {
+        console.warn(`⚠️ Carte ${cardId}: tracking invalide, correction`);
+        dataToSave.tracking = {};
       }
       
       // Upload images to Firebase Storage if they are base64
       if (dataToSave.messages) {
         for (let i = 0; i < dataToSave.messages.length; i++) {
           const msg = dataToSave.messages[i];
-          if (msg.image && msg.image.startsWith('data:')) {
+          if (msg && msg.image && msg.image.startsWith('data:')) {
             try {
               const imageUrl = await uploadImageToStorage(cardId, i, msg.image);
               dataToSave.messages[i].image = imageUrl;
@@ -3446,14 +3481,32 @@
     
     async function saveAssociationsToFirebase() {
       try {
-        await firebaseDb.ref(DB_PATHS.associations).set({
-          cardAssociations,
-          associationGroups,
+        // Validation avant sauvegarde
+        if (typeof validateAssociationsBeforeSave === 'function') {
+          const isValid = validateAssociationsBeforeSave();
+          if (!isValid) {
+            console.warn('⚠️ Associations invalides détectées, nettoyage en cours...');
+            cleanOrphanedAssociations();
+          }
+        }
+        
+        // Créer une copie propre pour éviter les références circulaires
+        const dataToSave = {
+          cardAssociations: { ...cardAssociations },
+          associationGroups: {},
           updatedAt: firebase.database.ServerValue.TIMESTAMP
-        });
+        };
+        
+        // Deep copy des groupes
+        for (const groupId in associationGroups) {
+          dataToSave.associationGroups[groupId] = [...associationGroups[groupId]];
+        }
+        
+        await firebaseDb.ref(DB_PATHS.associations).set(dataToSave);
+        console.log('✅ Associations sauvegardées:', Object.keys(associationGroups).length, 'groupes');
         return true;
       } catch (error) {
-        console.error('Erreur sauvegarde associations:', error);
+        console.error('❌ Erreur sauvegarde associations:', error);
         return false;
       }
     }
@@ -3497,7 +3550,19 @@
         }
       }
       
-      // 3. Sauvegarder si des modifications ont été faites
+      // 3. Vérifier la cohérence bidirectionnelle (cardAssociations ↔ associationGroups)
+      for (const groupId in associationGroups) {
+        const cardsInGroup = associationGroups[groupId];
+        for (const cardId of cardsInGroup) {
+          if (cardAssociations[cardId] !== groupId) {
+            console.log(`🧹 Nettoyage: Incohérence détectée - carte ${cardId} devrait être dans groupe ${groupId}`);
+            cardAssociations[cardId] = groupId;
+            modified = true;
+          }
+        }
+      }
+      
+      // 4. Sauvegarder si des modifications ont été faites
       if (modified) {
         console.log('💾 Associations nettoyées sauvegardées dans Firebase');
         saveAssociationsToFirebase();
@@ -3505,6 +3570,48 @@
       } else {
         console.log('✅ Aucune association orpheline détectée');
       }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // VALIDATION DES ASSOCIATIONS AVANT SAUVEGARDE
+    // ═══════════════════════════════════════════════════════════════════
+    
+    function validateAssociationsBeforeSave() {
+      const issues = [];
+      
+      // Vérifier que chaque groupe a au moins 2 cartes
+      for (const groupId in associationGroups) {
+        const cardsInGroup = associationGroups[groupId];
+        if (!Array.isArray(cardsInGroup)) {
+          issues.push(`Groupe ${groupId}: n'est pas un tableau`);
+          continue;
+        }
+        if (cardsInGroup.length < 2) {
+          issues.push(`Groupe ${groupId}: moins de 2 cartes (${cardsInGroup.length})`);
+        }
+        // Vérifier que toutes les cartes du groupe existent
+        for (const cardId of cardsInGroup) {
+          if (!cardsData[cardId]) {
+            issues.push(`Groupe ${groupId}: carte ${cardId} n'existe pas`);
+          }
+        }
+      }
+      
+      // Vérifier que chaque carte associée pointe vers un groupe valide
+      for (const cardId in cardAssociations) {
+        const groupId = cardAssociations[cardId];
+        if (!associationGroups[groupId]) {
+          issues.push(`Carte ${cardId}: pointe vers groupe inexistant ${groupId}`);
+        } else if (!associationGroups[groupId].includes(cardId)) {
+          issues.push(`Carte ${cardId}: n'est pas dans le groupe ${groupId}`);
+        }
+      }
+      
+      if (issues.length > 0) {
+        console.warn('⚠️ Problèmes d\'associations détectés:', issues);
+        return false;
+      }
+      return true;
     }
     
     // ═══════════════════════════════════════════════════════════════════
@@ -3517,6 +3624,14 @@
       let fixedCount = 0;
       
       for (const [cardId, card] of Object.entries(cardsData)) {
+        // Vérifier que la carte est un objet valide
+        if (!card || typeof card !== 'object') {
+          issues.push(`Carte ${cardId}: données invalides`);
+          delete cardsData[cardId];
+          fixedCount++;
+          continue;
+        }
+        
         // Vérifier que les champs essentiels existent
         if (!card.name) {
           issues.push(`Carte ${cardId}: nom manquant`);
@@ -3527,32 +3642,70 @@
           card.colonne = 'colAttente';
           fixedCount++;
         }
+        
+        // Vérifier que la colonne existe dans COLONNES
+        const colonneValide = COLONNES.find(c => c.id === card.colonne);
+        if (!colonneValide) {
+          issues.push(`Carte ${cardId}: colonne '${card.colonne}' invalide`);
+          card.colonne = 'colAttente';
+          fixedCount++;
+        }
+        
         if (!card.order) {
           issues.push(`Carte ${cardId}: numéro de commande manquant`);
         }
         
+        // Vérifier le sortOrder (doit être un nombre)
+        if (card.sortOrder !== undefined && typeof card.sortOrder !== 'number') {
+          issues.push(`Carte ${cardId}: sortOrder invalide (${typeof card.sortOrder})`);
+          card.sortOrder = parseInt(card.sortOrder) || 0;
+          fixedCount++;
+        }
+        
         // Vérifier les messages
-        if (card.messages && Array.isArray(card.messages)) {
-          card.messages.forEach((msg, idx) => {
-            if (!msg.type) {
-              issues.push(`Carte ${cardId}: message ${idx} sans type`);
-              msg.type = 'note';
-              fixedCount++;
-            }
-            if (!msg.date) {
-              issues.push(`Carte ${cardId}: message ${idx} sans date`);
-              msg.date = new Date().toISOString().split('T')[0];
-              fixedCount++;
-            }
-          });
+        if (card.messages) {
+          if (!Array.isArray(card.messages)) {
+            issues.push(`Carte ${cardId}: messages doit être un tableau`);
+            card.messages = [];
+            fixedCount++;
+          } else {
+            card.messages.forEach((msg, idx) => {
+              if (!msg || typeof msg !== 'object') {
+                issues.push(`Carte ${cardId}: message ${idx} invalide`);
+                return;
+              }
+              if (!msg.type) {
+                issues.push(`Carte ${cardId}: message ${idx} sans type`);
+                msg.type = 'note';
+                fixedCount++;
+              }
+              if (!msg.date) {
+                issues.push(`Carte ${cardId}: message ${idx} sans date`);
+                msg.date = new Date().toISOString().split('T')[0];
+                fixedCount++;
+              }
+            });
+          }
         }
         
         // Vérifier le tracking
-        if (card.tracking && typeof card.tracking !== 'object') {
-          issues.push(`Carte ${cardId}: tracking invalide`);
-          card.tracking = {};
-          fixedCount++;
+        if (card.tracking) {
+          if (typeof card.tracking !== 'object' || Array.isArray(card.tracking)) {
+            issues.push(`Carte ${cardId}: tracking invalide`);
+            card.tracking = {};
+            fixedCount++;
+          }
         }
+        
+        // Vérifier les dates (format attendu: YYYY-MM-DD ou vide)
+        const dateFields = ['dateRecue', 'dateLivraison', 'dateEssayage', 'dateExpedition', 'createdAt'];
+        dateFields.forEach(field => {
+          if (card[field] && typeof card[field] !== 'string') {
+            issues.push(`Carte ${cardId}: ${field} doit être une chaîne`);
+            card[field] = String(card[field]);
+            fixedCount++;
+          }
+        });
       }
       
       if (issues.length > 0) {
@@ -3754,7 +3907,52 @@
         const snapshot = await firebaseDb.ref(DB_PATHS.moulages).once('value');
         
         if (snapshot.exists()) {
-          cardsData = snapshot.val() || {};
+          const loadedData = snapshot.val() || {};
+          
+          // ═══════════════════════════════════════════════════════════════════
+          // VALIDATION DES DONNÉES REÇUES DE FIREBASE
+          // ═══════════════════════════════════════════════════════════════════
+          let validatedData = {};
+          let invalidCount = 0;
+          
+          for (const [cardId, card] of Object.entries(loadedData)) {
+            // Vérifier que c'est un objet valide
+            if (!card || typeof card !== 'object' || Array.isArray(card)) {
+              console.warn(`⚠️ Carte ${cardId} ignorée: données invalides`);
+              invalidCount++;
+              continue;
+            }
+            
+            // Vérifier les champs minimaux requis
+            if (!card.name && !card.order) {
+              console.warn(`⚠️ Carte ${cardId} ignorée: nom et ordre manquants`);
+              invalidCount++;
+              continue;
+            }
+            
+            // Corriger la colonne si invalide
+            if (!card.colonne || !COLONNES.find(c => c.id === card.colonne)) {
+              card.colonne = 'colAttente';
+            }
+            
+            // S'assurer que messages est un tableau
+            if (card.messages && !Array.isArray(card.messages)) {
+              card.messages = [];
+            }
+            
+            // S'assurer que tracking est un objet
+            if (card.tracking && (typeof card.tracking !== 'object' || Array.isArray(card.tracking))) {
+              card.tracking = {};
+            }
+            
+            validatedData[cardId] = card;
+          }
+          
+          if (invalidCount > 0) {
+            console.warn(`⚠️ ${invalidCount} carte(s) invalide(s) ignorée(s) lors du chargement`);
+          }
+          
+          cardsData = validatedData;
           console.log('✅ Firebase:', Object.keys(cardsData).length, 'cartes chargées');
         }
         
@@ -3763,6 +3961,14 @@
           const data = assocSnapshot.val();
           cardAssociations = data.cardAssociations || {};
           associationGroups = data.associationGroups || {};
+          
+          // Valider que associationGroups contient des tableaux
+          for (const groupId in associationGroups) {
+            if (!Array.isArray(associationGroups[groupId])) {
+              console.warn(`⚠️ Groupe ${groupId} invalide, conversion en tableau`);
+              associationGroups[groupId] = [];
+            }
+          }
         }
         
         // Nettoyer les associations orphelines (cartes qui n'existent plus dans cardsData)
@@ -4757,6 +4963,13 @@
     // Fonction pour marquer une carte comme expédiée
     function marquerExpedie(cardId, event) {
       event.stopPropagation();
+      
+      // En mode association, rediriger vers onCardClick
+      if (associationMode) {
+        onCardClick(event, cardId);
+        return;
+      }
+      
       const card = cardsData[cardId];
       if (!card || (card.expedie && card.expedie !== true && card.expedie !== 'true')) return; // Déjà expédié
       
@@ -4775,6 +4988,13 @@
     
     function openRaisonAttenteMenu(cardId, event) {
       event.stopPropagation();
+      
+      // En mode association, rediriger vers onCardClick
+      if (associationMode) {
+        onCardClick(event, cardId);
+        return;
+      }
+      
       currentAttenteCardId = cardId;
       const card = cardsData[cardId];
       if (!card) return;
@@ -4876,7 +5096,10 @@
       
       div.className = `mcard region-${getRegionClass(card.region)} ${isAssociated ? 'associated' : ''} ${isSelected ? 'selected-for-association' : ''}`;
       div.dataset.cardId = cardId;
-      div.draggable = true;
+      
+      // IMPORTANT: Désactiver le drag en mode association pour permettre les clics
+      div.draggable = !associationMode;
+      
       div.ondragstart = (e) => onCardDragStart(e, cardId);
       div.ondragend = onCardDragEnd;
       div.ondragover = (e) => onCardDragOver(e, cardId);
@@ -4932,7 +5155,7 @@
             <div class="mcard-order-line">
               <span class="mcard-region-pill">${normalizeRegion(card.region)}</span>
               <span class="mcard-order-text">${escapeHtml(card.order)}</span>
-              <button class="mcard-fiche-btn" onclick="event.stopPropagation(); openFiche('${cardId}')">Fiche</button>
+              <button class="mcard-fiche-btn" onclick="if(associationMode){event.stopPropagation(); onCardClick(event,'${cardId}'); return;} event.stopPropagation(); openFiche('${cardId}')">Fiche</button>
             </div>
           </div>
         </div>
@@ -4958,10 +5181,12 @@
     let dissociateMode = false;
     
     function toggleAssociationMode() {
+      console.log('🔗 toggleAssociationMode appelé - État actuel:', { associationMode, dissociateMode, selectedForAssociation });
       const btn = document.getElementById('btnAssociate');
       
       // Si on est en mode dissociation (bouton orange), dissocier et quitter
       if (dissociateMode && selectedForAssociation) {
+        console.log('🔓 Mode dissociation - dissocier carte:', selectedForAssociation);
         dissociateCard(selectedForAssociation);
         exitAssociationMode();
         return;
@@ -4969,14 +5194,17 @@
       
       // Sinon, toggle le mode association
       if (associationMode) {
+        console.log('🔗 Sortie du mode association');
         exitAssociationMode();
       } else {
+        console.log('🔗 Entrée en mode association');
         enterAssociationMode();
       }
     }
     window.toggleAssociationMode = toggleAssociationMode;
     
     function enterAssociationMode() {
+      console.log('🔗 enterAssociationMode()');
       associationMode = true;
       dissociateMode = false;
       selectedForAssociation = null;
@@ -4986,6 +5214,7 @@
       btn.innerHTML = '<span>🔗</span><span>Associer</span>';
       showToast('🔗 Cliquez sur 2 cartes pour les associer', 'info');
       renderKanban();
+      console.log('🔗 Mode association activé - associationMode:', associationMode);
     }
     
     function enterDissociateMode(cardId) {
@@ -5000,6 +5229,8 @@
     }
     
     function exitAssociationMode() {
+      console.log('🔗 exitAssociationMode() appelé');
+      console.trace('Stack trace:'); // Affiche d'où vient l'appel
       associationMode = false;
       dissociateMode = false;
       selectedForAssociation = null;
@@ -5027,6 +5258,8 @@
     }
 
     function onCardClick(e, cardId) {
+      console.log('🖱️ onCardClick appelé:', cardId, 'associationMode:', associationMode, 'dissociateMode:', dissociateMode, 'selectedForAssociation:', selectedForAssociation);
+      
       const isCardAssociated = !!cardAssociations[cardId];
       
       // === CAS 1: Mode normal, clic sur carte associée → entrer en mode dissociation ===
@@ -5072,16 +5305,62 @@
     document.addEventListener('click', function(e) {
       if (!associationMode) return;
       
-      // Si on clique sur une carte ou sur le bouton, ne pas annuler
-      if (e.target.closest('.mcard') || e.target.closest('#btnAssociate')) return;
+      console.log('🖱️ Document click - target:', e.target.tagName, e.target.className);
       
+      // PROTECTION: Ne JAMAIS annuler si le clic vient du bouton Associer ou de ses enfants
+      const btnAssociate = document.getElementById('btnAssociate');
+      if (btnAssociate && (e.target === btnAssociate || btnAssociate.contains(e.target))) {
+        console.log('🔗 Clic sur bouton Associer - ignoré');
+        return;
+      }
+      
+      // Liste des éléments qui NE DOIVENT PAS annuler le mode association
+      const safeSelectors = [
+        '.mcard',           // Les cartes
+        '.btn-associate',   // Le bouton associer (par classe)
+        '.toast',           // Les toasts
+        '.associated-group', // Les groupes associés
+        '.mcard-fiche-btn', // Le bouton fiche
+        '.mcard-item-pill', // La pastille item
+        '.priority-badge',  // Le badge priorité
+        '.mcard-link-icon', // L'icône de lien
+        '.mcard-header',    // L'en-tête de carte
+        '.mcard-info',      // Les infos de carte
+        '.mcard-title-text', // Le titre
+        '.mcard-order-line', // La ligne de commande
+        '.mcard-order-text', // Le texte de commande
+        '.mcard-region-pill' // La pastille région
+      ];
+      
+      // Vérifier si on a cliqué sur un élément safe
+      for (const selector of safeSelectors) {
+        if (e.target.closest(selector)) {
+          console.log('🔗 Clic sur élément safe:', selector);
+          return;
+        }
+      }
+      
+      // Vérifier si on a cliqué dans la zone du kanban (colonnes)
+      if (e.target.closest('.moulages-col') || 
+          e.target.closest('.moulages-col-body') || 
+          e.target.closest('.moulages-col-header') ||
+          e.target.closest('.moulages-wrapper') || 
+          e.target.closest('.moulages-main')) {
+        console.log('🔗 Clic dans la zone kanban - mode association maintenu');
+        return;
+      }
+      
+      console.log('🔗 Clic hors zone - annulation du mode association');
       // Sinon, annuler le mode
       exitAssociationMode();
     });
 
     function associateCards(cardId1, cardId2) {
+      console.log('🔗 associateCards appelé:', cardId1, cardId2);
       const group1 = cardAssociations[cardId1];
       const group2 = cardAssociations[cardId2];
+      
+      console.log('🔗 Groupes existants:', { group1, group2 });
       
       // Si les 2 cartes sont déjà dans le même groupe, ne rien faire
       if (group1 && group2 && group1 === group2) {
@@ -5095,18 +5374,23 @@
         groupId = group1;
         cardAssociations[cardId2] = groupId;
         associationGroups[groupId].push(cardId2);
+        console.log('🔗 Carte 2 ajoutée au groupe existant:', groupId);
       } else if (group2) {
         // Ajouter cardId1 au groupe de cardId2
         groupId = group2;
         cardAssociations[cardId1] = groupId;
         associationGroups[groupId].push(cardId1);
+        console.log('🔗 Carte 1 ajoutée au groupe existant:', groupId);
       } else {
         // Créer un nouveau groupe
         groupId = generateGroupId();
         cardAssociations[cardId1] = groupId;
         cardAssociations[cardId2] = groupId;
         associationGroups[groupId] = [cardId1, cardId2];
+        console.log('🔗 Nouveau groupe créé:', groupId);
       }
+      
+      console.log('🔗 État final:', { cardAssociations, associationGroups });
       saveAssociationsToFirebase();
       renderAssociatedCards();
       showToast('🔗 Cartes associées', 'success');
@@ -5122,8 +5406,8 @@
         if (parent) {
           const cards = Array.from(group.querySelectorAll('.mcard'));
           cards.forEach(card => {
-            // Réactiver le drag individuel
-            card.draggable = true;
+            // IMPORTANT: Ne réactiver le drag que si on n'est PAS en mode association
+            card.draggable = !associationMode;
             parent.insertBefore(card, group);
           });
         }
@@ -5207,7 +5491,9 @@
           const groupWrapper = document.createElement('div');
           groupWrapper.className = 'associated-group';
           groupWrapper.dataset.groupId = groupId;
-          groupWrapper.draggable = true;
+          
+          // IMPORTANT: Désactiver le drag en mode association pour permettre les clics
+          groupWrapper.draggable = !associationMode;
           
           // Ajouter les événements de drag sur le groupe
           groupWrapper.addEventListener('dragstart', (e) => onGroupDragStart(e, groupId));
@@ -8269,7 +8555,7 @@
 
     // ===== INITIALISATION =====
     document.addEventListener('DOMContentLoaded', async () => {
-      console.log('🚀 PhysiPro Moulage v1434 - Firebase Realtime DB');
+      console.log('🚀 PhysiPro Moulage v1439 - Firebase Realtime DB');
       
       // Permettre la connexion avec Enter
       document.getElementById('loginEmail').addEventListener('keypress', (e) => {
