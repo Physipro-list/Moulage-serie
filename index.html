@@ -4,23 +4,20 @@
   <meta charset="UTF-8">
   <!-- 
     ═══════════════════════════════════════════════════════════════════
-    v1441 - CORRECTIONS CRITIQUES SYNCHRONISATION MESSAGES
+    v1450 - CORRECTION TAILLE DRAG GROUPES
     ═══════════════════════════════════════════════════════════════════
     
-    PROBLÈMES CORRIGÉS:
-    1. isLocalOperation bloquait la réception pendant 500ms → réduit à 100ms
-    2. Le merge écrasait les messages au lieu de les fusionner
-    3. Ajout d'une fonction mergeMessages() pour fusion intelligente
-    4. Ajout d'une fonction mergeCardData() pour fusion au niveau carte
-    5. Ajout d'un refresh forcé après envoi de message
-    6. Refresh automatique quand on ouvre une fiche
+    CORRECTIONS:
+    - Groupes associés: même taille que cartes normales pendant le drag
+    - Enlevé l'animation pulse-group-drag qui faisait grossir
+    - transform: scale(0.95) comme les cartes individuelles
     
-    Ces corrections permettent à deux utilisateurs de voir les messages
-    de l'autre en temps réel sans perte de données.
+    v1449:
+    - 4 coins verts aux angles des groupes
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1441</title>
+  <title>PhysiPro Moulages v1450</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -42,6 +39,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+  
+  <!-- Microsoft Authentication Library (MSAL) pour OneDrive -->
+  <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; background: linear-gradient(135deg, #0a0f1a 0%, #1a1f2e 50%, #0d1420 100%); color: #e2e8f0; height: 100vh; overflow: hidden; }
@@ -59,9 +59,10 @@
     .logo-main { display: flex; flex-direction: column; align-items: center; }
     .logo-top-fixed img { height: 40px; width: auto; filter: brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
     .logo-bottom-text { font-size: 15px; font-weight: 600; color: #fff; text-shadow: 1px 1px 3px rgba(0,0,0,0.6); margin-top: -4px; }
-    .tb-create-btn { position: absolute; bottom: 8px; left: 175px; z-index: 2; }
+    .tb-create-btn { position: absolute; bottom: 8px; left: 175px; z-index: 2; display: flex; gap: 4px; }
     .btn-pill { display: flex; align-items: center; gap: 4px; height: 22px; padding: 0 10px; background: linear-gradient(135deg, #3b82f6 0%, #1e3a5f 100%); color: white; border: 2px solid #000; border-radius: 11px; font-size: 9px; font-weight: 600; cursor: pointer; text-shadow: 1px 1px 0 #000; transition: all 0.2s; }
     .btn-pill:hover { transform: scale(1.02); box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+    .btn-pill.btn-note { background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%); }
     .tb-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; pointer-events: none; max-width: calc(100% - 550px); overflow: hidden; }
     .top-title { font-size: 30px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #fdfdfd; text-shadow: 0 2px 3px rgba(0,0,0,0.85); white-space: nowrap; }
     .tb-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; z-index: 2; }
@@ -244,22 +245,26 @@
     /* ===== SECTION 3: CARTES ===== */
     .mcard { position: relative; margin: 2px 0; padding: 0px 3px 1px 3px; border-radius: 6px; cursor: grab; box-shadow: 0 2px 8px rgba(0,0,0,0.3); animation: slideIn 0.25s ease-out; transition: opacity 0.2s, transform 0.2s; border: 2px solid transparent; }
     .mcard:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
-    .mcard.dragging { opacity: 0.5; transform: scale(0.95); }
-    .mcard.dragging-with-group { opacity: 0.6; transform: scale(0.98); box-shadow: 0 0 0 3px #22c55e, 0 2px 6px rgba(0,0,0,0.35) !important; animation: pulse-group-drag 1s infinite; }
-    @keyframes pulse-group-drag { 0%, 100% { box-shadow: 0 0 0 3px #22c55e, 0 2px 6px rgba(0,0,0,0.35); } 50% { box-shadow: 0 0 0 5px #4ade80, 0 2px 8px rgba(0,0,0,0.4); } }
+    .mcard.dragging { opacity: 0.5; transform: scale(0.95); animation: none !important; }
+    .mcard.dragging-with-group { opacity: 0.5; animation: none !important; }
     .mcard.hidden { display: none; }
     .mcard.associated { border-color: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); }
     .mcard.selected-for-association { border-color: #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.8); animation: pulseGold 1s infinite; }
     @keyframes pulseGold { 0%, 100% { box-shadow: 0 0 8px rgba(251, 191, 36, 0.6); } 50% { box-shadow: 0 0 16px rgba(251, 191, 36, 1); } }
     
-    /* Wrapper pour groupe de cartes associées - les colle ensemble */
-    .associated-group { position: relative; border: 3px solid #22c55e; border-radius: 11px; margin: 2px 0; padding: 0; background: transparent; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
+    /* Wrapper pour groupe de cartes associées - 4 COINS VERTS */
+    .associated-group { position: relative; border: none; border-radius: 8px; margin: 2px 0; padding: 0; background: transparent; }
     .associated-group .mcard { margin: 0 !important; border-radius: 0 !important; border: none !important; }
-    .associated-group .mcard:first-child { border-top-left-radius: 8px !important; border-top-right-radius: 8px !important; }
-    .associated-group .mcard:last-child { border-bottom-left-radius: 8px !important; border-bottom-right-radius: 8px !important; }
+    .associated-group .mcard:first-child { border-top-left-radius: 6px !important; border-top-right-radius: 6px !important; }
+    .associated-group .mcard:last-child { border-bottom-left-radius: 6px !important; border-bottom-right-radius: 6px !important; }
     .associated-group .mcard + .mcard { border-top: 1px dashed rgba(255,255,255,0.3) !important; }
-    .associated-group::before { content: '🔗'; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #22c55e; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 11px; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
-    .associated-group.dragging { opacity: 0.7; }
+    /* Coins verts aux 4 coins */
+    .associated-group .corner { position: absolute; width: 12px; height: 12px; background: #22c55e; z-index: 10; }
+    .associated-group .corner-tl { top: -2px; left: -2px; border-radius: 4px 0 4px 0; }
+    .associated-group .corner-tr { top: -2px; right: -2px; border-radius: 0 4px 0 4px; }
+    .associated-group .corner-bl { bottom: -2px; left: -2px; border-radius: 0 4px 0 4px; }
+    .associated-group .corner-br { bottom: -2px; right: -2px; border-radius: 4px 0 4px 0; }
+    .associated-group.dragging { opacity: 0.5; transform: scale(0.95); }
     /* Indicateurs de drop pour les wrappers */
     .associated-group.drop-above::after { content: ''; position: absolute; top: -6px; left: 0; right: 0; height: 4px; background: #22c55e; border-radius: 2px; z-index: 100; }
     .associated-group.drop-below::after { content: ''; position: absolute; bottom: -6px; left: 0; right: 0; height: 4px; background: #22c55e; border-radius: 2px; z-index: 100; }
@@ -267,6 +272,16 @@
     .mcard.region-qc { background: linear-gradient(to bottom, #1a3a5a 0%, #3a6a9a 35%, #5a9acf 100%); }
     .mcard.region-on { background: linear-gradient(to bottom, #704414 0%, #a66a2a 50%, #E8B97A 100%); }
     .mcard.region-ma { background: linear-gradient(to bottom, #451238 0%, #8D2E6A 50%, #C7458C 100%); }
+    /* Cartes Notes - Style Post-it - MÊMES DIMENSIONS que cartes normales */
+    .mcard.note-card { background: linear-gradient(to bottom, #b45309 0%, #f59e0b 50%, #fbbf24 100%); min-height: 52px; }
+    .mcard.note-card.dragging { animation: none; transform: scale(0.95); }
+    .mcard.note-card .mcard-header { padding: 2px 4px; }
+    .mcard.note-card .mcard-title-text { font-size: 12px; font-weight: 700; }
+    .mcard.note-card .mcard-order-text { font-size: 11px; }
+    .mcard.note-card .mcard-note-content { font-size: 11px; padding: 2px 4px; color: #1f2937; line-height: 1.3; max-height: 60px; overflow: hidden; text-overflow: ellipsis; }
+    .mcard.note-card .mcard-note-type { position: absolute; top: 2px; right: 4px; font-size: 12px; }
+    .mcard.note-card .mcard-item-pill { background: rgba(0,0,0,0.2); color: #fff; }
+    .mcard.note-card .mcard-fiche-btn { font-size: 9px; }
     .priority-badge { position: absolute; top: -1px; left: -1px; width: 14px; height: 14px; border-radius: 5px 0 5px 0; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 1; }
     .priority-badge.p1 { background: linear-gradient(135deg, #ef4444, #dc2626); }
     .priority-badge.p2 { background: linear-gradient(135deg, #f97316, #ea580c); }
@@ -919,6 +934,58 @@
     .lightbox-btn:hover { background: rgba(255,255,255,0.3); transform: scale(1.1); }
     .lightbox-btn.close { background: rgba(220,38,38,0.8); }
     .lightbox-btn.close:hover { background: #dc2626; }
+    
+    /* ===== BOUTON PHOTOS ONEDRIVE ===== */
+    .fiche-photos-zone { padding: 8px 12px; margin-top: auto; border-top: 1px solid rgba(0,0,0,0.08); }
+    .fiche-photos-btn-large { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px 16px; background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 6px rgba(139,92,246,0.25); }
+    .fiche-photos-btn-large:hover { filter: brightness(1.15); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(139,92,246,0.35); }
+    .fiche-photos-btn-large:active { transform: translateY(0); }
+    .fiche-photos-btn-large .photos-btn-icon { font-size: 14px; }
+    .fiche-photos-btn-large .photos-btn-text { font-size: 12px; }
+    .fiche-photos-btn-large.loading { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); pointer-events: none; }
+    
+    /* Mobile */
+    .mobile-photos-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 16px; background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; margin: 12px 0; box-shadow: 0 4px 12px rgba(139,92,246,0.35); }
+    .mobile-photos-btn:hover { filter: brightness(1.1); }
+    .mobile-photos-btn:active { transform: scale(0.98); }
+    
+    /* ===== GALERIE PHOTOS PLEIN ÉCRAN ===== */
+    .photo-gallery-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.97); z-index: 100000; display: none; flex-direction: column; }
+    .photo-gallery-overlay.active { display: flex; }
+    .photo-gallery-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent); z-index: 2; }
+    .photo-gallery-title { color: #fff; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+    .photo-gallery-title .folder-name { color: #a78bfa; font-weight: 400; font-size: 14px; }
+    .photo-gallery-counter { color: #fff; font-size: 14px; background: rgba(139,92,246,0.4); padding: 6px 14px; border-radius: 20px; }
+    .photo-gallery-close { width: 44px; height: 44px; border-radius: 50%; background: rgba(239,68,68,0.9); border: none; color: white; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+    .photo-gallery-close:hover { background: #dc2626; transform: scale(1.1); }
+    .photo-gallery-main { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; padding: 20px; overflow: hidden; }
+    .photo-gallery-image { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; box-shadow: 0 0 60px rgba(0,0,0,0.5); transition: opacity 0.3s; }
+    .photo-gallery-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 56px; height: 56px; border-radius: 50%; background: rgba(139,92,246,0.5); border: 2px solid rgba(255,255,255,0.3); color: white; font-size: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; z-index: 3; }
+    .photo-gallery-nav:hover { background: rgba(139,92,246,0.8); transform: translateY(-50%) scale(1.1); }
+    .photo-gallery-nav:disabled { opacity: 0.3; cursor: not-allowed; }
+    .photo-gallery-nav:disabled:hover { transform: translateY(-50%); background: rgba(139,92,246,0.3); }
+    .photo-gallery-nav.prev { left: 20px; }
+    .photo-gallery-nav.next { right: 20px; }
+    .photo-gallery-footer { display: flex; justify-content: center; gap: 8px; padding: 15px; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); overflow-x: auto; }
+    .photo-gallery-thumb { width: 70px; height: 70px; border-radius: 8px; object-fit: cover; cursor: pointer; border: 3px solid transparent; opacity: 0.6; transition: all 0.2s; flex-shrink: 0; }
+    .photo-gallery-thumb:hover { opacity: 0.9; }
+    .photo-gallery-thumb.active { border-color: #8b5cf6; opacity: 1; }
+    .photo-gallery-loading { color: #fff; font-size: 16px; display: flex; flex-direction: column; align-items: center; gap: 15px; }
+    .photo-gallery-spinner { width: 50px; height: 50px; border: 4px solid rgba(255,255,255,0.2); border-top-color: #8b5cf6; border-radius: 50%; animation: spin 1s linear infinite; }
+    .photo-gallery-empty { color: #94a3b8; font-size: 18px; text-align: center; padding: 40px; }
+    .photo-gallery-empty-icon { font-size: 64px; margin-bottom: 20px; opacity: 0.5; }
+    .photo-gallery-error { color: #f87171; font-size: 16px; text-align: center; padding: 40px; }
+    .photo-gallery-connect { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 40px; }
+    .photo-gallery-connect-btn { padding: 16px 32px; background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.2s; }
+    .photo-gallery-connect-btn:hover { filter: brightness(1.15); transform: scale(1.02); }
+    .photo-gallery-connect-text { color: #94a3b8; font-size: 14px; text-align: center; max-width: 300px; }
+    @media (max-width: 768px) {
+      .photo-gallery-nav { width: 44px; height: 44px; font-size: 22px; }
+      .photo-gallery-nav.prev { left: 10px; }
+      .photo-gallery-nav.next { right: 10px; }
+      .photo-gallery-thumb { width: 55px; height: 55px; }
+      .photo-gallery-header { padding: 10px 15px; }
+    }
     
     /* ===== MODAL DESTINATAIRES ===== */
     .dest-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 99998; display: none; align-items: center; justify-content: center; }
@@ -1590,6 +1657,17 @@
       .mobile-msg-image {
         max-width: 100%; border-radius: 6px; margin-top: 8px;
       }
+      /* Grille d'images dans les messages */
+      .mobile-msg-images-grid {
+        display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;
+      }
+      .mobile-msg-images-grid img {
+        width: 80px; height: 80px; object-fit: cover;
+        border-radius: 6px; cursor: pointer;
+      }
+      .mobile-msg-images-grid.single img {
+        width: auto; height: auto; max-width: 100%; max-height: 200px;
+      }
       
       /* Bouton répondre mobile */
       .mobile-reply-btn {
@@ -1599,6 +1677,19 @@
         color: #fff; font-size: 12px; font-weight: 600;
         cursor: pointer;
       }
+      
+      /* Bouton supprimer message mobile */
+      .mobile-msg-delete-btn {
+        position: absolute; top: 4px; right: 4px;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: #ef4444; border: 2px solid #fff;
+        color: #fff; font-size: 12px; font-weight: 700;
+        cursor: pointer; display: flex;
+        align-items: center; justify-content: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        z-index: 5;
+      }
+      .mobile-msg-delete-btn:hover { background: #dc2626; }
       
       /* Zone composition mobile */
       .mobile-chat-compose {
@@ -1696,12 +1787,24 @@
       /* Preview de l'image */
       .mobile-compose-preview {
         display: none; margin-top: 8px;
-        position: relative; max-width: 150px;
+        width: 100%;
       }
-      .mobile-compose-preview.active { display: block; }
-      .mobile-compose-preview img {
-        max-width: 150px; max-height: 150px;
+      .mobile-compose-preview.active { display: flex; flex-wrap: wrap; gap: 6px; }
+      .mobile-compose-preview-item {
+        position: relative; width: 70px; height: 70px;
+      }
+      .mobile-compose-preview-item img {
+        width: 70px; height: 70px; object-fit: cover;
         border-radius: 8px; border: 2px solid #e2e8f0;
+      }
+      .mobile-compose-preview-item .photo-remove-btn {
+        position: absolute; top: -6px; right: -6px;
+        width: 20px; height: 20px; border-radius: 50%;
+        background: #ef4444; border: 2px solid #fff;
+        color: #fff; font-size: 10px; font-weight: 700;
+        cursor: pointer; display: flex;
+        align-items: center; justify-content: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
       }
       .mobile-compose-preview-remove {
         position: absolute; top: -8px; right: -8px;
@@ -2062,7 +2165,7 @@
         <div class="logo-bottom-text">Moulage</div>
       </div>
     </div>
-    <div class="tb-create-btn"><button class="btn-pill" onclick="openCreateModal()"><span>+</span><span>Créer moulage</span></button></div>
+    <div class="tb-create-btn"><button class="btn-pill" onclick="openCreateModal()"><span>+</span><span>Moulage</span></button><button class="btn-pill btn-note" onclick="openCreateNoteModal()"><span>📝</span><span>Note</span></button></div>
     <div class="tb-center"><span class="top-title">Outil de gestion des moulages</span></div>
     <div class="tb-right">
       <div class="tb-buttons-row">
@@ -2092,7 +2195,8 @@
     <div class="robot-view-header">
       <div class="robot-view-header-left">
         <button class="robot-view-back-btn" onclick="toggleRobotView()">← Retour au Kanban</button>
-        <button class="robot-view-add-btn" onclick="openCreateModal()">+ Créer moulage</button>
+        <button class="robot-view-add-btn" onclick="openCreateModal()">+ Moulage</button>
+        <button class="robot-view-add-btn" onclick="openCreateNoteModal()" style="background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);">📝 Note</button>
       </div>
       <div class="robot-view-header-center">
         <span class="robot-view-title">📊 Vue Tableau - Robot</span>
@@ -2157,6 +2261,12 @@
         </div>
         <div class="fiche-body">
           <div class="fiche-fields-list" id="ficheFieldsList"></div>
+        </div>
+        <div class="fiche-photos-zone">
+          <button type="button" class="fiche-photos-btn-large" onclick="openPhotosOneDrive(currentCardId)">
+            <span class="photos-btn-icon">📷</span>
+            <span class="photos-btn-text">Voir les photos OneDrive</span>
+          </button>
         </div>
       </div>
       <div class="fiche-notes-zone">
@@ -2233,11 +2343,65 @@
         <div class="modal-field-row"><div class="modal-field-label">🧾 N° PO</div><div class="modal-field-value"><input type="text" id="newPo" placeholder="PO-XXXXX"></div></div>
         <div class="modal-field-row"><div class="modal-field-label">📥 Date Reçue</div><div class="modal-field-value date-field" id="newDateRecue" onclick="openCalendarModal(this,'newDateRecue')">Sélectionner...</div></div>
         <div class="modal-field-row"><div class="modal-field-label">📦 Date Livraison</div><div class="modal-field-value date-field" id="newDateLivraison" onclick="openCalendarModal(this,'newDateLivraison')">Sélectionner...</div></div>
-        <div class="modal-field-row"><div class="modal-field-label">🔧 Fabrication Moulage</div><div class="modal-field-value date-field" id="newDateEssayage" onclick="openCalendarModal(this,'newDateEssayage')">Sélectionner...</div></div>
+        <div class="modal-field-row"><div class="modal-field-label">🔧 Fab-moulage</div><div class="modal-field-value date-field" id="newDateEssayage" onclick="openCalendarModal(this,'newDateEssayage')">Sélectionner...</div></div>
       </div>
       <div class="modal-actions">
         <button class="modal-btn secondary" onclick="closeCreateModal(event, true)">Annuler</button>
         <button class="modal-btn primary" onclick="createNewCard()">✓ Créer le moulage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL CRÉATION/ÉDITION NOTE ===== -->
+  <div class="modal-overlay" id="createNoteModal" onclick="closeCreateNoteModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()" style="max-width: 400px;">
+      <div class="modal-header" style="background: linear-gradient(to bottom, #b45309 0%, #f59e0b 100%);">
+        <div class="modal-title" id="noteModalTitle">📝 Créer une Note</div>
+        <button class="modal-close-btn" onclick="closeCreateNoteModal(event, true)">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="noteEditId" value="">
+        <div class="modal-field-row">
+          <div class="modal-field-label">📌 Type de note</div>
+          <div class="modal-field-value">
+            <select id="noteType">
+              <option value="postit">📋 Postit</option>
+              <option value="table">📊 Table</option>
+              <option value="note">📝 Note</option>
+              <option value="important">⚠️ Important</option>
+              <option value="urgent">🔴 Urgent</option>
+              <option value="rush">🚨 Rush</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-field-row">
+          <div class="modal-field-label">🔢 N° Commande (optionnel)</div>
+          <div class="modal-field-value"><input type="text" id="noteOrder" placeholder="290XXX ou laisser vide"></div>
+        </div>
+        <div class="modal-field-row">
+          <div class="modal-field-label">📝 Titre</div>
+          <div class="modal-field-value"><input type="text" id="noteTitle" placeholder="Titre de la note"></div>
+        </div>
+        <!-- Options avec cases à cocher -->
+        <div class="modal-field-row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+          <div class="modal-field-label">⏰ Options</div>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; background: #f8fafc; border-radius: 6px;">
+            <input type="checkbox" id="noteHasDeadline" onchange="toggleNoteDeadline()" style="width: 18px; height: 18px; cursor: pointer;">
+            <span style="font-size: 13px;">📅 Doit partir avant :</span>
+            <div id="noteDeadlineDate" class="date-field" onclick="if(document.getElementById('noteHasDeadline').checked) openCalendarModal(this,'noteDeadlineDate')" style="flex: 1; padding: 6px 10px; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; text-align: center; color: #64748b;">Sélectionner...</div>
+          </label>
+        </div>
+        <div class="modal-field-row" style="flex-direction: column; align-items: stretch;">
+          <div class="modal-field-label" style="margin-bottom: 6px;">✏️ Contenu</div>
+          <textarea id="noteContent" placeholder="Écrivez vos notes ici..." style="width: 100%; min-height: 120px; padding: 10px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 13px; resize: vertical; font-family: inherit;"></textarea>
+        </div>
+      </div>
+      <div class="modal-actions" style="flex-direction: column; gap: 8px;">
+        <button class="modal-btn" id="noteDeleteBtn" style="display: none; width: 100%; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white;" onclick="deleteNoteFromModal()">🗑️ Supprimer cette note</button>
+        <div style="display: flex; gap: 10px; width: 100%;">
+          <button class="modal-btn secondary" onclick="closeCreateNoteModal(event, true)" style="flex: 1;">Annuler</button>
+          <button class="modal-btn primary" id="noteSaveBtn" style="flex: 1; background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);" onclick="saveNote()">✓ Créer la note</button>
+        </div>
       </div>
     </div>
   </div>
@@ -4056,15 +4220,13 @@
         }
         
         // ═══════════════════════════════════════════════════════════════════
-        // MERGE INTELLIGENT: Préserver les modifications locales non sauvegardées
-        // ET FUSIONNER LES MESSAGES AU LIEU D'ÉCRASER
+        // MERGE INTELLIGENT: Fusionner les messages au lieu d'écraser
         // ═══════════════════════════════════════════════════════════════════
         
         let mergedData = {};
         let localChangesPreserved = 0;
         let messagesMerged = 0;
         
-        // Parcourir TOUTES les cartes (Firebase + locales)
         const allCardIds = new Set([...Object.keys(firebaseData), ...Object.keys(cardsData)]);
         
         for (const cardId of allCardIds) {
@@ -4072,61 +4234,50 @@
           const localCard = cardsData[cardId];
           const pendingCard = pendingSaves[cardId];
           
-          // Cas 1: Carte seulement dans Firebase (nouvelle carte d'un autre utilisateur)
           if (firebaseCard && !localCard && !pendingCard) {
             mergedData[cardId] = firebaseCard;
             continue;
           }
           
-          // Cas 2: Carte seulement locale (en cours de création, pas encore synchro)
           if (!firebaseCard && localCard) {
             mergedData[cardId] = localCard;
             localChangesPreserved++;
             continue;
           }
           
-          // Cas 3: Carte en attente de sauvegarde - utiliser mergeCardData pour fusionner
           if (pendingCard && firebaseCard) {
             mergedData[cardId] = mergeCardData(pendingCard, firebaseCard);
             localChangesPreserved++;
             messagesMerged++;
-            // Remettre la version fusionnée dans pendingSaves pour la prochaine sauvegarde
             pendingSaves[cardId] = mergedData[cardId];
             continue;
           }
           
-          // Cas 4: Carte modifiée localement récemment
           if (localCard && firebaseCard) {
-            const localModTime = localCard.localModifiedAt || 0;
-            const firebaseModTime = firebaseCard.updatedAt || 0;
-            
-            // TOUJOURS fusionner les messages, même si pas de modification locale récente
             mergedData[cardId] = mergeCardData(localCard, firebaseCard);
             
-            // Compter si des messages ont été fusionnés
             const localMsgCount = localCard.messages?.length || 0;
             const firebaseMsgCount = firebaseCard.messages?.length || 0;
             const mergedMsgCount = mergedData[cardId].messages?.length || 0;
             
             if (mergedMsgCount > Math.max(localMsgCount, firebaseMsgCount)) {
               messagesMerged++;
-              console.log(`🔀 Carte ${cardId}: Messages fusionnés (${localMsgCount} local + ${firebaseMsgCount} Firebase = ${mergedMsgCount} total)`);
+              console.log(`🔀 Carte ${cardId}: Messages fusionnés (${localMsgCount} + ${firebaseMsgCount} = ${mergedMsgCount})`);
             }
             
-            if (localModTime > firebaseModTime) {
+            if ((localCard.localModifiedAt || 0) > (firebaseCard.updatedAt || 0)) {
               localChangesPreserved++;
             }
             continue;
           }
           
-          // Cas par défaut: prendre Firebase
           if (firebaseCard) {
             mergedData[cardId] = firebaseCard;
           }
         }
         
         if (localChangesPreserved > 0 || messagesMerged > 0) {
-          console.log(`✅ MERGE: ${localChangesPreserved} cartes locales préservées, ${messagesMerged} cartes avec messages fusionnés`);
+          console.log(`✅ MERGE: ${localChangesPreserved} locales, ${messagesMerged} messages fusionnés`);
         }
         
         // Calculer le hash des nouvelles données pour voir si ça a vraiment changé
@@ -4217,7 +4368,6 @@
       // Convertir en tableau et trier par date
       const merged = Array.from(messagesMap.values());
       merged.sort((a, b) => {
-        // Trier par ID (qui contient le timestamp) ou par date
         const dateA = a.id?.includes('msg_') ? parseInt(a.id.split('_')[1]) : new Date(a.date).getTime();
         const dateB = b.id?.includes('msg_') ? parseInt(b.id.split('_')[1]) : new Date(b.date).getTime();
         return dateA - dateB;
@@ -4233,18 +4383,13 @@
       if (!localCard) return firebaseCard;
       if (!firebaseCard) return localCard;
       
-      // Commencer avec la version Firebase comme base
       const merged = { ...firebaseCard };
-      
-      // FUSION INTELLIGENTE DES MESSAGES (le point critique!)
       merged.messages = mergeMessages(localCard.messages, firebaseCard.messages);
       
-      // Si la version locale a des modifications plus récentes sur certains champs, les préserver
       const localModTime = localCard.localModifiedAt || 0;
       const firebaseModTime = firebaseCard.updatedAt || 0;
       
       if (localModTime > firebaseModTime) {
-        // Préserver les champs critiques modifiés localement (sauf les messages déjà fusionnés)
         const fieldsToPreserve = [
           'colonne', 'sortOrder', 'priority', 'raisonAttente', 'dateExpedition',
           'expedie', 'rush', 'tracking', 'dateEssayage', 'dateLivraison'
@@ -4256,7 +4401,6 @@
         });
       }
       
-      // Toujours garder le timestamp local pour la protection
       if (localCard.localModifiedAt) {
         merged.localModifiedAt = localCard.localModifiedAt;
       }
@@ -4266,7 +4410,6 @@
     
     /**
      * Force un refresh d'une carte spécifique depuis Firebase
-     * et fusionne les messages pour éviter de perdre ceux des autres utilisateurs
      */
     async function forceRefreshCardFromFirebase(cardId) {
       if (!cardId || !firebaseDb) return;
@@ -4281,36 +4424,27 @@
         if (!localCard) {
           cardsData[cardId] = firebaseCard;
         } else {
-          // Fusionner les messages intelligemment
           const mergedCard = mergeCardData(localCard, firebaseCard);
-          
-          // Vérifier si des nouveaux messages ont été récupérés
           const localMsgCount = localCard.messages?.length || 0;
           const mergedMsgCount = mergedCard.messages?.length || 0;
           
           if (mergedMsgCount > localMsgCount) {
-            console.log(`🔄 Refresh carte ${cardId}: ${mergedMsgCount - localMsgCount} nouveau(x) message(s) récupéré(s)`);
+            console.log(`🔄 Refresh carte ${cardId}: ${mergedMsgCount - localMsgCount} nouveau(x) message(s)`);
             cardsData[cardId] = mergedCard;
             
-            // Re-render si c'est la carte actuellement ouverte
             if (currentCardId === cardId) {
               renderMessages(cardId);
               scrollChatToBottom();
             }
-            
-            // Re-render mobile si applicable
             if (mobileCurrentCardId === cardId) {
               openMobileChat();
             }
           } else {
-            // Mettre à jour quand même pour les autres champs
             cardsData[cardId] = mergedCard;
           }
         }
         
         saveToLocalStorageQuiet();
-        console.log(`✅ Refresh forcé carte ${cardId} terminé`);
-        
       } catch (error) {
         console.error(`❌ Erreur refresh carte ${cardId}:`, error);
       }
@@ -5287,8 +5421,14 @@
       const div = document.createElement('div');
       const isAssociated = cardAssociations[cardId];
       const isSelected = selectedForAssociation === cardId;
+      const isNote = card.isNote === true;
       
-      div.className = `mcard region-${getRegionClass(card.region)} ${isAssociated ? 'associated' : ''} ${isSelected ? 'selected-for-association' : ''}`;
+      // Classe spéciale pour les notes
+      if (isNote) {
+        div.className = `mcard note-card ${isAssociated ? 'associated' : ''} ${isSelected ? 'selected-for-association' : ''}`;
+      } else {
+        div.className = `mcard region-${getRegionClass(card.region)} ${isAssociated ? 'associated' : ''} ${isSelected ? 'selected-for-association' : ''}`;
+      }
       div.dataset.cardId = cardId;
       
       // IMPORTANT: Désactiver le drag en mode association pour permettre les clics
@@ -5299,6 +5439,30 @@
       div.ondragover = (e) => onCardDragOver(e, cardId);
       div.ondragleave = onCardDragLeave;
       div.onclick = (e) => onCardClick(e, cardId);
+      
+      // Affichage spécial pour les notes
+      if (isNote) {
+        const typeIcons = { postit: '📋', table: '📊', note: '📝', important: '⚠️', urgent: '🔴', rush: '🚨' };
+        const typeIcon = typeIcons[card.noteType] || '📝';
+        const linkIcon = isAssociated ? '<div class="mcard-link-icon">🔗</div>' : '';
+        const contentPreview = (card.noteContent || card.notes || '').substring(0, 80);
+        
+        div.innerHTML = `
+          ${linkIcon}
+          <span class="mcard-note-type">${typeIcon}</span>
+          <div class="mcard-header">
+            <div class="mcard-info">
+              <span class="mcard-title-text">${escapeHtml(card.name)}</span>
+              <div class="mcard-order-line">
+                ${card.order ? `<span class="mcard-order-text" style="font-size:9px;">#${escapeHtml(card.order)}</span>` : ''}
+                <button class="mcard-fiche-btn mcard-note-btn" onclick="event.stopPropagation(); openNoteModal('${cardId}')" style="background: linear-gradient(to bottom, #b45309, #f59e0b);">Note</button>
+              </div>
+            </div>
+          </div>
+          ${contentPreview ? `<div class="mcard-note-content">${escapeHtml(contentPreview)}${contentPreview.length >= 80 ? '...' : ''}</div>` : ''}
+        `;
+        return div;
+      }
       
       const delay = calculateDelay(card);
       const priorityBadge = card.priority > 0 ? `<div class="priority-badge p${card.priority}">${card.priority}</div>` : '';
@@ -5685,6 +5849,13 @@
           const groupWrapper = document.createElement('div');
           groupWrapper.className = 'associated-group';
           groupWrapper.dataset.groupId = groupId;
+          
+          // Ajouter les 4 coins verts
+          ['tl', 'tr', 'bl', 'br'].forEach(pos => {
+            const corner = document.createElement('div');
+            corner.className = `corner corner-${pos}`;
+            groupWrapper.appendChild(corner);
+          });
           
           // IMPORTANT: Désactiver le drag en mode association pour permettre les clics
           groupWrapper.draggable = !associationMode;
@@ -6664,7 +6835,7 @@
       const d = cardsData[cardId];
       if (!d) return;
       
-      // CORRECTION SYNC: Refresh automatique pour avoir les derniers messages
+      // SYNC FIX: Refresh automatique pour avoir les derniers messages
       forceRefreshCardFromFirebase(cardId);
       
       const currentCol = COLONNES.find(c => c.id === d.colonne);
@@ -6690,7 +6861,7 @@
         <div class="fiche-field-row"><div class="fiche-field-label">📦 Item</div><div class="fiche-field-value fiche-field-with-btn"><select onchange="updateField('${cardId}','item',this.value)"><option value=""></option>${ITEMS.map(i=>`<option ${i===d.item?'selected':''}>${i}</option>`).join('')}</select><button class="fiche-field-manage-btn" onclick="openListManager('ITEMS')" title="Gérer">⚙️</button></div></div>
         <div class="fiche-field-row"><div class="fiche-field-label">📥 Date Reçue</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateRecue')">${formatDateDisplay(d.dateRecue)||'Sélectionner...'}</div></div>
         <div class="fiche-field-row"><div class="fiche-field-label">📦 Date Livraison</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison')">${formatDateDisplay(d.dateLivraison)||'Sélectionner...'}</div></div>
-        <div class="fiche-field-row"><div class="fiche-field-label">🔧 Fabrication Moulage</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateEssayage')">${formatDateDisplay(d.dateEssayage)||'Sélectionner...'}</div></div>
+        <div class="fiche-field-row"><div class="fiche-field-label">🔧 Fab-moulage</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateEssayage')">${formatDateDisplay(d.dateEssayage)||'Sélectionner...'}</div></div>
       `;
       
       renderMessages(cardId);
@@ -7239,11 +7410,9 @@
       saveCardToFirebase(currentCardId, cardsData[currentCardId]);
       scrollChatToBottom();
       
-      // CORRECTION SYNC: Forcer un refresh des données Firebase après l'envoi
-      // pour récupérer les messages des autres utilisateurs
-      setTimeout(() => {
-        forceRefreshCardFromFirebase(currentCardId);
-      }, 1000);
+      // SYNC FIX: Refresh forcé après envoi
+      const cardIdToRefresh = currentCardId;
+      setTimeout(() => forceRefreshCardFromFirebase(cardIdToRefresh), 1000);
       
       // Afficher le menu destinataire pour Question et Discussion (pas pour épinglé)
       if (currentComposeType !== 'pinned') {
@@ -7471,6 +7640,217 @@
       setTimeout(() => openFiche(cardId), 100);
     }
     window.createNewCard = createNewCard;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // CARTES NOTES - Création et gestion des notes/post-it
+    // ═══════════════════════════════════════════════════════════════════
+    
+    // Types et icônes des notes
+    const NOTE_TYPE_ICONS = { postit: '📋', table: '📊', note: '📝', important: '⚠️', urgent: '🔴', rush: '🚨' };
+    
+    // Fonction pour activer/désactiver la date limite
+    function toggleNoteDeadline() {
+      const checkbox = document.getElementById('noteHasDeadline');
+      const dateField = document.getElementById('noteDeadlineDate');
+      if (checkbox.checked) {
+        dateField.style.opacity = '1';
+        dateField.style.cursor = 'pointer';
+      } else {
+        dateField.style.opacity = '0.5';
+        dateField.style.cursor = 'not-allowed';
+        dateField.textContent = 'Sélectionner...';
+        delete modalDateValues.noteDeadlineDate;
+      }
+    }
+    window.toggleNoteDeadline = toggleNoteDeadline;
+    
+    // Ouvrir le modal pour créer une nouvelle note
+    function openCreateNoteModal() {
+      document.getElementById('noteModalTitle').textContent = '📝 Créer une Note';
+      document.getElementById('noteEditId').value = '';
+      document.getElementById('noteType').value = 'postit';
+      document.getElementById('noteOrder').value = '';
+      document.getElementById('noteTitle').value = '';
+      document.getElementById('noteContent').value = '';
+      document.getElementById('noteHasDeadline').checked = false;
+      document.getElementById('noteDeadlineDate').textContent = 'Sélectionner...';
+      document.getElementById('noteDeadlineDate').style.opacity = '0.5';
+      delete modalDateValues.noteDeadlineDate;
+      document.getElementById('noteDeleteBtn').style.display = 'none';
+      document.getElementById('noteSaveBtn').textContent = '✓ Créer la note';
+      document.getElementById('createNoteModal').classList.add('active');
+    }
+    window.openCreateNoteModal = openCreateNoteModal;
+    
+    // Ouvrir le modal pour éditer une note existante
+    function openNoteModal(cardId) {
+      const card = cardsData[cardId];
+      if (!card || !card.isNote) {
+        showToast('❌ Note introuvable', 'error');
+        return;
+      }
+      
+      document.getElementById('noteModalTitle').textContent = '📝 Modifier la Note';
+      document.getElementById('noteEditId').value = cardId;
+      document.getElementById('noteType').value = card.noteType || 'postit';
+      document.getElementById('noteOrder').value = card.order || '';
+      document.getElementById('noteTitle').value = card.name || '';
+      document.getElementById('noteContent').value = card.noteContent || card.notes || '';
+      
+      // Restaurer la deadline si elle existe
+      if (card.noteDeadline) {
+        document.getElementById('noteHasDeadline').checked = true;
+        document.getElementById('noteDeadlineDate').textContent = formatDateDisplay(card.noteDeadline) || 'Sélectionner...';
+        document.getElementById('noteDeadlineDate').style.opacity = '1';
+        modalDateValues.noteDeadlineDate = card.noteDeadline;
+      } else {
+        document.getElementById('noteHasDeadline').checked = false;
+        document.getElementById('noteDeadlineDate').textContent = 'Sélectionner...';
+        document.getElementById('noteDeadlineDate').style.opacity = '0.5';
+        delete modalDateValues.noteDeadlineDate;
+      }
+      
+      document.getElementById('noteDeleteBtn').style.display = 'block';
+      document.getElementById('noteSaveBtn').textContent = '✓ Sauvegarder';
+      document.getElementById('createNoteModal').classList.add('active');
+    }
+    window.openNoteModal = openNoteModal;
+    
+    function closeCreateNoteModal(e, force) {
+      if (force || (e && e.target.id === 'createNoteModal')) {
+        document.getElementById('createNoteModal').classList.remove('active');
+      }
+    }
+    window.closeCreateNoteModal = closeCreateNoteModal;
+    
+    // Sauvegarder (créer ou modifier) une note
+    function saveNote() {
+      const editId = document.getElementById('noteEditId').value;
+      const title = document.getElementById('noteTitle').value.trim();
+      const content = document.getElementById('noteContent').value.trim();
+      const noteType = document.getElementById('noteType').value;
+      const orderNum = document.getElementById('noteOrder').value.trim();
+      const hasDeadline = document.getElementById('noteHasDeadline').checked;
+      const deadline = hasDeadline ? modalDateValues.noteDeadlineDate : null;
+      
+      if (!title && !content) { 
+        alert('Veuillez entrer un titre ou du contenu'); 
+        return; 
+      }
+      
+      const today = formatDateISO(new Date());
+      
+      if (editId && cardsData[editId]) {
+        // Mode édition - mettre à jour la note existante
+        cardsData[editId].name = title || 'Note';
+        cardsData[editId].order = orderNum;
+        cardsData[editId].noteType = noteType;
+        cardsData[editId].noteContent = content;
+        cardsData[editId].notes = content;
+        cardsData[editId].noteDeadline = deadline;
+        cardsData[editId].item = NOTE_TYPE_ICONS[noteType] || '📝';
+        cardsData[editId].localModifiedAt = Date.now();
+        
+        closeCreateNoteModal(null, true);
+        renderKanban();
+        saveCardToFirebase(editId, cardsData[editId]);
+        
+        showToast('✅ Note sauvegardée', 'success');
+      } else {
+        // Mode création - nouvelle note
+        const cardId = 'note_' + Date.now();
+        
+        // Calculer le sortOrder pour la colonne Robot (mettre à la fin)
+        const maxOrder = Object.values(cardsData)
+          .filter(c => c.colonne === 'colRobot')
+          .reduce((max, c) => Math.max(max, c.sortOrder ?? 0), 0);
+        
+        cardsData[cardId] = {
+          name: title || 'Note',
+          order: orderNum,
+          isNote: true,
+          noteType: noteType,
+          noteContent: content,
+          noteDeadline: deadline,
+          region: 'note',
+          client: '',
+          intervenant: '',
+          representante: '',
+          soumission: '',
+          po: '',
+          item: NOTE_TYPE_ICONS[noteType] || '📝',
+          priority: 0,
+          rush: 'NO',
+          dateRecue: today,
+          dateLivraison: '',
+          dateEssayage: '',
+          notes: content,
+          etat: 'Robot',
+          colonne: 'colRobot',
+          raisonAttente: '',
+          dateExpedition: '',
+          messages: [],
+          tracking: { robot: { entree: today, sortie: '' } },
+          sortOrder: maxOrder + 10,
+          createdAt: today
+        };
+        
+        closeCreateNoteModal(null, true);
+        renderKanban();
+        saveCardToFirebase(cardId, cardsData[cardId]);
+        
+        addLog(LOG_TYPES.CREATE, `Note créée: "${title || 'Note'}"`, {
+          cardId: cardId,
+          noteType: noteType,
+          hasOrder: !!orderNum
+        });
+        
+        showToast('📝 Note créée', 'success');
+      }
+    }
+    window.saveNote = saveNote;
+    
+    // Supprimer une note depuis le modal
+    function deleteNoteFromModal() {
+      const editId = document.getElementById('noteEditId').value;
+      if (!editId || !cardsData[editId]) {
+        showToast('❌ Note introuvable', 'error');
+        return;
+      }
+      
+      const noteName = cardsData[editId].name || 'Note';
+      
+      if (!confirm(`Supprimer la note "${noteName}" ?`)) {
+        return;
+      }
+      
+      // Supprimer de Firebase
+      firebaseDb.ref(`${DB_PATHS.moulages}/${editId}`).remove()
+        .then(() => {
+          // Supprimer localement
+          delete cardsData[editId];
+          
+          // Supprimer les associations si présentes
+          if (cardAssociations[editId]) {
+            const associatedId = cardAssociations[editId];
+            delete cardAssociations[editId];
+            delete cardAssociations[associatedId];
+            saveAssociationsToFirebase();
+          }
+          
+          closeCreateNoteModal(null, true);
+          renderKanban();
+          saveToLocalStorageQuiet();
+          
+          addLog(LOG_TYPES.DELETE, `Note supprimée: "${noteName}"`, { cardId: editId });
+          showToast('🗑️ Note supprimée', 'success');
+        })
+        .catch(err => {
+          console.error('Erreur suppression note:', err);
+          showToast('❌ Erreur lors de la suppression', 'error');
+        });
+    }
+    window.deleteNoteFromModal = deleteNoteFromModal;
 
     // ===== SECTION 17: MODAL ATTENTE =====
     function openAttenteModal() {
@@ -8893,6 +9273,406 @@
     window.closeLightbox = closeLightbox;
     window.zoomImage = zoomImage;
     
+    // ═══════════════════════════════════════════════════════════════════
+    // MICROSOFT OAUTH + GALERIE PHOTOS ONEDRIVE
+    // ═══════════════════════════════════════════════════════════════════
+    
+    // Configuration Microsoft Azure
+    const MSAL_CONFIG = {
+      auth: {
+        clientId: 'ee52201b-cbe1-475d-86cf-46b42c7ff9e2',
+        authority: 'https://login.microsoftonline.com/48fdd444-4fc1-45ee-b7d1-8d434dd079d4',
+        redirectUri: window.location.origin + window.location.pathname
+      },
+      cache: {
+        cacheLocation: 'localStorage',
+        storeAuthStateInCookie: true
+      }
+    };
+    
+    // Chemin du dossier photos dans OneDrive
+    const ONEDRIVE_PHOTOS_PATH = '/Photos moulage atelier client En attente';
+    
+    // Variables globales pour la galerie
+    let msalInstance = null;
+    let msalAccessToken = null;
+    let galleryPhotos = [];
+    let currentPhotoIndex = 0;
+    let galleryCardId = null;
+    
+    // Initialiser MSAL
+    function initMSAL() {
+      try {
+        if (typeof msal !== 'undefined') {
+          msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+          console.log('✅ MSAL initialisé');
+          
+          // Vérifier si déjà connecté
+          const accounts = msalInstance.getAllAccounts();
+          if (accounts.length > 0) {
+            console.log('👤 Compte OneDrive trouvé:', accounts[0].username);
+          }
+        } else {
+          console.warn('⚠️ MSAL non disponible');
+        }
+      } catch (error) {
+        console.error('❌ Erreur init MSAL:', error);
+      }
+    }
+    
+    // Connexion à OneDrive
+    async function loginOneDrive() {
+      if (!msalInstance) {
+        showToast('❌ Service OneDrive non disponible', 'error');
+        return false;
+      }
+      
+      try {
+        const loginRequest = {
+          scopes: ['Files.Read', 'Files.Read.All', 'User.Read']
+        };
+        
+        // Essayer silencieusement d'abord
+        const accounts = msalInstance.getAllAccounts();
+        if (accounts.length > 0) {
+          try {
+            const response = await msalInstance.acquireTokenSilent({
+              ...loginRequest,
+              account: accounts[0]
+            });
+            msalAccessToken = response.accessToken;
+            console.log('✅ Token OneDrive récupéré (silencieux)');
+            return true;
+          } catch (silentError) {
+            console.log('Token silencieux échoué, popup requis');
+          }
+        }
+        
+        // Sinon, popup de connexion
+        const response = await msalInstance.loginPopup(loginRequest);
+        msalAccessToken = response.accessToken;
+        console.log('✅ Connexion OneDrive réussie:', response.account.username);
+        showToast('✅ Connecté à OneDrive', 'success');
+        return true;
+        
+      } catch (error) {
+        console.error('❌ Erreur connexion OneDrive:', error);
+        if (error.errorCode === 'user_cancelled') {
+          showToast('Connexion annulée', 'warning');
+        } else {
+          showToast('❌ Erreur de connexion OneDrive', 'error');
+        }
+        return false;
+      }
+    }
+    
+    // Obtenir le token (avec refresh si nécessaire)
+    async function getOneDriveToken() {
+      if (!msalInstance) return null;
+      
+      const accounts = msalInstance.getAllAccounts();
+      if (accounts.length === 0) {
+        return await loginOneDrive() ? msalAccessToken : null;
+      }
+      
+      try {
+        const response = await msalInstance.acquireTokenSilent({
+          scopes: ['Files.Read', 'Files.Read.All'],
+          account: accounts[0]
+        });
+        msalAccessToken = response.accessToken;
+        return msalAccessToken;
+      } catch (error) {
+        console.log('Token expiré, nouvelle connexion requise');
+        return await loginOneDrive() ? msalAccessToken : null;
+      }
+    }
+    
+    // Rechercher le dossier d'une commande
+    async function findOrderFolder(orderNumber) {
+      const token = await getOneDriveToken();
+      if (!token) return null;
+      
+      try {
+        // Chercher dans le dossier photos
+        const encodedPath = encodeURIComponent(ONEDRIVE_PHOTOS_PATH);
+        const url = `https://graph.microsoft.com/v1.0/me/drive/root:${encodedPath}:/children?$filter=startswith(name,'${orderNumber}')`;
+        
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+          // Essayer sans filtre si erreur
+          const url2 = `https://graph.microsoft.com/v1.0/me/drive/root:${encodedPath}:/children`;
+          const response2 = await fetch(url2, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (!response2.ok) throw new Error('Dossier non trouvé');
+          
+          const data2 = await response2.json();
+          const folder = data2.value?.find(f => f.name.startsWith(orderNumber));
+          return folder || null;
+        }
+        
+        const data = await response.json();
+        return data.value?.[0] || null;
+        
+      } catch (error) {
+        console.error('❌ Erreur recherche dossier:', error);
+        return null;
+      }
+    }
+    
+    // Récupérer les photos d'un dossier
+    async function getPhotosFromFolder(folderId) {
+      const token = await getOneDriveToken();
+      if (!token) return [];
+      
+      try {
+        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children?$filter=file ne null`;
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Erreur récupération photos');
+        
+        const data = await response.json();
+        
+        // Filtrer pour garder uniquement les images
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+        const photos = data.value?.filter(file => {
+          const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+          return imageExtensions.includes(ext);
+        }) || [];
+        
+        // Ajouter les URLs de téléchargement
+        for (const photo of photos) {
+          photo.downloadUrl = photo['@microsoft.graph.downloadUrl'];
+        }
+        
+        return photos;
+        
+      } catch (error) {
+        console.error('❌ Erreur récupération photos:', error);
+        return [];
+      }
+    }
+    
+    // Ouvrir la galerie de photos
+    async function openPhotosOneDrive(cardId) {
+      if (!cardId) {
+        showToast('❌ Aucune carte sélectionnée', 'error');
+        return;
+      }
+      
+      const card = cardsData[cardId];
+      if (!card) {
+        showToast('❌ Carte introuvable', 'error');
+        return;
+      }
+      
+      galleryCardId = cardId;
+      const orderNumber = card.order || '';
+      const beneficiaryName = (card.name || '').toUpperCase().trim();
+      
+      if (!orderNumber) {
+        showToast('⚠️ Numéro de commande manquant', 'warning');
+        return;
+      }
+      
+      // Afficher la galerie avec loading
+      showGalleryLoading(orderNumber, beneficiaryName);
+      
+      // Vérifier si MSAL est disponible
+      if (!msalInstance) {
+        showGalleryConnect();
+        return;
+      }
+      
+      // Vérifier la connexion
+      const token = await getOneDriveToken();
+      if (!token) {
+        showGalleryConnect();
+        return;
+      }
+      
+      // Rechercher le dossier
+      const folder = await findOrderFolder(orderNumber);
+      if (!folder) {
+        showGalleryEmpty(`Aucun dossier trouvé pour "${orderNumber}"`);
+        return;
+      }
+      
+      // Récupérer les photos
+      const photos = await getPhotosFromFolder(folder.id);
+      if (photos.length === 0) {
+        showGalleryEmpty('Aucune photo dans ce dossier');
+        return;
+      }
+      
+      // Afficher la galerie
+      galleryPhotos = photos;
+      currentPhotoIndex = 0;
+      renderGallery(orderNumber, beneficiaryName);
+    }
+    window.openPhotosOneDrive = openPhotosOneDrive;
+    
+    // Afficher l'état de chargement
+    function showGalleryLoading(orderNumber, name) {
+      const overlay = document.getElementById('photoGalleryOverlay');
+      if (!overlay) return;
+      
+      document.getElementById('galleryFolderName').textContent = `${orderNumber} - ${name}`;
+      document.getElementById('photoGalleryCounter').textContent = '';
+      document.getElementById('photoGalleryMain').innerHTML = `
+        <div class="photo-gallery-loading">
+          <div class="photo-gallery-spinner"></div>
+          <span>Chargement des photos...</span>
+        </div>
+      `;
+      document.getElementById('photoGalleryFooter').innerHTML = '';
+      overlay.classList.add('active');
+    }
+    
+    // Afficher le bouton de connexion
+    function showGalleryConnect() {
+      document.getElementById('photoGalleryMain').innerHTML = `
+        <div class="photo-gallery-connect">
+          <div class="photo-gallery-empty-icon">🔐</div>
+          <button class="photo-gallery-connect-btn" onclick="connectAndRetry()">
+            <span>🔗</span>
+            <span>Se connecter à OneDrive</span>
+          </button>
+          <p class="photo-gallery-connect-text">
+            Connectez-vous avec votre compte Microsoft PhysiPro pour voir les photos.
+          </p>
+        </div>
+      `;
+    }
+    
+    // Se connecter et réessayer
+    async function connectAndRetry() {
+      const connected = await loginOneDrive();
+      if (connected && galleryCardId) {
+        openPhotosOneDrive(galleryCardId);
+      }
+    }
+    window.connectAndRetry = connectAndRetry;
+    
+    // Afficher message vide
+    function showGalleryEmpty(message) {
+      document.getElementById('photoGalleryMain').innerHTML = `
+        <div class="photo-gallery-empty">
+          <div class="photo-gallery-empty-icon">📷</div>
+          <p>${message}</p>
+        </div>
+      `;
+    }
+    
+    // Afficher la galerie avec les photos
+    function renderGallery(orderNumber, name) {
+      document.getElementById('galleryFolderName').textContent = `${orderNumber} - ${name}`;
+      updateGalleryCounter();
+      renderCurrentPhoto();
+      renderThumbnails();
+    }
+    
+    // Mettre à jour le compteur
+    function updateGalleryCounter() {
+      document.getElementById('photoGalleryCounter').textContent = 
+        `${currentPhotoIndex + 1} / ${galleryPhotos.length}`;
+    }
+    
+    // Afficher la photo courante
+    function renderCurrentPhoto() {
+      const photo = galleryPhotos[currentPhotoIndex];
+      if (!photo) return;
+      
+      const mainEl = document.getElementById('photoGalleryMain');
+      mainEl.innerHTML = `
+        <button class="photo-gallery-nav prev" onclick="prevPhoto()" ${currentPhotoIndex === 0 ? 'disabled' : ''}>‹</button>
+        <img src="${photo.downloadUrl}" alt="${photo.name}" class="photo-gallery-image" onclick="zoomGalleryPhoto()">
+        <button class="photo-gallery-nav next" onclick="nextPhoto()" ${currentPhotoIndex >= galleryPhotos.length - 1 ? 'disabled' : ''}>›</button>
+      `;
+      
+      // Mettre à jour les thumbnails
+      document.querySelectorAll('.photo-gallery-thumb').forEach((thumb, i) => {
+        thumb.classList.toggle('active', i === currentPhotoIndex);
+      });
+    }
+    
+    // Afficher les miniatures
+    function renderThumbnails() {
+      const footer = document.getElementById('photoGalleryFooter');
+      footer.innerHTML = galleryPhotos.map((photo, i) => `
+        <img src="${photo.downloadUrl}" 
+             alt="${photo.name}" 
+             class="photo-gallery-thumb ${i === currentPhotoIndex ? 'active' : ''}"
+             onclick="goToPhoto(${i})">
+      `).join('');
+    }
+    
+    // Navigation
+    function prevPhoto() {
+      if (currentPhotoIndex > 0) {
+        currentPhotoIndex--;
+        updateGalleryCounter();
+        renderCurrentPhoto();
+      }
+    }
+    window.prevPhoto = prevPhoto;
+    
+    function nextPhoto() {
+      if (currentPhotoIndex < galleryPhotos.length - 1) {
+        currentPhotoIndex++;
+        updateGalleryCounter();
+        renderCurrentPhoto();
+      }
+    }
+    window.nextPhoto = nextPhoto;
+    
+    function goToPhoto(index) {
+      if (index >= 0 && index < galleryPhotos.length) {
+        currentPhotoIndex = index;
+        updateGalleryCounter();
+        renderCurrentPhoto();
+      }
+    }
+    window.goToPhoto = goToPhoto;
+    
+    // Zoom sur la photo (ouvrir dans un nouvel onglet)
+    function zoomGalleryPhoto() {
+      const photo = galleryPhotos[currentPhotoIndex];
+      if (photo?.downloadUrl) {
+        window.open(photo.downloadUrl, '_blank');
+      }
+    }
+    window.zoomGalleryPhoto = zoomGalleryPhoto;
+    
+    // Fermer la galerie
+    function closePhotoGallery() {
+      document.getElementById('photoGalleryOverlay').classList.remove('active');
+      galleryPhotos = [];
+      currentPhotoIndex = 0;
+      galleryCardId = null;
+    }
+    window.closePhotoGallery = closePhotoGallery;
+    
+    // Navigation clavier dans la galerie
+    document.addEventListener('keydown', (e) => {
+      const overlay = document.getElementById('photoGalleryOverlay');
+      if (!overlay || !overlay.classList.contains('active')) return;
+      
+      if (e.key === 'ArrowLeft') prevPhoto();
+      else if (e.key === 'ArrowRight') nextPhoto();
+      else if (e.key === 'Escape') closePhotoGallery();
+    });
+    
+    // Initialiser MSAL au chargement
+    setTimeout(initMSAL, 500);
+    
     // ===== MENU DESTINATAIRES =====
     function showDestModal() {
       selectedDestinataires = [];
@@ -9532,7 +10312,7 @@
       const card = cardsData[cardId];
       if (!card) return;
       
-      // CORRECTION SYNC: Refresh automatique pour avoir les derniers messages
+      // SYNC FIX: Refresh automatique pour avoir les derniers messages
       forceRefreshCardFromFirebase(cardId);
       
       // Utiliser 'd' comme alias pour être cohérent avec le desktop
@@ -9657,6 +10437,12 @@
             <span class="mobile-fiche-value date-field" onclick="openCalendar(this,'dateEssayage','${cardId}')">${formatDateDisplay(d.dateEssayage) || 'Sélectionner...'}</span>
           </div>
         </div>
+        
+        <!-- BOUTON PHOTOS ONEDRIVE (en bas) -->
+        <button class="mobile-photos-btn" onclick="openPhotosOneDrive('${cardId}')">
+          <span>📷</span>
+          <span>Voir les photos OneDrive</span>
+        </button>
       `;
       
       document.getElementById('mobileFichePage').classList.add('active');
@@ -9711,6 +10497,28 @@
     }
     window.goToMobileFiche = goToMobileFiche;
     
+    // Fonction helper pour afficher les images d'un message (supporte une ou plusieurs)
+    function renderMsgImages(msg) {
+      // Si le message a un tableau images (nouvelle version)
+      if (msg.images && msg.images.length > 0) {
+        if (msg.images.length === 1) {
+          return `<div class="mobile-msg-images-grid single">
+            <img src="${msg.images[0]}" onclick="openLightbox('${msg.images[0]}')">
+          </div>`;
+        }
+        return `<div class="mobile-msg-images-grid">
+          ${msg.images.map(img => `<img src="${img}" onclick="openLightbox('${img}')">`).join('')}
+        </div>`;
+      }
+      // Compatibilité: ancienne version avec une seule image
+      if (msg.image) {
+        return `<div class="mobile-msg-images-grid single">
+          <img src="${msg.image}" onclick="openLightbox('${msg.image}')">
+        </div>`;
+      }
+      return '';
+    }
+    
     // Ouvrir le chat mobile (identique au desktop)
     function openMobileChat() {
       if (!mobileCurrentCardId) return;
@@ -9730,12 +10538,14 @@
       if (pinnedMsgs.length > 0) {
         html += `<div class="mobile-pinned-section">
           <div class="mobile-pinned-header">📌 Messages épinglés</div>`;
-        pinnedMsgs.forEach(msg => {
+        pinnedMsgs.forEach((msg, idx) => {
+          const msgIndex = messages.indexOf(msg);
           html += `
-            <div style="background:#fff;border-radius:6px;padding:8px;margin-bottom:6px;">
+            <div style="background:#fff;border-radius:6px;padding:8px;margin-bottom:6px;position:relative;">
+              <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${msgIndex})" title="Supprimer">✕</button>
               <div class="mobile-msg-author">${msg.author || 'Utilisateur'} • ${msg.date || ''}</div>
               <div class="mobile-msg-content">${msg.content || ''}</div>
-              ${msg.image ? `<img src="${msg.image}" class="mobile-msg-image" onclick="openLightbox('${msg.image}')">` : ''}
+              ${renderMsgImages(msg)}
             </div>
           `;
         });
@@ -9767,21 +10577,25 @@
         
         // Afficher les threads
         Object.values(threads).forEach(thread => {
+          const questionMsgIndex = messages.indexOf(thread.question);
           html += `<div class="mobile-thread-block">
-            <div class="mobile-thread-question">
+            <div class="mobile-thread-question" style="position:relative;">
+              <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${questionMsgIndex})" title="Supprimer">✕</button>
               <div class="mobile-msg-type question">❓ Question</div>
               <div class="mobile-msg-author">${thread.question.author || 'Utilisateur'} • ${thread.question.date || ''}</div>
               <div class="mobile-msg-content">${thread.question.content || ''}</div>
-              ${thread.question.image ? `<img src="${thread.question.image}" class="mobile-msg-image" onclick="openLightbox('${thread.question.image}')">` : ''}
+              ${renderMsgImages(thread.question)}
             </div>`;
           
           thread.replies.forEach(reply => {
+            const replyMsgIndex = messages.indexOf(reply);
             html += `
-              <div class="mobile-thread-reply">
+              <div class="mobile-thread-reply" style="position:relative;">
+                <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${replyMsgIndex})" title="Supprimer">✕</button>
                 <div class="mobile-msg-type reply">💬 Réponse</div>
                 <div class="mobile-msg-author">${reply.author || 'Utilisateur'} • ${reply.date || ''}</div>
                 <div class="mobile-msg-content">${reply.content || ''}</div>
-                ${reply.image ? `<img src="${reply.image}" class="mobile-msg-image" onclick="openLightbox('${reply.image}')">` : ''}
+                ${renderMsgImages(reply)}
               </div>
             `;
           });
@@ -9793,11 +10607,13 @@
         // Messages normaux sans thread
         const normalMsgs = messages.filter(m => m.type === 'normal');
         normalMsgs.forEach(msg => {
+          const msgIndex = messages.indexOf(msg);
           html += `
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;">
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;position:relative;">
+              <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${msgIndex})" title="Supprimer">✕</button>
               <div class="mobile-msg-author">💬 ${msg.author || 'Utilisateur'} • ${msg.date || ''}</div>
               <div class="mobile-msg-content">${msg.content || ''}</div>
-              ${msg.image ? `<img src="${msg.image}" class="mobile-msg-image" onclick="openLightbox('${msg.image}')">` : ''}
+              ${renderMsgImages(msg)}
             </div>
           `;
         });
@@ -9818,8 +10634,7 @@
             <textarea class="mobile-compose-textarea" id="mobileComposeTextarea" placeholder="Écrivez ici..."></textarea>
           </div>
           <div class="mobile-compose-preview" id="mobileComposePreview">
-            <img id="mobileComposePreviewImg" src="" alt="Preview">
-            <button class="mobile-compose-preview-remove" onclick="removeMobilePhoto()">✕</button>
+            <!-- Photos ajoutées dynamiquement ici -->
           </div>
           <div class="mobile-compose-footer">
             <button class="mobile-compose-photo-btn" onclick="document.getElementById('mobilePhotoInput').click()">
@@ -9881,22 +10696,49 @@
     function closeMobileCompose() {
       document.getElementById('mobileComposeZone').className = 'mobile-compose-zone';
       document.getElementById('mobileComposeTextarea').value = '';
-      // Reset la photo
-      mobilePhotoData = null;
-      const preview = document.getElementById('mobileComposePreview');
-      if (preview) preview.classList.remove('active');
+      // Reset les photos
+      mobilePhotosData = [];
+      updateMobilePhotosPreview();
       const input = document.getElementById('mobilePhotoInput');
       if (input) input.value = '';
     }
     window.closeMobileCompose = closeMobileCompose;
     
-    // Variable pour stocker l'image compressée
-    let mobilePhotoData = null;
+    // Variable pour stocker les images compressées (TABLEAU pour plusieurs photos)
+    let mobilePhotosData = [];
     
-    // Gérer la sélection/prise de photo
+    // Mettre à jour l'affichage de la preview des photos
+    function updateMobilePhotosPreview() {
+      const preview = document.getElementById('mobileComposePreview');
+      if (!preview) return;
+      
+      if (mobilePhotosData.length === 0) {
+        preview.classList.remove('active');
+        preview.innerHTML = '';
+        return;
+      }
+      
+      preview.classList.add('active');
+      preview.innerHTML = mobilePhotosData.map((photo, index) => `
+        <div class="mobile-compose-preview-item">
+          <img src="${photo}" alt="Photo ${index + 1}">
+          <button class="photo-remove-btn" onclick="removeMobilePhotoAt(${index})">✕</button>
+        </div>
+      `).join('');
+    }
+    window.updateMobilePhotosPreview = updateMobilePhotosPreview;
+    
+    // Gérer la sélection/prise de photo (AJOUTE au tableau au lieu de remplacer)
     function handleMobilePhoto(input) {
       const file = input.files[0];
       if (!file) return;
+      
+      // Limiter à 6 photos max
+      if (mobilePhotosData.length >= 6) {
+        showToast('⚠️ Maximum 6 photos par message', 'warning');
+        input.value = '';
+        return;
+      }
       
       // Vérifier si le stockage est plein
       if (!canAddPhoto()) {
@@ -9912,22 +10754,17 @@
       
       // Compresser et redimensionner l'image
       compressMobileImage(file, (compressedData) => {
-        mobilePhotoData = compressedData;
+        mobilePhotosData.push(compressedData);
+        updateMobilePhotosPreview();
+        showToast(`📷 Photo ${mobilePhotosData.length} ajoutée`, 'success');
         
-        // Afficher la preview
-        const preview = document.getElementById('mobileComposePreview');
-        const previewImg = document.getElementById('mobileComposePreviewImg');
-        if (preview && previewImg) {
-          previewImg.src = compressedData;
-          preview.classList.add('active');
-        }
-        
-        showToast('📷 Photo ajoutée', 'success');
+        // Reset l'input pour pouvoir reprendre une autre photo
+        input.value = '';
       });
     }
     window.handleMobilePhoto = handleMobilePhoto;
     
-    // Compresser l'image (max 800px, qualité 0.6)
+    // Compresser l'image (max 600px pour économiser l'espace, qualité 0.5)
     function compressMobileImage(file, callback) {
       const reader = new FileReader();
       reader.onload = function(e) {
@@ -9936,8 +10773,8 @@
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           
-          // Calculer les nouvelles dimensions (max 800px)
-          const maxSize = 800;
+          // Calculer les nouvelles dimensions (max 600px pour économiser l'espace)
+          const maxSize = 600;
           let width = img.width;
           let height = img.height;
           
@@ -9959,12 +10796,12 @@
           // Dessiner l'image redimensionnée
           ctx.drawImage(img, 0, 0, width, height);
           
-          // Convertir en JPEG avec compression (qualité 0.6)
-          const compressedData = canvas.toDataURL('image/jpeg', 0.6);
+          // Convertir en JPEG avec compression (qualité 0.5 pour économiser l'espace)
+          const compressedData = canvas.toDataURL('image/jpeg', 0.5);
           
           // Log de la taille
           const originalSize = Math.round(file.size / 1024);
-          const compressedSize = Math.round(compressedData.length * 0.75 / 1024); // Approximation
+          const compressedSize = Math.round(compressedData.length * 0.75 / 1024);
           console.log(`📷 Image: ${originalSize}KB → ~${compressedSize}KB (${width}x${height})`);
           
           callback(compressedData);
@@ -9974,16 +10811,25 @@
       reader.readAsDataURL(file);
     }
     
-    // Supprimer la photo
+    // Supprimer une photo spécifique par son index
+    function removeMobilePhotoAt(index) {
+      if (index >= 0 && index < mobilePhotosData.length) {
+        mobilePhotosData.splice(index, 1);
+        updateMobilePhotosPreview();
+        showToast('🗑️ Photo supprimée', 'info');
+      }
+    }
+    window.removeMobilePhotoAt = removeMobilePhotoAt;
+    
+    // Supprimer toutes les photos (compatibilité)
     function removeMobilePhoto() {
-      mobilePhotoData = null;
-      const preview = document.getElementById('mobileComposePreview');
-      if (preview) preview.classList.remove('active');
+      mobilePhotosData = [];
+      updateMobilePhotosPreview();
       const input = document.getElementById('mobilePhotoInput');
       if (input) input.value = '';
       const inputFile = document.getElementById('mobileFileInput');
       if (inputFile) inputFile.value = '';
-      showToast('🗑️ Fichier supprimé', 'info');
+      showToast('🗑️ Photos supprimées', 'info');
     }
     window.removeMobilePhoto = removeMobilePhoto;
     
@@ -9998,49 +10844,86 @@
         return;
       }
       
-      // Si c'est une image, utiliser la compression
+      // Si c'est une image, utiliser la compression et ajouter au tableau
       if (file.type.startsWith('image/')) {
+        // Limiter à 6 photos max
+        if (mobilePhotosData.length >= 6) {
+          showToast('⚠️ Maximum 6 photos par message', 'warning');
+          input.value = '';
+          return;
+        }
+        
         compressMobileImage(file, (compressedData) => {
-          mobilePhotoData = compressedData;
-          
-          // Afficher la preview
-          const preview = document.getElementById('mobileComposePreview');
-          const previewImg = document.getElementById('mobileComposePreviewImg');
-          if (preview && previewImg) {
-            previewImg.src = compressedData;
-            preview.classList.add('active');
-          }
-          
-          showToast('📷 Image ajoutée', 'success');
+          mobilePhotosData.push(compressedData);
+          updateMobilePhotosPreview();
+          showToast(`📷 Photo ${mobilePhotosData.length} ajoutée`, 'success');
+          input.value = '';
         });
       } else {
-        // Pour les autres fichiers, convertir en base64
+        // Pour les autres fichiers, convertir en base64 (remplace les photos)
         const reader = new FileReader();
         reader.onload = function(e) {
-          mobilePhotoData = e.target.result;
+          // Pour les fichiers non-image, on remplace tout
+          mobilePhotosData = [e.target.result];
           
           // Afficher un placeholder pour le fichier
           const preview = document.getElementById('mobileComposePreview');
-          const previewImg = document.getElementById('mobileComposePreviewImg');
-          if (preview && previewImg) {
-            // Utiliser une icône selon le type de fichier
+          if (preview) {
             const ext = file.name.split('.').pop().toLowerCase();
             let icon = '📄';
             if (ext === 'pdf') icon = '📕';
             else if (['doc', 'docx'].includes(ext)) icon = '📘';
             else if (['xls', 'xlsx'].includes(ext)) icon = '📗';
             
-            // Créer un placeholder visuel
-            previewImg.src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23f1f5f9" width="100" height="100" rx="8"/><text x="50" y="45" font-size="30" text-anchor="middle">${icon}</text><text x="50" y="70" font-size="12" text-anchor="middle" fill="%23475569">${ext.toUpperCase()}</text></svg>`;
             preview.classList.add('active');
+            preview.innerHTML = `
+              <div class="mobile-compose-preview-item" style="width: 100px; height: 70px;">
+                <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f1f5f9; border-radius: 8px; border: 2px solid #e2e8f0;">
+                  <span style="font-size: 24px;">${icon}</span>
+                  <span style="font-size: 10px; color: #475569;">${ext.toUpperCase()}</span>
+                </div>
+                <button class="photo-remove-btn" onclick="removeMobilePhotoAt(0)">✕</button>
+              </div>
+            `;
           }
           
           showToast('📎 Fichier ajouté: ' + file.name, 'success');
+          input.value = '';
         };
         reader.readAsDataURL(file);
       }
     }
     window.handleMobileFile = handleMobileFile;
+    
+    // Supprimer un message mobile
+    function deleteMobileMessage(msgIndex) {
+      if (!mobileCurrentCardId) return;
+      const card = cardsData[mobileCurrentCardId];
+      if (!card || !card.messages || msgIndex < 0 || msgIndex >= card.messages.length) {
+        showToast('❌ Message introuvable', 'error');
+        return;
+      }
+      
+      const msg = card.messages[msgIndex];
+      const msgPreview = (msg.content || '').substring(0, 30) + ((msg.content || '').length > 30 ? '...' : '');
+      
+      if (!confirm(`Supprimer ce message ?\n\n"${msgPreview}"`)) {
+        return;
+      }
+      
+      // Supprimer le message
+      card.messages.splice(msgIndex, 1);
+      card.localModifiedAt = Date.now();
+      
+      // Sauvegarder
+      saveCardToFirebase(mobileCurrentCardId, card);
+      
+      // Rafraîchir l'affichage
+      openMobileChat();
+      
+      showToast('🗑️ Message supprimé', 'success');
+    }
+    window.deleteMobileMessage = deleteMobileMessage;
     
     // Répondre à une question
     function mobileReplyTo(questionIdx) {
@@ -10054,8 +10937,9 @@
     // Envoyer un message mobile (comme sendMessage du desktop)
     function sendMobileMessage() {
       const content = document.getElementById('mobileComposeTextarea').value.trim();
-      // Permettre l'envoi si texte OU photo
-      if ((!content && !mobilePhotoData) || !mobileCurrentCardId) return;
+      // Permettre l'envoi si texte OU photos
+      const hasPhotos = mobilePhotosData && mobilePhotosData.length > 0;
+      if ((!content && !hasPhotos) || !mobileCurrentCardId) return;
       
       const card = cardsData[mobileCurrentCardId];
       if (!card.messages) card.messages = [];
@@ -10063,6 +10947,10 @@
       const authorName = getCurrentUserName();
       const authorEmail = currentUser?.email || 'unknown';
       const questionIdx = window.mobileReplyToIdx;
+      
+      // Préparer les données d'images (compatibilité: image = première, images = toutes)
+      const imageData = hasPhotos ? mobilePhotosData[0] : '';
+      const imagesData = hasPhotos ? [...mobilePhotosData] : [];
       
       // Si c'est une réponse à une question existante
       if (mobileComposeType === 'reply' && questionIdx !== null && questionIdx !== undefined) {
@@ -10086,7 +10974,8 @@
           authorEmail: authorEmail,
           date: new Date().toISOString().split('T')[0],
           content: content,
-          image: mobilePhotoData || '',
+          image: imageData,
+          images: imagesData,
           sentTo: [],
           parentQuestionIndex: questionIdx
         };
@@ -10110,7 +10999,8 @@
               cardName: card.name,
               messageType: 'reply',
               messageContent: content.substring(0, 100),
-              hasImage: !!mobilePhotoData,
+              hasImage: hasPhotos,
+              imageCount: imagesData.length,
               timestamp: Date.now(),
               threadId: parentQuestion?.id || questionIdx
             });
@@ -10133,11 +11023,9 @@
         card.localModifiedAt = Date.now(); // PROTECTION CRITIQUE
         saveCardToFirebase(mobileCurrentCardId, card);
         
-        // CORRECTION SYNC: Forcer un refresh après l'envoi
+        // SYNC FIX: Refresh forcé après envoi
         const cardIdToRefresh = mobileCurrentCardId;
-        setTimeout(() => {
-          forceRefreshCardFromFirebase(cardIdToRefresh);
-        }, 1000);
+        setTimeout(() => forceRefreshCardFromFirebase(cardIdToRefresh), 1000);
         
         closeMobileCompose();
         window.mobileReplyToIdx = null;
@@ -10153,7 +11041,8 @@
         authorEmail: authorEmail,
         date: new Date().toISOString().split('T')[0],
         content: content,
-        image: mobilePhotoData || '',
+        image: imageData,
+        images: imagesData,
         sentTo: [],
         threadParticipants: mobileComposeType === 'problem' ? [{ name: authorName, email: authorEmail }] : null,
         parentIndex: null
@@ -10163,11 +11052,9 @@
       card.localModifiedAt = Date.now(); // PROTECTION CRITIQUE
       saveCardToFirebase(mobileCurrentCardId, card);
       
-      // CORRECTION SYNC: Forcer un refresh après l'envoi
+      // SYNC FIX: Refresh forcé après envoi
       const cardIdToRefresh = mobileCurrentCardId;
-      setTimeout(() => {
-        forceRefreshCardFromFirebase(cardIdToRefresh);
-      }, 1000);
+      setTimeout(() => forceRefreshCardFromFirebase(cardIdToRefresh), 1000);
       
       // Fermer la zone de composition
       closeMobileCompose();
@@ -10504,5 +11391,23 @@
     window.updateMobileField = updateMobileField;
     console.log('✅ Toutes les fonctions exposées sur window');
   </script>
+  
+  <!-- GALERIE PHOTOS ONEDRIVE -->
+  <div class="photo-gallery-overlay" id="photoGalleryOverlay">
+    <div class="photo-gallery-header">
+      <div class="photo-gallery-title">
+        <span>📷</span>
+        <span class="folder-name" id="galleryFolderName">Chargement...</span>
+      </div>
+      <span class="photo-gallery-counter" id="photoGalleryCounter"></span>
+      <button class="photo-gallery-close" onclick="closePhotoGallery()">✕</button>
+    </div>
+    <div class="photo-gallery-main" id="photoGalleryMain">
+      <!-- Photos will be loaded here -->
+    </div>
+    <div class="photo-gallery-footer" id="photoGalleryFooter">
+      <!-- Thumbnails will be loaded here -->
+    </div>
+  </div>
 </body>
 </html>
