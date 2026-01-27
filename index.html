@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1432</title>
+  <title>PhysiPro Moulages v1434</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -2677,6 +2677,7 @@
     let lastLocalCardCount = 0; // Nombre de cartes avant sync
     let isLocalOperation = false; // Empêche le re-render pendant nos propres sauvegardes
     let lastDataHash = ''; // Hash des données pour détecter les vrais changements
+    let hasPendingLocalChanges = false; // NOUVEAU: Indique si des modifications locales sont en attente
     
     // === PhysiPro Moulage v1427 - UI Optimized ===
     
@@ -3271,7 +3272,10 @@
     
     // Fonction pour ajouter une carte à la file d'attente de sauvegarde
     function queueCardSave(cardId, cardData) {
-      pendingSaves[cardId] = cardData;
+      pendingSaves[cardId] = JSON.parse(JSON.stringify(cardData)); // Deep copy pour éviter les références
+      
+      // IMPORTANT: Marquer qu'on a des changements en attente
+      hasPendingLocalChanges = true;
       
       // Annuler le timer précédent s'il existe
       if (saveDebounceTimer) {
@@ -3291,7 +3295,10 @@
       saveDebounceTimer = null;
       
       const cardIds = Object.keys(cardsToSave);
-      if (cardIds.length === 0) return;
+      if (cardIds.length === 0) {
+        hasPendingLocalChanges = false;
+        return;
+      }
       
       // IMPORTANT: Marquer comme opération locale pour éviter le clignotement
       isLocalOperation = true;
@@ -3305,20 +3312,29 @@
           try {
             await saveCardToFirebaseImmediate(cardId, cardsToSave[cardId]);
             successCount++;
+            console.log(`✅ Carte ${cardId} sauvegardée`);
           } catch (error) {
             errorCount++;
-            console.error(`Erreur sauvegarde ${cardId}:`, error);
+            console.error(`❌ Erreur sauvegarde ${cardId}:`, error);
+            // IMPORTANT: Remettre dans la file si erreur
+            pendingSaves[cardId] = cardsToSave[cardId];
             addToPendingChanges({ type: 'save', cardId, data: cardsToSave[cardId] });
           }
         }
         
-        // Mettre à jour le hash après sauvegarde
-        lastDataHash = getDataHash();
-        
+        // Mettre à jour le hash après sauvegarde réussie
         if (errorCount === 0) {
+          lastDataHash = getDataHash();
+          hasPendingLocalChanges = Object.keys(pendingSaves).length > 0;
           updateSyncIndicator('online', 'En ligne');
         } else {
           updateSyncIndicator('offline', 'Erreur sync');
+          // Réessayer automatiquement après 5 secondes
+          setTimeout(() => {
+            if (Object.keys(pendingSaves).length > 0) {
+              processPendingSaves();
+            }
+          }, 5000);
         }
         
         saveToLocalStorageQuiet();
@@ -3332,7 +3348,23 @@
     
     // Sauvegarde immédiate d'une carte (appelée par processPendingSaves)
     async function saveCardToFirebaseImmediate(cardId, cardData) {
+      // Vérification préalable
+      if (!cardId || !cardData) {
+        console.error('❌ saveCardToFirebaseImmediate: cardId ou cardData manquant');
+        logSaveOperation(cardId, 'save', false, new Error('Données manquantes'));
+        return;
+      }
+      
       const dataToSave = { ...cardData };
+      
+      // Nettoyer le timestamp local (ne pas envoyer à Firebase)
+      delete dataToSave.localModifiedAt;
+      
+      // Vérifier les champs essentiels avant sauvegarde
+      if (!dataToSave.colonne) {
+        console.warn(`⚠️ Carte ${cardId} sans colonne, défaut: colAttente`);
+        dataToSave.colonne = 'colAttente';
+      }
       
       // Upload images to Firebase Storage if they are base64
       if (dataToSave.messages) {
@@ -3342,6 +3374,10 @@
             try {
               const imageUrl = await uploadImageToStorage(cardId, i, msg.image);
               dataToSave.messages[i].image = imageUrl;
+              // Mettre à jour aussi dans cardsData local
+              if (cardsData[cardId]?.messages?.[i]) {
+                cardsData[cardId].messages[i].image = imageUrl;
+              }
             } catch (e) {
               console.error('Erreur upload image:', e);
             }
@@ -3354,8 +3390,14 @@
         dataToSave.createdAt = firebase.database.ServerValue.TIMESTAMP;
       }
       
-      await firebaseDb.ref(DB_PATHS.moulages + '/' + cardId).update(dataToSave);
-      lastSyncTime = new Date();
+      try {
+        await firebaseDb.ref(DB_PATHS.moulages + '/' + cardId).update(dataToSave);
+        lastSyncTime = new Date();
+        logSaveOperation(cardId, 'save', true);
+      } catch (error) {
+        logSaveOperation(cardId, 'save', false, error);
+        throw error; // Re-throw pour que l'appelant puisse gérer
+      }
     }
     
     // Fonction wrapper pour la compatibilité (remplace l'ancienne saveCardToFirebase)
@@ -3462,6 +3504,90 @@
         showToast('🧹 Associations orphelines nettoyées', 'info');
       } else {
         console.log('✅ Aucune association orpheline détectée');
+      }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // VÉRIFICATION D'INTÉGRITÉ DES DONNÉES
+    // ═══════════════════════════════════════════════════════════════════
+    
+    function verifyDataIntegrity() {
+      console.log('🔍 Vérification de l\'intégrité des données...');
+      const issues = [];
+      let fixedCount = 0;
+      
+      for (const [cardId, card] of Object.entries(cardsData)) {
+        // Vérifier que les champs essentiels existent
+        if (!card.name) {
+          issues.push(`Carte ${cardId}: nom manquant`);
+        }
+        if (!card.colonne) {
+          issues.push(`Carte ${cardId}: colonne manquante`);
+          // Correction automatique
+          card.colonne = 'colAttente';
+          fixedCount++;
+        }
+        if (!card.order) {
+          issues.push(`Carte ${cardId}: numéro de commande manquant`);
+        }
+        
+        // Vérifier les messages
+        if (card.messages && Array.isArray(card.messages)) {
+          card.messages.forEach((msg, idx) => {
+            if (!msg.type) {
+              issues.push(`Carte ${cardId}: message ${idx} sans type`);
+              msg.type = 'note';
+              fixedCount++;
+            }
+            if (!msg.date) {
+              issues.push(`Carte ${cardId}: message ${idx} sans date`);
+              msg.date = new Date().toISOString().split('T')[0];
+              fixedCount++;
+            }
+          });
+        }
+        
+        // Vérifier le tracking
+        if (card.tracking && typeof card.tracking !== 'object') {
+          issues.push(`Carte ${cardId}: tracking invalide`);
+          card.tracking = {};
+          fixedCount++;
+        }
+      }
+      
+      if (issues.length > 0) {
+        console.warn('⚠️ Problèmes d\'intégrité détectés:', issues.length);
+        issues.forEach(issue => console.warn('  - ' + issue));
+        if (fixedCount > 0) {
+          console.log(`✅ ${fixedCount} problèmes corrigés automatiquement`);
+          saveToLocalStorageQuiet();
+        }
+      } else {
+        console.log('✅ Intégrité des données OK');
+      }
+      
+      return { issues, fixedCount };
+    }
+    
+    // Fonction pour créer un log de sauvegarde (audit trail)
+    function logSaveOperation(cardId, operation, success, error = null) {
+      const logEntry = {
+        timestamp: new Date().toISOString(),
+        cardId: cardId,
+        operation: operation, // 'save', 'delete', 'update'
+        success: success,
+        error: error ? error.message : null,
+        cardName: cardsData[cardId]?.name || 'Unknown'
+      };
+      
+      // Garder les 100 derniers logs
+      let saveLogs = JSON.parse(localStorage.getItem('physipro_save_logs') || '[]');
+      saveLogs.unshift(logEntry);
+      if (saveLogs.length > 100) saveLogs = saveLogs.slice(0, 100);
+      localStorage.setItem('physipro_save_logs', JSON.stringify(saveLogs));
+      
+      if (!success) {
+        console.error(`❌ ÉCHEC ${operation} carte ${cardId}:`, error);
       }
     }
     
@@ -3706,19 +3832,56 @@
           return;
         }
         
+        // ═══════════════════════════════════════════════════════════════════
+        // MERGE INTELLIGENT: Préserver les modifications locales non sauvegardées
+        // ═══════════════════════════════════════════════════════════════════
+        
+        let mergedData = { ...firebaseData };
+        let localChangesPreserved = 0;
+        
+        // Si on a des modifications en attente, les préserver
+        if (hasPendingLocalChanges && Object.keys(pendingSaves).length > 0) {
+          console.log(`🔀 MERGE: Préservation de ${Object.keys(pendingSaves).length} modifications locales`);
+          
+          for (const cardId of Object.keys(pendingSaves)) {
+            // Utiliser notre version locale pour les cartes en attente de sauvegarde
+            mergedData[cardId] = pendingSaves[cardId];
+            localChangesPreserved++;
+          }
+        }
+        
+        // Vérifier aussi les cartes modifiées localement mais pas encore dans pendingSaves
+        // (modifications très récentes qui n'ont pas encore déclenché le debounce)
+        for (const cardId of Object.keys(cardsData)) {
+          if (cardsData[cardId] && firebaseData[cardId]) {
+            // Comparer les timestamps - garder la version la plus récente
+            const localUpdated = cardsData[cardId].localModifiedAt || 0;
+            const firebaseUpdated = firebaseData[cardId].updatedAt || 0;
+            
+            if (localUpdated > firebaseUpdated) {
+              mergedData[cardId] = cardsData[cardId];
+              localChangesPreserved++;
+            }
+          }
+        }
+        
+        if (localChangesPreserved > 0) {
+          console.log(`✅ MERGE: ${localChangesPreserved} modifications locales préservées`);
+        }
+        
         // Calculer le hash des nouvelles données pour voir si ça a vraiment changé
-        const newHash = JSON.stringify(Object.keys(firebaseData).sort());
+        const newHash = JSON.stringify(Object.keys(mergedData).sort());
         
         // Ne mettre à jour que si les données ont vraiment changé
-        if (newHash !== lastDataHash) {
+        if (newHash !== lastDataHash || localChangesPreserved > 0) {
           // Comparer en profondeur pour voir si c'est un vrai changement
           const oldCount = Object.keys(cardsData).length;
-          const newCount = Object.keys(firebaseData).length;
+          const newCount = Object.keys(mergedData).length;
           
           // Si c'est juste un update de timestamps/sortOrder, ne pas re-render
-          const hasRealChanges = oldCount !== newCount || checkForRealChanges(cardsData, firebaseData);
+          const hasRealChanges = oldCount !== newCount || checkForRealChanges(cardsData, mergedData);
           
-          cardsData = firebaseData;
+          cardsData = mergedData; // Utiliser les données mergées, pas juste Firebase!
           lastLocalCardCount = newCount;
           lastDataHash = newHash;
           
@@ -3728,7 +3891,7 @@
           }
           
           saveToLocalStorageQuiet();
-          console.log(`🔄 Sync Firebase: ${newCount} cartes${hasRealChanges ? ' (render)' : ' (données seulement)'}`);
+          console.log(`🔄 Sync Firebase: ${newCount} cartes${hasRealChanges ? ' (render)' : ' (données seulement)'}${localChangesPreserved > 0 ? ` [${localChangesPreserved} locales préservées]` : ''}`);
         }
         
         lastSyncTime = new Date();
@@ -3740,33 +3903,73 @@
     
     // Hash simple des données pour détecter les changements
     function getDataHash() {
-      return JSON.stringify(Object.keys(cardsData).sort());
+      // Hash plus complet qui inclut les propriétés clés des cartes
+      const keyData = {};
+      for (const [cardId, card] of Object.entries(cardsData)) {
+        keyData[cardId] = {
+          col: card.colonne,
+          so: card.sortOrder,
+          n: card.name,
+          o: card.order,
+          mc: card.messages?.length || 0
+        };
+      }
+      return JSON.stringify(keyData);
     }
     
     // Vérifier si les changements affectent visuellement les cartes (pas juste timestamps)
     function checkForRealChanges(oldData, newData) {
-      // Comparer les propriétés visuelles importantes
-      const visualProps = ['colonne', 'name', 'order', 'priority', 'region', 'raisonAttente'];
+      // Comparer les propriétés visuelles ET fonctionnelles importantes
+      const criticalProps = [
+        'colonne', 'name', 'order', 'priority', 'region', 'raisonAttente',
+        'sortOrder', 'dateExpedition', 'expedie', 'rush', 'item',
+        'client', 'intervenant', 'representante', 'dateLivraison', 'dateEssayage'
+      ];
       
+      // Vérifier les cartes supprimées
+      for (const cardId of Object.keys(oldData)) {
+        if (!newData[cardId]) {
+          console.log(`🔍 Carte ${cardId} supprimée dans newData`);
+          return true;
+        }
+      }
+      
+      // Vérifier les nouvelles cartes et modifications
       for (const cardId of Object.keys(newData)) {
         const oldCard = oldData[cardId];
         const newCard = newData[cardId];
         
-        if (!oldCard) return true; // Nouvelle carte
+        if (!oldCard) {
+          console.log(`🔍 Nouvelle carte ${cardId}`);
+          return true; // Nouvelle carte
+        }
         
-        for (const prop of visualProps) {
+        // Vérifier les propriétés critiques
+        for (const prop of criticalProps) {
           if (oldCard[prop] !== newCard[prop]) {
-            return true; // Changement visuel
+            console.log(`🔍 Carte ${cardId}: ${prop} changé de "${oldCard[prop]}" à "${newCard[prop]}"`);
+            return true; // Changement critique
           }
         }
         
-        // Vérifier si les messages ont changé (pour l'indicateur ❓)
+        // Vérifier si les messages ont changé (nombre ou contenu)
         const oldMsgCount = oldCard.messages?.length || 0;
         const newMsgCount = newCard.messages?.length || 0;
-        if (oldMsgCount !== newMsgCount) return true;
+        if (oldMsgCount !== newMsgCount) {
+          console.log(`🔍 Carte ${cardId}: messages changés (${oldMsgCount} → ${newMsgCount})`);
+          return true;
+        }
+        
+        // Vérifier le tracking (structure complexe)
+        const oldTracking = JSON.stringify(oldCard.tracking || {});
+        const newTracking = JSON.stringify(newCard.tracking || {});
+        if (oldTracking !== newTracking) {
+          console.log(`🔍 Carte ${cardId}: tracking changé`);
+          return true;
+        }
       }
       
-      return false; // Pas de changement visuel
+      return false; // Pas de changement critique
     }
     
     // Pause/Resume du listener
@@ -4560,6 +4763,7 @@
       const now = new Date();
       const dateStr = now.toLocaleDateString('fr-CA') + ' ' + now.toLocaleTimeString('fr-CA', {hour: '2-digit', minute: '2-digit'});
       card.expedie = dateStr;
+      card.localModifiedAt = Date.now(); // PROTECTION CRITIQUE
       saveCardToFirebase(cardId, card);
       updateCardInDOM(cardId);
       showToast('✅ Envoyé au shipping');
@@ -4636,6 +4840,7 @@
       if (!currentAttenteCardId || !cardsData[currentAttenteCardId]) return;
       
       cardsData[currentAttenteCardId].raisonAttente = raison;
+      cardsData[currentAttenteCardId].localModifiedAt = Date.now(); // PROTECTION
       saveCardToFirebase(currentAttenteCardId, cardsData[currentAttenteCardId]);
       updateCardInDOM(currentAttenteCardId);
       
@@ -4648,6 +4853,7 @@
       if (!currentAttenteCardId || !cardsData[currentAttenteCardId]) return;
       
       cardsData[currentAttenteCardId].raisonAttente = '';
+      cardsData[currentAttenteCardId].localModifiedAt = Date.now(); // PROTECTION
       saveCardToFirebase(currentAttenteCardId, cardsData[currentAttenteCardId]);
       updateCardInDOM(currentAttenteCardId);
       
@@ -5396,6 +5602,7 @@
           if (!cardData) return;
           
           cardData.colonne = colId;
+          cardData.localModifiedAt = Date.now(); // PROTECTION CRITIQUE
           
           if (colId !== 'colAttente') {
             cardData.raisonAttente = '';
@@ -5443,6 +5650,7 @@
           }
           
           cardData.colonne = colId;
+          cardData.localModifiedAt = Date.now(); // PROTECTION CRITIQUE
           
           if (colId !== 'colAttente') {
             cardData.raisonAttente = '';
@@ -5475,11 +5683,19 @@
       }
       
       // === METTRE À JOUR LES SORTORDER BASÉ SUR L'ORDRE DOM ===
+      // IMPORTANT: Collecter toutes les cartes dont l'ordre a changé pour les sauvegarder
+      const cardsWithChangedOrder = new Set();
       const allCardsInCol = Array.from(targetCol.querySelectorAll('.mcard'));
       allCardsInCol.forEach((cardEl, index) => {
         const cid = cardEl.dataset.cardId;
         if (cardsData[cid]) {
-          cardsData[cid].sortOrder = index * 10;
+          const newSortOrder = index * 10;
+          // Vérifier si l'ordre a vraiment changé
+          if (cardsData[cid].sortOrder !== newSortOrder) {
+            cardsData[cid].sortOrder = newSortOrder;
+            cardsData[cid].localModifiedAt = Date.now(); // Marquer comme modifié
+            cardsWithChangedOrder.add(cid);
+          }
         }
       });
       
@@ -5504,8 +5720,13 @@
         });
       }
       
-      // === SAUVEGARDER ===
-      cardsToMove.forEach(cid => {
+      // === SAUVEGARDER TOUTES LES CARTES MODIFIÉES ===
+      // Inclure les cartes déplacées ET les cartes dont l'ordre a changé
+      cardsToMove.forEach(cid => cardsWithChangedOrder.add(cid));
+      
+      console.log(`💾 Sauvegarde de ${cardsWithChangedOrder.size} cartes (${cardsToMove.length} déplacées + ${cardsWithChangedOrder.size - cardsToMove.length} ordre modifié)`);
+      
+      cardsWithChangedOrder.forEach(cid => {
         if (cardsData[cid]) {
           saveCardToFirebase(cid, cardsData[cid]);
         }
@@ -5572,6 +5793,7 @@
       
       const oldColonne = card.colonne;
       card.colonne = colId;
+      card.localModifiedAt = Date.now(); // IMPORTANT: Marquer comme modifié localement
       
       // Si on quitte "En attente", effacer la raison
       if (colId !== 'colAttente') {
@@ -5618,6 +5840,7 @@
           if (cid !== cardId && cardsData[cid]) {
             cardsData[cid].colonne = colId;
             cardsData[cid].sortOrder = maxOrder + 10 + ((index + 1) * 5);
+            cardsData[cid].localModifiedAt = Date.now(); // IMPORTANT: Marquer comme modifié localement
             if (colId !== 'colAttente') {
               cardsData[cid].raisonAttente = '';
             }
@@ -5728,8 +5951,11 @@
         const oldValue = card[field];
         card[field] = value;
         
+        // IMPORTANT: Marquer la modification locale avec un timestamp
+        card.localModifiedAt = Date.now();
+        
         // Log de modification (sauf pour les champs mineurs ou identiques)
-        if (oldValue !== value && !['messages', 'tracking', 'sortOrder', 'updatedAt'].includes(field)) {
+        if (oldValue !== value && !['messages', 'tracking', 'sortOrder', 'updatedAt', 'localModifiedAt'].includes(field)) {
           const fieldLabels = {
             name: 'Nom', order: '# Commande', soumission: '# Soumission', po: '# PO',
             client: 'Client', region: 'Région', intervenant: 'Intervenant', representante: 'Représentante',
@@ -5852,6 +6078,7 @@
       if (!card.tracking[deptId]) card.tracking[deptId] = {};
       
       card.tracking[deptId][entreeOuSortie] = dateISO;
+      card.localModifiedAt = Date.now(); // PROTECTION CRITIQUE
       
       saveCardToFirebase(cardId, card);
       renderTracking(cardId);
@@ -5939,6 +6166,7 @@
         const cardId = r.dataset.cardId;
         if (cardId && cardsData[cardId]) {
           cardsData[cardId].sortOrder = i;
+          cardsData[cardId].localModifiedAt = Date.now(); // PROTECTION CRITIQUE
           saveCardToFirebase(cardId, cardsData[cardId]);
         }
       });
@@ -6260,6 +6488,7 @@
       
       if (!cardsData[currentCardId].messages) cardsData[currentCardId].messages = [];
       cardsData[currentCardId].messages.push(newMessage);
+      cardsData[currentCardId].localModifiedAt = Date.now(); // PROTECTION
       
       addLog(LOG_TYPES.MESSAGE, `Discussion ajoutée sur "${card.name}"`, {
         cardId: currentCardId,
@@ -6510,6 +6739,7 @@
       };
       
       cardsData[currentCardId].messages.push(newMessage);
+      cardsData[currentCardId].localModifiedAt = Date.now(); // PROTECTION
       
       // Log d'ajout de message
       const typeLabels = { problem: 'Question', solution: 'Réponse', normal: 'Discussion', pinned: 'Épinglé' };
@@ -6554,7 +6784,8 @@
         const card = cardsData[currentCardId];
         const deletedMsg = card.messages[i];
         
-        cardsData[currentCardId].messages.splice(i,1); 
+        cardsData[currentCardId].messages.splice(i,1);
+        cardsData[currentCardId].localModifiedAt = Date.now(); // PROTECTION
         
         // Log de suppression de message
         addLog(LOG_TYPES.DELETE, `Message supprimé sur "${card.name}"`, {
@@ -6799,6 +7030,7 @@
         const card = cardsData[pendingAttenteCardId];
         cardsData[pendingAttenteCardId].colonne = 'colAttente';
         cardsData[pendingAttenteCardId].raisonAttente = raison;
+        cardsData[pendingAttenteCardId].localModifiedAt = Date.now(); // PROTECTION
         saveCardToFirebase(pendingAttenteCardId, cardsData[pendingAttenteCardId]);
         
         // Log de mise en attente
@@ -6815,6 +7047,7 @@
             if (cid !== pendingAttenteCardId && cardsData[cid]) {
               cardsData[cid].colonne = 'colAttente';
               cardsData[cid].raisonAttente = raison;
+              cardsData[cid].localModifiedAt = Date.now(); // PROTECTION
               saveCardToFirebase(cid, cardsData[cid]);
             }
           });
@@ -6877,6 +7110,7 @@
         cardsData[pendingExpedCardId].colonne = 'colExpedition';
         cardsData[pendingExpedCardId].dateExpedition = `${dateStr} ${timeStr}`;
         cardsData[pendingExpedCardId].raisonAttente = '';
+        cardsData[pendingExpedCardId].localModifiedAt = Date.now(); // PROTECTION
         saveCardToFirebase(pendingExpedCardId, cardsData[pendingExpedCardId]);
         
         // Log d'expédition
@@ -6894,6 +7128,7 @@
               cardsData[cid].colonne = 'colExpedition';
               cardsData[cid].dateExpedition = `${dateStr} ${timeStr}`;
               cardsData[cid].raisonAttente = '';
+              cardsData[cid].localModifiedAt = Date.now(); // PROTECTION
               saveCardToFirebase(cid, cardsData[cid]);
             }
           });
@@ -7863,6 +8098,58 @@
     async function initializeApp() {
       console.log('🚀 Initialisation de l\'application...');
       
+      // ═══════════════════════════════════════════════════════════════════
+      // PROTECTION #3: Sauvegarder avant de fermer la page
+      // ═══════════════════════════════════════════════════════════════════
+      window.addEventListener('beforeunload', async (event) => {
+        // Si on a des modifications en attente, les sauvegarder immédiatement
+        if (hasPendingLocalChanges && Object.keys(pendingSaves).length > 0) {
+          console.log('⚠️ BEFOREUNLOAD: Sauvegarde des modifications en attente...');
+          
+          // Annuler le timer debounce
+          if (saveDebounceTimer) {
+            clearTimeout(saveDebounceTimer);
+          }
+          
+          // Sauvegarder immédiatement en local (synchrone)
+          try {
+            localStorage.setItem(STORAGE_KEYS.cards, JSON.stringify(cardsData));
+            localStorage.setItem('physipro_unsaved_pending', JSON.stringify(pendingSaves));
+            console.log('✅ Données sauvegardées localement avant fermeture');
+          } catch (e) {
+            console.error('❌ Erreur sauvegarde locale:', e);
+          }
+          
+          // Afficher un avertissement si des données ne sont pas synchronisées
+          event.preventDefault();
+          event.returnValue = 'Des modifications sont en cours de synchronisation. Voulez-vous vraiment quitter?';
+          return event.returnValue;
+        }
+      });
+      
+      // Récupérer les modifications non sauvegardées de la session précédente
+      try {
+        const unsavedPending = localStorage.getItem('physipro_unsaved_pending');
+        if (unsavedPending) {
+          const pendingData = JSON.parse(unsavedPending);
+          console.log('🔄 RÉCUPÉRATION: Modifications non sauvegardées trouvées:', Object.keys(pendingData).length);
+          
+          // Remettre dans la file d'attente
+          for (const [cardId, cardData] of Object.entries(pendingData)) {
+            pendingSaves[cardId] = cardData;
+          }
+          hasPendingLocalChanges = true;
+          
+          // Nettoyer après récupération
+          localStorage.removeItem('physipro_unsaved_pending');
+          
+          // Programmer la sauvegarde
+          setTimeout(() => processPendingSaves(), 2000);
+        }
+      } catch (e) {
+        console.error('Erreur récupération pending:', e);
+      }
+      
       // Charger d'abord depuis le cache local (pour affichage rapide)
       loadFromLocalStorage();
       renderKanban();
@@ -7901,6 +8188,35 @@
           
           // Optimisation automatique du stockage (en arrière-plan)
           setTimeout(() => autoOptimizeStorage(), 5000);
+          
+          // ═══════════════════════════════════════════════════════════════════
+          // PROTECTION #4: Vérification périodique de synchronisation
+          // ═══════════════════════════════════════════════════════════════════
+          setInterval(() => {
+            // Vérifier s'il y a des modifications en attente depuis plus de 10 secondes
+            if (hasPendingLocalChanges && Object.keys(pendingSaves).length > 0) {
+              console.log('⚠️ VÉRIFICATION PÉRIODIQUE: Modifications en attente détectées, sauvegarde forcée...');
+              processPendingSaves();
+            }
+            
+            // Vérifier les cartes avec localModifiedAt récent qui ne sont pas dans pendingSaves
+            const now = Date.now();
+            let unsavedCount = 0;
+            for (const [cardId, card] of Object.entries(cardsData)) {
+              if (card.localModifiedAt && (now - card.localModifiedAt) < 60000 && !pendingSaves[cardId]) {
+                // Carte modifiée dans la dernière minute mais pas en attente de sauvegarde
+                // Vérifier si elle a été sauvegardée (updatedAt devrait être plus récent)
+                if (!card.updatedAt || card.localModifiedAt > card.updatedAt) {
+                  console.log(`⚠️ Carte ${cardId} potentiellement non sauvegardée, ajout à la file`);
+                  queueCardSave(cardId, card);
+                  unsavedCount++;
+                }
+              }
+            }
+            if (unsavedCount > 0) {
+              console.log(`🔄 ${unsavedCount} carte(s) ajoutée(s) à la file de sauvegarde`);
+            }
+          }, 30000); // Toutes les 30 secondes
         }
       } catch (e) {
         console.error('Erreur Firebase:', e);
@@ -7915,6 +8231,15 @@
         showToast('📂 Aucune carte - Importez un backup via Paramètres', 'info');
       } else {
         console.log(`✅ ${cardCount} cartes chargées`);
+        
+        // ═══════════════════════════════════════════════════════════════════
+        // VÉRIFICATION D'INTÉGRITÉ AU DÉMARRAGE
+        // ═══════════════════════════════════════════════════════════════════
+        const integrity = verifyDataIntegrity();
+        if (integrity.issues.length > 0) {
+          console.warn(`⚠️ ${integrity.issues.length} problèmes d'intégrité détectés, ${integrity.fixedCount} corrigés`);
+        }
+        
         // Mettre à jour la vue mobile si on est sur mobile
         if (window.innerWidth <= 768) {
           console.log('📱 Appel renderMobileCards depuis checkDataLoaded');
@@ -7944,7 +8269,7 @@
 
     // ===== INITIALISATION =====
     document.addEventListener('DOMContentLoaded', async () => {
-      console.log('🚀 PhysiPro Moulage v1365 - Firebase Realtime DB');
+      console.log('🚀 PhysiPro Moulage v1434 - Firebase Realtime DB');
       
       // Permettre la connexion avec Enter
       document.getElementById('loginEmail').addEventListener('keypress', (e) => {
@@ -8192,6 +8517,7 @@
           });
         });
         
+        cardsData[cardId].localModifiedAt = Date.now(); // PROTECTION CRITIQUE
         saveCardToFirebase(cardId, cardsData[cardId]);
         renderMessages(cardId);
       }
@@ -8849,6 +9175,7 @@
     function updateMobileField(cardId, field, value) {
       if (!cardsData[cardId]) return;
       cardsData[cardId][field] = value;
+      cardsData[cardId].localModifiedAt = Date.now(); // PROTECTION CRITIQUE
       saveCardToFirebase(cardId, cardsData[cardId]);
       renderMobileCards();
     }
@@ -9311,6 +9638,7 @@
           showToast('💬 Message ajouté', 'info');
         }
         
+        card.localModifiedAt = Date.now(); // PROTECTION CRITIQUE
         saveCardToFirebase(mobileCurrentCardId, card);
         closeMobileCompose();
         window.mobileReplyToIdx = null;
@@ -9333,6 +9661,7 @@
       };
       
       card.messages.push(newMessage);
+      card.localModifiedAt = Date.now(); // PROTECTION CRITIQUE
       saveCardToFirebase(mobileCurrentCardId, card);
       
       // Fermer la zone de composition
@@ -9409,9 +9738,8 @@
       document.getElementById('photoArchiveName').textContent = card.name || '-';
       document.getElementById('photoArchiveOrder').textContent = card.order || '-';
       
-      // Créer le nom du dossier avec la région au début (format: "R 284719 - PLOD 3832")
-      const region = normalizeRegion(card.region) || 'X';
-      const folderName = `${region} ${card.order || 'SANS-NUM'} - ${card.name || 'Sans nom'}`;
+      // Créer le nom du dossier (format: "289871 - DESG 52521")
+      const folderName = `${card.order || 'SANS-NUM'} - ${card.name || 'Sans nom'}`;
       document.getElementById('photoArchiveFolder').textContent = folderName;
       
       // Vider la grille
@@ -9503,9 +9831,8 @@
       statusEl.textContent = '⏳ Envoi en cours...';
       
       try {
-        // Créer le nom du dossier avec la région au début (format: "R 284719 - PLOD 3832")
-        const region = normalizeRegion(card.region) || 'X';
-        const folderName = `${region} ${card.order || 'SANS-NUM'} - ${card.name || 'Sans nom'}`;
+        // Créer le nom du dossier (format: "289871 - DESG 52521")
+        const folderName = `${card.order || 'SANS-NUM'} - ${card.name || 'Sans nom'}`;
         const timestamp = Date.now();
         
         // Préparer les photos en base64 avec leurs noms
@@ -9522,7 +9849,6 @@
           cardId: photoArchiveCardId,
           cardName: card.name || '',
           cardOrder: card.order || '',
-          cardRegion: region, // Région normalisée (R, Q, M, etc.)
           folderName: folderName,
           photoCount: photos.length,
           photos: photosData, // Les photos en base64 directement
