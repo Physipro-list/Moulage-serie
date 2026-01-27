@@ -2,8 +2,25 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <!-- 
+    ═══════════════════════════════════════════════════════════════════
+    v1441 - CORRECTIONS CRITIQUES SYNCHRONISATION MESSAGES
+    ═══════════════════════════════════════════════════════════════════
+    
+    PROBLÈMES CORRIGÉS:
+    1. isLocalOperation bloquait la réception pendant 500ms → réduit à 100ms
+    2. Le merge écrasait les messages au lieu de les fusionner
+    3. Ajout d'une fonction mergeMessages() pour fusion intelligente
+    4. Ajout d'une fonction mergeCardData() pour fusion au niveau carte
+    5. Ajout d'un refresh forcé après envoi de message
+    6. Refresh automatique quand on ouvre une fiche
+    
+    Ces corrections permettent à deux utilisateurs de voir les messages
+    de l'autre en temps réel sans perte de données.
+    ═══════════════════════════════════════════════════════════════════
+  -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1440</title>
+  <title>PhysiPro Moulages v1441</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -3339,10 +3356,10 @@
         
         saveToLocalStorageQuiet();
       } finally {
-        // IMPORTANT: Toujours réactiver le listener après un court délai
+        // IMPORTANT: Réactiver le listener rapidement (réduit de 500ms à 100ms)
         setTimeout(() => {
           isLocalOperation = false;
-        }, 500);
+        }, 100);
       }
     }
     
@@ -4040,39 +4057,76 @@
         
         // ═══════════════════════════════════════════════════════════════════
         // MERGE INTELLIGENT: Préserver les modifications locales non sauvegardées
+        // ET FUSIONNER LES MESSAGES AU LIEU D'ÉCRASER
         // ═══════════════════════════════════════════════════════════════════
         
-        let mergedData = { ...firebaseData };
+        let mergedData = {};
         let localChangesPreserved = 0;
+        let messagesMerged = 0;
         
-        // Si on a des modifications en attente, les préserver
-        if (hasPendingLocalChanges && Object.keys(pendingSaves).length > 0) {
-          console.log(`🔀 MERGE: Préservation de ${Object.keys(pendingSaves).length} modifications locales`);
+        // Parcourir TOUTES les cartes (Firebase + locales)
+        const allCardIds = new Set([...Object.keys(firebaseData), ...Object.keys(cardsData)]);
+        
+        for (const cardId of allCardIds) {
+          const firebaseCard = firebaseData[cardId];
+          const localCard = cardsData[cardId];
+          const pendingCard = pendingSaves[cardId];
           
-          for (const cardId of Object.keys(pendingSaves)) {
-            // Utiliser notre version locale pour les cartes en attente de sauvegarde
-            mergedData[cardId] = pendingSaves[cardId];
-            localChangesPreserved++;
+          // Cas 1: Carte seulement dans Firebase (nouvelle carte d'un autre utilisateur)
+          if (firebaseCard && !localCard && !pendingCard) {
+            mergedData[cardId] = firebaseCard;
+            continue;
           }
-        }
-        
-        // Vérifier aussi les cartes modifiées localement mais pas encore dans pendingSaves
-        // (modifications très récentes qui n'ont pas encore déclenché le debounce)
-        for (const cardId of Object.keys(cardsData)) {
-          if (cardsData[cardId] && firebaseData[cardId]) {
-            // Comparer les timestamps - garder la version la plus récente
-            const localUpdated = cardsData[cardId].localModifiedAt || 0;
-            const firebaseUpdated = firebaseData[cardId].updatedAt || 0;
+          
+          // Cas 2: Carte seulement locale (en cours de création, pas encore synchro)
+          if (!firebaseCard && localCard) {
+            mergedData[cardId] = localCard;
+            localChangesPreserved++;
+            continue;
+          }
+          
+          // Cas 3: Carte en attente de sauvegarde - utiliser mergeCardData pour fusionner
+          if (pendingCard && firebaseCard) {
+            mergedData[cardId] = mergeCardData(pendingCard, firebaseCard);
+            localChangesPreserved++;
+            messagesMerged++;
+            // Remettre la version fusionnée dans pendingSaves pour la prochaine sauvegarde
+            pendingSaves[cardId] = mergedData[cardId];
+            continue;
+          }
+          
+          // Cas 4: Carte modifiée localement récemment
+          if (localCard && firebaseCard) {
+            const localModTime = localCard.localModifiedAt || 0;
+            const firebaseModTime = firebaseCard.updatedAt || 0;
             
-            if (localUpdated > firebaseUpdated) {
-              mergedData[cardId] = cardsData[cardId];
+            // TOUJOURS fusionner les messages, même si pas de modification locale récente
+            mergedData[cardId] = mergeCardData(localCard, firebaseCard);
+            
+            // Compter si des messages ont été fusionnés
+            const localMsgCount = localCard.messages?.length || 0;
+            const firebaseMsgCount = firebaseCard.messages?.length || 0;
+            const mergedMsgCount = mergedData[cardId].messages?.length || 0;
+            
+            if (mergedMsgCount > Math.max(localMsgCount, firebaseMsgCount)) {
+              messagesMerged++;
+              console.log(`🔀 Carte ${cardId}: Messages fusionnés (${localMsgCount} local + ${firebaseMsgCount} Firebase = ${mergedMsgCount} total)`);
+            }
+            
+            if (localModTime > firebaseModTime) {
               localChangesPreserved++;
             }
+            continue;
+          }
+          
+          // Cas par défaut: prendre Firebase
+          if (firebaseCard) {
+            mergedData[cardId] = firebaseCard;
           }
         }
         
-        if (localChangesPreserved > 0) {
-          console.log(`✅ MERGE: ${localChangesPreserved} modifications locales préservées`);
+        if (localChangesPreserved > 0 || messagesMerged > 0) {
+          console.log(`✅ MERGE: ${localChangesPreserved} cartes locales préservées, ${messagesMerged} cartes avec messages fusionnés`);
         }
         
         // Calculer le hash des nouvelles données pour voir si ça a vraiment changé
@@ -4122,6 +4176,146 @@
       }
       return JSON.stringify(keyData);
     }
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // FUSION INTELLIGENTE DES MESSAGES (CORRIGE LE PROBLÈME DE SYNC)
+    // ═══════════════════════════════════════════════════════════════════
+    
+    /**
+     * Fusionne les messages de deux versions d'une carte
+     * Au lieu d'écraser, on garde TOUS les messages uniques des deux côtés
+     */
+    function mergeMessages(localMessages, firebaseMessages) {
+      if (!localMessages && !firebaseMessages) return [];
+      if (!localMessages) return firebaseMessages || [];
+      if (!firebaseMessages) return localMessages || [];
+      
+      // Créer un Map avec l'ID du message comme clé pour détecter les doublons
+      const messagesMap = new Map();
+      
+      // Ajouter d'abord les messages Firebase (source de vérité pour les anciens messages)
+      firebaseMessages.forEach(msg => {
+        const msgId = msg.id || `legacy_${msg.date}_${msg.author}_${(msg.content || '').substring(0, 20)}`;
+        messagesMap.set(msgId, { ...msg, id: msgId });
+      });
+      
+      // Ajouter/mettre à jour avec les messages locaux
+      localMessages.forEach(msg => {
+        const msgId = msg.id || `legacy_${msg.date}_${msg.author}_${(msg.content || '').substring(0, 20)}`;
+        
+        // Si le message existe déjà, garder la version la plus complète
+        if (messagesMap.has(msgId)) {
+          const existing = messagesMap.get(msgId);
+          // Préserver les mises à jour locales (sentTo, threadParticipants, etc.)
+          messagesMap.set(msgId, { ...existing, ...msg, id: msgId });
+        } else {
+          // Nouveau message local, l'ajouter
+          messagesMap.set(msgId, { ...msg, id: msgId });
+        }
+      });
+      
+      // Convertir en tableau et trier par date
+      const merged = Array.from(messagesMap.values());
+      merged.sort((a, b) => {
+        // Trier par ID (qui contient le timestamp) ou par date
+        const dateA = a.id?.includes('msg_') ? parseInt(a.id.split('_')[1]) : new Date(a.date).getTime();
+        const dateB = b.id?.includes('msg_') ? parseInt(b.id.split('_')[1]) : new Date(b.date).getTime();
+        return dateA - dateB;
+      });
+      
+      return merged;
+    }
+    
+    /**
+     * Fusionne deux versions d'une carte en préservant les modifications des deux côtés
+     */
+    function mergeCardData(localCard, firebaseCard) {
+      if (!localCard) return firebaseCard;
+      if (!firebaseCard) return localCard;
+      
+      // Commencer avec la version Firebase comme base
+      const merged = { ...firebaseCard };
+      
+      // FUSION INTELLIGENTE DES MESSAGES (le point critique!)
+      merged.messages = mergeMessages(localCard.messages, firebaseCard.messages);
+      
+      // Si la version locale a des modifications plus récentes sur certains champs, les préserver
+      const localModTime = localCard.localModifiedAt || 0;
+      const firebaseModTime = firebaseCard.updatedAt || 0;
+      
+      if (localModTime > firebaseModTime) {
+        // Préserver les champs critiques modifiés localement (sauf les messages déjà fusionnés)
+        const fieldsToPreserve = [
+          'colonne', 'sortOrder', 'priority', 'raisonAttente', 'dateExpedition',
+          'expedie', 'rush', 'tracking', 'dateEssayage', 'dateLivraison'
+        ];
+        fieldsToPreserve.forEach(field => {
+          if (localCard[field] !== undefined) {
+            merged[field] = localCard[field];
+          }
+        });
+      }
+      
+      // Toujours garder le timestamp local pour la protection
+      if (localCard.localModifiedAt) {
+        merged.localModifiedAt = localCard.localModifiedAt;
+      }
+      
+      return merged;
+    }
+    
+    /**
+     * Force un refresh d'une carte spécifique depuis Firebase
+     * et fusionne les messages pour éviter de perdre ceux des autres utilisateurs
+     */
+    async function forceRefreshCardFromFirebase(cardId) {
+      if (!cardId || !firebaseDb) return;
+      
+      try {
+        const snapshot = await firebaseDb.ref(DB_PATHS.moulages + '/' + cardId).once('value');
+        if (!snapshot.exists()) return;
+        
+        const firebaseCard = snapshot.val();
+        const localCard = cardsData[cardId];
+        
+        if (!localCard) {
+          cardsData[cardId] = firebaseCard;
+        } else {
+          // Fusionner les messages intelligemment
+          const mergedCard = mergeCardData(localCard, firebaseCard);
+          
+          // Vérifier si des nouveaux messages ont été récupérés
+          const localMsgCount = localCard.messages?.length || 0;
+          const mergedMsgCount = mergedCard.messages?.length || 0;
+          
+          if (mergedMsgCount > localMsgCount) {
+            console.log(`🔄 Refresh carte ${cardId}: ${mergedMsgCount - localMsgCount} nouveau(x) message(s) récupéré(s)`);
+            cardsData[cardId] = mergedCard;
+            
+            // Re-render si c'est la carte actuellement ouverte
+            if (currentCardId === cardId) {
+              renderMessages(cardId);
+              scrollChatToBottom();
+            }
+            
+            // Re-render mobile si applicable
+            if (mobileCurrentCardId === cardId) {
+              openMobileChat();
+            }
+          } else {
+            // Mettre à jour quand même pour les autres champs
+            cardsData[cardId] = mergedCard;
+          }
+        }
+        
+        saveToLocalStorageQuiet();
+        console.log(`✅ Refresh forcé carte ${cardId} terminé`);
+        
+      } catch (error) {
+        console.error(`❌ Erreur refresh carte ${cardId}:`, error);
+      }
+    }
+    window.forceRefreshCardFromFirebase = forceRefreshCardFromFirebase;
     
     // Vérifier si les changements affectent visuellement les cartes (pas juste timestamps)
     function checkForRealChanges(oldData, newData) {
@@ -6470,6 +6664,9 @@
       const d = cardsData[cardId];
       if (!d) return;
       
+      // CORRECTION SYNC: Refresh automatique pour avoir les derniers messages
+      forceRefreshCardFromFirebase(cardId);
+      
       const currentCol = COLONNES.find(c => c.id === d.colonne);
       const isEnAttente = currentCol?.enAttente || false;
       const statusBanner = document.getElementById('ficheStatusBanner');
@@ -7041,6 +7238,12 @@
       renderMessages(currentCardId);
       saveCardToFirebase(currentCardId, cardsData[currentCardId]);
       scrollChatToBottom();
+      
+      // CORRECTION SYNC: Forcer un refresh des données Firebase après l'envoi
+      // pour récupérer les messages des autres utilisateurs
+      setTimeout(() => {
+        forceRefreshCardFromFirebase(currentCardId);
+      }, 1000);
       
       // Afficher le menu destinataire pour Question et Discussion (pas pour épinglé)
       if (currentComposeType !== 'pinned') {
@@ -9329,6 +9532,9 @@
       const card = cardsData[cardId];
       if (!card) return;
       
+      // CORRECTION SYNC: Refresh automatique pour avoir les derniers messages
+      forceRefreshCardFromFirebase(cardId);
+      
       // Utiliser 'd' comme alias pour être cohérent avec le desktop
       const d = card;
       
@@ -9926,6 +10132,13 @@
         
         card.localModifiedAt = Date.now(); // PROTECTION CRITIQUE
         saveCardToFirebase(mobileCurrentCardId, card);
+        
+        // CORRECTION SYNC: Forcer un refresh après l'envoi
+        const cardIdToRefresh = mobileCurrentCardId;
+        setTimeout(() => {
+          forceRefreshCardFromFirebase(cardIdToRefresh);
+        }, 1000);
+        
         closeMobileCompose();
         window.mobileReplyToIdx = null;
         openMobileChat();
@@ -9949,6 +10162,12 @@
       card.messages.push(newMessage);
       card.localModifiedAt = Date.now(); // PROTECTION CRITIQUE
       saveCardToFirebase(mobileCurrentCardId, card);
+      
+      // CORRECTION SYNC: Forcer un refresh après l'envoi
+      const cardIdToRefresh = mobileCurrentCardId;
+      setTimeout(() => {
+        forceRefreshCardFromFirebase(cardIdToRefresh);
+      }, 1000);
       
       // Fermer la zone de composition
       closeMobileCompose();
