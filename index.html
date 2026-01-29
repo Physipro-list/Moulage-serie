@@ -1612,6 +1612,24 @@
         text-shadow: none;
       }
       
+      /* Pastilles de raison d'attente sur mobile */
+      .mobile-card-item.mobile-item-pill.en-attente {
+        background: linear-gradient(to bottom, #dc2626, #7f1d1d);
+        border-radius: 8px;
+        padding: 8px 14px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .mobile-card-item.mobile-item-pill.en-attente.no-raison {
+        background: linear-gradient(to bottom, #f97316, #c2410c);
+        animation: clignoteNoRaison 0.8s infinite;
+        border: 2px solid #fbbf24;
+      }
+      .mobile-card-item.mobile-item-pill.en-attente.alerte {
+        animation: clignoteAttente 1s infinite;
+      }
+      
       /* On enlève les anciens styles */
       .mobile-card-arrow { display: none; }
       .mobile-card-pills { display: none; }
@@ -6140,7 +6158,13 @@
       cardsData[currentAttenteCardId].raisonAttente = raison;
       cardsData[currentAttenteCardId].localModifiedAt = Date.now(); // PROTECTION
       saveCardToFirebase(currentAttenteCardId, cardsData[currentAttenteCardId]);
-      updateCardInDOM(currentAttenteCardId);
+      
+      // Mise à jour de l'affichage selon le mode
+      if (window.innerWidth <= 768 && typeof renderMobileCards === 'function') {
+        renderMobileCards(); // Mode mobile: re-rendre toutes les cartes
+      } else {
+        updateCardInDOM(currentAttenteCardId); // Mode PC: mise à jour individuelle
+      }
       
       closeRaisonAttenteMenu();
       showToast(`✅ Raison: ${raison}`);
@@ -6153,7 +6177,13 @@
       cardsData[currentAttenteCardId].raisonAttente = '';
       cardsData[currentAttenteCardId].localModifiedAt = Date.now(); // PROTECTION
       saveCardToFirebase(currentAttenteCardId, cardsData[currentAttenteCardId]);
-      updateCardInDOM(currentAttenteCardId);
+      
+      // Mise à jour de l'affichage selon le mode
+      if (window.innerWidth <= 768 && typeof renderMobileCards === 'function') {
+        renderMobileCards();
+      } else {
+        updateCardInDOM(currentAttenteCardId);
+      }
       
       closeRaisonAttenteMenu();
       showToast('🗑️ Raison effacée');
@@ -12278,14 +12308,33 @@
             const colName = colInfo ? colInfo.name : '';
             const colIcon = colInfo ? colInfo.icon : '📁';
             
+            // Pour les cartes en attente, afficher la raison
+            let itemDisplay = card.item || '';
+            let itemClass = '';
+            let itemClick = '';
+            
+            if (card.colonne === 'colAttente') {
+              if (!card.raisonAttente) {
+                itemDisplay = '⚠️ CHOISIR RAISON';
+                itemClass = 'mobile-item-pill en-attente no-raison';
+              } else {
+                itemDisplay = card.raisonAttente;
+                itemClass = 'mobile-item-pill en-attente';
+                if (RAISONS_ALERTE && RAISONS_ALERTE.includes(card.raisonAttente)) {
+                  itemClass += ' alerte';
+                }
+              }
+              itemClick = `onclick="event.stopPropagation(); openRaisonAttenteMenu('${card.id}', event)"`;
+            }
+            
             html += `
-              <div class="mobile-card ${regionClass}" onclick="openMobileFiche('${card.id}')">
+              <div class="mobile-card ${regionClass}" data-card-id="${card.id}" onclick="openMobileFiche('${card.id}')">
                 <div class="mobile-card-top">
                   <span class="mobile-card-name">${card.name || 'Sans nom'}</span>
                   <span class="mobile-card-order">${card.order || ''}</span>
                 </div>
                 <div class="mobile-card-separator"></div>
-                <div class="mobile-card-item">${card.item || ''}</div>
+                <div class="mobile-card-item ${itemClass}" ${itemClick}>${itemDisplay}</div>
                 <div style="font-size:10px;color:#9ca3af;margin-top:4px;text-align:right;">${colIcon} ${colName}</div>
               </div>
             `;
@@ -12341,17 +12390,36 @@
         colCards.forEach(card => {
           const regionClass = 'region-' + getRegionClass(card.region);
           
+          // Pour les cartes en attente, afficher la raison au lieu de l'item
+          let itemDisplay = card.item || '';
+          let itemClass = '';
+          let itemClick = '';
+          
+          if (card.colonne === 'colAttente') {
+            if (!card.raisonAttente) {
+              itemDisplay = '⚠️ CHOISIR RAISON';
+              itemClass = 'mobile-item-pill en-attente no-raison';
+            } else {
+              itemDisplay = card.raisonAttente;
+              itemClass = 'mobile-item-pill en-attente';
+              if (RAISONS_ALERTE && RAISONS_ALERTE.includes(card.raisonAttente)) {
+                itemClass += ' alerte';
+              }
+            }
+            itemClick = `onclick="event.stopPropagation(); openRaisonAttenteMenu('${card.id}', event)"`;
+          }
+          
           const cardContent = `
             <div class="mobile-card-top">
               <span class="mobile-card-name">${card.name || 'Sans nom'}</span>
               <span class="mobile-card-order">${card.order || ''}</span>
             </div>
             <div class="mobile-card-separator"></div>
-            <div class="mobile-card-item">${card.item || ''}</div>
+            <div class="mobile-card-item ${itemClass}" ${itemClick}>${itemDisplay}</div>
           `;
           
           html += `
-            <div class="mobile-card ${regionClass}" onclick="openMobileFiche('${card.id}')">
+            <div class="mobile-card ${regionClass}" data-card-id="${card.id}" onclick="openMobileFiche('${card.id}')">
               ${cardContent}
             </div>
           `;
