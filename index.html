@@ -4,6 +4,25 @@
   <meta charset="UTF-8">
   <!-- 
     ═══════════════════════════════════════════════════════════════════
+    v1520 - AUDIT CRITIQUE: CORRECTION PERTE DE VALEURS LISTES
+    ═══════════════════════════════════════════════════════════════════
+    
+    🔴 BUG CORRIGÉ: Les valeurs ajoutées (Intervenants, Centres, etc.) 
+       disparaissaient car:
+       1. Les listes étaient écrasées au lieu d'être fusionnées
+       2. Pas d'écoute en temps réel sur les listes
+       3. Utilisateurs avec anciennes versions écrasaient les nouvelles valeurs
+    
+    ✅ CORRECTIONS APPORTÉES:
+    - Système de FUSION des listes (ne perd plus de valeurs)
+    - Écoute en TEMPS RÉEL des listes Firebase
+    - Protection contre sauvegarde avant chargement
+    - Historique des listes sauvegardé pour récupération
+    - Logs détaillés pour traçabilité
+    
+    + Recherche PC améliorée (cherche dans les messages)
+    + Colonne Essayage triée par DATE (PC et Mobile)
+    
     v1472 - CHECKBOX ABSOLU + MENU EXPAND AVEC OPTIONS
     ═══════════════════════════════════════════════════════════════════
     
@@ -21,7 +40,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1519</title>
+  <title>PhysiPro Moulages v1520</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -5471,11 +5490,24 @@
           `;
           container.appendChild(colDiv);
           
-          // Ajouter les cartes triées par sortOrder pour cette colonne (exclure les notes)
+          // Ajouter les cartes triées pour cette colonne (exclure les notes)
           const colBody = colDiv.querySelector('.moulages-col-body');
           Object.entries(cardsData)
             .filter(([id, card]) => card.colonne === col.id && !card.isNote)
-            .sort((a, b) => (a[1].sortOrder ?? 999999) - (b[1].sortOrder ?? 999999))
+            .sort((a, b) => {
+              // TRI SPÉCIAL: Colonne Essayage triée par date (plus récent en HAUT)
+              if (col.id === 'colEssayage') {
+                const dateA = a[1].dateEssayage || a[1].createdAt || '';
+                const dateB = b[1].dateEssayage || b[1].createdAt || '';
+                // Tri descendant (plus récent en haut): B - A
+                if (dateB && dateA) return dateB.localeCompare(dateA);
+                if (dateB) return 1;  // B a une date, pas A → B en haut
+                if (dateA) return -1; // A a une date, pas B → A en haut
+                return 0;
+              }
+              // Autres colonnes: tri par sortOrder
+              return (a[1].sortOrder ?? 999999) - (b[1].sortOrder ?? 999999);
+            })
             .forEach(([cardId, card]) => {
               colBody.appendChild(createCardElement(cardId, card));
             });
@@ -7027,14 +7059,43 @@
     // ===== SECTION 8: RECHERCHE =====
     function handleGlobalSearch(query) {
       const q = query.toLowerCase().trim();
-      Object.keys(cardsData).forEach(cardId => {
-        const card = cardsData[cardId];
+      
+      // Parcourir TOUTES les cartes dans cardsData
+      Object.entries(cardsData).forEach(([cardId, card]) => {
+        if (card.isNote) return; // Ignorer les notes
+        
         const el = document.querySelector(`[data-card-id="${cardId}"]`);
         if (!el) return;
-        if (!q) { el.classList.remove('hidden'); return; }
-        const fields = [card.name, card.order, card.soumission, card.po, card.client, card.region, card.intervenant, card.representante, card.item, card.notes].map(f => (f||'').toLowerCase());
-        el.classList.toggle('hidden', !fields.some(f => f.includes(q)));
+        
+        // Si pas de recherche, tout montrer
+        if (!q) { 
+          el.classList.remove('hidden'); 
+          return; 
+        }
+        
+        // Construire tous les champs à chercher (incluant les messages)
+        const searchFields = [
+          card.name || '',
+          card.order || '',
+          card.soumission || '',
+          card.po || '',
+          card.client || '',
+          card.region || '',
+          card.intervenant || '',
+          card.representante || '',
+          card.item || '',
+          card.notes || '',
+          // Ajouter le contenu des messages pour recherche approfondie
+          ...(card.messages || []).map(m => (m.content || '') + ' ' + (m.author || ''))
+        ].join(' ').toLowerCase();
+        
+        // Vérifier si le terme de recherche est présent
+        const match = searchFields.includes(q);
+        el.classList.toggle('hidden', !match);
       });
+      
+      // Log pour debug
+      console.log(`🔍 Recherche: "${q}" - Cartes trouvées: ${document.querySelectorAll('.mcard:not(.hidden)').length}`);
     }
 
     // ===== SECTION 9: VUE ROBOT =====
@@ -8737,36 +8798,199 @@
     }
     window.deleteListValue = deleteListValue;
     
+    // ═══════════════════════════════════════════════════════════════════
+    // SYSTÈME DE LISTES v2 - AVEC FUSION ET SYNC EN TEMPS RÉEL
+    // ═══════════════════════════════════════════════════════════════════
+    
+    // Flag pour éviter les sauvegardes pendant le chargement
+    let listsLoadedFromFirebase = false;
+    
     function saveListsToFirebase() {
       if (!firebaseDb) return;
+      
+      // PROTECTION: Ne pas sauvegarder si les listes n'ont pas été chargées de Firebase
+      if (!listsLoadedFromFirebase) {
+        console.warn('⚠️ PROTECTION: Sauvegarde listes bloquée - listes pas encore chargées de Firebase');
+        return;
+      }
+      
       try {
         const listsData = {
-          CENTRES, ITEMS, INTERVENANTS, REPRESENTANTES, RAISONS_ATTENTE
+          CENTRES, ITEMS, INTERVENANTS, REPRESENTANTES, RAISONS_ATTENTE,
+          lastModified: Date.now(),
+          lastModifiedBy: currentUserEmail || 'unknown'
         };
+        
+        // LOG de la sauvegarde pour traçabilité
+        console.log(`📝 Sauvegarde listes par ${currentUserEmail}:`, {
+          CENTRES: CENTRES.length,
+          ITEMS: ITEMS.length,
+          INTERVENANTS: INTERVENANTS.length,
+          REPRESENTANTES: REPRESENTANTES.length,
+          RAISONS_ATTENTE: RAISONS_ATTENTE.length
+        });
+        
         firebaseDb.ref('listes').set(listsData);
+        
+        // Aussi sauvegarder un historique pour pouvoir récupérer
+        const historyKey = `listes_history/${Date.now()}`;
+        firebaseDb.ref(historyKey).set({
+          ...listsData,
+          savedAt: new Date().toISOString()
+        });
+        
       } catch (e) {
-        console.warn('Erreur sauvegarde listes:', e);
+        console.error('❌ Erreur sauvegarde listes:', e);
       }
     }
     
     function loadListsFromFirebase() {
       if (!firebaseDb) return;
+      
       try {
-        firebaseDb.ref('listes').once('value').then(snapshot => {
+        // ÉCOUTE EN TEMPS RÉEL pour synchroniser les listes entre tous les utilisateurs
+        firebaseDb.ref('listes').on('value', snapshot => {
           const data = snapshot.val();
           if (data) {
-            if (data.CENTRES) CENTRES = data.CENTRES;
-            if (data.ITEMS) ITEMS = data.ITEMS;
-            if (data.INTERVENANTS) INTERVENANTS = data.INTERVENANTS;
-            if (data.REPRESENTANTES) REPRESENTANTES = data.REPRESENTANTES;
-            if (data.RAISONS_ATTENTE) RAISONS_ATTENTE = data.RAISONS_ATTENTE;
-            console.log('✅ Listes personnalisées chargées');
+            // FUSION: Garder les valeurs locales ET les nouvelles de Firebase
+            if (data.CENTRES && Array.isArray(data.CENTRES)) {
+              CENTRES = mergeArraysUnique(CENTRES, data.CENTRES);
+            }
+            if (data.ITEMS && Array.isArray(data.ITEMS)) {
+              ITEMS = mergeArraysUnique(ITEMS, data.ITEMS);
+            }
+            if (data.INTERVENANTS && Array.isArray(data.INTERVENANTS)) {
+              INTERVENANTS = mergeArraysUnique(INTERVENANTS, data.INTERVENANTS);
+            }
+            if (data.REPRESENTANTES && Array.isArray(data.REPRESENTANTES)) {
+              REPRESENTANTES = mergeArraysUnique(REPRESENTANTES, data.REPRESENTANTES);
+            }
+            if (data.RAISONS_ATTENTE && Array.isArray(data.RAISONS_ATTENTE)) {
+              RAISONS_ATTENTE = mergeArraysUnique(RAISONS_ATTENTE, data.RAISONS_ATTENTE);
+            }
+            
+            // Marquer que les listes ont été chargées (permet la sauvegarde)
+            listsLoadedFromFirebase = true;
+            
+            console.log('✅ Listes synchronisées depuis Firebase:', {
+              CENTRES: CENTRES.length,
+              ITEMS: ITEMS.length,
+              INTERVENANTS: INTERVENANTS.length,
+              REPRESENTANTES: REPRESENTANTES.length,
+              RAISONS_ATTENTE: RAISONS_ATTENTE.length,
+              lastModifiedBy: data.lastModifiedBy || 'unknown'
+            });
+            
+            // Rafraîchir l'UI si un gestionnaire de liste est ouvert
+            if (currentListKey && document.getElementById('listManagerModal')?.style.display !== 'none') {
+              renderListManagerItems();
+            }
+          } else {
+            // Aucune donnée dans Firebase - première utilisation ou données perdues
+            // Sauvegarder les listes actuelles comme base
+            listsLoadedFromFirebase = true;
+            console.log('📦 Aucune liste dans Firebase - initialisation avec les valeurs par défaut');
+            saveListsToFirebase();
           }
-        }).catch(e => console.warn('Erreur chargement listes:', e));
+        }, e => console.error('❌ Erreur écoute listes:', e));
+        
       } catch (e) {
-        console.warn('Erreur chargement listes:', e);
+        console.error('❌ Erreur chargement listes:', e);
+        listsLoadedFromFirebase = true; // Permettre la sauvegarde même en cas d'erreur
       }
     }
+    
+    // Fonction utilitaire pour fusionner deux tableaux sans doublons
+    function mergeArraysUnique(arr1, arr2) {
+      const merged = [...new Set([...arr1, ...arr2])];
+      return merged.sort((a, b) => a.localeCompare(b, 'fr'));
+    }
+    
+    // Fonction pour récupérer l'historique des listes (pour debug/récupération)
+    async function getListsHistory() {
+      if (!firebaseDb) return [];
+      try {
+        const snapshot = await firebaseDb.ref('listes_history').orderByKey().limitToLast(20).once('value');
+        const data = snapshot.val();
+        if (!data) return [];
+        
+        const history = Object.entries(data).map(([key, value]) => ({
+          timestamp: parseInt(key),
+          date: new Date(parseInt(key)).toLocaleString('fr-CA'),
+          savedBy: value.lastModifiedBy || 'unknown',
+          counts: {
+            CENTRES: value.CENTRES?.length || 0,
+            ITEMS: value.ITEMS?.length || 0,
+            INTERVENANTS: value.INTERVENANTS?.length || 0,
+            REPRESENTANTES: value.REPRESENTANTES?.length || 0,
+            RAISONS_ATTENTE: value.RAISONS_ATTENTE?.length || 0
+          },
+          data: value
+        }));
+        
+        console.log('📜 Historique des listes:', history);
+        return history.sort((a, b) => b.timestamp - a.timestamp);
+      } catch (e) {
+        console.error('Erreur récupération historique:', e);
+        return [];
+      }
+    }
+    window.getListsHistory = getListsHistory;
+    
+    // Fonction pour restaurer les listes depuis un point dans l'historique
+    async function restoreListsFromHistory(timestamp) {
+      if (!firebaseDb) return false;
+      try {
+        const snapshot = await firebaseDb.ref(`listes_history/${timestamp}`).once('value');
+        const data = snapshot.val();
+        if (!data) {
+          console.error('❌ Aucune donnée trouvée pour ce timestamp');
+          return false;
+        }
+        
+        // Fusionner avec les listes actuelles (ne pas perdre les nouvelles valeurs)
+        if (data.CENTRES) CENTRES = mergeArraysUnique(CENTRES, data.CENTRES);
+        if (data.ITEMS) ITEMS = mergeArraysUnique(ITEMS, data.ITEMS);
+        if (data.INTERVENANTS) INTERVENANTS = mergeArraysUnique(INTERVENANTS, data.INTERVENANTS);
+        if (data.REPRESENTANTES) REPRESENTANTES = mergeArraysUnique(REPRESENTANTES, data.REPRESENTANTES);
+        if (data.RAISONS_ATTENTE) RAISONS_ATTENTE = mergeArraysUnique(RAISONS_ATTENTE, data.RAISONS_ATTENTE);
+        
+        // Sauvegarder les listes fusionnées
+        saveListsToFirebase();
+        
+        console.log('✅ Listes restaurées et fusionnées depuis:', new Date(timestamp).toLocaleString('fr-CA'));
+        showToast('✅ Listes restaurées!', 'success');
+        return true;
+      } catch (e) {
+        console.error('Erreur restauration:', e);
+        return false;
+      }
+    }
+    window.restoreListsFromHistory = restoreListsFromHistory;
+    
+    // Fonction pour afficher les valeurs perdues entre deux versions
+    async function findLostValues() {
+      const history = await getListsHistory();
+      if (history.length < 2) {
+        console.log('Pas assez d\'historique pour comparer');
+        return null;
+      }
+      
+      const latest = history[0].data;
+      const previous = history[1].data;
+      
+      const lost = {
+        CENTRES: (previous.CENTRES || []).filter(v => !(latest.CENTRES || []).includes(v)),
+        ITEMS: (previous.ITEMS || []).filter(v => !(latest.ITEMS || []).includes(v)),
+        INTERVENANTS: (previous.INTERVENANTS || []).filter(v => !(latest.INTERVENANTS || []).includes(v)),
+        REPRESENTANTES: (previous.REPRESENTANTES || []).filter(v => !(latest.REPRESENTANTES || []).includes(v)),
+        RAISONS_ATTENTE: (previous.RAISONS_ATTENTE || []).filter(v => !(latest.RAISONS_ATTENTE || []).includes(v))
+      };
+      
+      console.log('🔍 Valeurs perdues entre les 2 dernières versions:', lost);
+      return lost;
+    }
+    window.findLostValues = findLostValues;
 
     // ===== SECTION 18B: SYSTÈME DE LOGS =====
     
@@ -11152,8 +11376,21 @@
       MOBILE_COL_ORDER.forEach(col => {
         const colCards = allCards.filter(c => c.colonne === col.id);
         
-        // Trier par nom
-        colCards.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        // TRI SPÉCIAL: Colonne Essayage triée par date (plus récent en HAUT)
+        if (col.id === 'colEssayage') {
+          colCards.sort((a, b) => {
+            const dateA = a.dateEssayage || a.createdAt || '';
+            const dateB = b.dateEssayage || b.createdAt || '';
+            // Tri descendant (plus récent en haut): B - A
+            if (dateB && dateA) return dateB.localeCompare(dateA);
+            if (dateB) return 1;
+            if (dateA) return -1;
+            return 0;
+          });
+        } else {
+          // Autres colonnes: tri par nom
+          colCards.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        }
         
         // Titre de section (toujours affiché - rouge pour En attente)
         html += `
