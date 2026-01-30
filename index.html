@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <!-- 
     ═══════════════════════════════════════════════════════════════════
-    v1524 - FIX BOUCLE VERSION: CORRECTIONS CRITIQUES + AUTO-UPDATE
+    v1525 - FIX BOUCLE VERSION: CORRECTIONS CRITIQUES + AUTO-UPDATE
     ═══════════════════════════════════════════════════════════════════
     
     🔴 BUGS CORRIGÉS:
@@ -36,7 +36,7 @@
     🆕 NOUVELLE FONCTIONNALITÉ: DÉTECTION AUTO DE MISE À JOUR
     - Quand tu déploies une nouvelle version:
       1. Change APP_VERSION dans le code
-      2. Dans la console: setRequiredVersion('1524')
+      2. Dans la console: setRequiredVersion('1525')
     - Tous les utilisateurs verront un popup les forçant à rafraîchir
     
     ⚠️ ACTIONS REQUISES DANS FIREBASE CONSOLE:
@@ -60,7 +60,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1524</title>
+  <title>PhysiPro Moulages v1525</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -641,6 +641,24 @@
     .fiche-field-value.date-field:hover { background: #e5e7eb; }
 
     .fiche-notes-zone { flex: 1; display: flex; flex-direction: column; background: #fff; min-width: 500px; border-radius: 0 16px 16px 0; overflow: hidden; }
+    
+    /* MODE TRACKING VISIBLE - fiche compacte (même styles que chat-expanded) */
+    .fiche-container:not(.no-tracking) .fiche-info-zone { flex: 0 0 280px; }
+    .fiche-container:not(.no-tracking) .fiche-status-pill-full { padding: 8px 10px; font-size: 11px; letter-spacing: 0.5px; }
+    .fiche-container:not(.no-tracking) .fiche-beneficiaire { padding: 4px 8px; }
+    .fiche-container:not(.no-tracking) .fiche-beneficiaire-label { width: 140px; font-size: 10px; padding-left: 8px; }
+    .fiche-container:not(.no-tracking) .fiche-beneficiaire-value { font-size: 14px; }
+    .fiche-container:not(.no-tracking) .fiche-beneficiaire-value input { font-size: 14px; max-width: 180px; }
+    .fiche-container:not(.no-tracking) .fiche-field-row { padding: 1px 6px; }
+    .fiche-container:not(.no-tracking) .fiche-field-label { width: 140px; font-size: 10px; padding-left: 8px; }
+    .fiche-container:not(.no-tracking) .fiche-field-value { font-size: 11px; }
+    .fiche-container:not(.no-tracking) .fiche-field-value select, 
+    .fiche-container:not(.no-tracking) .fiche-field-value input { font-size: 11px; max-width: 150px; }
+    .fiche-container:not(.no-tracking) .fiche-header { height: 36px; padding: 0 6px; }
+    .fiche-container:not(.no-tracking) .fiche-tracking-btn { padding: 3px 6px; font-size: 8px; }
+    .fiche-container:not(.no-tracking) .fiche-tracking-btn input { width: 10px; height: 10px; }
+    .fiche-container:not(.no-tracking) .fiche-logo img { height: 20px; }
+    .fiche-container:not(.no-tracking) .fiche-delete-btn { padding: 4px 6px; font-size: 8px; }
     
     /* MODE CHAT AGRANDI - fiche compacte */
     .fiche-container.chat-expanded .fiche-info-zone { flex: 0 0 280px; }
@@ -2915,7 +2933,7 @@
             </div>
             <div class="settings-row" style="margin-bottom:4px;">
               <span class="settings-label">Version actuelle (ce fichier)</span>
-              <span class="settings-value" style="color:#22c55e; font-weight:700;" id="currentVersionDisplay">v1524</span>
+              <span class="settings-value" style="color:#22c55e; font-weight:700;" id="currentVersionDisplay">v1525</span>
             </div>
             <div class="settings-row">
               <span class="settings-label">Version requise (Firebase)</span>
@@ -2925,7 +2943,7 @@
           
           <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
             <span style="font-size:11px; color:#94a3b8;">Nouvelle version:</span>
-            <input type="text" id="newVersionInput" value="1524" style="
+            <input type="text" id="newVersionInput" value="1525" style="
               flex:1;
               padding:8px 12px;
               border:2px solid #3b82f6;
@@ -2935,7 +2953,7 @@
               font-size:14px;
               font-weight:700;
               text-align:center;
-            " placeholder="ex: 1524">
+            " placeholder="ex: 1525">
           </div>
           
           <button class="settings-btn primary" onclick="forceUpdateAllUsers()" style="width:100%; background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%); padding:12px;">
@@ -3186,7 +3204,7 @@
 
   <script>
     // ================================================================
-    // === PhysiPro Moulage v1524 - Firebase Realtime DB ===
+    // === PhysiPro Moulage v1525 - Firebase Realtime DB ===
     // ================================================================
     
     /*
@@ -3295,8 +3313,12 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1524';
+    const APP_VERSION = '1525';
     let versionCheckInterval = null;
+    
+    // ═══════════════════════════════════════════════════════════════
+    // SYSTÈME DE VERSION v2 - Avec protection anti-boucle
+    // ═══════════════════════════════════════════════════════════════
     
     // Vérifier si une nouvelle version est disponible
     function startVersionCheck() {
@@ -3318,30 +3340,134 @@
           const requiredNum = parseInt(requiredVersion);
           const currentNum = parseInt(APP_VERSION);
           
-          // Si Firebase demande une version PLUS RÉCENTE que notre fichier = on doit rafraîchir
+          // Si Firebase demande une version PLUS RÉCENTE que notre fichier
           if (requiredNum > currentNum) {
+            // PROTECTION ANTI-BOUCLE: Vérifier si on a déjà essayé de rafraîchir
+            const lastRefreshAttempt = sessionStorage.getItem('versionRefreshAttempt');
+            const now = Date.now();
+            
+            if (lastRefreshAttempt) {
+              const timeSinceLastAttempt = now - parseInt(lastRefreshAttempt);
+              // Si on a rafraîchi il y a moins de 30 secondes, c'est une boucle
+              if (timeSinceLastAttempt < 30000) {
+                console.warn(`⚠️ BOUCLE DÉTECTÉE! Firebase=${requiredVersion}, Fichier=${APP_VERSION}`);
+                console.warn(`⚠️ Le fichier sur le serveur n'a pas encore été mis à jour.`);
+                // Afficher un message différent pour expliquer le problème
+                showVersionMismatchWarning(requiredVersion);
+                return;
+              }
+            }
+            
             console.log(`🔄 Nouvelle version requise: ${requiredVersion} (actuelle: ${APP_VERSION})`);
             showUpdateRequiredModal(requiredVersion);
           }
-          // Si notre fichier est PLUS RÉCENT que Firebase = on est admin avec nouveau fichier, mettre à jour Firebase
+          // Si notre fichier est PLUS RÉCENT que Firebase = admin avec nouveau fichier
           else if (requiredNum < currentNum) {
             console.log(`📱 Fichier plus récent (${APP_VERSION}) que Firebase (${requiredVersion})`);
             // Vérifier si c'est un admin (a la permission A)
             if (hasPermission('A')) {
               console.log(`🔧 Admin détecté - Mise à jour automatique de Firebase vers ${APP_VERSION}`);
               firebaseDb.ref('appVersion').set(APP_VERSION);
-              showToast(`✅ Firebase mis à jour vers v${APP_VERSION}`, 'success');
+              showToast(`✅ Firebase synchronisé: v${APP_VERSION}`, 'success');
             }
           }
           // Versions identiques = tout est OK
           else {
             console.log(`✅ Version ${APP_VERSION} - OK`);
+            // Nettoyer le flag de refresh
+            sessionStorage.removeItem('versionRefreshAttempt');
           }
         });
         
         console.log(`📱 Version ${APP_VERSION} - Vérification activée`);
-      }, 500); // Délai de 500ms pour s'assurer que l'auth est complète
+      }, 500);
     }
+    
+    // Afficher avertissement quand boucle détectée (pour admins)
+    function showVersionMismatchWarning(firebaseVersion) {
+      // Ne montrer qu'aux admins
+      if (!hasPermission('A')) {
+        // Pour les non-admins, juste ignorer et continuer
+        console.log(`📱 Version en attente de mise à jour serveur - Utilisation permise`);
+        sessionStorage.removeItem('versionRefreshAttempt');
+        return;
+      }
+      
+      const existingWarning = document.getElementById('versionMismatchWarning');
+      if (existingWarning) return; // Déjà affiché
+      
+      const warning = document.createElement('div');
+      warning.id = 'versionMismatchWarning';
+      warning.innerHTML = `
+        <div style="
+          position: fixed;
+          top: 10px;
+          right: 10px;
+          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+          padding: 15px 20px;
+          border-radius: 10px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+          z-index: 99999;
+          max-width: 350px;
+          border: 2px solid #fbbf24;
+        ">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+            <span style="font-size: 24px;">⚠️</span>
+            <strong style="color: #fff; font-size: 14px;">Désynchronisation détectée</strong>
+          </div>
+          <p style="color: #fef3c7; font-size: 12px; margin-bottom: 12px; line-height: 1.4;">
+            Firebase demande v${firebaseVersion} mais le serveur a v${APP_VERSION}.<br>
+            Le fichier n'a pas encore été mis à jour sur GitHub.
+          </p>
+          <div style="display: flex; gap: 8px;">
+            <button onclick="forceSyncVersion()" style="
+              flex: 1;
+              padding: 8px;
+              background: #22c55e;
+              color: white;
+              border: none;
+              border-radius: 6px;
+              font-size: 11px;
+              font-weight: 600;
+              cursor: pointer;
+            ">🔧 Forcer sync Firebase</button>
+            <button onclick="this.parentElement.parentElement.parentElement.remove()" style="
+              padding: 8px 12px;
+              background: rgba(255,255,255,0.2);
+              color: white;
+              border: none;
+              border-radius: 6px;
+              font-size: 11px;
+              cursor: pointer;
+            ">✕</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(warning);
+    }
+    
+    // Fonction admin pour forcer Firebase à prendre la version du fichier
+    function forceSyncVersion() {
+      if (!firebaseDb || !hasPermission('A')) {
+        showToast('❌ Permission refusée', 'error');
+        return;
+      }
+      
+      firebaseDb.ref('appVersion').set(APP_VERSION)
+        .then(() => {
+          showToast(`✅ Firebase forcé à v${APP_VERSION}`, 'success');
+          sessionStorage.removeItem('versionRefreshAttempt');
+          const warning = document.getElementById('versionMismatchWarning');
+          if (warning) warning.remove();
+          const modal = document.getElementById('versionUpdateModal');
+          if (modal) modal.remove();
+          document.body.style.overflow = '';
+        })
+        .catch(err => {
+          showToast('❌ Erreur: ' + err.message, 'error');
+        });
+    }
+    window.forceSyncVersion = forceSyncVersion;
     
     // Afficher le modal de mise à jour obligatoire
     function showUpdateRequiredModal(newVersion) {
@@ -3411,6 +3537,9 @@
     
     // Forcer le rafraîchissement complet
     function forceRefresh() {
+      // IMPORTANT: Enregistrer qu'on a tenté un rafraîchissement (pour détection boucle)
+      sessionStorage.setItem('versionRefreshAttempt', Date.now().toString());
+      
       // Vider le cache du Service Worker si présent
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -3557,7 +3686,7 @@
     let lastDataHash = ''; // Hash des données pour détecter les vrais changements
     let hasPendingLocalChanges = false; // NOUVEAU: Indique si des modifications locales sont en attente
     
-    // === PhysiPro Moulage v1524 - UI Optimized ===
+    // === PhysiPro Moulage v1525 - UI Optimized ===
     
     // ===== SECTION 1: VARIABLES GLOBALES =====
     let robotViewActive = false;
@@ -5584,7 +5713,7 @@
     // Exporter les données en fichier JSON
     function exportBackupJSON() {
       const backupData = {
-        version: 'v1524',
+        version: 'v1525',
         timestamp: new Date().toISOString(),
         moulages: cardsData,
         associations: cardAssociations,
@@ -10893,7 +11022,7 @@
 
     // ===== INITIALISATION =====
     document.addEventListener('DOMContentLoaded', async () => {
-      console.log('🚀 PhysiPro Moulage v1524 - Firebase Realtime DB');
+      console.log('🚀 PhysiPro Moulage v1525 - Firebase Realtime DB');
       
       // Permettre la connexion avec Enter
       document.getElementById('loginEmail').addEventListener('keypress', (e) => {
