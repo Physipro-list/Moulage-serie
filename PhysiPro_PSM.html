@@ -88,8 +88,9 @@ body {
 .logo-top-fixed{height:40px;display:flex;align-items:center;}
 .logo-top-fixed img{height:36px;width:auto;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5));}
 .logo-bottom-text{font-size:13px;font-weight:600;color:#fff;text-shadow:1px 1px 3px rgba(0,0,0,0.6);margin-top:-4px;}
-.logo-menu{position:fixed;top:0;left:145px;right:0;height:75px;background:linear-gradient(to bottom,#04152c 0%,#2a6bc9 100%);padding:0 20px;opacity:0;visibility:hidden;transform:translateY(-10px);transition:all .3s ease;z-index:99990;display:flex;align-items:center;gap:15px;box-shadow:0 4px 15px rgba(0,0,0,.4);}
+.logo-menu{position:fixed;top:0;left:0;right:0;height:75px;background:linear-gradient(to bottom,#04152c 0%,#2a6bc9 100%);padding:0 20px 0 160px;opacity:0;visibility:hidden;transform:translateY(-10px);transition:all .3s ease;z-index:100000;display:flex;align-items:center;gap:15px;box-shadow:0 4px 15px rgba(0,0,0,.4);}
 .logo-menu:hover{opacity:1;visibility:visible;transform:translateY(0);}
+.topbar.menu-open .tb-right,.topbar.menu-open .tb-center,.topbar.menu-open .tb-create-btn{opacity:0;pointer-events:none;transition:opacity .2s;}
 .logo-menu-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:4px 12px;font-family:'Segoe UI',sans-serif;color:#fff;cursor:pointer;transition:all .2s;border-radius:6px;background:transparent;border:2px solid transparent;min-width:80px;height:65px;text-decoration:none;position:relative;}
 .logo-menu-item:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);}
 .logo-menu-icon-img{height:40px;width:auto;object-fit:contain;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));transition:transform .2s;}
@@ -767,6 +768,21 @@ function initLogoMenu(currentMod){
     item.innerHTML='<img class="logo-menu-icon-img" src="'+m.img+'" alt="'+m.label+'"><span class="logo-menu-text" style="color:'+m.color+';">'+m.label+'</span>';
     menu.appendChild(item);
   });
+  /* Logo menu hover: hide topbar buttons (debounced) */
+  var flipC = document.getElementById('logoFlipContainer');
+  var topbar = flipC ? flipC.closest('.topbar') : null;
+  if (flipC && topbar) {
+    var _menuCloseTimer = null;
+    function menuOpen() { clearTimeout(_menuCloseTimer); topbar.classList.add('menu-open'); }
+    function menuClose() { _menuCloseTimer = setTimeout(function() { topbar.classList.remove('menu-open'); }, 120); }
+    flipC.addEventListener('mouseenter', menuOpen);
+    flipC.addEventListener('mouseleave', menuClose);
+    var logoMenuEl = document.getElementById('logoMenu');
+    if (logoMenuEl) {
+      logoMenuEl.addEventListener('mouseenter', menuOpen);
+      logoMenuEl.addEventListener('mouseleave', menuClose);
+    }
+  }
 }
 
 function handleGlobalSearch(val) {
@@ -1013,6 +1029,18 @@ function showToast(msg, type = 'info') {
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 3000);
 }
+
+/* ═══ BACKUP / RECOVERY LOG ═══ */
+function psmCreateBackup() {
+  if (!db) return;
+  var backup = { timestamp: new Date().toISOString(), psm: psmData };
+  var backupKey = 'backup_' + new Date().toISOString().replace(/[:.]/g, '-');
+  db.ref('psmBackups/' + backupKey).set(backup).then(function() {
+    console.log('💾 PSM backup créé:', backupKey);
+  }).catch(function(err) { console.error('❌ PSM backup error:', err.message); });
+}
+setInterval(function() { psmCreateBackup(); }, 30 * 60 * 1000);
+window.addEventListener('beforeunload', function() { psmCreateBackup(); });
 </script>
 </body>
 </html>

@@ -125,9 +125,10 @@
 
 /* ═══ LOGO NAV MENU (bandeau hover) ═══ */
 .logo-flip-container{position:relative;cursor:pointer;z-index:2;}
-.logo-menu{position:fixed;top:0;left:145px;right:0;height:75px;background:linear-gradient(to bottom,#04152c 0%,#2a6bc9 100%);padding:0 20px;opacity:0;visibility:hidden;transform:translateY(-10px);transition:all .3s ease;z-index:99990;display:flex;align-items:center;gap:15px;box-shadow:0 4px 15px rgba(0,0,0,.4);}
+.logo-menu{position:fixed;top:0;left:0;right:0;height:75px;background:linear-gradient(to bottom,#04152c 0%,#2a6bc9 100%);padding:0 20px 0 160px;opacity:0;visibility:hidden;transform:translateY(-10px);transition:all .3s ease;z-index:100000;display:flex;align-items:center;gap:15px;box-shadow:0 4px 15px rgba(0,0,0,.4);}
 .logo-flip-container:hover .logo-menu{opacity:1;visibility:visible;transform:translateY(0);}
 .logo-menu:hover{opacity:1;visibility:visible;transform:translateY(0);}
+.topbar.menu-open .tb-right,.topbar.menu-open .tb-center,.topbar.menu-open .tb-create-btn{opacity:0;pointer-events:none;transition:opacity .2s;}
 .logo-menu-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:4px 12px;font-family:'Segoe UI',sans-serif;color:#fff;cursor:pointer;transition:all .2s;border-radius:6px;background:transparent;border:2px solid transparent;min-width:80px;height:65px;text-decoration:none;position:relative;}
 .logo-menu-item:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);}
 .logo-menu-item.active{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);}
@@ -257,7 +258,7 @@
     .logs-filter-btn { padding: 5px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; background: rgba(0,0,0,0.3); color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s; }
     .logs-filter-btn:hover { background: rgba(59,130,246,0.3); color: #fff; }
     .logs-filter-btn.active { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; border-color: #1d4ed8; }
-    .logs-list-container { max-height: 220px; overflow-y: auto; border-radius: 6px; border: 1px solid rgba(74,142,245,0.3); background: rgba(0,0,0,0.2); padding: 4px; }
+    .logs-list-container { max-height: 450px; overflow-y: auto; border-radius: 6px; border: 1px solid rgba(74,142,245,0.3); background: rgba(0,0,0,0.2); padding: 4px; }
     .log-entry { padding: 8px 10px; border-radius: 6px; cursor: pointer; transition: all 0.15s; margin: 3px 0; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); }
     .log-entry:hover { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.3); }
     .log-entry.expanded { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.4); }
@@ -3802,6 +3803,21 @@ function initLogoMenu(currentMod){
     item.innerHTML='<img class="logo-menu-icon-img" src="'+m.img+'" alt="'+m.label+'"><span class="logo-menu-text" style="color:'+m.color+';">'+m.label+'</span>';
     menu.appendChild(item);
   });
+  /* Logo menu hover: hide topbar buttons (debounced) */
+  var flipC = document.getElementById('logoFlipContainer');
+  var topbar = flipC ? flipC.closest('.topbar') : null;
+  if (flipC && topbar) {
+    var _menuCloseTimer = null;
+    function menuOpen() { clearTimeout(_menuCloseTimer); topbar.classList.add('menu-open'); }
+    function menuClose() { _menuCloseTimer = setTimeout(function() { topbar.classList.remove('menu-open'); }, 120); }
+    flipC.addEventListener('mouseenter', menuOpen);
+    flipC.addEventListener('mouseleave', menuClose);
+    var logoMenuEl = document.getElementById('logoMenu');
+    if (logoMenuEl) {
+      logoMenuEl.addEventListener('mouseenter', menuOpen);
+      logoMenuEl.addEventListener('mouseleave', menuClose);
+    }
+  }
 }
 
 
@@ -5806,6 +5822,9 @@ function initLogoMenu(currentMod){
       else showToast('❌ Erreur backup', 'error');
     }
     window.createBackupNow = createBackupNow;
+    
+    // Auto-backup every 30 minutes
+    setInterval(function() { createBackup(); }, 30 * 60 * 1000);
     
     async function resetAllData() {
       if (!confirm('⚠️ Supprimer TOUTES les données ?')) return;
@@ -10099,6 +10118,17 @@ function initLogoMenu(currentMod){
         console.error('Erreur chargement logs:', e);
         activityLogs = [];
       }
+      // Also load from Firebase (Firebase wins if more entries)
+      if (typeof firebaseDb !== 'undefined' && firebaseDb) {
+        firebaseDb.ref('moulageLogs').once('value').then(function(snap) {
+          var fbLogs = snap.val();
+          if (fbLogs && Array.isArray(fbLogs) && fbLogs.length > activityLogs.length) {
+            activityLogs = fbLogs;
+            try { localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(activityLogs)); } catch(e) {}
+            console.log('🔄 Logs loaded from Firebase:', fbLogs.length, 'entries');
+          }
+        }).catch(function(e) { console.log('Log Firebase load error:', e.message); });
+      }
     }
     
     // Sauvegarder les logs dans localStorage
@@ -10109,6 +10139,12 @@ function initLogoMenu(currentMod){
           activityLogs = activityLogs.slice(-MAX_LOGS);
         }
         localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(activityLogs));
+        // Sync to Firebase
+        if (typeof firebaseDb !== 'undefined' && firebaseDb) {
+          firebaseDb.ref('moulageLogs').set(activityLogs).catch(function(e) {
+            console.error('Log Firebase sync error:', e.message);
+          });
+        }
       } catch (e) {
         console.error('Erreur sauvegarde logs:', e);
       }
@@ -10170,14 +10206,12 @@ function initLogoMenu(currentMod){
       
       if (!container) return;
       
-      // Filtrer les logs
       let filteredLogs = activityLogs;
       if (currentLogFilter !== 'all') {
         filteredLogs = activityLogs.filter(log => log.type === currentLogFilter);
       }
       
-      // Trier par date décroissante (plus récent en premier)
-      filteredLogs = [...filteredLogs].reverse().slice(0, 200); // Limiter à 200 entrées
+      filteredLogs = [...filteredLogs].reverse().slice(0, 300);
       
       if (filteredLogs.length === 0) {
         container.innerHTML = '<div class="logs-empty">Aucune activité enregistrée</div>';
@@ -10185,52 +10219,62 @@ function initLogoMenu(currentMod){
         return;
       }
       
-      // Emojis et couleurs par type
       const typeConfig = {
-        move: { emoji: '🟠', label: 'dépl.' },
-        message: { emoji: '💬', label: 'msg' },
-        edit: { emoji: '🔵', label: 'édit.' },
-        create: { emoji: '🟢', label: 'créa.' },
-        delete: { emoji: '🔴', label: 'suppr.' },
-        sync: { emoji: '☁️', label: 'sync' },
-        auth: { emoji: '🔐', label: 'auth' }
+        move: { emoji: '🟠', label: 'Déplacement', color: '#f59e0b' },
+        message: { emoji: '💬', label: 'Message', color: '#8b5cf6' },
+        edit: { emoji: '🔵', label: 'Modification', color: '#3b82f6' },
+        create: { emoji: '🟢', label: 'Création', color: '#22c55e' },
+        delete: { emoji: '🔴', label: 'Suppression', color: '#ef4444' },
+        sync: { emoji: '☁️', label: 'Sync', color: '#06b6d4' },
+        auth: { emoji: '🔐', label: 'Connexion', color: '#ec4899' }
       };
       
-      let html = '';
-      filteredLogs.forEach((log, idx) => {
-        const config = typeConfig[log.type] || { emoji: '📋', label: log.type };
+      let html = '<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+      html += '<thead><tr style="background:rgba(59,130,246,.15);position:sticky;top:0;z-index:1;">';
+      html += '<th style="padding:5px 6px;text-align:left;color:#60a5fa;font-size:9px;border-bottom:1px solid rgba(59,130,246,.3);white-space:nowrap;">Date</th>';
+      html += '<th style="padding:5px 6px;text-align:left;color:#60a5fa;font-size:9px;border-bottom:1px solid rgba(59,130,246,.3);">Heure</th>';
+      html += '<th style="padding:5px 6px;text-align:left;color:#60a5fa;font-size:9px;border-bottom:1px solid rgba(59,130,246,.3);">Utilisateur</th>';
+      html += '<th style="padding:5px 6px;text-align:left;color:#60a5fa;font-size:9px;border-bottom:1px solid rgba(59,130,246,.3);">Type</th>';
+      html += '<th style="padding:5px 6px;text-align:left;color:#60a5fa;font-size:9px;border-bottom:1px solid rgba(59,130,246,.3);">Action</th>';
+      html += '<th style="padding:5px 6px;text-align:left;color:#60a5fa;font-size:9px;border-bottom:1px solid rgba(59,130,246,.3);">Détails</th>';
+      html += '</tr></thead><tbody>';
+      
+      let lastDate = '';
+      filteredLogs.forEach((log) => {
+        const config = typeConfig[log.type] || { emoji: '📋', label: log.type, color: '#94a3b8' };
         const date = new Date(log.timestamp);
-        const timeStr = date.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+        const timeStr = date.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const dateStr = date.toLocaleDateString('fr-CA');
         const userName = log.user || 'Système';
-        
-        // Construire les détails
-        let detailsHtml = '';
         const details = log.details || {};
-        if (details.cardId) detailsHtml += `<div class="log-detail-row"><span class="log-detail-label">ID Carte:</span><span class="log-detail-value">${details.cardId}</span></div>`;
-        if (details.cardName) detailsHtml += `<div class="log-detail-row"><span class="log-detail-label">Carte:</span><span class="log-detail-value">${escapeHtml(details.cardName)}</span></div>`;
-        if (details.order) detailsHtml += `<div class="log-detail-row"><span class="log-detail-label">Commande:</span><span class="log-detail-value">${escapeHtml(details.order)}</span></div>`;
-        if (details.from) detailsHtml += `<div class="log-detail-row"><span class="log-detail-label">De:</span><span class="log-detail-value">${details.from}</span></div>`;
-        if (details.to) detailsHtml += `<div class="log-detail-row"><span class="log-detail-label">Vers:</span><span class="log-detail-value">${details.to}</span></div>`;
-        if (details.field) detailsHtml += `<div class="log-detail-row"><span class="log-detail-label">Champ:</span><span class="log-detail-value">${details.field}</span></div>`;
-        if (details.oldValue !== undefined) detailsHtml += `<div class="log-detail-row"><span class="log-detail-label">Avant:</span><span class="log-detail-value">${escapeHtml(String(details.oldValue || '(vide)'))}</span></div>`;
-        if (details.newValue !== undefined) detailsHtml += `<div class="log-detail-row"><span class="log-detail-label">Après:</span><span class="log-detail-value">${escapeHtml(String(details.newValue || '(vide)'))}</span></div>`;
         
-        html += `
-          <div class="log-entry" onclick="this.classList.toggle('expanded')">
-            <div class="log-entry-header">
-              <span class="log-entry-emoji">${config.emoji}</span>
-              <span class="log-entry-date">${timeStr}</span>
-              <span class="log-entry-user">${escapeHtml(userName)}</span>
-              <span class="log-entry-type ${log.type}">${config.label}</span>
-              <span class="log-entry-message">${escapeHtml(log.action)}</span>
-              <span class="log-entry-expand">▼</span>
-            </div>
-            ${detailsHtml ? `<div class="log-details">${detailsHtml}</div>` : ''}
-          </div>
-        `;
+        // Date separator
+        if (dateStr !== lastDate) {
+          lastDate = dateStr;
+          html += '<tr><td colspan="6" style="padding:6px;background:rgba(255,255,255,.05);color:#94a3b8;font-weight:700;font-size:10px;border-bottom:1px solid rgba(255,255,255,.1);">📅 ' + dateStr + '</td></tr>';
+        }
+        
+        // Build details string
+        let detailParts = [];
+        if (details.cardName) detailParts.push(escapeHtml(details.cardName));
+        if (details.order) detailParts.push('#' + escapeHtml(details.order));
+        if (details.from && details.to) detailParts.push(details.from + ' → ' + details.to);
+        else if (details.from) detailParts.push('de: ' + details.from);
+        else if (details.to) detailParts.push('vers: ' + details.to);
+        if (details.field) detailParts.push(details.field);
+        if (details.oldValue !== undefined && details.newValue !== undefined) detailParts.push('"' + (details.oldValue || '∅') + '" → "' + (details.newValue || '∅') + '"');
+        
+        html += '<tr style="border-bottom:1px solid rgba(255,255,255,.04);">';
+        html += '<td style="padding:4px 6px;color:#64748b;white-space:nowrap;">' + dateStr + '</td>';
+        html += '<td style="padding:4px 6px;color:#94a3b8;white-space:nowrap;">' + timeStr + '</td>';
+        html += '<td style="padding:4px 6px;color:#60a5fa;font-weight:600;white-space:nowrap;">' + escapeHtml(userName) + '</td>';
+        html += '<td style="padding:4px 6px;white-space:nowrap;"><span style="background:' + config.color + ';color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600;">' + config.emoji + ' ' + config.label + '</span></td>';
+        html += '<td style="padding:4px 6px;color:#e2e8f0;">' + escapeHtml(log.action) + '</td>';
+        html += '<td style="padding:4px 6px;color:#94a3b8;font-size:9px;max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(detailParts.join(' | ')) + '">' + escapeHtml(detailParts.join(' | ')) + '</td>';
+        html += '</tr>';
       });
       
+      html += '</tbody></table>';
       container.innerHTML = html;
       if (countEl) countEl.textContent = `${filteredLogs.length}${currentLogFilter !== 'all' ? ' filtrées' : ''} / ${activityLogs.length} total`;
     }

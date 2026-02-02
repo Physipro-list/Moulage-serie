@@ -49,8 +49,9 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
 .logo-top-fixed{height:40px;display:flex;align-items:center;}
 .logo-top-fixed img{height:36px;width:auto;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));}
 .logo-bottom-text{font-size:13px;font-weight:600;color:#fff;text-shadow:1px 1px 3px rgba(0,0,0,.6);margin-top:-4px;}
-.logo-menu{position:fixed;top:0;left:145px;right:0;height:75px;background:linear-gradient(to bottom,#04152c 0%,#2a6bc9 100%);padding:0 20px;opacity:0;visibility:hidden;transform:translateY(-10px);transition:all .3s ease;z-index:99990;display:flex;align-items:center;gap:15px;box-shadow:0 4px 15px rgba(0,0,0,.4);}
+.logo-menu{position:fixed;top:0;left:0;right:0;height:75px;background:linear-gradient(to bottom,#04152c 0%,#2a6bc9 100%);padding:0 20px 0 160px;opacity:0;visibility:hidden;transform:translateY(-10px);transition:all .3s ease;z-index:100000;display:flex;align-items:center;gap:15px;box-shadow:0 4px 15px rgba(0,0,0,.4);}
 .logo-menu:hover{opacity:1;visibility:visible;transform:translateY(0);}
+.topbar.menu-open .tb-right,.topbar.menu-open .tb-center,.topbar.menu-open .tb-create-btn{opacity:0;pointer-events:none;transition:opacity .2s;}
 .logo-menu-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:4px 12px;font-family:'Segoe UI',sans-serif;color:#fff;cursor:pointer;transition:all .2s;border-radius:6px;background:transparent;border:2px solid transparent;min-width:80px;height:65px;text-decoration:none;position:relative;}
 .logo-menu-item:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);}
 .logo-menu-icon-img{height:40px;width:auto;object-fit:contain;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));transition:transform .2s;}
@@ -1372,6 +1373,21 @@ function initLogoMenu(currentMod){
     item.innerHTML='<img class="logo-menu-icon-img" src="'+m.img+'" alt="'+m.label+'"><span class="logo-menu-text" style="color:'+m.color+';">'+m.label+'</span>';
     menu.appendChild(item);
   });
+  /* Logo menu hover: hide topbar buttons (debounced) */
+  var flipC = document.getElementById('logoFlipContainer');
+  var topbar = flipC ? flipC.closest('.topbar') : null;
+  if (flipC && topbar) {
+    var _menuCloseTimer = null;
+    function menuOpen() { clearTimeout(_menuCloseTimer); topbar.classList.add('menu-open'); }
+    function menuClose() { _menuCloseTimer = setTimeout(function() { topbar.classList.remove('menu-open'); }, 120); }
+    flipC.addEventListener('mouseenter', menuOpen);
+    flipC.addEventListener('mouseleave', menuClose);
+    var logoMenuEl = document.getElementById('logoMenu');
+    if (logoMenuEl) {
+      logoMenuEl.addEventListener('mouseenter', menuOpen);
+      logoMenuEl.addEventListener('mouseleave', menuClose);
+    }
+  }
 }
 
 // ===== TOAST =====
@@ -1749,6 +1765,18 @@ function magentSaveInvData() {
   } catch (e) {
     console.log('Erreur sauvegarde inventaire Mag+Ent:', e);
   }
+  // Debounced Firebase sync
+  clearTimeout(_magentInvSaveTimeout);
+  _magentInvSaveTimeout = setTimeout(function() { magentPushInvToFB(); }, 800);
+}
+
+function magentPushInvToFB() {
+  if (!db) return;
+  db.ref('magentInventaire').set({ items: magentInvItems, lastUpdated: new Date().toISOString() }).then(function() {
+    console.log('✅ Firebase magentInventaire saved');
+  }).catch(function(err) {
+    console.error('❌ Firebase magentInventaire error:', err.message);
+  });
 }
 
 // Ouvrir le modal de création (même style que page Inventaire)
@@ -2654,11 +2682,38 @@ function magentShowDeliveryNotification(order) {
   showToast('📦 Commande livrée avec succès!', 'success');
 }
 
+var _magentSaveTimeout = null;
+var _magentInvSaveTimeout = null;
+var _magentFBWriting = false;
+
 function magentSaveData() {
   try {
     localStorage.setItem('physipro_magent_orders', JSON.stringify(magentOrders));
     localStorage.setItem('physipro_magent_current', magentCurrentOrderId || '');
-  } catch(e) { console.error('Erreur:', e); }
+  } catch(e) { console.error('Erreur localStorage:', e); }
+  // Debounced Firebase sync
+  clearTimeout(_magentSaveTimeout);
+  _magentSaveTimeout = setTimeout(function() { magentPushOrdersToFB(); }, 800);
+}
+
+function magentPushOrdersToFB() {
+  if (!db) return;
+  _magentFBWriting = true;
+  var data = { orders: magentOrders, currentOrderId: magentCurrentOrderId || '', lastUpdated: new Date().toISOString() };
+  db.ref('magentOrders').set(data).then(function() {
+    _magentFBWriting = false;
+    console.log('✅ Firebase magentOrders saved');
+  }).catch(function(err) {
+    _magentFBWriting = false;
+    console.error('❌ Firebase magentOrders error:', err.message);
+    // Retry once
+    setTimeout(function() {
+      if (!db) return;
+      db.ref('magentOrders').set(data).catch(function(e2) {
+        console.error('❌ Firebase magentOrders retry failed:', e2.message);
+      });
+    }, 3000);
+  });
 }
 
 function magentLoadData() {
@@ -2673,11 +2728,76 @@ function magentLoadData() {
 function initMagentPage() {
   magentLoadData();
   magentLoadLog();
+  magentLoadInvData();
   magentInitPanel();
+  // Setup Firebase listeners for real-time sync
+  magentSetupFBListeners();
   magentRenderOrders();
   magentRenderOrdersList();
   magentUpdateFooterCounts();
 }
+
+/* ═══ FIREBASE REAL-TIME LISTENERS ═══ */
+function magentSetupFBListeners() {
+  if (!db) { console.log('⚠️ Firebase non disponible, mode local uniquement'); return; }
+  
+  // Listen for orders changes from other users
+  db.ref('magentOrders').on('value', function(snapshot) {
+    if (_magentFBWriting) return; // Skip if we're the ones writing
+    var fbData = snapshot.val();
+    if (!fbData) return;
+    
+    // Merge: Firebase wins if newer
+    var localTime = localStorage.getItem('physipro_magent_lastUpdate') || '';
+    if (fbData.lastUpdated && fbData.lastUpdated > localTime) {
+      magentOrders = fbData.orders || [];
+      magentCurrentOrderId = fbData.currentOrderId || null;
+      // Save to localStorage as backup
+      try {
+        localStorage.setItem('physipro_magent_orders', JSON.stringify(magentOrders));
+        localStorage.setItem('physipro_magent_current', magentCurrentOrderId || '');
+        localStorage.setItem('physipro_magent_lastUpdate', fbData.lastUpdated);
+      } catch(e) {}
+      magentRenderOrders();
+      magentRenderOrdersList();
+      magentUpdateFooterCounts();
+      console.log('🔄 magentOrders synced from Firebase');
+    }
+  });
+  
+  // Listen for inventory changes
+  db.ref('magentInventaire').on('value', function(snapshot) {
+    var fbData = snapshot.val();
+    if (!fbData || !fbData.items) return;
+    magentInvItems = fbData.items;
+    try { localStorage.setItem('magentInventaire', JSON.stringify(magentInvItems)); } catch(e) {}
+    magentRenderInvCards();
+    console.log('🔄 magentInventaire synced from Firebase');
+  });
+  
+  console.log('✅ Entrepôt Firebase listeners active');
+}
+
+/* ═══ BACKUP / RECOVERY LOG ═══ */
+function magentCreateBackup() {
+  if (!db) return;
+  var backup = {
+    timestamp: new Date().toISOString(),
+    orders: magentOrders,
+    inventory: magentInvItems,
+    deliveryLog: magentDeliveryLog,
+    materiaux: JSON.parse(localStorage.getItem('physipro_materiaux_stock') || '{}')
+  };
+  var backupKey = 'backup_' + new Date().toISOString().replace(/[:.]/g, '-');
+  db.ref('magentBackups/' + backupKey).set(backup).then(function() {
+    console.log('💾 Backup créé:', backupKey);
+  }).catch(function(err) {
+    console.error('❌ Backup error:', err.message);
+  });
+}
+
+// Auto-backup every 30 minutes
+setInterval(function() { magentCreateBackup(); }, 30 * 60 * 1000);
 
 window.magentToggleMat = magentToggleMat;
 window.magentFilterPanel = magentFilterPanel;
@@ -2837,6 +2957,9 @@ window.closeMagentInvModal = closeMagentInvModal;
 window.confirmMagentInvAdd = confirmMagentInvAdd;
 window.magentEditInvCard = magentEditInvCard;
 window.onMagentInvItemChange = onMagentInvItemChange;
+
+// Backup on page unload
+window.addEventListener('beforeunload', function() { magentCreateBackup(); });
 
 </script>
 </body>
