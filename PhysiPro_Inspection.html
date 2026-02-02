@@ -296,7 +296,7 @@ body.col-resizing *{cursor:col-resize!important;}
 <!-- INSPECTION -->
 <div class="content active" id="tab-inspection">
   <div class="entry-bar">
-    <label>📋 #</label><input type="text" id="insp-bon" placeholder="# bon + Entrée" onkeydown="if(event.key==='Enter')scanBon('inspection')">
+    <label>📋 #</label><input type="text" id="insp-bon" placeholder="# bon + Entrée" onkeydown="if(event.key==='Enter')scanBon('inspection')"><span class="zoom-btn" onclick="doRefresh('inspection')" title="Rafraîchir">🔄</span>
     <div class="divider"></div>
     <span class="zoom-btn" onclick="zoomTable(-1)" title="Réduire texte">▼</span><span class="zoom-btn" onclick="zoomTable(1)" title="Agrandir texte">▲</span>
     <button class="btn-sep" onclick="addDateSep('inspection')">📅 Séparation</button>
@@ -311,7 +311,7 @@ body.col-resizing *{cursor:col-resize!important;}
 <!-- COUTURE -->
 <div class="content" id="tab-couture">
   <div class="entry-bar">
-    <label>🧵 #</label><input type="text" id="cout-bon" placeholder="# bon + Entrée" onkeydown="if(event.key==='Enter')scanBon('couture')">
+    <label>🧵 #</label><input type="text" id="cout-bon" placeholder="# bon + Entrée" onkeydown="if(event.key==='Enter')scanBon('couture')"><span class="zoom-btn" onclick="doRefresh('couture')" title="Rafraîchir">🔄</span>
     <div class="divider"></div>
     <span class="zoom-btn" onclick="zoomTable(-1)" title="Réduire texte">▼</span><span class="zoom-btn" onclick="zoomTable(1)" title="Agrandir texte">▲</span>
     <button class="btn-sep" onclick="addDateSep('couture')">📅 Séparation</button>
@@ -787,6 +787,27 @@ var currentZoom=11;
 function zoomTable(dir){currentZoom=Math.max(8,Math.min(18,currentZoom+dir));document.documentElement.style.setProperty('--tbl-zoom',currentZoom+'px');}
 function addDateSep(dept){var md=gmd(dept);var rows=md.rows;rows.push({id:'date-'+Date.now(),type:'date',dateLabel:todayStr()});md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('📅 Séparation ajoutée','success');}
 function onSearchInput(){var t=document.querySelector('.content.active');if(t){var n=t.id.replace('tab-','');if(n==='inspection'||n==='couture')renderTable(n);}}
+function doRefresh(dept){
+  renderTable(dept);
+  if(fbDb&&fbUser){
+    setSyncBadge('syncing');
+    fbDb.ref(FB_PATHS[dept]).once('value').then(function(snap){
+      var fbData=snap.val();
+      if(fbData){
+        var lk=dept==='inspection'?IK:CK;
+        safeLSSet(lk,JSON.stringify(fbData));
+      }
+      renderTable(dept);
+      setSyncBadge('online');
+      showToast('🔄 Rafraîchi','success');
+    }).catch(function(e){
+      setSyncBadge('offline');
+      showToast('⚠️ Erreur sync','error');
+    });
+  }else{
+    showToast('🔄 Rafraîchi (local)','info');
+  }
+}
 function getSF(){return(document.getElementById('global-search').value||'').toLowerCase();}
 
 /* ═══ COLUMN CONFIG SYSTEM ═══ */
