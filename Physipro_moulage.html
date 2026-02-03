@@ -11654,28 +11654,72 @@ function initLogoMenu(currentMod){
       if (!token) return [];
       
       try {
-        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children?$filter=file ne null`;
+        // Récupérer TOUS les fichiers du dossier avec les URLs de téléchargement
+        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children?$select=id,name,file,@microsoft.graph.downloadUrl,thumbnails`;
         const response = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
-        if (!response.ok) throw new Error('Erreur récupération photos');
-        
-        const data = await response.json();
-        
-        // Filtrer pour garder uniquement les images
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
-        const photos = data.value?.filter(file => {
-          const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
-          return imageExtensions.includes(ext);
-        }) || [];
-        
-        // Ajouter les URLs de téléchargement
-        for (const photo of photos) {
-          photo.downloadUrl = photo['@microsoft.graph.downloadUrl'];
+        if (!response.ok) {
+          console.error('❌ Erreur API OneDrive:', response.status, response.statusText);
+          throw new Error('Erreur récupération photos');
         }
         
-        return photos;
+        const data = await response.json();
+        console.log(`📁 Fichiers trouvés dans le dossier:`, data.value?.length || 0);
+        
+        // Log tous les fichiers pour debug
+        if (data.value) {
+          data.value.forEach(f => console.log(`  - ${f.name} (${f.file ? 'fichier' : 'dossier'})`));
+        }
+        
+        // Filtrer pour garder uniquement les images (inclut HEIC pour iPhone)
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.heic', '.heif', '.tiff', '.tif'];
+        const photos = (data.value || []).filter(item => {
+          // Vérifier que c'est un fichier (pas un dossier)
+          if (!item.file) return false;
+          
+          // Vérifier l'extension
+          const name = item.name.toLowerCase();
+          const lastDot = name.lastIndexOf('.');
+          if (lastDot === -1) return false;
+          
+          const ext = name.slice(lastDot);
+          return imageExtensions.includes(ext);
+        });
+        
+        console.log(`📷 Photos filtrées:`, photos.length);
+        
+        // Ajouter/récupérer les URLs de téléchargement
+        for (const photo of photos) {
+          // L'URL peut être dans différentes propriétés selon la réponse
+          photo.downloadUrl = photo['@microsoft.graph.downloadUrl'] || photo['@content.downloadUrl'];
+          
+          // Si pas d'URL, essayer de la récupérer individuellement
+          if (!photo.downloadUrl) {
+            try {
+              const itemResponse = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${photo.id}?$select=@microsoft.graph.downloadUrl`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (itemResponse.ok) {
+                const itemData = await itemResponse.json();
+                photo.downloadUrl = itemData['@microsoft.graph.downloadUrl'];
+              }
+            } catch (e) {
+              console.warn(`⚠️ Impossible de récupérer URL pour ${photo.name}`);
+            }
+          }
+          
+          console.log(`  📷 ${photo.name} - URL: ${photo.downloadUrl ? 'OK' : 'MANQUANTE'}`);
+        }
+        
+        // Filtrer les photos sans URL
+        const validPhotos = photos.filter(p => p.downloadUrl);
+        if (validPhotos.length < photos.length) {
+          console.warn(`⚠️ ${photos.length - validPhotos.length} photo(s) sans URL ignorée(s)`);
+        }
+        
+        return validPhotos;
         
       } catch (error) {
         console.error('❌ Erreur récupération photos:', error);
