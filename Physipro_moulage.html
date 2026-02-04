@@ -3971,7 +3971,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1562';
+    const APP_VERSION = '1563';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -4011,140 +4011,89 @@
       // NETTOYER les anciennes clés au démarrage
       cleanOldVersionKeys();
       
-      // DÉSACTIVER SUR MOBILE - trop de problèmes de cache
-      if (isMobileDevice()) {
-        console.log(`📱 Version ${APP_VERSION} - Vérification désactivée sur mobile`);
-        // Sur mobile, on synchronise Firebase silencieusement si notre version est plus récente
-        if (firebaseDb) {
-          firebaseDb.ref('appVersion').once('value').then(snapshot => {
-            const fbVersion = parseInt(snapshot.val() || '0');
-            const localVersion = parseInt(APP_VERSION);
-            if (localVersion > fbVersion) {
-              firebaseDb.ref('appVersion').set(APP_VERSION);
-              console.log(`📱 Firebase mis à jour silencieusement: v${APP_VERSION}`);
-            }
-          });
-        }
+      // Synchroniser Firebase silencieusement (mettre à jour si notre version est plus récente)
+      if (firebaseDb) {
+        firebaseDb.ref('appVersion').once('value').then(snapshot => {
+          const fbVersion = parseInt(snapshot.val() || '0');
+          const localVersion = parseInt(APP_VERSION);
+          if (localVersion > fbVersion) {
+            firebaseDb.ref('appVersion').set(APP_VERSION);
+            console.log(`✅ Firebase synchronisé silencieusement: v${APP_VERSION}`);
+          } else {
+            console.log(`✅ Version ${APP_VERSION} - OK`);
+          }
+        }).catch(err => console.log('Version sync error:', err));
+      }
+      
+      // DÉMARRER le rafraîchissement automatique toutes les 30 minutes
+      startAutoRefresh();
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // RAFRAÎCHISSEMENT AUTOMATIQUE TOUTES LES 30 MINUTES
+    // ═══════════════════════════════════════════════════════════════
+    
+    let autoRefreshInterval = null;
+    let refreshPending = false;
+    const AUTO_REFRESH_DELAY = 30 * 60 * 1000; // 30 minutes en millisecondes
+    
+    function startAutoRefresh() {
+      // Éviter les doublons
+      if (autoRefreshInterval) return;
+      
+      console.log(`⏰ Rafraîchissement automatique activé (toutes les 30 min)`);
+      
+      autoRefreshInterval = setInterval(() => {
+        tryAutoRefresh();
+      }, AUTO_REFRESH_DELAY);
+    }
+    
+    function tryAutoRefresh() {
+      // Vérifier si une fiche est ouverte
+      const ficheOverlay = document.getElementById('ficheOverlay');
+      const isFicheOpen = ficheOverlay && ficheOverlay.classList.contains('active');
+      
+      // Vérifier si la fiche mobile est ouverte
+      const mobileFiche = document.getElementById('mobileFichePage');
+      const isMobileFicheOpen = mobileFiche && mobileFiche.classList.contains('active');
+      
+      // Vérifier si le chat mobile est ouvert
+      const mobileChat = document.getElementById('mobileChatPage');
+      const isMobileChatOpen = mobileChat && mobileChat.classList.contains('active');
+      
+      // Vérifier si les photos mobile sont ouvertes
+      const mobilePhotos = document.getElementById('mobilePhotosPage');
+      const isMobilePhotosOpen = mobilePhotos && mobilePhotos.classList.contains('active');
+      
+      // Si quelque chose est ouvert, attendre
+      if (isFicheOpen || isMobileFicheOpen || isMobileChatOpen || isMobilePhotosOpen) {
+        console.log('⏳ Rafraîchissement en attente (fiche/chat ouvert)...');
+        refreshPending = true;
         return;
       }
       
-      // PC/Desktop seulement
-      if (!firebaseDb || versionListenerActive) return;
-      versionListenerActive = true;
-      
-      setTimeout(() => {
-        firebaseDb.ref('appVersion').once('value')
-          .then((snapshot) => {
-            handleVersionCheck(snapshot.val());
-            
-            // Écouter les changements futurs (desktop only)
-            firebaseDb.ref('appVersion').on('value', (snap) => {
-              if (versionCheckDone) {
-                handleVersionCheck(snap.val());
-              }
-            });
-          })
-          .catch(err => console.error('Erreur version check:', err));
-        
-        console.log(`🖥️ Version ${APP_VERSION} - Vérification activée (desktop)`);
-      }, 2000);
+      // Tout est fermé, on peut rafraîchir
+      console.log('🔄 Rafraîchissement automatique...');
+      doSilentRefresh();
     }
     
-    function handleVersionCheck(firebaseVersion) {
-      if (!firebaseVersion) {
-        console.log(`📱 Firebase initialisé à v${APP_VERSION}`);
-        firebaseDb.ref('appVersion').set(APP_VERSION);
-        versionCheckDone = true;
-        return;
+    // Vérifier si on peut rafraîchir quand une fiche est fermée
+    function checkPendingRefresh() {
+      if (refreshPending) {
+        console.log('🔄 Rafraîchissement en attente exécuté...');
+        refreshPending = false;
+        setTimeout(() => {
+          doSilentRefresh();
+        }, 500);
       }
-      
-      const firebaseNum = parseInt(firebaseVersion);
-      const localNum = parseInt(APP_VERSION);
-      
-      console.log(`🖥️ Version locale: ${APP_VERSION}, Firebase: ${firebaseVersion}`);
-      
-      // Versions identiques = OK
-      if (firebaseNum === localNum) {
-        console.log(`✅ Version ${APP_VERSION} - OK`);
-        hideVersionBanner();
-        versionCheckDone = true;
-        return;
-      }
-      
-      // Fichier plus récent = sync Firebase
-      if (localNum > firebaseNum) {
-        console.log(`🖥️ Sync Firebase: v${APP_VERSION}`);
-        versionCheckDone = true;
-        firebaseDb.ref('appVersion').set(APP_VERSION)
-          .then(() => {
-            showToast(`✅ Firebase synchronisé: v${APP_VERSION}`, 'success');
-            hideVersionBanner();
-          });
-        return;
-      }
-      
-      // Firebase plus récent = afficher bandeau (desktop seulement)
-      versionCheckDone = true;
-      console.log(`🔄 Nouvelle version disponible: ${firebaseVersion}`);
-      showVersionBanner(firebaseVersion);
     }
     
-    // Bandeau de mise à jour (desktop seulement)
-    function showVersionBanner(newVersion) {
-      hideVersionBanner();
-      
-      const banner = document.createElement('div');
-      banner.id = 'versionBanner';
-      banner.innerHTML = `
-        <div style="
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-          padding: 10px 15px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          z-index: 999999;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-          flex-wrap: wrap;
-        ">
-          <span style="color: white; font-size: 13px;">
-            🔄 <strong>v${newVersion}</strong> disponible
-          </span>
-          <button onclick="doVersionRefresh()" style="
-            padding: 6px 14px;
-            background: #22c55e;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-weight: 600;
-            font-size: 12px;
-            cursor: pointer;
-          ">Rafraîchir</button>
-          <button onclick="hideVersionBanner()" style="
-            padding: 6px 12px;
-            background: rgba(255,255,255,0.2);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 12px;
-            cursor: pointer;
-          ">✕</button>
-        </div>
-      `;
-      document.body.appendChild(banner);
+    // Rafraîchissement silencieux (sans vider le cache agressivement)
+    function doSilentRefresh() {
+      window.location.reload();
     }
     
-    function hideVersionBanner() {
-      const banner = document.getElementById('versionBanner');
-      if (banner) banner.remove();
-    }
-    window.hideVersionBanner = hideVersionBanner;
-    
-    // Rafraîchir (desktop)
+    // Fonction de rafraîchissement manuel (garde la compatibilité)
     function doVersionRefresh() {
       if ('caches' in window) {
         caches.keys().then(names => names.forEach(name => caches.delete(name)));
@@ -4159,6 +4108,7 @@
       }, 300);
     }
     window.doVersionRefresh = doVersionRefresh;
+    window.checkPendingRefresh = checkPendingRefresh;
     
     // Forcer Firebase (admin)
     function forceSyncVersion() {
@@ -4170,7 +4120,6 @@
       firebaseDb.ref('appVersion').set(APP_VERSION)
         .then(() => {
           showToast(`✅ Firebase forcé à v${APP_VERSION}`, 'success');
-          hideVersionBanner();
         })
         .catch(err => showToast('❌ Erreur: ' + err.message, 'error'));
     }
@@ -9046,6 +8995,10 @@ function initLogoMenu(currentMod){
         closeCompose();
         currentCardId = null;
         renderKanban();
+        // Vérifier s'il y a un rafraîchissement en attente
+        if (typeof checkPendingRefresh === 'function') {
+          checkPendingRefresh();
+        }
       }
     }
     window.closeFiche = closeFiche;
@@ -14136,6 +14089,10 @@ function initLogoMenu(currentMod){
       document.getElementById('mobileChatPage').classList.remove('active');
       document.getElementById('mobilePhotosPage').classList.remove('active');
       mobileCurrentCardId = null;
+      // Vérifier s'il y a un rafraîchissement en attente
+      if (typeof checkPendingRefresh === 'function') {
+        checkPendingRefresh();
+      }
     }
     window.closeMobileFiche = closeMobileFiche;
     
