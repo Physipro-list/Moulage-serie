@@ -3998,7 +3998,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1577';
+    const APP_VERSION = '1578';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -12132,40 +12132,91 @@ function initLogoMenu(currentMod){
       }
     }
     
-    // Rechercher le dossier d'une commande
+    // Rechercher le dossier d'une commande (fonctionne pour propriétaire ET collègues)
     async function findOrderFolder(orderNumber) {
       const token = await getOneDriveToken();
       if (!token) return null;
       
       try {
-        // MÉTHODE 1: Chercher directement avec le chemin (sans encoder les /)
-        // Graph API veut le chemin avec espaces encodés mais pas les /
+        // ═══════════════════════════════════════════════════════════════
+        // MÉTHODE 1: Chercher dans MON OneDrive (pour le propriétaire)
+        // ═══════════════════════════════════════════════════════════════
         const pathEncoded = ONEDRIVE_PHOTOS_PATH.split('/').map(p => encodeURIComponent(p)).join('/');
         const url1 = `https://graph.microsoft.com/v1.0/me/drive/root:${pathEncoded}:/children`;
         
-        console.log('🔍 Recherche dossier OneDrive:', url1);
+        console.log('🔍 Recherche dossier OneDrive (propriétaire):', url1);
         
-        const response = await fetch(url1, {
+        let response = await fetch(url1, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
         if (response.ok) {
           const data = await response.json();
-          console.log('📁 Dossiers trouvés:', data.value?.length || 0);
+          console.log('📁 Dossiers trouvés (propriétaire):', data.value?.length || 0);
           
-          // Chercher le dossier qui commence par le numéro de commande
           const folder = data.value?.find(f => 
             f.folder && f.name.startsWith(orderNumber)
           );
           
           if (folder) {
-            console.log('✅ Dossier trouvé:', folder.name);
+            console.log('✅ Dossier trouvé (propriétaire):', folder.name);
             return folder;
           }
         }
         
-        // MÉTHODE 2: Recherche via search API si méthode 1 échoue
-        console.log('🔍 Essai avec recherche...');
+        // ═══════════════════════════════════════════════════════════════
+        // MÉTHODE 2: Chercher dans "Partagé avec moi" (pour les collègues)
+        // ═══════════════════════════════════════════════════════════════
+        console.log('🔍 Recherche dans "Partagé avec moi"...');
+        const sharedUrl = `https://graph.microsoft.com/v1.0/me/drive/sharedWithMe`;
+        const sharedResponse = await fetch(sharedUrl, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (sharedResponse.ok) {
+          const sharedData = await sharedResponse.json();
+          console.log('📁 Éléments partagés trouvés:', sharedData.value?.length || 0);
+          
+          // Chercher le dossier racine partagé (Photos moulage...)
+          const sharedRoot = sharedData.value?.find(f => 
+            f.folder && f.name.includes('Photos moulage')
+          );
+          
+          if (sharedRoot && sharedRoot.remoteItem) {
+            // Accéder au contenu du dossier partagé via remoteItem
+            const remoteDriveId = sharedRoot.remoteItem.parentReference?.driveId;
+            const remoteItemId = sharedRoot.remoteItem.id;
+            
+            if (remoteDriveId && remoteItemId) {
+              console.log('📂 Accès au dossier partagé distant...');
+              const remoteUrl = `https://graph.microsoft.com/v1.0/drives/${remoteDriveId}/items/${remoteItemId}/children`;
+              const remoteResponse = await fetch(remoteUrl, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              
+              if (remoteResponse.ok) {
+                const remoteData = await remoteResponse.json();
+                console.log('📁 Dossiers dans partagé:', remoteData.value?.length || 0);
+                
+                const folder = remoteData.value?.find(f => 
+                  f.folder && f.name.startsWith(orderNumber)
+                );
+                
+                if (folder) {
+                  // Ajouter le driveId pour getPhotosFromFolder
+                  folder._sharedDriveId = remoteDriveId;
+                  console.log('✅ Dossier trouvé (partagé):', folder.name);
+                  return folder;
+                }
+              }
+            }
+          }
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // MÉTHODE 3: Recherche globale (fallback)
+        // ═══════════════════════════════════════════════════════════════
+        console.log('🔍 Essai avec recherche globale...');
         const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${orderNumber}')`;
         const searchResponse = await fetch(searchUrl, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -12192,15 +12243,27 @@ function initLogoMenu(currentMod){
       }
     }
     
-    // Récupérer les photos d'un dossier
-    async function getPhotosFromFolder(folderId) {
+    // Récupérer les photos d'un dossier (supporte OneDrive personnel ET partagé)
+    async function getPhotosFromFolder(folder) {
       const token = await getOneDriveToken();
       if (!token) return [];
       
+      // Extraire l'ID et le driveId si c'est un dossier partagé
+      const folderId = typeof folder === 'string' ? folder : folder.id;
+      const sharedDriveId = typeof folder === 'object' ? folder._sharedDriveId : null;
+      
       try {
-        // Récupérer tous les fichiers du dossier avec les miniatures
-        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children?$expand=thumbnails`;
-        console.log('🖼️ Récupération photos:', url);
+        // Construire l'URL selon si c'est partagé ou non
+        let url;
+        if (sharedDriveId) {
+          // Dossier partagé: utiliser /drives/{driveId}/items/{itemId}
+          url = `https://graph.microsoft.com/v1.0/drives/${sharedDriveId}/items/${folderId}/children?$expand=thumbnails`;
+          console.log('🖼️ Récupération photos (partagé):', url);
+        } else {
+          // OneDrive personnel: utiliser /me/drive/items/{itemId}
+          url = `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children?$expand=thumbnails`;
+          console.log('🖼️ Récupération photos (personnel):', url);
+        }
         
         const response = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -12288,8 +12351,8 @@ function initLogoMenu(currentMod){
         return;
       }
       
-      // Récupérer les photos
-      const photos = await getPhotosFromFolder(folder.id);
+      // Récupérer les photos (passer l'objet folder complet pour supporter les dossiers partagés)
+      const photos = await getPhotosFromFolder(folder);
       if (photos.length === 0) {
         showGalleryEmpty('Aucune photo dans ce dossier');
         return;
@@ -12484,8 +12547,8 @@ function initLogoMenu(currentMod){
         return;
       }
       
-      // Récupérer les photos
-      const photos = await getPhotosFromFolder(folder.id);
+      // Récupérer les photos (passer l'objet folder complet pour supporter les dossiers partagés)
+      const photos = await getPhotosFromFolder(folder);
       if (photos.length === 0) {
         gridEl.innerHTML = `
           <div class="photos-sidebar-empty">
@@ -14362,7 +14425,7 @@ function initLogoMenu(currentMod){
         }
         
         console.log('📱 Dossier trouvé, chargement des photos...');
-        const photos = await getPhotosFromFolder(folder.id);
+        const photos = await getPhotosFromFolder(folder);
         if (!photos || photos.length === 0) {
           grid.innerHTML = `
             <div class="mobile-photos-empty">
