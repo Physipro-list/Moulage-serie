@@ -3971,7 +3971,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1563';
+    const APP_VERSION = '1564';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -8646,6 +8646,11 @@ function initLogoMenu(currentMod){
       
       // Scroll vers le bas pour voir les derniers messages
       scrollChatToBottom();
+      
+      // Charger les photos OneDrive automatiquement
+      if (typeof loadSidebarPhotos === 'function') {
+        loadSidebarPhotos();
+      }
     }
     window.openFiche = openFiche;
 
@@ -14315,24 +14320,235 @@ function initLogoMenu(currentMod){
     }
     window.connectMobileOneDrive = connectMobileOneDrive;
     
-    // Ouvrir la galerie depuis mobile
+    // ═══════════════════════════════════════════════════════════════
+    // GALERIE MOBILE AVEC ZOOM TACTILE (pinch-to-zoom)
+    // ═══════════════════════════════════════════════════════════════
+    
+    let mobileZoomIndex = 0;
+    let mobileZoomScale = 1;
+    let mobileZoomPanX = 0;
+    let mobileZoomPanY = 0;
+    let mobileZoomPhotos = [];
+    let mobileTouchStartDistance = 0;
+    let mobileTouchStartScale = 1;
+    let mobileTouchStartX = 0;
+    let mobileTouchStartY = 0;
+    let mobileIsPanning = false;
+    
     function openMobilePhotoGallery(index) {
       const photos = window.mobileGalleryPhotos || sidebarPhotos || [];
       if (photos.length === 0) return;
       
-      const card = cardsData[mobileCurrentCardId];
-      if (!card) return;
+      mobileZoomPhotos = photos;
+      mobileZoomIndex = index;
+      mobileZoomScale = 1;
+      mobileZoomPanX = 0;
+      mobileZoomPanY = 0;
       
-      currentPhotoIndex = index;
-      galleryCardId = mobileCurrentCardId;
-      galleryPhotos = photos;
+      // Créer l'overlay s'il n'existe pas
+      let overlay = document.getElementById('mobilePhotoZoomOverlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'mobilePhotoZoomOverlay';
+        overlay.innerHTML = `
+          <div class="mobile-zoom-header">
+            <button class="mobile-zoom-close" onclick="closeMobileZoom()">✕</button>
+            <span class="mobile-zoom-counter" id="mobileZoomCounter">1/1</span>
+            <div class="mobile-zoom-controls">
+              <button class="mobile-zoom-btn" onclick="mobileZoomOut()">−</button>
+              <button class="mobile-zoom-btn" onclick="mobileZoomIn()">+</button>
+            </div>
+          </div>
+          <div class="mobile-zoom-container" id="mobileZoomContainer">
+            <img id="mobileZoomImg" src="" alt="">
+          </div>
+          <div class="mobile-zoom-nav">
+            <button class="mobile-zoom-nav-btn" onclick="mobileZoomPrev()">◀</button>
+            <button class="mobile-zoom-nav-btn" onclick="mobileZoomNext()">▶</button>
+          </div>
+          <div class="mobile-zoom-hint">Pincez pour zoomer • Double-tap pour réinitialiser</div>
+        `;
+        document.body.appendChild(overlay);
+        
+        // Ajouter les styles
+        const style = document.createElement('style');
+        style.textContent = `
+          #mobilePhotoZoomOverlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95); z-index: 10000;
+            display: none; flex-direction: column;
+          }
+          #mobilePhotoZoomOverlay.active { display: flex; }
+          .mobile-zoom-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 15px; background: rgba(0,0,0,0.5);
+          }
+          .mobile-zoom-close {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: rgba(239,68,68,0.8); border: none;
+            color: white; font-size: 20px; cursor: pointer;
+          }
+          .mobile-zoom-counter {
+            color: white; font-size: 14px; font-weight: 600;
+          }
+          .mobile-zoom-controls { display: flex; gap: 10px; }
+          .mobile-zoom-btn {
+            width: 44px; height: 44px; border-radius: 50%;
+            background: rgba(59,130,246,0.8); border: none;
+            color: white; font-size: 24px; font-weight: bold; cursor: pointer;
+          }
+          .mobile-zoom-btn:active { background: rgba(59,130,246,1); }
+          .mobile-zoom-container {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            overflow: hidden; touch-action: none;
+          }
+          #mobileZoomImg {
+            max-width: 100%; max-height: 100%; object-fit: contain;
+            transition: transform 0.1s ease-out;
+          }
+          .mobile-zoom-nav {
+            display: flex; justify-content: space-between;
+            padding: 15px 20px; background: rgba(0,0,0,0.5);
+          }
+          .mobile-zoom-nav-btn {
+            width: 60px; height: 50px; border-radius: 10px;
+            background: rgba(59,130,246,0.8); border: none;
+            color: white; font-size: 24px; cursor: pointer;
+          }
+          .mobile-zoom-nav-btn:active { background: rgba(59,130,246,1); }
+          .mobile-zoom-hint {
+            text-align: center; padding: 8px;
+            color: rgba(255,255,255,0.5); font-size: 11px;
+            background: rgba(0,0,0,0.5);
+          }
+        `;
+        document.head.appendChild(style);
+        
+        // Ajouter les événements tactiles
+        const container = document.getElementById('mobileZoomContainer');
+        container.addEventListener('touchstart', handleMobileZoomTouchStart, { passive: false });
+        container.addEventListener('touchmove', handleMobileZoomTouchMove, { passive: false });
+        container.addEventListener('touchend', handleMobileZoomTouchEnd);
+        
+        // Double-tap pour reset
+        let lastTap = 0;
+        container.addEventListener('touchend', (e) => {
+          const now = Date.now();
+          if (now - lastTap < 300) {
+            mobileZoomScale = 1;
+            mobileZoomPanX = 0;
+            mobileZoomPanY = 0;
+            applyMobileZoomTransform();
+          }
+          lastTap = now;
+        });
+      }
       
-      const overlay = document.getElementById('photoGalleryOverlay');
-      if (overlay) overlay.classList.add('active');
-      
-      renderGallery(card.order || '', (card.name || '').toUpperCase().trim());
+      overlay.classList.add('active');
+      renderMobileZoom();
     }
     window.openMobilePhotoGallery = openMobilePhotoGallery;
+    
+    function renderMobileZoom() {
+      const photo = mobileZoomPhotos[mobileZoomIndex];
+      if (!photo) return;
+      
+      document.getElementById('mobileZoomImg').src = photo.downloadUrl || photo.thumbnailUrl;
+      document.getElementById('mobileZoomCounter').textContent = `${mobileZoomIndex + 1}/${mobileZoomPhotos.length}`;
+      applyMobileZoomTransform();
+    }
+    
+    function applyMobileZoomTransform() {
+      const img = document.getElementById('mobileZoomImg');
+      if (img) {
+        img.style.transform = `scale(${mobileZoomScale}) translate(${mobileZoomPanX}px, ${mobileZoomPanY}px)`;
+      }
+    }
+    
+    function handleMobileZoomTouchStart(e) {
+      if (e.touches.length === 2) {
+        // Pinch zoom start
+        e.preventDefault();
+        mobileTouchStartDistance = getTouchDistance(e.touches);
+        mobileTouchStartScale = mobileZoomScale;
+      } else if (e.touches.length === 1 && mobileZoomScale > 1) {
+        // Pan start
+        e.preventDefault();
+        mobileIsPanning = true;
+        mobileTouchStartX = e.touches[0].clientX - mobileZoomPanX;
+        mobileTouchStartY = e.touches[0].clientY - mobileZoomPanY;
+      }
+    }
+    
+    function handleMobileZoomTouchMove(e) {
+      if (e.touches.length === 2) {
+        // Pinch zoom
+        e.preventDefault();
+        const distance = getTouchDistance(e.touches);
+        mobileZoomScale = Math.max(0.5, Math.min(5, mobileTouchStartScale * (distance / mobileTouchStartDistance)));
+        if (mobileZoomScale <= 1) {
+          mobileZoomPanX = 0;
+          mobileZoomPanY = 0;
+        }
+        applyMobileZoomTransform();
+      } else if (e.touches.length === 1 && mobileIsPanning) {
+        // Pan
+        e.preventDefault();
+        mobileZoomPanX = e.touches[0].clientX - mobileTouchStartX;
+        mobileZoomPanY = e.touches[0].clientY - mobileTouchStartY;
+        applyMobileZoomTransform();
+      }
+    }
+    
+    function handleMobileZoomTouchEnd(e) {
+      mobileIsPanning = false;
+    }
+    
+    function getTouchDistance(touches) {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    function mobileZoomIn() {
+      mobileZoomScale = Math.min(5, mobileZoomScale + 0.5);
+      applyMobileZoomTransform();
+    }
+    window.mobileZoomIn = mobileZoomIn;
+    
+    function mobileZoomOut() {
+      mobileZoomScale = Math.max(0.5, mobileZoomScale - 0.5);
+      if (mobileZoomScale <= 1) {
+        mobileZoomPanX = 0;
+        mobileZoomPanY = 0;
+      }
+      applyMobileZoomTransform();
+    }
+    window.mobileZoomOut = mobileZoomOut;
+    
+    function mobileZoomPrev() {
+      mobileZoomIndex = (mobileZoomIndex - 1 + mobileZoomPhotos.length) % mobileZoomPhotos.length;
+      mobileZoomScale = 1;
+      mobileZoomPanX = 0;
+      mobileZoomPanY = 0;
+      renderMobileZoom();
+    }
+    window.mobileZoomPrev = mobileZoomPrev;
+    
+    function mobileZoomNext() {
+      mobileZoomIndex = (mobileZoomIndex + 1) % mobileZoomPhotos.length;
+      mobileZoomScale = 1;
+      mobileZoomPanX = 0;
+      mobileZoomPanY = 0;
+      renderMobileZoom();
+    }
+    window.mobileZoomNext = mobileZoomNext;
+    
+    function closeMobileZoom() {
+      const overlay = document.getElementById('mobilePhotoZoomOverlay');
+      if (overlay) overlay.classList.remove('active');
+    }
+    window.closeMobileZoom = closeMobileZoom;
     
     // Fonction helper pour afficher les images d'un message (supporte une ou plusieurs)
     function renderMsgImages(msg) {
