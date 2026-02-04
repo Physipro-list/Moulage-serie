@@ -2984,23 +2984,45 @@
       justify-content: center;
     }
     
+    .photo-archive-buttons-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    
     .photo-archive-add-btn {
-      width: 100%;
-      padding: 20px;
+      flex: 1;
+      padding: 16px 12px;
       background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
       border: 3px solid #15803d;
       border-radius: 12px;
       color: #fff;
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 700;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 10px;
-      margin-bottom: 20px;
+      gap: 8px;
     }
     .photo-archive-add-btn:active { filter: brightness(0.9); }
+    
+    .photo-archive-mode-btn {
+      padding: 16px 12px;
+      background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+      border: 3px solid #374151;
+      border-radius: 12px;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .photo-archive-mode-btn.active {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      border-color: #b45309;
+    }
+    .photo-archive-mode-btn:active { filter: brightness(0.9); }
     
     .photo-archive-send-btn {
       width: 100%;
@@ -3150,9 +3172,14 @@
         <!-- Photos ajoutées ici -->
       </div>
       
-      <button class="photo-archive-add-btn" onclick="takeArchivePhoto()">
-        📷 Prendre une photo
-      </button>
+      <div class="photo-archive-buttons-row">
+        <button class="photo-archive-add-btn" onclick="takeArchivePhoto()">
+          📷 Prendre une photo
+        </button>
+        <button class="photo-archive-mode-btn active" id="continuousModeBtn" onclick="toggleContinuousMode()">
+          🔄 Mode continu: ON
+        </button>
+      </div>
       
       <input type="file" id="photoArchiveInput" accept="image/*" capture="environment" style="display:none;" onchange="handleArchivePhoto(event)">
       
@@ -3998,7 +4025,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1581';
+    const APP_VERSION = '1582';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -15507,10 +15534,24 @@ function initLogoMenu(currentMod){
     }
     window.closePhotoArchiveModal = closePhotoArchiveModal;
     
+    // Mode prise continue (réouvre l'appareil après chaque photo)
+    let continuousPhotoMode = true;
+    
     function takeArchivePhoto() {
       document.getElementById('photoArchiveInput').click();
     }
     window.takeArchivePhoto = takeArchivePhoto;
+    
+    function toggleContinuousMode() {
+      continuousPhotoMode = !continuousPhotoMode;
+      const btn = document.getElementById('continuousModeBtn');
+      if (btn) {
+        btn.classList.toggle('active', continuousPhotoMode);
+        btn.textContent = continuousPhotoMode ? '🔄 Mode continu: ON' : '🔄 Mode continu: OFF';
+      }
+      showToast(continuousPhotoMode ? '📷 Mode continu activé' : '📷 Mode continu désactivé', 'info');
+    }
+    window.toggleContinuousMode = toggleContinuousMode;
     
     function handleArchivePhoto(event) {
       const file = event.target.files[0];
@@ -15536,6 +15577,15 @@ function initLogoMenu(currentMod){
         
         // Mettre à jour le compteur
         updateArchivePhotoCount();
+        
+        // MODE CONTINU: Réouvrir automatiquement l'appareil photo après 500ms
+        if (continuousPhotoMode) {
+          setTimeout(() => {
+            if (document.getElementById('photoArchiveOverlay').classList.contains('active')) {
+              takeArchivePhoto();
+            }
+          }, 500);
+        }
       };
       reader.readAsDataURL(file);
       
