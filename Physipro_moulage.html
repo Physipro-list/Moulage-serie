@@ -3998,7 +3998,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1574';
+    const APP_VERSION = '1575';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -12555,61 +12555,44 @@ function initLogoMenu(currentMod){
         if (infoZone) savedInfoZoneWidth = infoZone.style.flex || '';
       }
       
-      // DÉSACTIVER les transitions pour un changement INSTANTANÉ
+      // DÉSACTIVER transitions
       photosZone.style.transition = 'none';
       if (infoZone) infoZone.style.transition = 'none';
       
-      // Zone info s'adapte naturellement
+      // Récupérer le ratio depuis le thumbnail DÉJÀ AFFICHÉ (instantané!)
+      const thumbImg = photosZone.querySelectorAll('.photos-sidebar-thumb img')[index];
+      let imgRatio = 0.75; // Ratio par défaut (portrait)
+      
+      if (thumbImg && thumbImg.naturalWidth && thumbImg.naturalHeight) {
+        imgRatio = thumbImg.naturalWidth / thumbImg.naturalHeight;
+      }
+      
+      // Calculer la largeur idéale
+      const zoneHeight = photosZone.offsetHeight || 600;
+      let idealWidth = Math.round(zoneHeight * imgRatio);
+      idealWidth = Math.max(300, Math.min(650, idealWidth));
+      
+      // APPLIQUER TOUT EN MÊME TEMPS
+      photosZone.style.width = idealWidth + 'px';
+      photosZone.style.minWidth = idealWidth + 'px';
+      photosZone.style.maxWidth = idealWidth + 'px';
+      
       if (infoZone) {
         infoZone.style.flex = '1 1 300px';
         infoZone.style.minWidth = '280px';
       }
       
-      const photo = sidebarPhotos[index];
-      
-      // Pré-charger l'image pour connaître ses dimensions AVANT d'afficher
-      const tempImg = new Image();
-      tempImg.onload = function() {
-        // Calculer la largeur idéale basée sur le ratio de l'image
-        const imgRatio = this.naturalWidth / this.naturalHeight;
-        const zoneHeight = photosZone.offsetHeight || 600;
-        
-        // Largeur = hauteur × ratio (pour que la photo remplisse exactement)
-        let idealWidth = Math.round(zoneHeight * imgRatio);
-        
-        // Limites raisonnables
-        idealWidth = Math.max(300, Math.min(650, idealWidth));
-        
-        // Appliquer la taille INSTANTANÉMENT
-        photosZone.style.width = idealWidth + 'px';
-        photosZone.style.minWidth = idealWidth + 'px';
-        photosZone.style.maxWidth = idealWidth + 'px';
-        
-        // Afficher le zoom IMMÉDIATEMENT
-        showInlineZoom();
-      };
-      tempImg.onerror = function() {
-        // En cas d'erreur, utiliser une taille par défaut
-        photosZone.style.width = '450px';
-        photosZone.style.minWidth = '450px';
-        photosZone.style.maxWidth = '450px';
-        showInlineZoom();
-      };
-      tempImg.src = photo.downloadUrl;
-      
-      function showInlineZoom() {
-        // Créer l'overlay de zoom inline
-        let zoomDiv = document.getElementById('inlinePhotoZoom');
-        if (!zoomDiv) {
-          zoomDiv = document.createElement('div');
-          zoomDiv.id = 'inlinePhotoZoom';
-          zoomDiv.className = 'photo-inline-zoom';
-          photosZone.appendChild(zoomDiv);
-        }
-        
-        renderInlineZoom();
-        zoomDiv.style.display = 'flex';
+      // Créer/afficher le zoom IMMÉDIATEMENT
+      let zoomDiv = document.getElementById('inlinePhotoZoom');
+      if (!zoomDiv) {
+        zoomDiv = document.createElement('div');
+        zoomDiv.id = 'inlinePhotoZoom';
+        zoomDiv.className = 'photo-inline-zoom';
+        photosZone.appendChild(zoomDiv);
       }
+      
+      renderInlineZoom();
+      zoomDiv.style.display = 'flex';
     }
     window.openInlineZoom = openInlineZoom;
     
@@ -12720,33 +12703,31 @@ function initLogoMenu(currentMod){
     }
     window.inlineZoomNext = inlineZoomNext;
     
-    // Ajuster la zone et afficher la photo - INSTANTANÉ
+    // Ajuster la zone et afficher la photo - INSTANTANÉ via thumbnail
     function adjustAndRenderZoom() {
       const photosZone = document.getElementById('fichePhotosZone');
       const photo = sidebarPhotos[inlineZoomIndex];
       if (!photosZone || !photo) return;
       
-      // Désactiver transitions
       photosZone.style.transition = 'none';
       
-      // Pré-charger pour connaître les dimensions
-      const tempImg = new Image();
-      tempImg.onload = function() {
-        const imgRatio = this.naturalWidth / this.naturalHeight;
-        const zoneHeight = photosZone.offsetHeight || 600;
-        let idealWidth = Math.round(zoneHeight * imgRatio);
-        idealWidth = Math.max(300, Math.min(650, idealWidth));
-        
-        photosZone.style.width = idealWidth + 'px';
-        photosZone.style.minWidth = idealWidth + 'px';
-        photosZone.style.maxWidth = idealWidth + 'px';
-        
-        renderInlineZoom();
-      };
-      tempImg.onerror = function() {
-        renderInlineZoom();
-      };
-      tempImg.src = photo.downloadUrl;
+      // Récupérer le ratio depuis le thumbnail DÉJÀ AFFICHÉ
+      const thumbImg = photosZone.querySelectorAll('.photos-sidebar-thumb img')[inlineZoomIndex];
+      let imgRatio = 0.75;
+      
+      if (thumbImg && thumbImg.naturalWidth && thumbImg.naturalHeight) {
+        imgRatio = thumbImg.naturalWidth / thumbImg.naturalHeight;
+      }
+      
+      const zoneHeight = photosZone.offsetHeight || 600;
+      let idealWidth = Math.round(zoneHeight * imgRatio);
+      idealWidth = Math.max(300, Math.min(650, idealWidth));
+      
+      photosZone.style.width = idealWidth + 'px';
+      photosZone.style.minWidth = idealWidth + 'px';
+      photosZone.style.maxWidth = idealWidth + 'px';
+      
+      renderInlineZoom();
     }
     
     function closeInlineZoom(e) {
