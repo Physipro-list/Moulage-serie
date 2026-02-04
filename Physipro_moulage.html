@@ -635,15 +635,17 @@
       flex: 1; 
       padding: 8px; 
       display: grid; 
-      grid-template-columns: repeat(2, 1fr); 
+      grid-template-columns: repeat(2, 70px); /* Taille FIXE des colonnes */
       gap: 8px; 
       overflow-y: auto; 
-      align-content: start; 
+      align-content: start;
+      justify-content: center; /* Centrer la grille */
       background: transparent;
       border-radius: 0 0 0 16px;
     }
     .photos-thumb { 
-      aspect-ratio: 1; 
+      width: 70px;  /* Taille FIXE */
+      height: 70px; /* Taille FIXE */
       border-radius: 8px; 
       overflow: hidden; 
       cursor: pointer; 
@@ -675,7 +677,7 @@
     .photos-sidebar-connect { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 40px 20px; gap: 12px; grid-column: 1 / -1; }
     .photos-sidebar-connect-btn { padding: 12px 20px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; border: none; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
     .photos-sidebar-connect-btn:hover { filter: brightness(1.15); }
-    .photos-sidebar-thumb { aspect-ratio: 1; border-radius: 8px; overflow: hidden; cursor: pointer; border: 2px solid rgba(255,255,255,0.2); transition: all 0.2s; background: rgba(0,0,0,0.3); position: relative; }
+    .photos-sidebar-thumb { width: 70px; height: 70px; border-radius: 8px; overflow: hidden; cursor: pointer; border: 2px solid rgba(255,255,255,0.2); transition: all 0.2s; background: rgba(0,0,0,0.3); position: relative; }
     .photos-sidebar-thumb:hover { border-color: #60a5fa; transform: scale(1.02); box-shadow: 0 4px 15px rgba(96,165,250,0.4); }
     .photos-sidebar-thumb img { width: 100%; height: 100%; object-fit: cover; }
     .photos-sidebar-thumb-overlay { position: absolute; inset: 0; background: rgba(59,130,246,0.4); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
@@ -3998,7 +4000,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1570';
+    const APP_VERSION = '1572';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -12555,15 +12557,17 @@ function initLogoMenu(currentMod){
         if (infoZone) savedInfoZoneWidth = infoZone.style.flex || '';
       }
       
-      // Agrandir seulement la zone photos - NE PAS TOUCHER AU CHAT
-      // La zone info se compressera naturellement grâce au flexbox
+      // Zone info s'adapte naturellement - NE PAS TOUCHER AU CHAT
       if (infoZone) {
         infoZone.style.flex = '1 1 300px';
         infoZone.style.minWidth = '280px';
-        infoZone.style.maxWidth = '';
       }
       
-      // NE PAS modifier le chat - il garde sa taille normale
+      // Définir une largeur FIXE pour la zone photo - pas d'ajustement après
+      // La photo s'adaptera avec object-fit: contain
+      photosZone.style.width = '500px';
+      photosZone.style.minWidth = '400px';
+      photosZone.style.maxWidth = '500px';
       
       // Créer l'overlay de zoom inline
       let zoomDiv = document.getElementById('inlinePhotoZoom');
@@ -12573,11 +12577,6 @@ function initLogoMenu(currentMod){
         zoomDiv.className = 'photo-inline-zoom';
         photosZone.appendChild(zoomDiv);
       }
-      
-      // Définir une largeur initiale, sera ajustée après chargement de l'image
-      photosZone.style.width = '450px';
-      photosZone.style.minWidth = '350px';
-      photosZone.style.maxWidth = '600px';
       
       renderInlineZoom();
       zoomDiv.style.display = 'flex';
@@ -12605,44 +12604,12 @@ function initLogoMenu(currentMod){
         <div class="photo-inline-zoom-counter">${inlineZoomIndex + 1} / ${total}</div>
       `;
       
-      // Ajuster la largeur de la zone après chargement de l'image
-      const img = document.getElementById('inlineZoomImg');
-      if (img) {
-        img.onload = function() {
-          adjustZoomToImage(this);
-        };
-        // Si l'image est déjà en cache
-        if (img.complete) {
-          adjustZoomToImage(img);
-        }
-      }
-      
       applyInlineZoomTransform();
       
       // Fermer si clic sur le fond
       zoomDiv.onclick = (e) => {
         if (e.target === zoomDiv) closeInlineZoom(e);
       };
-    }
-    
-    // Ajuster la largeur de la zone photos selon le ratio de l'image
-    function adjustZoomToImage(img) {
-      const photosZone = document.getElementById('fichePhotosZone');
-      if (!photosZone || !img) return;
-      
-      const imgRatio = img.naturalWidth / img.naturalHeight;
-      const zoneHeight = photosZone.offsetHeight;
-      
-      // Calculer la largeur idéale basée sur le ratio de l'image et la hauteur disponible
-      let idealWidth = zoneHeight * imgRatio;
-      
-      // Limites plus raisonnables pour ne pas écraser le chat
-      idealWidth = Math.max(300, Math.min(550, idealWidth));
-      
-      // Appliquer
-      photosZone.style.width = Math.round(idealWidth) + 'px';
-      photosZone.style.minWidth = Math.round(idealWidth) + 'px';
-      photosZone.style.maxWidth = Math.round(idealWidth) + 'px';
     }
     
     function applyInlineZoomTransform() {
