@@ -684,7 +684,7 @@
     .photos-sidebar-thumb:hover .photos-sidebar-thumb-overlay { opacity: 1; }
     .photos-sidebar-thumb-overlay span { color: #fff; font-size: 20px; }
     
-    /* Zoom inline pour photos OneDrive - PHOTO AJUSTÉE À LA ZONE */
+    /* Zoom inline pour photos OneDrive - PHOTO REMPLIT EXACTEMENT LA ZONE */
     .photo-inline-zoom {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
@@ -698,10 +698,8 @@
       padding: 0;
     }
     .photo-inline-zoom img {
-      max-width: 100%;
-      max-height: 100%;
-      width: auto;
-      height: auto;
+      width: 100%;
+      height: 100%;
       object-fit: contain;
       cursor: grab;
       transition: transform 0.1s ease-out;
@@ -4000,7 +3998,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1572';
+    const APP_VERSION = '1573';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -12557,29 +12555,57 @@ function initLogoMenu(currentMod){
         if (infoZone) savedInfoZoneWidth = infoZone.style.flex || '';
       }
       
-      // Zone info s'adapte naturellement - NE PAS TOUCHER AU CHAT
+      // Zone info s'adapte naturellement
       if (infoZone) {
         infoZone.style.flex = '1 1 300px';
         infoZone.style.minWidth = '280px';
       }
       
-      // Définir une largeur FIXE pour la zone photo - pas d'ajustement après
-      // La photo s'adaptera avec object-fit: contain
-      photosZone.style.width = '500px';
-      photosZone.style.minWidth = '400px';
-      photosZone.style.maxWidth = '500px';
+      const photo = sidebarPhotos[index];
       
-      // Créer l'overlay de zoom inline
-      let zoomDiv = document.getElementById('inlinePhotoZoom');
-      if (!zoomDiv) {
-        zoomDiv = document.createElement('div');
-        zoomDiv.id = 'inlinePhotoZoom';
-        zoomDiv.className = 'photo-inline-zoom';
-        photosZone.appendChild(zoomDiv);
+      // Pré-charger l'image pour connaître ses dimensions AVANT d'afficher
+      const tempImg = new Image();
+      tempImg.onload = function() {
+        // Calculer la largeur idéale basée sur le ratio de l'image
+        const imgRatio = this.naturalWidth / this.naturalHeight;
+        const zoneHeight = photosZone.offsetHeight || 600;
+        
+        // Largeur = hauteur × ratio (pour que la photo remplisse exactement)
+        let idealWidth = Math.round(zoneHeight * imgRatio);
+        
+        // Limites raisonnables
+        idealWidth = Math.max(300, Math.min(650, idealWidth));
+        
+        // Appliquer la taille AVANT d'afficher
+        photosZone.style.width = idealWidth + 'px';
+        photosZone.style.minWidth = idealWidth + 'px';
+        photosZone.style.maxWidth = idealWidth + 'px';
+        
+        // Maintenant afficher le zoom
+        showInlineZoom();
+      };
+      tempImg.onerror = function() {
+        // En cas d'erreur, utiliser une taille par défaut
+        photosZone.style.width = '450px';
+        photosZone.style.minWidth = '450px';
+        photosZone.style.maxWidth = '450px';
+        showInlineZoom();
+      };
+      tempImg.src = photo.downloadUrl;
+      
+      function showInlineZoom() {
+        // Créer l'overlay de zoom inline
+        let zoomDiv = document.getElementById('inlinePhotoZoom');
+        if (!zoomDiv) {
+          zoomDiv = document.createElement('div');
+          zoomDiv.id = 'inlinePhotoZoom';
+          zoomDiv.className = 'photo-inline-zoom';
+          photosZone.appendChild(zoomDiv);
+        }
+        
+        renderInlineZoom();
+        zoomDiv.style.display = 'flex';
       }
-      
-      renderInlineZoom();
-      zoomDiv.style.display = 'flex';
     }
     window.openInlineZoom = openInlineZoom;
     
@@ -12676,7 +12702,7 @@ function initLogoMenu(currentMod){
       inlineZoomScale = 1;
       inlineZoomPanX = 0;
       inlineZoomPanY = 0;
-      renderInlineZoom();
+      adjustAndRenderZoom();
     }
     window.inlineZoomPrev = inlineZoomPrev;
     
@@ -12686,9 +12712,35 @@ function initLogoMenu(currentMod){
       inlineZoomScale = 1;
       inlineZoomPanX = 0;
       inlineZoomPanY = 0;
-      renderInlineZoom();
+      adjustAndRenderZoom();
     }
     window.inlineZoomNext = inlineZoomNext;
+    
+    // Ajuster la zone et afficher la photo
+    function adjustAndRenderZoom() {
+      const photosZone = document.getElementById('fichePhotosZone');
+      const photo = sidebarPhotos[inlineZoomIndex];
+      if (!photosZone || !photo) return;
+      
+      // Pré-charger pour connaître les dimensions
+      const tempImg = new Image();
+      tempImg.onload = function() {
+        const imgRatio = this.naturalWidth / this.naturalHeight;
+        const zoneHeight = photosZone.offsetHeight || 600;
+        let idealWidth = Math.round(zoneHeight * imgRatio);
+        idealWidth = Math.max(300, Math.min(650, idealWidth));
+        
+        photosZone.style.width = idealWidth + 'px';
+        photosZone.style.minWidth = idealWidth + 'px';
+        photosZone.style.maxWidth = idealWidth + 'px';
+        
+        renderInlineZoom();
+      };
+      tempImg.onerror = function() {
+        renderInlineZoom();
+      };
+      tempImg.src = photo.downloadUrl;
+    }
     
     function closeInlineZoom(e) {
       if (e) e.stopPropagation();
