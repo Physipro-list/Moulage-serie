@@ -3998,7 +3998,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1578';
+    const APP_VERSION = '1579';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -12135,7 +12135,19 @@ function initLogoMenu(currentMod){
     // Rechercher le dossier d'une commande (fonctionne pour propriétaire ET collègues)
     async function findOrderFolder(orderNumber) {
       const token = await getOneDriveToken();
-      if (!token) return null;
+      if (!token) {
+        console.log('❌ LOG: Pas de token!');
+        return null;
+      }
+      
+      // Variable pour stocker les logs
+      window.lastSearchLogs = [];
+      const addLog = (msg) => {
+        console.log(msg);
+        window.lastSearchLogs.push(msg);
+      };
+      
+      addLog(`🔍 Recherche du dossier: ${orderNumber}`);
       
       try {
         // ═══════════════════════════════════════════════════════════════
@@ -12144,106 +12156,210 @@ function initLogoMenu(currentMod){
         const pathEncoded = ONEDRIVE_PHOTOS_PATH.split('/').map(p => encodeURIComponent(p)).join('/');
         const url1 = `https://graph.microsoft.com/v1.0/me/drive/root:${pathEncoded}:/children`;
         
-        console.log('🔍 Recherche dossier OneDrive (propriétaire):', url1);
+        addLog(`📂 MÉTHODE 1: OneDrive personnel`);
+        addLog(`   URL: ${url1}`);
         
         let response = await fetch(url1, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
+        addLog(`   Réponse: ${response.status} ${response.statusText}`);
+        
         if (response.ok) {
           const data = await response.json();
-          console.log('📁 Dossiers trouvés (propriétaire):', data.value?.length || 0);
+          addLog(`   📁 Dossiers trouvés: ${data.value?.length || 0}`);
+          
+          if (data.value && data.value.length > 0) {
+            addLog(`   Liste: ${data.value.map(f => f.name).join(', ')}`);
+          }
           
           const folder = data.value?.find(f => 
             f.folder && f.name.startsWith(orderNumber)
           );
           
           if (folder) {
-            console.log('✅ Dossier trouvé (propriétaire):', folder.name);
+            addLog(`   ✅ TROUVÉ: ${folder.name}`);
             return folder;
+          } else {
+            addLog(`   ❌ Dossier ${orderNumber} non trouvé dans la liste`);
           }
+        } else {
+          const errorText = await response.text();
+          addLog(`   ❌ Erreur: ${errorText.substring(0, 200)}`);
         }
         
         // ═══════════════════════════════════════════════════════════════
         // MÉTHODE 2: Chercher dans "Partagé avec moi" (pour les collègues)
         // ═══════════════════════════════════════════════════════════════
-        console.log('🔍 Recherche dans "Partagé avec moi"...');
+        addLog(`📂 MÉTHODE 2: Partagé avec moi`);
         const sharedUrl = `https://graph.microsoft.com/v1.0/me/drive/sharedWithMe`;
+        addLog(`   URL: ${sharedUrl}`);
+        
         const sharedResponse = await fetch(sharedUrl, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
+        addLog(`   Réponse: ${sharedResponse.status} ${sharedResponse.statusText}`);
+        
         if (sharedResponse.ok) {
           const sharedData = await sharedResponse.json();
-          console.log('📁 Éléments partagés trouvés:', sharedData.value?.length || 0);
+          addLog(`   📁 Éléments partagés: ${sharedData.value?.length || 0}`);
+          
+          if (sharedData.value && sharedData.value.length > 0) {
+            addLog(`   Liste partagée:`);
+            sharedData.value.forEach((f, i) => {
+              addLog(`     ${i+1}. "${f.name}" (${f.folder ? 'dossier' : 'fichier'})`);
+            });
+          }
           
           // Chercher le dossier racine partagé (Photos moulage...)
           const sharedRoot = sharedData.value?.find(f => 
             f.folder && f.name.includes('Photos moulage')
           );
           
-          if (sharedRoot && sharedRoot.remoteItem) {
-            // Accéder au contenu du dossier partagé via remoteItem
-            const remoteDriveId = sharedRoot.remoteItem.parentReference?.driveId;
-            const remoteItemId = sharedRoot.remoteItem.id;
+          if (sharedRoot) {
+            addLog(`   ✅ Dossier racine trouvé: "${sharedRoot.name}"`);
+            addLog(`   remoteItem: ${sharedRoot.remoteItem ? 'OUI' : 'NON'}`);
             
-            if (remoteDriveId && remoteItemId) {
-              console.log('📂 Accès au dossier partagé distant...');
-              const remoteUrl = `https://graph.microsoft.com/v1.0/drives/${remoteDriveId}/items/${remoteItemId}/children`;
-              const remoteResponse = await fetch(remoteUrl, {
-                headers: { 'Authorization': `Bearer ${token}` }
-              });
+            if (sharedRoot.remoteItem) {
+              const remoteDriveId = sharedRoot.remoteItem.parentReference?.driveId;
+              const remoteItemId = sharedRoot.remoteItem.id;
               
-              if (remoteResponse.ok) {
-                const remoteData = await remoteResponse.json();
-                console.log('📁 Dossiers dans partagé:', remoteData.value?.length || 0);
+              addLog(`   driveId: ${remoteDriveId}`);
+              addLog(`   itemId: ${remoteItemId}`);
+              
+              if (remoteDriveId && remoteItemId) {
+                const remoteUrl = `https://graph.microsoft.com/v1.0/drives/${remoteDriveId}/items/${remoteItemId}/children`;
+                addLog(`   URL remote: ${remoteUrl}`);
                 
-                const folder = remoteData.value?.find(f => 
-                  f.folder && f.name.startsWith(orderNumber)
-                );
+                const remoteResponse = await fetch(remoteUrl, {
+                  headers: { 'Authorization': `Bearer ${token}` }
+                });
                 
-                if (folder) {
-                  // Ajouter le driveId pour getPhotosFromFolder
-                  folder._sharedDriveId = remoteDriveId;
-                  console.log('✅ Dossier trouvé (partagé):', folder.name);
-                  return folder;
+                addLog(`   Réponse remote: ${remoteResponse.status} ${remoteResponse.statusText}`);
+                
+                if (remoteResponse.ok) {
+                  const remoteData = await remoteResponse.json();
+                  addLog(`   📁 Dossiers dans partagé: ${remoteData.value?.length || 0}`);
+                  
+                  if (remoteData.value && remoteData.value.length > 0) {
+                    addLog(`   Liste: ${remoteData.value.slice(0, 10).map(f => f.name).join(', ')}${remoteData.value.length > 10 ? '...' : ''}`);
+                  }
+                  
+                  const folder = remoteData.value?.find(f => 
+                    f.folder && f.name.startsWith(orderNumber)
+                  );
+                  
+                  if (folder) {
+                    folder._sharedDriveId = remoteDriveId;
+                    addLog(`   ✅ TROUVÉ dans partagé: ${folder.name}`);
+                    return folder;
+                  } else {
+                    addLog(`   ❌ Dossier ${orderNumber} non trouvé dans partagé`);
+                  }
+                } else {
+                  const errorText = await remoteResponse.text();
+                  addLog(`   ❌ Erreur remote: ${errorText.substring(0, 200)}`);
                 }
               }
             }
+          } else {
+            addLog(`   ❌ Pas de dossier "Photos moulage" trouvé dans partagé`);
           }
+        } else {
+          const errorText = await sharedResponse.text();
+          addLog(`   ❌ Erreur sharedWithMe: ${errorText.substring(0, 200)}`);
         }
         
         // ═══════════════════════════════════════════════════════════════
         // MÉTHODE 3: Recherche globale (fallback)
         // ═══════════════════════════════════════════════════════════════
-        console.log('🔍 Essai avec recherche globale...');
+        addLog(`📂 MÉTHODE 3: Recherche globale`);
         const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${orderNumber}')`;
+        addLog(`   URL: ${searchUrl}`);
+        
         const searchResponse = await fetch(searchUrl, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
+        addLog(`   Réponse: ${searchResponse.status} ${searchResponse.statusText}`);
+        
         if (searchResponse.ok) {
           const searchData = await searchResponse.json();
+          addLog(`   📁 Résultats recherche: ${searchData.value?.length || 0}`);
+          
           const folder = searchData.value?.find(f => 
             f.folder && f.name.startsWith(orderNumber)
           );
           
           if (folder) {
-            console.log('✅ Dossier trouvé via recherche:', folder.name);
+            addLog(`   ✅ TROUVÉ via recherche: ${folder.name}`);
             return folder;
           }
         }
         
-        console.log('❌ Aucun dossier trouvé pour:', orderNumber);
+        addLog(`❌ ÉCHEC: Aucun dossier trouvé pour ${orderNumber}`);
+        addLog(`📋 Conseil: Vérifiez que le dossier est bien partagé`);
         return null;
         
       } catch (error) {
-        console.error('❌ Erreur recherche dossier:', error);
+        addLog(`❌ ERREUR: ${error.message}`);
+        console.error('Erreur recherche dossier:', error);
         return null;
       }
     }
     
-    // Récupérer les photos d'un dossier (supporte OneDrive personnel ET partagé)
+    // Afficher les logs de recherche dans une popup
+    function showSearchLogs() {
+      const logs = window.lastSearchLogs || ['Aucun log disponible'];
+      const logsText = logs.join('\n');
+      
+      // Créer une popup pour afficher les logs
+      const popup = document.createElement('div');
+      popup.id = 'searchLogsPopup';
+      popup.style.cssText = `
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background: #1e293b; color: #e2e8f0; padding: 20px; border-radius: 10px;
+        max-width: 90%; max-height: 80%; overflow: auto; z-index: 10000;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.5); font-family: monospace; font-size: 11px;
+        white-space: pre-wrap; line-height: 1.6;
+      `;
+      
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;';
+      header.innerHTML = '<strong style="font-size:14px;">📋 Logs de recherche OneDrive</strong>';
+      
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕ Fermer';
+      closeBtn.style.cssText = 'background:#ef4444;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;';
+      closeBtn.onclick = () => popup.remove();
+      header.appendChild(closeBtn);
+      
+      const logsDiv = document.createElement('div');
+      logsDiv.style.cssText = 'background:#0f172a;padding:15px;border-radius:8px;max-height:400px;overflow:auto;';
+      logsDiv.textContent = logsText;
+      
+      const hint = document.createElement('div');
+      hint.style.cssText = 'margin-top:15px;font-size:10px;color:#94a3b8;';
+      hint.textContent = '💡 Copie ces logs et envoie-les pour déboguer le problème';
+      
+      const copyBtn = document.createElement('button');
+      copyBtn.textContent = '📋 Copier les logs';
+      copyBtn.style.cssText = 'margin-top:10px;background:#3b82f6;color:white;border:none;padding:8px 15px;border-radius:5px;cursor:pointer;width:100%;';
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(logsText).then(() => {
+          copyBtn.textContent = '✅ Copié!';
+          setTimeout(() => copyBtn.textContent = '📋 Copier les logs', 2000);
+        });
+      };
+      
+      popup.appendChild(header);
+      popup.appendChild(logsDiv);
+      popup.appendChild(hint);
+      popup.appendChild(copyBtn);
+      document.body.appendChild(popup);
+    }
+    window.showSearchLogs = showSearchLogs;
     async function getPhotosFromFolder(folder) {
       const token = await getOneDriveToken();
       if (!token) return [];
@@ -12538,10 +12654,15 @@ function initLogoMenu(currentMod){
       // Rechercher le dossier
       const folder = await findOrderFolder(orderNumber);
       if (!folder) {
+        // Afficher les logs pour déboguer
+        const logs = window.lastSearchLogs || ['Aucun log disponible'];
         gridEl.innerHTML = `
           <div class="photos-sidebar-empty">
             <div class="photos-sidebar-empty-icon">📁</div>
             <div class="photos-sidebar-empty-text">Aucun dossier trouvé<br>pour "${orderNumber}"</div>
+            <button onclick="showSearchLogs()" style="margin-top:10px;padding:5px 10px;font-size:10px;background:#3b82f6;color:white;border:none;border-radius:5px;cursor:pointer;">
+              📋 Voir les logs
+            </button>
           </div>
         `;
         return;
