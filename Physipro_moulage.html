@@ -998,13 +998,15 @@
     .tracking-popup-close { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.2); border: none; color: #fff; font-size: 16px; cursor: pointer; }
     .tracking-popup-close:hover { background: rgba(255,255,255,0.3); }
     .tracking-popup-content { padding: 12px; max-height: 60vh; overflow-y: auto; }
-    .tracking-popup-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    .tracking-popup-table th { padding: 8px 6px; background: #f1f5f9; font-weight: 600; border: 1px solid #e2e8f0; }
-    .tracking-popup-table td { padding: 6px; text-align: center; border: 1px solid #e2e8f0; }
-    .tracking-popup-table .dept-cell { text-align: left; font-weight: 600; padding-left: 8px; }
+    .tracking-popup-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .tracking-popup-table th { padding: 8px 6px; background: #f1f5f9; font-weight: 700; border: 1px solid #e2e8f0; color: #1e293b; }
+    .tracking-popup-table td { padding: 6px; text-align: center; border: 1px solid #e2e8f0; color: #1e293b; font-weight: 500; }
+    .tracking-popup-table .dept-cell { text-align: left; font-weight: 700; padding-left: 8px; color: #1e293b; }
     .tracking-popup-table .active-row { background: #dbeafe; }
-    .tracking-popup-table .active-row .dept-cell { color: #2563eb; }
+    .tracking-popup-table .active-row td { color: #1e40af; font-weight: 600; }
+    .tracking-popup-table .active-row .dept-cell { color: #1e40af; }
     .tracking-popup-table .completed-row { background: #f0fdf4; }
+    .tracking-popup-table .completed-row td { color: #166534; }
     .tracking-popup-table .completed-row .dept-cell { color: #16a34a; }
     .tracking-popup-total { background: linear-gradient(90deg, #1e3a5f, #3b82f6) !important; }
     .tracking-popup-total td { color: #fff !important; font-weight: 700; }
@@ -3042,7 +3044,7 @@
           <label class="fiche-header-btn" id="fichePhotosBtn">
             <input type="checkbox" onchange="togglePhotosPanel(this)"> 📷 Photos
           </label>
-          <button type="button" class="fiche-header-btn" onclick="openTrackingPopup()" title="Voir le suivi">📊 Suivi</button>
+          <button type="button" class="fiche-header-btn" onclick="openTrackingPopup()" title="Voir le tracking">📊 Tracking</button>
           <div class="fiche-logo">
             <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro">
           </div>
@@ -3105,7 +3107,7 @@
   <div class="tracking-popup-overlay" id="trackingPopupOverlay" onclick="closeTrackingPopup(event)">
     <div class="tracking-popup" onclick="event.stopPropagation()">
       <div class="tracking-popup-header">
-        <span class="tracking-popup-title">📊 Suivi Production</span>
+        <span class="tracking-popup-title">📊 Tracking Production</span>
         <button class="tracking-popup-close" onclick="closeTrackingPopup(event, true)">✕</button>
       </div>
       <div class="tracking-popup-content">
@@ -3743,80 +3745,125 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1549';
+    const APP_VERSION = '1553';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
-    // SYSTÈME DE VERSION v3 - ROBUSTE avec protection anti-boucle
+    // SYSTÈME DE VERSION v5 - DÉSACTIVÉ SUR MOBILE (5 ingénieurs)
+    // ═══════════════════════════════════════════════════════════════
+    // 
+    // POURQUOI DÉSACTIVÉ SUR MOBILE:
+    // - Le cache iOS/Android est très agressif
+    // - Le refresh ne charge pas toujours la nouvelle version
+    // - Cause des boucles infinies de bandeaux
+    // - Les utilisateurs doivent forcer la mise à jour manuellement
+    //
     // ═══════════════════════════════════════════════════════════════
     
-    function startVersionCheck() {
-      if (!firebaseDb) return;
-      
-      setTimeout(() => {
-        firebaseDb.ref('appVersion').on('value', (snapshot) => {
-          const firebaseVersion = snapshot.val();
-          
-          // Pas de version dans Firebase = on initialise
-          if (!firebaseVersion) {
-            console.log(`📱 Firebase initialisé à v${APP_VERSION}`);
-            firebaseDb.ref('appVersion').set(APP_VERSION);
-            return;
-          }
-          
-          const firebaseNum = parseInt(firebaseVersion);
-          const localNum = parseInt(APP_VERSION);
-          
-          console.log(`📱 Version locale: ${APP_VERSION}, Firebase: ${firebaseVersion}`);
-          
-          // CAS 1: Versions identiques = tout va bien
-          if (firebaseNum === localNum) {
-            console.log(`✅ Version ${APP_VERSION} - OK`);
-            localStorage.removeItem('versionIgnored');
-            localStorage.removeItem('versionRefreshCount');
-            hideVersionBanner();
-            return;
-          }
-          
-          // CAS 2: Notre fichier est PLUS RÉCENT que Firebase
-          if (localNum > firebaseNum) {
-            console.log(`📱 Fichier plus récent (${APP_VERSION}) que Firebase (${firebaseVersion})`);
-            // Synchroniser Firebase automatiquement
-            firebaseDb.ref('appVersion').set(APP_VERSION);
-            showToast(`✅ Firebase synchronisé: v${APP_VERSION}`, 'success');
-            return;
-          }
-          
-          // CAS 3: Firebase demande une version PLUS RÉCENTE
-          // Vérifier si l'utilisateur a déjà ignoré cette version
-          const ignoredVersion = localStorage.getItem('versionIgnored');
-          if (ignoredVersion === firebaseVersion) {
-            console.log(`📱 Version ${firebaseVersion} ignorée par l'utilisateur`);
-            return;
-          }
-          
-          // Compter les tentatives de rafraîchissement
-          const refreshCount = parseInt(localStorage.getItem('versionRefreshCount') || '0');
-          const lastRefreshTime = parseInt(localStorage.getItem('versionRefreshTime') || '0');
-          const now = Date.now();
-          
-          // Si on a rafraîchi récemment (moins de 60 secondes) et qu'on est toujours sur l'ancienne version
-          if (refreshCount > 0 && (now - lastRefreshTime) < 60000) {
-            console.warn(`⚠️ BOUCLE DÉTECTÉE! Tentative #${refreshCount}`);
-            showVersionBannerWithBypass(firebaseVersion, refreshCount);
-            return;
-          }
-          
-          // Première demande de mise à jour
-          console.log(`🔄 Nouvelle version disponible: ${firebaseVersion} (actuelle: ${APP_VERSION})`);
-          showVersionBanner(firebaseVersion);
-        });
-        
-        console.log(`📱 Version ${APP_VERSION} - Vérification activée`);
-      }, 1000);
+    let versionCheckDone = false;
+    let versionListenerActive = false;
+    
+    // Détecter si on est sur mobile
+    function isMobileDevice() {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+             || window.innerWidth <= 768;
     }
     
-    // Bandeau simple de mise à jour (première fois)
+    // Nettoyer TOUTES les anciennes clés de version (migration)
+    function cleanOldVersionKeys() {
+      // Anciennes clés v3
+      localStorage.removeItem('versionIgnored');
+      localStorage.removeItem('versionRefreshCount');
+      localStorage.removeItem('versionRefreshTime');
+      // Clés v4
+      localStorage.removeItem('ppVersionIgnored');
+      localStorage.removeItem('ppVersionRefreshCount');
+      localStorage.removeItem('ppVersionLastAttempt');
+    }
+    
+    function startVersionCheck() {
+      // NETTOYER les anciennes clés au démarrage
+      cleanOldVersionKeys();
+      
+      // DÉSACTIVER SUR MOBILE - trop de problèmes de cache
+      if (isMobileDevice()) {
+        console.log(`📱 Version ${APP_VERSION} - Vérification désactivée sur mobile`);
+        // Sur mobile, on synchronise Firebase silencieusement si notre version est plus récente
+        if (firebaseDb) {
+          firebaseDb.ref('appVersion').once('value').then(snapshot => {
+            const fbVersion = parseInt(snapshot.val() || '0');
+            const localVersion = parseInt(APP_VERSION);
+            if (localVersion > fbVersion) {
+              firebaseDb.ref('appVersion').set(APP_VERSION);
+              console.log(`📱 Firebase mis à jour silencieusement: v${APP_VERSION}`);
+            }
+          });
+        }
+        return;
+      }
+      
+      // PC/Desktop seulement
+      if (!firebaseDb || versionListenerActive) return;
+      versionListenerActive = true;
+      
+      setTimeout(() => {
+        firebaseDb.ref('appVersion').once('value')
+          .then((snapshot) => {
+            handleVersionCheck(snapshot.val());
+            
+            // Écouter les changements futurs (desktop only)
+            firebaseDb.ref('appVersion').on('value', (snap) => {
+              if (versionCheckDone) {
+                handleVersionCheck(snap.val());
+              }
+            });
+          })
+          .catch(err => console.error('Erreur version check:', err));
+        
+        console.log(`🖥️ Version ${APP_VERSION} - Vérification activée (desktop)`);
+      }, 2000);
+    }
+    
+    function handleVersionCheck(firebaseVersion) {
+      if (!firebaseVersion) {
+        console.log(`📱 Firebase initialisé à v${APP_VERSION}`);
+        firebaseDb.ref('appVersion').set(APP_VERSION);
+        versionCheckDone = true;
+        return;
+      }
+      
+      const firebaseNum = parseInt(firebaseVersion);
+      const localNum = parseInt(APP_VERSION);
+      
+      console.log(`🖥️ Version locale: ${APP_VERSION}, Firebase: ${firebaseVersion}`);
+      
+      // Versions identiques = OK
+      if (firebaseNum === localNum) {
+        console.log(`✅ Version ${APP_VERSION} - OK`);
+        hideVersionBanner();
+        versionCheckDone = true;
+        return;
+      }
+      
+      // Fichier plus récent = sync Firebase
+      if (localNum > firebaseNum) {
+        console.log(`🖥️ Sync Firebase: v${APP_VERSION}`);
+        versionCheckDone = true;
+        firebaseDb.ref('appVersion').set(APP_VERSION)
+          .then(() => {
+            showToast(`✅ Firebase synchronisé: v${APP_VERSION}`, 'success');
+            hideVersionBanner();
+          });
+        return;
+      }
+      
+      // Firebase plus récent = afficher bandeau (desktop seulement)
+      versionCheckDone = true;
+      console.log(`🔄 Nouvelle version disponible: ${firebaseVersion}`);
+      showVersionBanner(firebaseVersion);
+    }
+    
+    // Bandeau de mise à jour (desktop seulement)
     function showVersionBanner(newVersion) {
       hideVersionBanner();
       
@@ -3829,133 +3876,65 @@
           left: 0;
           right: 0;
           background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-          padding: 12px 20px;
+          padding: 10px 15px;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 15px;
-          z-index: 999999;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        ">
-          <span style="font-size: 20px;">🔄</span>
-          <span style="color: white; font-size: 14px;">
-            <strong>Nouvelle version v${newVersion} disponible!</strong>
-            <span style="opacity: 0.9;">(Vous avez v${APP_VERSION})</span>
-          </span>
-          <button onclick="doVersionRefresh()" style="
-            padding: 8px 20px;
-            background: #22c55e;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-          ">Rafraîchir</button>
-          <button onclick="ignoreVersion('${newVersion}')" style="
-            padding: 8px 15px;
-            background: rgba(255,255,255,0.2);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-          ">Plus tard</button>
-        </div>
-      `;
-      document.body.appendChild(banner);
-    }
-    
-    // Bandeau avec option de bypass (après boucle détectée)
-    function showVersionBannerWithBypass(newVersion, attempts) {
-      hideVersionBanner();
-      
-      const banner = document.createElement('div');
-      banner.id = 'versionBanner';
-      banner.innerHTML = `
-        <div style="
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-          padding: 12px 20px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 15px;
+          gap: 10px;
           z-index: 999999;
           box-shadow: 0 4px 20px rgba(0,0,0,0.3);
           flex-wrap: wrap;
         ">
-          <span style="font-size: 20px;">⚠️</span>
           <span style="color: white; font-size: 13px;">
-            <strong>Version v${newVersion} demandée mais serveur a v${APP_VERSION}</strong>
-            <span style="opacity: 0.9;">(Le fichier GitHub n'est peut-être pas encore à jour)</span>
+            🔄 <strong>v${newVersion}</strong> disponible
           </span>
           <button onclick="doVersionRefresh()" style="
-            padding: 8px 15px;
-            background: rgba(255,255,255,0.3);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-          ">🔄 Réessayer</button>
-          <button onclick="ignoreVersion('${newVersion}')" style="
-            padding: 8px 15px;
+            padding: 6px 14px;
             background: #22c55e;
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 5px;
             font-weight: 600;
+            font-size: 12px;
             cursor: pointer;
-          ">✓ Continuer quand même</button>
-          ${hasPermission('A') ? `<button onclick="forceSyncVersion()" style="
-            padding: 8px 15px;
-            background: #ef4444;
+          ">Rafraîchir</button>
+          <button onclick="hideVersionBanner()" style="
+            padding: 6px 12px;
+            background: rgba(255,255,255,0.2);
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 5px;
+            font-size: 12px;
             cursor: pointer;
-          ">🔧 Forcer Firebase à v${APP_VERSION}</button>` : ''}
+          ">✕</button>
         </div>
       `;
       document.body.appendChild(banner);
     }
     
-    // Cacher le bandeau
     function hideVersionBanner() {
       const banner = document.getElementById('versionBanner');
       if (banner) banner.remove();
     }
+    window.hideVersionBanner = hideVersionBanner;
     
-    // Rafraîchir la page
+    // Rafraîchir (desktop)
     function doVersionRefresh() {
-      // Incrémenter le compteur de tentatives
-      const count = parseInt(localStorage.getItem('versionRefreshCount') || '0') + 1;
-      localStorage.setItem('versionRefreshCount', count.toString());
-      localStorage.setItem('versionRefreshTime', Date.now().toString());
-      
-      // Vider les caches
       if ('caches' in window) {
         caches.keys().then(names => names.forEach(name => caches.delete(name)));
       }
-      
-      // Recharger avec cache-buster
-      const url = new URL(window.location.href);
-      url.searchParams.set('_v', Date.now());
-      window.location.href = url.toString();
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          regs.forEach(reg => reg.unregister());
+        });
+      }
+      setTimeout(() => {
+        window.location.reload(true);
+      }, 300);
     }
     window.doVersionRefresh = doVersionRefresh;
     
-    // Ignorer cette version
-    function ignoreVersion(version) {
-      localStorage.setItem('versionIgnored', version);
-      localStorage.removeItem('versionRefreshCount');
-      hideVersionBanner();
-      showToast(`Version ${version} ignorée. Rechargez manuellement plus tard.`, 'info');
-    }
-    window.ignoreVersion = ignoreVersion;
-    
-    // Forcer Firebase à prendre la version locale (admin)
+    // Forcer Firebase (admin)
     function forceSyncVersion() {
       if (!firebaseDb) {
         showToast('❌ Firebase non connecté', 'error');
@@ -3965,8 +3944,6 @@
       firebaseDb.ref('appVersion').set(APP_VERSION)
         .then(() => {
           showToast(`✅ Firebase forcé à v${APP_VERSION}`, 'success');
-          localStorage.removeItem('versionIgnored');
-          localStorage.removeItem('versionRefreshCount');
           hideVersionBanner();
         })
         .catch(err => showToast('❌ Erreur: ' + err.message, 'error'));
@@ -8875,13 +8852,27 @@ function initLogoMenu(currentMod){
       if (!tbody) return;
       
       const tracking = card.tracking || {};
-      const currentCol = card.colonne || 'robot';
+      const currentCol = card.colonne || 'colRobot';
+      
+      // Mapping colonne ID -> tracking ID
+      const colToTrackingId = {
+        'colRobot': 'robot',
+        'colDegauchage': 'degauchage',
+        'colEssayage': 'essayage',
+        'colAtelier': 'atelier',
+        'colCouture': 'couture',
+        'colPeinture': 'peinture',
+        'colExpedition': 'expedition',
+        'colAttente': 'attente'
+      };
       
       let html = '';
       let totalDays = 0;
       
       COLONNES.forEach((col, idx) => {
-        const t = tracking[col.id] || {};
+        // Utiliser le bon ID de tracking
+        const trackingId = colToTrackingId[col.id] || col.id;
+        const t = tracking[trackingId] || {};
         const entree = t.entree || '';
         const sortie = t.sortie || '';
         const isCurrent = (col.id === currentCol);
@@ -12273,6 +12264,13 @@ function initLogoMenu(currentMod){
       currentPhotoIndex = index;
       galleryCardId = currentCardId;
       galleryPhotos = sidebarPhotos;
+      
+      // OUVRIR la galerie
+      const overlay = document.getElementById('photoGalleryOverlay');
+      if (overlay) {
+        overlay.classList.add('active');
+      }
+      
       renderGallery(orderNumber, beneficiaryName);
     }
     window.openPhotoFromSidebar = openPhotoFromSidebar;
