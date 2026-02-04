@@ -3998,7 +3998,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1579';
+    const APP_VERSION = '1580';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -11970,6 +11970,10 @@ function initLogoMenu(currentMod){
     // Chemin du dossier photos dans OneDrive
     const ONEDRIVE_PHOTOS_PATH = '/Photos moulage atelier client En attente';
     
+    // DriveId du OneDrive partagé (poste atelieratp@physipro.com)
+    // Tout le monde accède à CE drive, pas leur drive personnel
+    const SHARED_DRIVE_ID = 'b!Xug9dO_pD0Kzgzmidiqvfy-H9aspqnxDmRwKgPDLetQEiULYtg5kSbg0XTIhUwTe';
+    
     // Variables globales pour la galerie
     let msalInstance = null;
     let msalAccessToken = null;
@@ -12151,15 +12155,16 @@ function initLogoMenu(currentMod){
       
       try {
         // ═══════════════════════════════════════════════════════════════
-        // MÉTHODE 1: Chercher dans MON OneDrive (pour le propriétaire)
+        // MÉTHODE PRINCIPALE: Accès direct au drive partagé (atelieratp)
+        // Fonctionne pour TOUT LE MONDE si le dossier est partagé
         // ═══════════════════════════════════════════════════════════════
         const pathEncoded = ONEDRIVE_PHOTOS_PATH.split('/').map(p => encodeURIComponent(p)).join('/');
-        const url1 = `https://graph.microsoft.com/v1.0/me/drive/root:${pathEncoded}:/children`;
+        const sharedUrl = `https://graph.microsoft.com/v1.0/drives/${SHARED_DRIVE_ID}/root:${pathEncoded}:/children`;
         
-        addLog(`📂 MÉTHODE 1: OneDrive personnel`);
-        addLog(`   URL: ${url1}`);
+        addLog(`📂 MÉTHODE 1: Drive partagé (atelieratp)`);
+        addLog(`   URL: ${sharedUrl}`);
         
-        let response = await fetch(url1, {
+        let response = await fetch(sharedUrl, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -12178,6 +12183,8 @@ function initLogoMenu(currentMod){
           );
           
           if (folder) {
+            // Marquer comme venant du drive partagé
+            folder._sharedDriveId = SHARED_DRIVE_ID;
             addLog(`   ✅ TROUVÉ: ${folder.name}`);
             return folder;
           } else {
@@ -12189,90 +12196,34 @@ function initLogoMenu(currentMod){
         }
         
         // ═══════════════════════════════════════════════════════════════
-        // MÉTHODE 2: Chercher dans "Partagé avec moi" (pour les collègues)
+        // MÉTHODE 2: OneDrive personnel (fallback si c'est le propriétaire)
         // ═══════════════════════════════════════════════════════════════
-        addLog(`📂 MÉTHODE 2: Partagé avec moi`);
-        const sharedUrl = `https://graph.microsoft.com/v1.0/me/drive/sharedWithMe`;
-        addLog(`   URL: ${sharedUrl}`);
+        addLog(`📂 MÉTHODE 2: OneDrive personnel (fallback)`);
+        const url1 = `https://graph.microsoft.com/v1.0/me/drive/root:${pathEncoded}:/children`;
+        addLog(`   URL: ${url1}`);
         
-        const sharedResponse = await fetch(sharedUrl, {
+        response = await fetch(url1, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
-        addLog(`   Réponse: ${sharedResponse.status} ${sharedResponse.statusText}`);
+        addLog(`   Réponse: ${response.status} ${response.statusText}`);
         
-        if (sharedResponse.ok) {
-          const sharedData = await sharedResponse.json();
-          addLog(`   📁 Éléments partagés: ${sharedData.value?.length || 0}`);
+        if (response.ok) {
+          const data = await response.json();
+          addLog(`   📁 Dossiers trouvés: ${data.value?.length || 0}`);
           
-          if (sharedData.value && sharedData.value.length > 0) {
-            addLog(`   Liste partagée:`);
-            sharedData.value.forEach((f, i) => {
-              addLog(`     ${i+1}. "${f.name}" (${f.folder ? 'dossier' : 'fichier'})`);
-            });
-          }
-          
-          // Chercher le dossier racine partagé (Photos moulage...)
-          const sharedRoot = sharedData.value?.find(f => 
-            f.folder && f.name.includes('Photos moulage')
+          const folder = data.value?.find(f => 
+            f.folder && f.name.startsWith(orderNumber)
           );
           
-          if (sharedRoot) {
-            addLog(`   ✅ Dossier racine trouvé: "${sharedRoot.name}"`);
-            addLog(`   remoteItem: ${sharedRoot.remoteItem ? 'OUI' : 'NON'}`);
-            
-            if (sharedRoot.remoteItem) {
-              const remoteDriveId = sharedRoot.remoteItem.parentReference?.driveId;
-              const remoteItemId = sharedRoot.remoteItem.id;
-              
-              addLog(`   driveId: ${remoteDriveId}`);
-              addLog(`   itemId: ${remoteItemId}`);
-              
-              if (remoteDriveId && remoteItemId) {
-                const remoteUrl = `https://graph.microsoft.com/v1.0/drives/${remoteDriveId}/items/${remoteItemId}/children`;
-                addLog(`   URL remote: ${remoteUrl}`);
-                
-                const remoteResponse = await fetch(remoteUrl, {
-                  headers: { 'Authorization': `Bearer ${token}` }
-                });
-                
-                addLog(`   Réponse remote: ${remoteResponse.status} ${remoteResponse.statusText}`);
-                
-                if (remoteResponse.ok) {
-                  const remoteData = await remoteResponse.json();
-                  addLog(`   📁 Dossiers dans partagé: ${remoteData.value?.length || 0}`);
-                  
-                  if (remoteData.value && remoteData.value.length > 0) {
-                    addLog(`   Liste: ${remoteData.value.slice(0, 10).map(f => f.name).join(', ')}${remoteData.value.length > 10 ? '...' : ''}`);
-                  }
-                  
-                  const folder = remoteData.value?.find(f => 
-                    f.folder && f.name.startsWith(orderNumber)
-                  );
-                  
-                  if (folder) {
-                    folder._sharedDriveId = remoteDriveId;
-                    addLog(`   ✅ TROUVÉ dans partagé: ${folder.name}`);
-                    return folder;
-                  } else {
-                    addLog(`   ❌ Dossier ${orderNumber} non trouvé dans partagé`);
-                  }
-                } else {
-                  const errorText = await remoteResponse.text();
-                  addLog(`   ❌ Erreur remote: ${errorText.substring(0, 200)}`);
-                }
-              }
-            }
-          } else {
-            addLog(`   ❌ Pas de dossier "Photos moulage" trouvé dans partagé`);
+          if (folder) {
+            addLog(`   ✅ TROUVÉ (personnel): ${folder.name}`);
+            return folder;
           }
-        } else {
-          const errorText = await sharedResponse.text();
-          addLog(`   ❌ Erreur sharedWithMe: ${errorText.substring(0, 200)}`);
         }
         
         // ═══════════════════════════════════════════════════════════════
-        // MÉTHODE 3: Recherche globale (fallback)
+        // MÉTHODE 3: Recherche globale (dernier recours)
         // ═══════════════════════════════════════════════════════════════
         addLog(`📂 MÉTHODE 3: Recherche globale`);
         const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${orderNumber}')`;
