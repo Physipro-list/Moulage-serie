@@ -3054,7 +3054,7 @@
     <div class="mobile-fiche-header">
       <button class="mobile-back-btn" onclick="closeMobileFiche()">←</button>
       <span class="mobile-fiche-title" id="mobileFicheTitle">Nom du moulage</span>
-      <button class="mobile-photo-btn" onclick="openPhotoArchiveModal(mobileCurrentCardId)" title="Photo pour archive">📤</button>
+      <button class="mobile-photo-btn" onclick="openPhotoArchiveModal(mobileCurrentCardId)" title="Photo pour archive">📷</button>
     </div>
     <div class="mobile-fiche-content" id="mobileFicheContent">
       <!-- Généré par JS -->
@@ -3062,7 +3062,7 @@
     <div class="mobile-fiche-nav-bar">
       <button class="mobile-nav-big-btn photos-btn" onclick="goToMobilePhotos()">
         <span class="nav-arrow">◀</span>
-        <span class="nav-label">📷 Photos</span>
+        <span class="nav-label">☁️ OneDrive</span>
       </button>
       <button class="mobile-nav-big-btn chat-btn" onclick="goToMobileChat()">
         <span class="nav-label">💬 Chat</span>
@@ -3971,7 +3971,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1558';
+    const APP_VERSION = '1562';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -11999,6 +11999,38 @@ function initLogoMenu(currentMod){
           msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
           console.log('✅ MSAL initialisé');
           
+          // Gérer le retour du redirect (important pour mobile)
+          msalInstance.handleRedirectPromise()
+            .then((response) => {
+              if (response) {
+                // Connexion réussie via redirect
+                msalAccessToken = response.accessToken;
+                localStorage.setItem('onedriveAccessToken', msalAccessToken);
+                console.log('✅ Connexion OneDrive réussie (redirect):', response.account.username);
+                showToast('✅ Connecté à OneDrive!', 'success');
+                
+                // Vérifier si on était en train de charger les photos mobile
+                if (sessionStorage.getItem('onedriveLoginPending') === 'true') {
+                  sessionStorage.removeItem('onedriveLoginPending');
+                  const savedCardId = sessionStorage.getItem('onedriveLoginCardId');
+                  sessionStorage.removeItem('onedriveLoginCardId');
+                  
+                  // Recharger les photos après un court délai
+                  setTimeout(() => {
+                    if (typeof loadMobilePhotos === 'function') {
+                      loadMobilePhotos();
+                    }
+                    if (typeof loadSidebarPhotos === 'function') {
+                      loadSidebarPhotos();
+                    }
+                  }, 500);
+                }
+              }
+            })
+            .catch((error) => {
+              console.error('Erreur redirect OneDrive:', error);
+            });
+          
           // Vérifier si déjà connecté
           const accounts = msalInstance.getAllAccounts();
           if (accounts.length > 0) {
@@ -12026,6 +12058,10 @@ function initLogoMenu(currentMod){
         return false;
       }
       
+      // Détecter si on est sur mobile
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                       || window.innerWidth <= 768;
+      
       try {
         const loginRequest = {
           scopes: ['Files.Read', 'Files.Read.All', 'User.Read']
@@ -12040,16 +12076,29 @@ function initLogoMenu(currentMod){
               account: accounts[0]
             });
             msalAccessToken = response.accessToken;
+            localStorage.setItem('onedriveAccessToken', msalAccessToken);
             console.log('✅ Token OneDrive récupéré (silencieux)');
             return true;
           } catch (silentError) {
-            console.log('Token silencieux échoué, popup requis');
+            console.log('Token silencieux échoué, connexion interactive requise');
           }
         }
         
-        // Sinon, popup de connexion
+        // Sur mobile: utiliser redirect au lieu de popup (les popups sont souvent bloquées)
+        if (isMobile) {
+          console.log('📱 Mobile détecté - utilisation de loginRedirect');
+          // Sauvegarder l'état pour après le redirect
+          sessionStorage.setItem('onedriveLoginPending', 'true');
+          sessionStorage.setItem('onedriveLoginCardId', mobileCurrentCardId || currentCardId || '');
+          await msalInstance.loginRedirect(loginRequest);
+          // Le code ne continue pas ici, la page va être redirigée
+          return false;
+        }
+        
+        // Sur desktop: popup classique
         const response = await msalInstance.loginPopup(loginRequest);
         msalAccessToken = response.accessToken;
+        localStorage.setItem('onedriveAccessToken', msalAccessToken);
         console.log('✅ Connexion OneDrive réussie:', response.account.username);
         showToast('✅ Connecté à OneDrive', 'success');
         return true;
@@ -12058,6 +12107,8 @@ function initLogoMenu(currentMod){
         console.error('❌ Erreur connexion OneDrive:', error);
         if (error.errorCode === 'user_cancelled') {
           showToast('Connexion annulée', 'warning');
+        } else if (error.errorCode === 'popup_window_error') {
+          showToast('⚠️ Popup bloquée. Réessayez.', 'warning');
         } else {
           showToast('❌ Erreur de connexion OneDrive', 'error');
         }
@@ -12071,7 +12122,11 @@ function initLogoMenu(currentMod){
       
       const accounts = msalInstance.getAllAccounts();
       if (accounts.length === 0) {
-        return await loginOneDrive() ? msalAccessToken : null;
+        const success = await loginOneDrive();
+        if (success) {
+          localStorage.setItem('onedriveAccessToken', msalAccessToken);
+        }
+        return success ? msalAccessToken : null;
       }
       
       try {
@@ -12080,10 +12135,15 @@ function initLogoMenu(currentMod){
           account: accounts[0]
         });
         msalAccessToken = response.accessToken;
+        localStorage.setItem('onedriveAccessToken', msalAccessToken);
         return msalAccessToken;
       } catch (error) {
         console.log('Token expiré, nouvelle connexion requise');
-        return await loginOneDrive() ? msalAccessToken : null;
+        const success = await loginOneDrive();
+        if (success) {
+          localStorage.setItem('onedriveAccessToken', msalAccessToken);
+        }
+        return success ? msalAccessToken : null;
       }
     }
     
@@ -14054,12 +14114,6 @@ function initLogoMenu(currentMod){
             <span class="mobile-fiche-value date-field" onclick="openCalendar(this,'dateEssayage','${cardId}')">${formatDateDisplay(d.dateEssayage) || 'Sélectionner...'}</span>
           </div>
         </div>
-        
-        <!-- BOUTON PHOTOS ONEDRIVE (en bas) -->
-        <button class="mobile-photos-btn" onclick="openPhotosOneDrive('${cardId}')">
-          <span>📷</span>
-          <span>Voir les photos OneDrive</span>
-        </button>
       `;
       
       document.getElementById('mobileFichePage').classList.add('active');
@@ -14119,7 +14173,11 @@ function initLogoMenu(currentMod){
     
     // Navigation vers les photos OneDrive mobile
     function goToMobilePhotos() {
-      if (!mobileCurrentCardId) return;
+      console.log('📱 goToMobilePhotos appelé, mobileCurrentCardId:', mobileCurrentCardId);
+      if (!mobileCurrentCardId) {
+        console.error('❌ Pas de carte sélectionnée');
+        return;
+      }
       document.getElementById('mobilePhotosPage').classList.add('active');
       document.getElementById('mobileChatPage').classList.remove('active');
       loadMobilePhotos();
@@ -14136,16 +14194,19 @@ function initLogoMenu(currentMod){
       const orderNumber = card.order || '';
       const beneficiaryName = (card.name || '').toUpperCase().trim();
       
-      folderEl.textContent = `${orderNumber} - ${beneficiaryName}`;
+      if (folderEl) folderEl.textContent = `${orderNumber} - ${beneficiaryName}`;
+      if (!grid) return;
       
-      // Vérifier connexion OneDrive
-      const accessToken = localStorage.getItem('onedriveAccessToken');
-      if (!accessToken) {
+      // Vérifier connexion OneDrive via MSAL (pas localStorage)
+      const hasAccount = msalInstance && msalInstance.getAllAccounts().length > 0;
+      const hasToken = msalAccessToken || localStorage.getItem('onedriveAccessToken');
+      
+      if (!hasAccount && !hasToken) {
         grid.innerHTML = `
           <div class="mobile-photos-connect">
             <div style="font-size: 48px; opacity: 0.5;">☁️</div>
             <div style="color: #93c5fd; text-align: center;">Connectez-vous à OneDrive pour voir les photos</div>
-            <button class="mobile-photos-connect-btn" onclick="connectToOneDrive()">
+            <button class="mobile-photos-connect-btn" onclick="connectMobileOneDrive()">
               🔗 Connexion OneDrive
             </button>
           </div>
@@ -14164,11 +14225,13 @@ function initLogoMenu(currentMod){
       try {
         // Utiliser les photos déjà chargées dans sidebarPhotos si disponibles
         if (sidebarPhotos && sidebarPhotos.length > 0 && sidebarPhotosCardId === mobileCurrentCardId) {
+          console.log('📱 Utilisation des photos en cache:', sidebarPhotos.length);
           renderMobilePhotos(sidebarPhotos);
           return;
         }
         
         // Sinon charger depuis OneDrive
+        console.log('📱 Recherche du dossier:', orderNumber, beneficiaryName);
         const folder = await findOrderFolder(orderNumber, beneficiaryName);
         if (!folder) {
           grid.innerHTML = `
@@ -14180,6 +14243,7 @@ function initLogoMenu(currentMod){
           return;
         }
         
+        console.log('📱 Dossier trouvé, chargement des photos...');
         const photos = await getPhotosFromFolder(folder.id);
         if (!photos || photos.length === 0) {
           grid.innerHTML = `
@@ -14191,14 +14255,18 @@ function initLogoMenu(currentMod){
           return;
         }
         
+        console.log('📱 Photos trouvées:', photos.length);
         renderMobilePhotos(photos);
         
       } catch (err) {
-        console.error('Erreur chargement photos mobile:', err);
+        console.error('❌ Erreur chargement photos mobile:', err);
         grid.innerHTML = `
           <div class="mobile-photos-empty">
             <div class="mobile-photos-empty-icon">❌</div>
             <div>Erreur de chargement<br>${err.message}</div>
+            <button class="mobile-photos-connect-btn" onclick="loadMobilePhotos()" style="margin-top: 15px;">
+              🔄 Réessayer
+            </button>
           </div>
         `;
       }
@@ -14207,6 +14275,13 @@ function initLogoMenu(currentMod){
     // Afficher les photos dans la grille mobile
     function renderMobilePhotos(photos) {
       const grid = document.getElementById('mobilePhotosGrid');
+      if (!grid) {
+        console.error('❌ Grid mobile non trouvée');
+        return;
+      }
+      
+      console.log('📱 renderMobilePhotos appelé avec', photos?.length || 0, 'photos');
+      
       if (!photos || photos.length === 0) {
         grid.innerHTML = `
           <div class="mobile-photos-empty">
@@ -14217,15 +14292,71 @@ function initLogoMenu(currentMod){
         return;
       }
       
-      grid.innerHTML = photos.map((photo, index) => `
-        <div class="mobile-photos-thumb" onclick="openMobilePhotoGallery(${index})">
-          <img src="${photo.thumbnailUrl || photo.downloadUrl}" alt="${photo.name}">
-        </div>
-      `).join('');
+      // Générer le HTML des miniatures
+      const html = photos.map((photo, index) => {
+        const imgUrl = photo.thumbnailUrl || photo.downloadUrl || '';
+        console.log(`📷 Photo ${index}: ${photo.name}, URL: ${imgUrl.substring(0, 50)}...`);
+        return `
+          <div class="mobile-photos-thumb" onclick="openMobilePhotoGallery(${index})">
+            <img src="${imgUrl}" alt="${photo.name || 'Photo'}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📷</text></svg>'">
+          </div>
+        `;
+      }).join('');
+      
+      grid.innerHTML = html;
+      console.log('✅ Photos mobile affichées:', photos.length);
       
       // Stocker pour la galerie
       window.mobileGalleryPhotos = photos;
     }
+    
+    // Connexion OneDrive depuis mobile
+    async function connectMobileOneDrive() {
+      const grid = document.getElementById('mobilePhotosGrid');
+      if (grid) {
+        grid.innerHTML = `
+          <div class="mobile-photos-loading">
+            <div class="mobile-photos-spinner"></div>
+            <div style="color: #93c5fd;">Connexion en cours...</div>
+          </div>
+        `;
+      }
+      
+      try {
+        const connected = await loginOneDrive();
+        if (connected) {
+          showToast('✅ Connecté à OneDrive!', 'success');
+          // Recharger les photos
+          loadMobilePhotos();
+        } else {
+          if (grid) {
+            grid.innerHTML = `
+              <div class="mobile-photos-connect">
+                <div style="font-size: 48px; opacity: 0.5;">❌</div>
+                <div style="color: #fca5a5; text-align: center;">Connexion échouée. Réessayez.</div>
+                <button class="mobile-photos-connect-btn" onclick="connectMobileOneDrive()">
+                  🔗 Réessayer
+                </button>
+              </div>
+            `;
+          }
+        }
+      } catch (err) {
+        console.error('Erreur connexion OneDrive mobile:', err);
+        if (grid) {
+          grid.innerHTML = `
+            <div class="mobile-photos-connect">
+              <div style="font-size: 48px; opacity: 0.5;">❌</div>
+              <div style="color: #fca5a5; text-align: center;">Erreur: ${err.message}</div>
+              <button class="mobile-photos-connect-btn" onclick="connectMobileOneDrive()">
+                🔗 Réessayer
+              </button>
+            </div>
+          `;
+        }
+      }
+    }
+    window.connectMobileOneDrive = connectMobileOneDrive;
     
     // Ouvrir la galerie depuis mobile
     function openMobilePhotoGallery(index) {
@@ -15143,7 +15274,6 @@ function initLogoMenu(currentMod){
     window.closeFiche = closeFiche;
     window.openMobileFiche = openMobileFiche;
     window.closeMobileFiche = closeMobileFiche;
-    window.toggleTracking = toggleTracking;
     window.toggleChatExpand = toggleChatExpand;
     window.updateField = updateField;
     window.updateMobileField = updateMobileField;
