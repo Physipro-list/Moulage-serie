@@ -4,52 +4,39 @@
   <meta charset="UTF-8">
   <!-- 
     ═══════════════════════════════════════════════════════════════════
-    v1527 - FIX BOUCLE VERSION: CORRECTIONS CRITIQUES + AUTO-UPDATE
+    ⚠️ RAPPEL CLAUDE: TOUJOURS INCRÉMENTER APP_VERSION APRÈS CHAQUE MODIFICATION!
+    La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
-    🔴 BUGS CORRIGÉS:
-    1. Perte de valeurs dans les listes (Intervenants, Centres, etc.)
-       → Système de FUSION au lieu d'écrasement
-       → Écoute en TEMPS RÉEL des listes
-       → Historique sauvegardé pour récupération
-    
-    2. Manifest PWA "start_url invalid"
-       → Manifest généré dynamiquement avec URL correcte
-    
-    3. Meta tag "apple-mobile-web-app-capable" déprécié
-       → Ajout de "mobile-web-app-capable"
-    
-    4. Warning "numéro de commande manquant" pour les notes
-       → Les notes (isNote) sont maintenant exclues de cette vérification
-    
-    5. Recherche PC améliorée
-       → Cherche aussi dans les messages
-    
-    6. Tri colonne Essayage par DATE
-       → Plus récent en HAUT (PC et Mobile)
-    
-    7. Recherche mobile améliorée
-       → Résultats affichés EN HAUT avec section "🔍 Résultats"
-       → Tri par pertinence
-       → Affiche la colonne d'origine de chaque carte
-    
-    🆕 NOUVELLE FONCTIONNALITÉ: DÉTECTION AUTO DE MISE À JOUR
-    - Quand tu déploies une nouvelle version:
-      1. Change APP_VERSION dans le code
-      2. Dans la console: setRequiredVersion('1525')
-    - Tous les utilisateurs verront un popup les forçant à rafraîchir
-    
-    ⚠️ ACTIONS REQUISES DANS FIREBASE CONSOLE:
-    - Ajouter physipro-list.github.io dans Authentication > Authorized domains
-    - Ajouter "appVersion" dans les Rules Firebase
-    
-    v1472 - CHECKBOX ABSOLU + MENU EXPAND AVEC OPTIONS
+    v1545 - SYSTÈME VERSION v3 + CORRECTIONS ONEDRIVE
     ═══════════════════════════════════════════════════════════════════
     
-    MODIFICATIONS:
-    - Checkbox en position absolue (n'affecte plus le centrage)
-    - Couleur du checkbox adaptée à la région de la carte
-    - Menu popup avec options:
+    🆕 MODIFICATIONS v1545:
+    
+    1. SYSTÈME DE VERSION v3 - ROBUSTE
+       → Bandeau NON-BLOQUANT au lieu de popup modal
+       → Bouton "Continuer quand même" après détection de boucle
+       → Bouton "Plus tard" pour ignorer temporairement
+       → Protection anti-boucle avec localStorage (persiste entre sessions)
+       → Synchronisation automatique de Firebase si fichier plus récent
+       → Détection intelligente: si le serveur n'a pas la bonne version, 
+         l'utilisateur peut continuer à travailler
+    
+    2. CORRECTIONS ONEDRIVE
+       → Encodage du chemin corrigé (ne pas encoder les /)
+       → Recherche alternative si première méthode échoue
+       → Support .heic ajouté pour photos iPhone
+       → Logs de debug dans la console
+       → Détection fichier local (file:///) avec message clair
+    
+    3. LAYOUT PHOTOS CORRIGÉ
+       → Header Photos aligné en haut (pas au milieu)
+       → Zone Photos prend toute la hauteur
+       → Utilisation des classes CSS au lieu de styles inline
+    
+    ═══════════════════════════════════════════════════════════════════
+    v1537 - SIDEBAR PHOTOS SEULEMENT + TRACKING POPUP + FIX FOND CHAT
+    ═══════════════════════════════════════════════════════════════════
       * Doit partir avant (date)
       * Message libre
     - Zone expand affiche les infos enregistrées
@@ -571,38 +558,453 @@
     .robot-notes-btn:hover { background: linear-gradient(to bottom, #e5e7eb, #d1d5db); border-color: #217346; }
     .robot-notes-btn.has-notes { background: linear-gradient(to bottom, #fee2e2, #fde68a); border-color: #dc2626; color: #92400e; }
 
-    /* ===== SECTION 5: FICHE OVERLAY ===== */
+    /* ═══════════════════════════════════════════════════════════════════════════════
+       SECTION 5: FICHE OVERLAY - SYSTÈME RESIZABLE AVEC SPLITTERS (comme Excel)
+    ═══════════════════════════════════════════════════════════════════════════════ */
+    
+    /* Overlay de fond */
     .fiche-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; animation: fadeIn 0.2s; }
     .fiche-overlay.hidden { display: none; }
-    .fiche-container { display: flex; width: calc(100% - 1in); max-width: 1600px; height: calc(100vh - 30px); max-height: 950px; background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); overflow: hidden; }
-    .fiche-container.no-tracking .fiche-tracking-sidebar { display: none; }
-    .fiche-container.no-tracking .fiche-info-zone { border-radius: 16px 0 0 16px; }
-
-    .fiche-tracking-sidebar { width: 280px; min-width: 280px; background: #fff; display: flex; flex-direction: column; border-radius: 16px 0 0 16px; border-right: 1px solid #e2e8f0; overflow: hidden; }
-    .tracking-sidebar-header { display: flex; align-items: center; justify-content: center; height: 44px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); }
-    .tracking-sidebar-title { font-size: 12px; font-weight: 700; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
-    .tracking-table-wrap { padding: 10px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
-    .tracking-table { width: 100%; border-collapse: collapse; font-size: 11px; color: #1f2937; }
-    .tracking-table th { padding: 6px 4px; background: #f1f5f9; color: #374151; font-weight: 600; text-align: center; border: 1px solid #e2e8f0; }
-    .tracking-table td { padding: 5px 4px; text-align: center; border: 1px solid #e2e8f0; color: #1f2937; }
-    .tracking-table td.dept-cell { text-align: left; font-weight: 600; color: #1f2937; padding-left: 6px; }
-    .tracking-table tr.active-dept { background: linear-gradient(90deg, #dbeafe, #eff6ff); }
-    .tracking-table tr.active-dept td.dept-cell { color: #2563eb; }
-    .tracking-table tr.completed-dept { background: #f0fdf4; }
-    .tracking-table tr.completed-dept td.dept-cell { color: #16a34a; }
-    .tracking-date-input { display: inline-block; min-width: 50px; padding: 3px 4px; font-size: 10px; border: 1px solid #d1d5db; border-radius: 4px; text-align: center; cursor: pointer; background: #fff; color: #1f2937; }
-    .tracking-date-input:hover { border-color: #3b82f6; background: #eff6ff; }
-    .tracking-date-input.has-date { border-color: #22c55e; background: #f0fdf4; color: #166534; font-weight: 600; }
-    .tracking-days { font-weight: 700; font-size: 11px; }
-    .tracking-days.completed { color: #16a34a; }
-    .tracking-days.in-progress { color: #2563eb; }
-    .tracking-days.empty { color: #9ca3af; }
-    .tracking-total-row { background: linear-gradient(90deg, #1e3a5f, #3b82f6) !important; }
-    .tracking-total-row td { color: #fff !important; font-weight: 700; border-color: #1e3a5f !important; }
-
-    .fiche-info-zone { flex: 0 0 530px; display: flex; flex-direction: column; background: #f8fafc; border-right: 3px solid #e2e8f0; }
-    .fiche-header { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 44px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); }
-    .fiche-tracking-btn { display: flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 10px; font-weight: 600; color: #fff; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); }
+    
+    /* Conteneur principal - flex horizontal */
+    .fiche-container { 
+      display: flex; 
+      align-items: stretch;
+      width: calc(100% - 40px); 
+      max-width: 1600px; 
+      height: calc(100vh - 40px); 
+      max-height: 950px; 
+      background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%); 
+      border-radius: 16px; 
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5); 
+      overflow: hidden;
+      user-select: none;
+    }
+    
+    /* ===== ZONE PHOTOS (gauche) ===== */
+    .fiche-photos-zone { 
+      width: 280px; 
+      min-width: 180px;
+      max-width: 500px;
+      display: flex; 
+      flex-direction: column; 
+      background: #1e293b; 
+      border-radius: 16px 0 0 16px;
+      align-self: stretch;
+      height: 100%;
+    }
+    .fiche-container.no-photos .fiche-photos-zone { display: none; }
+    .fiche-container.no-photos .splitter-photos { display: none; }
+    
+    /* Header Photos - MÊME STYLE que Fiche et Chat */
+    .photos-header { 
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      height: 44px;
+      padding: 0 12px; 
+      background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); 
+      flex-shrink: 0;
+      border-radius: 16px 0 0 0;
+    }
+    .photos-header-title { font-size: 13px; font-weight: 700; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+    .photos-header-folder { font-size: 10px; color: #a78bfa; text-align: center; word-break: break-all; padding: 6px; background: rgba(0,0,0,0.2); }
+    
+    .photos-grid { 
+      flex: 1; 
+      padding: 8px; 
+      display: grid; 
+      grid-template-columns: repeat(2, 1fr); 
+      gap: 8px; 
+      overflow-y: auto; 
+      align-content: start; 
+      background: #1e293b;
+      border-radius: 0 0 0 16px;
+    }
+    .photos-thumb { 
+      aspect-ratio: 1; 
+      border-radius: 8px; 
+      overflow: hidden; 
+      cursor: pointer; 
+      border: 2px solid #475569; 
+      transition: all 0.2s; 
+      background: #334155; 
+    }
+    .photos-thumb:hover { border-color: #8b5cf6; transform: scale(1.02); }
+    .photos-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    
+    .photos-empty { 
+      grid-column: 1 / -1;
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      justify-content: flex-start; 
+      padding: 40px 20px; 
+      text-align: center; 
+      color: #94a3b8; 
+    }
+    .photos-empty-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.5; }
+    
+    /* Alias pour compatibilité avec loadSidebarPhotos - ALIGNÉ EN HAUT */
+    .photos-sidebar-empty { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 40px 20px; text-align: center; color: #94a3b8; grid-column: 1 / -1; }
+    .photos-sidebar-empty-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.5; }
+    .photos-sidebar-empty-text { font-size: 11px; line-height: 1.5; }
+    .photos-sidebar-loading { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 10px; grid-column: 1 / -1; padding: 40px 20px; }
+    .photos-sidebar-spinner { width: 30px; height: 30px; border: 3px solid #334155; border-top-color: #8b5cf6; border-radius: 50%; animation: spin 1s linear infinite; }
+    .photos-sidebar-connect { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 40px 20px; gap: 12px; grid-column: 1 / -1; }
+    .photos-sidebar-connect-btn { padding: 12px 20px; background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: white; border: none; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+    .photos-sidebar-connect-btn:hover { filter: brightness(1.15); }
+    .photos-sidebar-thumb { aspect-ratio: 1; border-radius: 8px; overflow: hidden; cursor: pointer; border: 2px solid #475569; transition: all 0.2s; background: #334155; position: relative; }
+    .photos-sidebar-thumb:hover { border-color: #8b5cf6; transform: scale(1.02); }
+    .photos-sidebar-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .photos-sidebar-thumb-overlay { position: absolute; inset: 0; background: rgba(139,92,246,0.4); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
+    .photos-sidebar-thumb:hover .photos-sidebar-thumb-overlay { opacity: 1; }
+    .photos-sidebar-thumb-overlay span { color: #fff; font-size: 20px; }
+    
+    .photos-connect-btn { 
+      margin-top: 12px;
+      padding: 12px 20px; 
+      background: linear-gradient(135deg, #8b5cf6, #6d28d9); 
+      color: white; 
+      border: none; 
+      border-radius: 10px; 
+      font-size: 12px; 
+      font-weight: 600; 
+      cursor: pointer; 
+      display: flex; 
+      align-items: center; 
+      gap: 8px; 
+    }
+    .photos-connect-btn:hover { filter: brightness(1.15); }
+    
+    /* ===== SPLITTER (barre de redimensionnement) ===== */
+    .fiche-splitter { 
+      width: 6px; 
+      background: linear-gradient(to bottom, #3b82f6, #1e40af); 
+      cursor: col-resize; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .fiche-splitter:hover { background: linear-gradient(to bottom, #60a5fa, #3b82f6); }
+    .fiche-splitter.dragging { background: linear-gradient(to bottom, #93c5fd, #60a5fa); }
+    .fiche-splitter::after {
+      content: '⋮';
+      color: rgba(255,255,255,0.6);
+      font-size: 14px;
+    }
+    
+    /* ===== ZONE FICHE (milieu) ===== */
+    .fiche-info-zone { 
+      flex: 1;
+      min-width: 300px;
+      max-width: 600px;
+      display: flex; 
+      flex-direction: column; 
+      background: #f8fafc;
+      overflow: hidden;
+    }
+    .fiche-container.no-photos .fiche-info-zone { border-radius: 16px 0 0 16px; }
+    .fiche-container.no-photos .fiche-header { border-radius: 16px 0 0 0; }
+    
+    .fiche-header { 
+      display: flex; 
+      align-items: center; 
+      gap: 8px; 
+      padding: 0 12px; 
+      height: 44px; 
+      background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); 
+    }
+    .fiche-header-btn { 
+      padding: 6px 10px; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      font-size: 11px; 
+      font-weight: 600; 
+      color: #fff; 
+      background: rgba(255,255,255,0.15); 
+      border: 1px solid rgba(255,255,255,0.3); 
+      display: flex; 
+      align-items: center; 
+      gap: 4px;
+      transition: all 0.2s;
+    }
+    .fiche-header-btn:hover { background: rgba(255,255,255,0.25); }
+    .fiche-header-btn.active { background: #8b5cf6; border-color: #8b5cf6; }
+    .fiche-header-btn input { width: 12px; height: 12px; cursor: pointer; accent-color: #8b5cf6; }
+    .fiche-logo { flex: 1; display: flex; justify-content: center; }
+    .fiche-logo img { height: 26px; filter: brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
+    .fiche-delete-btn { 
+      padding: 6px 10px; 
+      background: linear-gradient(135deg, #ef4444, #dc2626); 
+      border: 2px solid #b91c1c; 
+      border-radius: 6px; 
+      color: #fff; 
+      font-size: 10px; 
+      font-weight: 600; 
+      cursor: pointer; 
+      display: flex; 
+      align-items: center;
+      gap: 4px;
+    }
+    .fiche-delete-btn:hover { filter: brightness(1.1); }
+    
+    .fiche-status-banner { 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      gap: 8px; 
+      padding: 10px; 
+      font-size: 13px; 
+      font-weight: 700; 
+      text-transform: uppercase; 
+      letter-spacing: 1px;
+      background: linear-gradient(90deg, #16a34a, #22c55e);
+      color: #fff;
+    }
+    .fiche-status-banner.en-attente { background: linear-gradient(90deg, #ea580c, #f97316); }
+    
+    .fiche-beneficiaire { 
+      display: flex; 
+      align-items: center; 
+      padding: 8px 12px; 
+      background: linear-gradient(90deg, #e0e7ff, #c7d2fe); 
+      border-bottom: 2px solid #a5b4fc; 
+    }
+    .fiche-beneficiaire-label { 
+      width: 100px;
+      min-width: 80px;
+      flex-shrink: 0;
+      font-size: 12px; 
+      font-weight: 600; 
+      color: #4338ca; 
+    }
+    .fiche-beneficiaire-value { 
+      flex: 1; 
+      text-align: center;
+      font-size: 18px; 
+      font-weight: 800; 
+      color: #1e293b;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .fiche-beneficiaire-value input { 
+      width: 100%; 
+      font-size: inherit; 
+      font-weight: inherit; 
+      color: inherit; 
+      background: transparent; 
+      border: none; 
+      outline: none; 
+      text-align: center;
+      text-overflow: ellipsis;
+    }
+    
+    .fiche-body { flex: 1; overflow-y: auto; }
+    .fiche-fields-list { display: flex; flex-direction: column; }
+    .fiche-field-row { 
+      display: flex; 
+      align-items: center; 
+      padding: 4px 8px; 
+      border-bottom: 1px solid #e5e7eb; 
+    }
+    .fiche-field-row:hover { background: #f1f5f9; }
+    .fiche-field-label { 
+      width: 110px;
+      min-width: 90px; 
+      flex-shrink: 0; 
+      font-size: 11px; 
+      font-weight: 600; 
+      color: #374151;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .fiche-field-value { 
+      flex: 1; 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      font-size: 12px; 
+      color: #1f2937;
+      overflow: hidden;
+      min-width: 0;
+    }
+    .fiche-field-value select, .fiche-field-value input { 
+      width: 100%; 
+      max-width: 100%;
+      text-align: center; 
+      font-size: inherit; 
+      color: inherit; 
+      background: transparent; 
+      border: none; 
+      outline: none; 
+      cursor: pointer; 
+      padding: 2px;
+      text-overflow: ellipsis;
+    }
+    .fiche-field-value select:focus, .fiche-field-value input:focus { 
+      background: #fff; 
+      box-shadow: 0 0 0 2px #3b82f6; 
+      border-radius: 4px; 
+    }
+    .fiche-field-value.date-field { color: #3b82f6; font-weight: 500; cursor: pointer; }
+    .fiche-field-value.date-field:hover { background: #e5e7eb; border-radius: 4px; }
+    .fiche-field-manage-btn { 
+      padding: 2px 6px; 
+      margin-left: 4px; 
+      background: #e5e7eb; 
+      border: none; 
+      border-radius: 4px; 
+      cursor: pointer; 
+      font-size: 10px; 
+    }
+    .fiche-field-manage-btn:hover { background: #d1d5db; }
+    
+    .fiche-photos-btn-large { 
+      margin: 8px 12px; 
+      padding: 10px; 
+      background: linear-gradient(135deg, #8b5cf6, #6d28d9); 
+      color: white; 
+      border: none; 
+      border-radius: 8px; 
+      font-size: 12px; 
+      font-weight: 600; 
+      cursor: pointer; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      gap: 8px; 
+    }
+    .fiche-photos-btn-large:hover { filter: brightness(1.15); }
+    
+    /* ===== ZONE CHAT (droite) ===== */
+    .fiche-chat-zone { 
+      flex: 1.5;
+      min-width: 280px;
+      display: flex; 
+      flex-direction: column; 
+      background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%); 
+      border-radius: 0 16px 16px 0;
+      overflow: hidden;
+    }
+    
+    .chat-header { 
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between; 
+      padding: 0 12px; 
+      height: 44px; 
+      background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); 
+      border-radius: 0 16px 0 0;
+    }
+    .chat-header-title { 
+      font-size: 13px; 
+      font-weight: 700; 
+      color: #fff; 
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.5); 
+    }
+    .chat-close-btn { 
+      padding: 6px 14px; 
+      background: linear-gradient(135deg, #ef4444, #dc2626); 
+      border: 1px solid #b91c1c; 
+      border-radius: 6px; 
+      color: #fff; 
+      font-size: 11px; 
+      font-weight: 600; 
+      cursor: pointer; 
+    }
+    .chat-close-btn:hover { filter: brightness(1.1); }
+    
+    .chat-scroll-container { 
+      flex: 1; 
+      overflow-y: auto; 
+      display: flex; 
+      flex-direction: column; 
+      min-height: 0; 
+      background: transparent; 
+    }
+    
+    /* Sections épinglés/questions */
+    .pinned-section { 
+      background: linear-gradient(135deg, #fefce8, #fef9c3); 
+      border-bottom: 2px solid #fde047; 
+      padding: 8px; 
+    }
+    .pinned-section-header { 
+      display: flex; 
+      align-items: center; 
+      gap: 6px; 
+      font-size: 10px; 
+      font-weight: 700; 
+      color: #a16207; 
+      margin-bottom: 6px; 
+      text-transform: uppercase; 
+    }
+    .questions-section { 
+      background: linear-gradient(135deg, #fef2f2, #fecaca); 
+      border-bottom: 2px solid #f87171; 
+      padding: 8px; 
+    }
+    .questions-section-header { 
+      font-size: 10px; 
+      font-weight: 700; 
+      color: #b91c1c; 
+      margin-bottom: 6px; 
+      text-transform: uppercase; 
+    }
+    
+    /* Boutons d'ajout de message - fond blanc */
+    .chat-buttons-row { 
+      display: flex; 
+      gap: 8px; 
+      padding: 10px; 
+      background: #f8fafc;
+      border-top: 2px solid #e2e8f0;
+      border-radius: 0 0 16px 0;
+    }
+    .chat-add-btn { 
+      flex: 1; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      gap: 4px; 
+      padding: 12px 8px; 
+      border-radius: 10px; 
+      cursor: pointer; 
+      border: none; 
+      font-weight: 600; 
+      transition: all 0.2s; 
+    }
+    .chat-add-btn .icon { font-size: 18px; }
+    .chat-add-btn .label { font-size: 10px; }
+    .chat-add-btn.question { background: linear-gradient(135deg, #fecaca, #f87171); color: #7f1d1d; }
+    .chat-add-btn.discussion { background: linear-gradient(135deg, #dbeafe, #93c5fd); color: #1e3a8a; }
+    .chat-add-btn.pinned { background: linear-gradient(135deg, #fef9c3, #fde047); color: #713f12; }
+    .chat-add-btn:hover { transform: translateY(-2px); filter: brightness(1.05); }
+    
+    /* ===== POPUP TRACKING ===== */
+    .tracking-popup-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 100001; }
+    .tracking-popup-overlay.active { display: flex; }
+    .tracking-popup { background: #fff; border-radius: 12px; width: 360px; max-height: 80vh; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+    .tracking-popup-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(to right, #1e40af, #3b82f6); }
+    .tracking-popup-title { font-size: 14px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
+    .tracking-popup-close { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.2); border: none; color: #fff; font-size: 16px; cursor: pointer; }
+    .tracking-popup-close:hover { background: rgba(255,255,255,0.3); }
+    .tracking-popup-content { padding: 12px; max-height: 60vh; overflow-y: auto; }
+    .tracking-popup-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .tracking-popup-table th { padding: 8px 6px; background: #f1f5f9; font-weight: 600; border: 1px solid #e2e8f0; }
+    .tracking-popup-table td { padding: 6px; text-align: center; border: 1px solid #e2e8f0; }
+    .tracking-popup-table .dept-cell { text-align: left; font-weight: 600; padding-left: 8px; }
+    .tracking-popup-table .active-row { background: #dbeafe; }
+    .tracking-popup-table .active-row .dept-cell { color: #2563eb; }
+    .tracking-popup-table .completed-row { background: #f0fdf4; }
+    .tracking-popup-table .completed-row .dept-cell { color: #16a34a; }
+    .tracking-popup-total { background: linear-gradient(90deg, #1e3a5f, #3b82f6) !important; }
+    .tracking-popup-total td { color: #fff !important; font-weight: 700; }
     .fiche-tracking-btn.active { background: #22c55e; border-color: #22c55e; }
     .fiche-tracking-btn input { width: 12px; height: 12px; cursor: pointer; accent-color: #22c55e; }
     .fiche-logo { flex: 1; display: flex; justify-content: center; }
@@ -653,57 +1055,27 @@
     .fiche-field-value select:focus, .fiche-field-value input:focus { background: #fff; box-shadow: 0 0 0 2px #3b82f6; border-radius: 4px; }
     .fiche-field-value.date-field { color: #3b82f6; font-weight: 500; cursor: pointer; justify-content: center; }
     .fiche-field-value.date-field:hover { background: #e5e7eb; }
-
-    .fiche-notes-zone { flex: 1; display: flex; flex-direction: column; background: #fff; min-width: 500px; border-radius: 0 16px 16px 0; overflow: hidden; }
     
-    /* MODE TRACKING VISIBLE - fiche compacte (même styles que chat-expanded) */
-    .fiche-container:not(.no-tracking) .fiche-info-zone { flex: 0 0 280px; }
-    .fiche-container:not(.no-tracking) .fiche-status-pill-full { padding: 8px 10px; font-size: 11px; letter-spacing: 0.5px; }
-    .fiche-container:not(.no-tracking) .fiche-beneficiaire { padding: 4px 8px; }
-    .fiche-container:not(.no-tracking) .fiche-beneficiaire-label { width: 140px; font-size: 10px; padding-left: 8px; }
-    .fiche-container:not(.no-tracking) .fiche-beneficiaire-value { font-size: 14px; }
-    .fiche-container:not(.no-tracking) .fiche-beneficiaire-value input { font-size: 14px; max-width: 180px; }
-    .fiche-container:not(.no-tracking) .fiche-field-row { padding: 1px 6px; }
-    .fiche-container:not(.no-tracking) .fiche-field-label { width: 140px; font-size: 10px; padding-left: 8px; }
-    .fiche-container:not(.no-tracking) .fiche-field-value { font-size: 11px; }
-    .fiche-container:not(.no-tracking) .fiche-field-value select, 
-    .fiche-container:not(.no-tracking) .fiche-field-value input { font-size: 11px; max-width: 150px; }
-    .fiche-container:not(.no-tracking) .fiche-header { height: 36px; padding: 0 6px; }
-    .fiche-container:not(.no-tracking) .fiche-tracking-btn { padding: 3px 6px; font-size: 8px; }
-    .fiche-container:not(.no-tracking) .fiche-tracking-btn input { width: 10px; height: 10px; }
-    .fiche-container:not(.no-tracking) .fiche-logo img { height: 20px; }
-    .fiche-container:not(.no-tracking) .fiche-delete-btn { padding: 4px 6px; font-size: 8px; }
-    
-    /* MODE CHAT AGRANDI - fiche compacte */
-    .fiche-container.chat-expanded .fiche-info-zone { flex: 0 0 280px; }
-    .fiche-container.chat-expanded .fiche-status-pill-full { padding: 8px 10px; font-size: 11px; letter-spacing: 0.5px; }
-    .fiche-container.chat-expanded .fiche-beneficiaire { padding: 4px 8px; }
-    .fiche-container.chat-expanded .fiche-beneficiaire-label { width: 140px; font-size: 10px; padding-left: 8px; }
-    .fiche-container.chat-expanded .fiche-beneficiaire-value { font-size: 14px; }
-    .fiche-container.chat-expanded .fiche-beneficiaire-value input { font-size: 14px; max-width: 180px; }
-    .fiche-container.chat-expanded .fiche-field-row { padding: 1px 6px; }
-    .fiche-container.chat-expanded .fiche-field-label { width: 140px; font-size: 10px; padding-left: 8px; }
-    .fiche-container.chat-expanded .fiche-field-value { font-size: 11px; }
-    .fiche-container.chat-expanded .fiche-field-value select, 
-    .fiche-container.chat-expanded .fiche-field-value input { font-size: 11px; max-width: 150px; }
-    .fiche-container.chat-expanded .fiche-header { height: 36px; padding: 0 6px; }
-    .fiche-container.chat-expanded .fiche-tracking-btn { padding: 3px 6px; font-size: 8px; }
-    .fiche-container.chat-expanded .fiche-tracking-btn input { width: 10px; height: 10px; }
-    .fiche-container.chat-expanded .fiche-logo img { height: 20px; }
-    .fiche-container.chat-expanded .fiche-delete-btn { padding: 4px 6px; font-size: 8px; }
-    .fiche-container.chat-expanded .fiche-notes-zone { min-width: 600px; }
-    
-    /* Bouton toggle chat agrandi */
-    .chat-expand-toggle { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; color: #fff; font-size: 9px; font-weight: 600; cursor: pointer; margin-right: 8px; }
-    .chat-expand-toggle:hover { background: rgba(255,255,255,0.25); }
-    .chat-expand-toggle.active { background: #22c55e; border-color: #22c55e; }
-    .chat-expand-toggle input { width: 12px; height: 12px; cursor: pointer; accent-color: #22c55e; }
+    /* ===== STYLES COMPACTS POUR FICHE RÉDUITE ===== */
+    .fiche-container.fiche-reduced .fiche-status-pill-full { padding: 6px 8px; font-size: 11px; }
+    .fiche-container.fiche-reduced .fiche-beneficiaire { padding: 4px 6px; }
+    .fiche-container.fiche-reduced .fiche-beneficiaire-label { font-size: 10px; width: 100px; }
+    .fiche-container.fiche-reduced .fiche-beneficiaire-value { font-size: 16px; }
+    .fiche-container.fiche-reduced .fiche-beneficiaire-value input { font-size: 16px; max-width: 140px; }
+    .fiche-container.fiche-reduced .fiche-field-row { padding: 1px 4px; }
+    .fiche-container.fiche-reduced .fiche-field-label { font-size: 10px; width: 100px; padding-left: 4px; }
+    .fiche-container.fiche-reduced .fiche-field-value { font-size: 11px; }
+    .fiche-container.fiche-reduced .fiche-field-value select,
+    .fiche-container.fiche-reduced .fiche-field-value input { font-size: 11px; max-width: 120px; }
+    .fiche-container.fiche-reduced .fiche-header { height: 36px; padding: 0 4px; gap: 3px; }
+    .fiche-container.fiche-reduced .fiche-logo img { height: 20px; }
+    .fiche-container.fiche-reduced .zone-resize-btn { padding: 2px 6px; font-size: 9px; }
+    .fiche-container.fiche-reduced .fiche-delete-btn { padding: 3px 6px; font-size: 8px; }
     
     /* Conteneur scrollable pour tout le chat */
-    .chat-scroll-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-height: 0; }
-    .fiche-notes-header { display: flex; align-items: center; justify-content: space-between; padding: 0 12px; height: 44px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); }
+    .chat-scroll-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-height: 0; background: transparent; }
+    .fiche-notes-header { display: flex; align-items: center; justify-content: space-between; padding: 0 12px; height: 44px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); position: relative; }
     .fiche-notes-title { font-size: 12px; font-weight: 700; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); position: absolute; left: 50%; transform: translateX(-50%); }
-    .fiche-notes-header { position: relative; }
     .fiche-close-btn { padding: 5px 12px; background: linear-gradient(135deg, #ef4444, #dc2626); border: 1px solid #b91c1c; border-radius: 5px; color: #fff; font-size: 10px; font-weight: 600; cursor: pointer; }
 
     /* Section messages épinglés */
@@ -813,7 +1185,7 @@
     .chat-compose-btn.send { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }
     .chat-compose-btn.send:hover { filter: brightness(1.1); }
 
-    .chat-type-buttons-row { display: flex; gap: 4px; justify-content: center; padding: 6px 8px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+    .chat-type-buttons-row { display: flex; gap: 4px; justify-content: center; padding: 6px 8px; background: rgba(15, 23, 42, 0.9); border-top: 1px solid rgba(255,255,255,0.1); }
     .chat-type-btn-new { flex: 1; padding: 6px 4px; border: 1px solid transparent; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; transition: all 0.2s; }
     .chat-type-btn-new .btn-icon { font-size: 14px; }
     .chat-type-btn-new .btn-label { font-size: 8px; text-transform: uppercase; }
@@ -2635,44 +3007,63 @@
     </div>
   </div>
 
-  <!-- ===== FICHE OVERLAY ===== -->
+  <!-- ===== FICHE OVERLAY v1543 - SYSTÈME RESIZABLE ===== -->
   <div class="fiche-overlay hidden" id="ficheOverlay" onclick="closeFiche(event)">
-    <div class="fiche-container no-tracking" onclick="event.stopPropagation()">
-      <div class="fiche-tracking-sidebar">
-        <div class="tracking-sidebar-header"><span class="tracking-sidebar-title">📊 Suivi Production</span></div>
-        <div class="tracking-table-wrap">
-          <table class="tracking-table">
-            <thead><tr><th>Dépt</th><th>Entrée</th><th>Sortie</th><th>Jrs</th></tr></thead>
-            <tbody id="trackingTableBody"></tbody>
-          </table>
+    <div class="fiche-container no-photos" onclick="event.stopPropagation()">
+      
+      <!-- ZONE 1: PHOTOS (gauche) -->
+      <div class="fiche-photos-zone" id="fichePhotosZone">
+        <div class="photos-header">
+          <span class="photos-header-title">📷 Photos OneDrive</span>
+        </div>
+        <div class="photos-header-folder" id="sidebarPhotosFolder">-</div>
+        <div class="photos-grid" id="sidebarPhotosGrid">
+          <div class="photos-empty">
+            <div class="photos-empty-icon">📷</div>
+            <div>Chargement...</div>
+          </div>
         </div>
       </div>
-      <div class="fiche-info-zone">
+      
+      <!-- SPLITTER 1: entre Photos et Fiche -->
+      <div class="fiche-splitter splitter-photos" id="splitter1" onmousedown="startDrag(event, 'splitter1')"></div>
+      
+      <!-- ZONE 2: FICHE (milieu) -->
+      <div class="fiche-info-zone" id="ficheInfoZone">
         <div class="fiche-header">
-          <label class="fiche-tracking-btn"><input type="checkbox" onchange="toggleTracking(this)"> Tracking</label>
-          <div class="fiche-logo"><img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro"></div>
-          <button type="button" class="fiche-delete-btn" onclick="deleteCurrentCard()"><span>🗑️</span><span>Supprimer</span></button>
+          <label class="fiche-header-btn" id="fichePhotosBtn">
+            <input type="checkbox" onchange="togglePhotosPanel(this)"> 📷 Photos
+          </label>
+          <button type="button" class="fiche-header-btn" onclick="openTrackingPopup()" title="Voir le suivi">📊 Suivi</button>
+          <div class="fiche-logo">
+            <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro">
+          </div>
+          <button type="button" class="fiche-delete-btn" onclick="deleteCurrentCard()">🗑️ Supprimer</button>
         </div>
-        <div class="fiche-status-pill-full ok" id="ficheStatusBanner"><span class="fiche-status-icon">📋</span><span class="fiche-status-text">Statut: <span id="ficheStatusText">Robot</span></span></div>
-        <div class="fiche-beneficiaire" id="ficheBeneficiaire">
+        <div class="fiche-status-banner" id="ficheStatusBanner">
+          <span>📋</span>
+          <span>Statut: <strong id="ficheStatusText">Robot</strong></span>
+        </div>
+        <div class="fiche-beneficiaire">
           <div class="fiche-beneficiaire-label">👤 Bénéficiaire</div>
           <div class="fiche-beneficiaire-value" id="ficheBeneficiaireValue"></div>
         </div>
         <div class="fiche-body">
           <div class="fiche-fields-list" id="ficheFieldsList"></div>
         </div>
-        <div class="fiche-photos-zone">
-          <button type="button" class="fiche-photos-btn-large" onclick="openPhotosOneDrive(currentCardId)">
-            <span class="photos-btn-icon">📷</span>
-            <span class="photos-btn-text">Voir les photos OneDrive</span>
-          </button>
-        </div>
+        <button type="button" class="fiche-photos-btn-large" onclick="openPhotosOneDrive(currentCardId)">
+          📷 Voir les photos OneDrive
+        </button>
       </div>
-      <div class="fiche-notes-zone">
-        <div class="fiche-notes-header">
-          <label class="chat-expand-toggle" id="chatExpandToggle"><input type="checkbox" onchange="toggleChatExpand(this)"> Agrandir</label>
-          <span class="fiche-notes-title">💬 Notes & Chat</span>
-          <button class="fiche-close-btn" onclick="closeFiche(event)">✕ Fermer</button>
+      
+      <!-- SPLITTER 2: entre Fiche et Chat -->
+      <div class="fiche-splitter" id="splitter2" onmousedown="startDrag(event, 'splitter2')"></div>
+      
+      <!-- ZONE 3: CHAT (droite) -->
+      <div class="fiche-chat-zone" id="ficheChatZone">
+        <div class="chat-header">
+          <span class="chat-header-title">💬 Notes & Chat</span>
+          <button class="chat-close-btn" onclick="closeFiche(event)">✕ Fermer</button>
         </div>
         <div class="chat-scroll-container" id="chatScrollContainer">
           <div class="pinned-section" id="pinnedSection" style="display:none;">
@@ -2695,11 +3086,28 @@
           </div>
           <div class="chat-compose-footer"><span class="chat-compose-hint">Ctrl+V = image</span><button class="chat-compose-btn send" onclick="sendMessage()">➤ Envoyer</button></div>
         </div>
-        <div class="chat-type-buttons-row">
-          <button class="chat-type-btn-new problem" onclick="openCompose('problem')"><span class="btn-icon">❓</span><span class="btn-label">Question</span></button>
-          <button class="chat-type-btn-new normal" onclick="openCompose('normal')"><span class="btn-icon">💬</span><span class="btn-label">Discussion</span></button>
-          <button class="chat-type-btn-new pinned" onclick="openCompose('pinned')"><span class="btn-icon">📌</span><span class="btn-label">Épinglé</span></button>
+        <div class="chat-buttons-row">
+          <button class="chat-add-btn question" onclick="openCompose('problem')"><span class="icon">❓</span><span class="label">Question</span></button>
+          <button class="chat-add-btn discussion" onclick="openCompose('normal')"><span class="icon">💬</span><span class="label">Discussion</span></button>
+          <button class="chat-add-btn pinned" onclick="openCompose('pinned')"><span class="icon">📌</span><span class="label">Épinglé</span></button>
         </div>
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- ===== POPUP TRACKING ===== -->
+  <div class="tracking-popup-overlay" id="trackingPopupOverlay" onclick="closeTrackingPopup(event)">
+    <div class="tracking-popup" onclick="event.stopPropagation()">
+      <div class="tracking-popup-header">
+        <span class="tracking-popup-title">📊 Suivi Production</span>
+        <button class="tracking-popup-close" onclick="closeTrackingPopup(event, true)">✕</button>
+      </div>
+      <div class="tracking-popup-content">
+        <table class="tracking-popup-table">
+          <thead><tr><th>Département</th><th>Entrée</th><th>Sortie</th><th>Jours</th></tr></thead>
+          <tbody id="trackingPopupTableBody"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -3330,60 +3738,82 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1535';
+    const APP_VERSION = '1545';
+    let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
-    // SYSTÈME DE VERSION v3 - Simple bandeau NON-BLOQUANT
+    // SYSTÈME DE VERSION v3 - ROBUSTE avec protection anti-boucle
     // ═══════════════════════════════════════════════════════════════
     
-    // Vérifier si une nouvelle version est disponible
     function startVersionCheck() {
       if (!firebaseDb) return;
       
       setTimeout(() => {
         firebaseDb.ref('appVersion').on('value', (snapshot) => {
-          const requiredVersion = snapshot.val();
+          const firebaseVersion = snapshot.val();
           
-          // Pas de version dans Firebase = on la définit
-          if (!requiredVersion) {
-            console.log(`📱 Initialisation Firebase à v${APP_VERSION}`);
+          // Pas de version dans Firebase = on initialise
+          if (!firebaseVersion) {
+            console.log(`📱 Firebase initialisé à v${APP_VERSION}`);
             firebaseDb.ref('appVersion').set(APP_VERSION);
             return;
           }
           
-          const requiredNum = parseInt(requiredVersion);
-          const currentNum = parseInt(APP_VERSION);
+          const firebaseNum = parseInt(firebaseVersion);
+          const localNum = parseInt(APP_VERSION);
           
-          // Si Firebase demande une version PLUS RÉCENTE
-          if (requiredNum > currentNum) {
-            console.log(`🔄 Nouvelle version disponible: v${requiredVersion} (vous: v${APP_VERSION})`);
-            showVersionBanner(requiredVersion);
-          }
-          // Si notre fichier est PLUS RÉCENT que Firebase = admin avec nouveau fichier
-          else if (requiredNum < currentNum) {
-            console.log(`📱 Fichier plus récent que Firebase`);
-            if (hasPermission('A')) {
-              console.log(`🔧 Admin - Sync Firebase vers v${APP_VERSION}`);
-              firebaseDb.ref('appVersion').set(APP_VERSION);
-              showToast(`✅ Firebase synchronisé: v${APP_VERSION}`, 'success');
-            }
-            hideVersionBanner();
-          }
-          // Versions identiques = OK
-          else {
+          console.log(`📱 Version locale: ${APP_VERSION}, Firebase: ${firebaseVersion}`);
+          
+          // CAS 1: Versions identiques = tout va bien
+          if (firebaseNum === localNum) {
             console.log(`✅ Version ${APP_VERSION} - OK`);
+            localStorage.removeItem('versionIgnored');
+            localStorage.removeItem('versionRefreshCount');
             hideVersionBanner();
+            return;
           }
+          
+          // CAS 2: Notre fichier est PLUS RÉCENT que Firebase
+          if (localNum > firebaseNum) {
+            console.log(`📱 Fichier plus récent (${APP_VERSION}) que Firebase (${firebaseVersion})`);
+            // Synchroniser Firebase automatiquement
+            firebaseDb.ref('appVersion').set(APP_VERSION);
+            showToast(`✅ Firebase synchronisé: v${APP_VERSION}`, 'success');
+            return;
+          }
+          
+          // CAS 3: Firebase demande une version PLUS RÉCENTE
+          // Vérifier si l'utilisateur a déjà ignoré cette version
+          const ignoredVersion = localStorage.getItem('versionIgnored');
+          if (ignoredVersion === firebaseVersion) {
+            console.log(`📱 Version ${firebaseVersion} ignorée par l'utilisateur`);
+            return;
+          }
+          
+          // Compter les tentatives de rafraîchissement
+          const refreshCount = parseInt(localStorage.getItem('versionRefreshCount') || '0');
+          const lastRefreshTime = parseInt(localStorage.getItem('versionRefreshTime') || '0');
+          const now = Date.now();
+          
+          // Si on a rafraîchi récemment (moins de 60 secondes) et qu'on est toujours sur l'ancienne version
+          if (refreshCount > 0 && (now - lastRefreshTime) < 60000) {
+            console.warn(`⚠️ BOUCLE DÉTECTÉE! Tentative #${refreshCount}`);
+            showVersionBannerWithBypass(firebaseVersion, refreshCount);
+            return;
+          }
+          
+          // Première demande de mise à jour
+          console.log(`🔄 Nouvelle version disponible: ${firebaseVersion} (actuelle: ${APP_VERSION})`);
+          showVersionBanner(firebaseVersion);
         });
         
         console.log(`📱 Version ${APP_VERSION} - Vérification activée`);
-      }, 500);
+      }, 1000);
     }
     
-    // Afficher un simple bandeau NON-BLOQUANT
+    // Bandeau simple de mise à jour (première fois)
     function showVersionBanner(newVersion) {
-      // Ne pas afficher si déjà présent
-      if (document.getElementById('versionBanner')) return;
+      hideVersionBanner();
       
       const banner = document.createElement('div');
       banner.id = 'versionBanner';
@@ -3394,75 +3824,147 @@
           left: 0;
           right: 0;
           background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-          padding: 10px 15px;
+          padding: 12px 20px;
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 15px;
-          z-index: 99999;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+          z-index: 999999;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         ">
-          <span style="color: #fff; font-size: 13px;">
-            🔄 Nouvelle version disponible (v${newVersion}) - Vous utilisez v${APP_VERSION}
+          <span style="font-size: 20px;">🔄</span>
+          <span style="color: white; font-size: 14px;">
+            <strong>Nouvelle version v${newVersion} disponible!</strong>
+            <span style="opacity: 0.9;">(Vous avez v${APP_VERSION})</span>
           </span>
-          <button onclick="doRefresh()" style="
-            padding: 6px 15px;
+          <button onclick="doVersionRefresh()" style="
+            padding: 8px 20px;
             background: #22c55e;
             color: white;
             border: none;
-            border-radius: 5px;
-            font-size: 12px;
+            border-radius: 6px;
             font-weight: 600;
             cursor: pointer;
           ">Rafraîchir</button>
-          <button onclick="hideVersionBanner()" style="
-            padding: 6px 10px;
+          <button onclick="ignoreVersion('${newVersion}')" style="
+            padding: 8px 15px;
             background: rgba(255,255,255,0.2);
             color: white;
             border: none;
-            border-radius: 5px;
-            font-size: 12px;
+            border-radius: 6px;
             cursor: pointer;
-          ">✕</button>
+          ">Plus tard</button>
         </div>
       `;
       document.body.appendChild(banner);
+    }
+    
+    // Bandeau avec option de bypass (après boucle détectée)
+    function showVersionBannerWithBypass(newVersion, attempts) {
+      hideVersionBanner();
       
-      // Décaler le contenu pour ne pas cacher le header
-      document.body.style.paddingTop = '50px';
+      const banner = document.createElement('div');
+      banner.id = 'versionBanner';
+      banner.innerHTML = `
+        <div style="
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+          padding: 12px 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 15px;
+          z-index: 999999;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+          flex-wrap: wrap;
+        ">
+          <span style="font-size: 20px;">⚠️</span>
+          <span style="color: white; font-size: 13px;">
+            <strong>Version v${newVersion} demandée mais serveur a v${APP_VERSION}</strong>
+            <span style="opacity: 0.9;">(Le fichier GitHub n'est peut-être pas encore à jour)</span>
+          </span>
+          <button onclick="doVersionRefresh()" style="
+            padding: 8px 15px;
+            background: rgba(255,255,255,0.3);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+          ">🔄 Réessayer</button>
+          <button onclick="ignoreVersion('${newVersion}')" style="
+            padding: 8px 15px;
+            background: #22c55e;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+          ">✓ Continuer quand même</button>
+          ${hasPermission('A') ? `<button onclick="forceSyncVersion()" style="
+            padding: 8px 15px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+          ">🔧 Forcer Firebase à v${APP_VERSION}</button>` : ''}
+        </div>
+      `;
+      document.body.appendChild(banner);
     }
     
     // Cacher le bandeau
     function hideVersionBanner() {
       const banner = document.getElementById('versionBanner');
-      if (banner) {
-        banner.remove();
-        document.body.style.paddingTop = '';
-      }
+      if (banner) banner.remove();
     }
-    window.hideVersionBanner = hideVersionBanner;
     
     // Rafraîchir la page
-    function doRefresh() {
-      window.location.reload(true);
+    function doVersionRefresh() {
+      // Incrémenter le compteur de tentatives
+      const count = parseInt(localStorage.getItem('versionRefreshCount') || '0') + 1;
+      localStorage.setItem('versionRefreshCount', count.toString());
+      localStorage.setItem('versionRefreshTime', Date.now().toString());
+      
+      // Vider les caches
+      if ('caches' in window) {
+        caches.keys().then(names => names.forEach(name => caches.delete(name)));
+      }
+      
+      // Recharger avec cache-buster
+      const url = new URL(window.location.href);
+      url.searchParams.set('_v', Date.now());
+      window.location.href = url.toString();
     }
-    window.doRefresh = doRefresh;
+    window.doVersionRefresh = doVersionRefresh;
     
-    // Fonction admin pour forcer Firebase à prendre la version du fichier
+    // Ignorer cette version
+    function ignoreVersion(version) {
+      localStorage.setItem('versionIgnored', version);
+      localStorage.removeItem('versionRefreshCount');
+      hideVersionBanner();
+      showToast(`Version ${version} ignorée. Rechargez manuellement plus tard.`, 'info');
+    }
+    window.ignoreVersion = ignoreVersion;
+    
+    // Forcer Firebase à prendre la version locale (admin)
     function forceSyncVersion() {
-      if (!firebaseDb || !hasPermission('A')) {
-        showToast('❌ Permission refusée', 'error');
+      if (!firebaseDb) {
+        showToast('❌ Firebase non connecté', 'error');
         return;
       }
       
       firebaseDb.ref('appVersion').set(APP_VERSION)
         .then(() => {
           showToast(`✅ Firebase forcé à v${APP_VERSION}`, 'success');
+          localStorage.removeItem('versionIgnored');
+          localStorage.removeItem('versionRefreshCount');
           hideVersionBanner();
         })
-        .catch(err => {
-          showToast('❌ Erreur: ' + err.message, 'error');
-        });
+        .catch(err => showToast('❌ Erreur: ' + err.message, 'error'));
     }
     window.forceSyncVersion = forceSyncVersion;
     
@@ -7789,7 +8291,9 @@ function initLogoMenu(currentMod){
         </tr>
       `;
       
-      document.getElementById('trackingTableBody').innerHTML = html;
+      // Mettre à jour le tableau si l'élément existe
+      const tbody = document.getElementById('trackingTableBody');
+      if (tbody) tbody.innerHTML = html;
     }
     
     function openTrackingCalendar(el, deptId, entreeOuSortie) {
@@ -7926,6 +8430,28 @@ function initLogoMenu(currentMod){
       let d = cardsData[cardId];
       if (!d) return;
       
+      // Réinitialiser les photos de la sidebar
+      if (typeof resetSidebarPhotos === 'function') {
+        resetSidebarPhotos();
+      }
+      
+      // Réinitialiser le layout par défaut
+      const container = document.querySelector('.fiche-container');
+      const infoZone = document.getElementById('ficheInfoZone');
+      const photosZone = document.getElementById('fichePhotosZone');
+      
+      if (container) {
+        // Cacher les photos via la classe
+        container.classList.add('no-photos');
+        // Réinitialiser les tailles
+        if (infoZone) infoZone.style.flex = '';
+        if (photosZone) photosZone.style.width = '280px';
+        // Décocher la checkbox photos
+        const photosCheckbox = document.querySelector('.fiche-header-btn input');
+        if (photosCheckbox) photosCheckbox.checked = false;
+        document.querySelector('.fiche-header-btn')?.classList.remove('active');
+      }
+      
       // SYNC FIX: Refresh automatique pour avoir les derniers données (attendre le résultat)
       await forceRefreshCardFromFirebase(cardId);
       
@@ -7936,7 +8462,7 @@ function initLogoMenu(currentMod){
       const currentCol = COLONNES.find(c => c.id === d.colonne);
       const isEnAttente = currentCol?.enAttente || false;
       const statusBanner = document.getElementById('ficheStatusBanner');
-      statusBanner.className = `fiche-status-pill-full ${isEnAttente ? 'en-attente' : 'ok'}`;
+      statusBanner.className = `fiche-status-banner ${isEnAttente ? 'en-attente' : ''}`;
       document.getElementById('ficheStatusText').textContent = currentCol?.name || 'Robot';
       
       // Rendu du tracking
@@ -8312,13 +8838,74 @@ function initLogoMenu(currentMod){
       }
     }
     window.closeFiche = closeFiche;
-
-    function toggleTracking(cb) {
-      const cont = document.querySelector('.fiche-container');
-      cb.checked ? cont.classList.remove('no-tracking') : cont.classList.add('no-tracking');
-      cb.closest('.fiche-tracking-btn').classList.toggle('active', cb.checked);
+    
+    // Ouvrir le popup tracking
+    function openTrackingPopup() {
+      const overlay = document.getElementById('trackingPopupOverlay');
+      overlay.classList.add('active');
+      // Remplir le tableau tracking
+      renderTrackingPopup();
     }
-    window.toggleTracking = toggleTracking;
+    window.openTrackingPopup = openTrackingPopup;
+    
+    // Fermer le popup tracking
+    function closeTrackingPopup(event, force) {
+      if (force || event.target.id === 'trackingPopupOverlay') {
+        document.getElementById('trackingPopupOverlay').classList.remove('active');
+      }
+    }
+    window.closeTrackingPopup = closeTrackingPopup;
+    
+    // Rendu du tableau tracking dans le popup
+    function renderTrackingPopup() {
+      if (!currentCardId) return;
+      const card = cardsData[currentCardId];
+      if (!card) return;
+      
+      const tbody = document.getElementById('trackingPopupTableBody');
+      if (!tbody) return;
+      
+      const tracking = card.tracking || {};
+      const currentCol = card.colonne || 'robot';
+      
+      let html = '';
+      let totalDays = 0;
+      
+      COLONNES.forEach((col, idx) => {
+        const t = tracking[col.id] || {};
+        const entree = t.entree || '';
+        const sortie = t.sortie || '';
+        const isCurrent = (col.id === currentCol);
+        const isCompleted = sortie && !isCurrent;
+        
+        let days = '';
+        if (entree) {
+          const endDate = sortie ? new Date(sortie) : new Date();
+          const startDate = new Date(entree);
+          const diffDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+          days = diffDays >= 0 ? diffDays : '';
+          if (typeof days === 'number') totalDays += days;
+        }
+        
+        const rowClass = isCurrent ? 'active-row' : (isCompleted ? 'completed-row' : '');
+        html += `<tr class="${rowClass}">
+          <td class="dept-cell">${col.icon || ''} ${col.name}</td>
+          <td>${entree ? formatDateDisplay(entree) : '-'}</td>
+          <td>${sortie ? formatDateDisplay(sortie) : (isCurrent ? '⏳' : '-')}</td>
+          <td>${days !== '' ? days + 'j' : '-'}</td>
+        </tr>`;
+      });
+      
+      // Ligne total
+      html += `<tr class="tracking-popup-total">
+        <td class="dept-cell">TOTAL</td>
+        <td colspan="2"></td>
+        <td>${totalDays}j</td>
+      </tr>`;
+      
+      tbody.innerHTML = html;
+    }
+    window.renderTrackingPopup = renderTrackingPopup;
 
     function toggleChatExpand(cb) {
       const cont = document.querySelector('.fiche-container');
@@ -11202,6 +11789,13 @@ function initLogoMenu(currentMod){
     
     // Connexion à OneDrive
     async function loginOneDrive() {
+      // Vérifier si on est en local (file:///)
+      if (window.location.protocol === 'file:') {
+        showToast('⚠️ OneDrive nécessite GitHub Pages', 'warning');
+        alert('⚠️ OneDrive ne fonctionne pas en mode local.\n\nPour utiliser les photos OneDrive, ouvrez l\'application depuis:\nhttps://physipro-list.github.io/Moulage-serie/\n\nLe fichier local (file:///) n\'est pas supporté par Microsoft.');
+        return false;
+      }
+      
       if (!msalInstance) {
         showToast('❌ Service OneDrive non disponible', 'error');
         return false;
@@ -11274,30 +11868,53 @@ function initLogoMenu(currentMod){
       if (!token) return null;
       
       try {
-        // Chercher dans le dossier photos
-        const encodedPath = encodeURIComponent(ONEDRIVE_PHOTOS_PATH);
-        const url = `https://graph.microsoft.com/v1.0/me/drive/root:${encodedPath}:/children?$filter=startswith(name,'${orderNumber}')`;
+        // MÉTHODE 1: Chercher directement avec le chemin (sans encoder les /)
+        // Graph API veut le chemin avec espaces encodés mais pas les /
+        const pathEncoded = ONEDRIVE_PHOTOS_PATH.split('/').map(p => encodeURIComponent(p)).join('/');
+        const url1 = `https://graph.microsoft.com/v1.0/me/drive/root:${pathEncoded}:/children`;
         
-        const response = await fetch(url, {
+        console.log('🔍 Recherche dossier OneDrive:', url1);
+        
+        const response = await fetch(url1, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
-        if (!response.ok) {
-          // Essayer sans filtre si erreur
-          const url2 = `https://graph.microsoft.com/v1.0/me/drive/root:${encodedPath}:/children`;
-          const response2 = await fetch(url2, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
+        if (response.ok) {
+          const data = await response.json();
+          console.log('📁 Dossiers trouvés:', data.value?.length || 0);
           
-          if (!response2.ok) throw new Error('Dossier non trouvé');
+          // Chercher le dossier qui commence par le numéro de commande
+          const folder = data.value?.find(f => 
+            f.folder && f.name.startsWith(orderNumber)
+          );
           
-          const data2 = await response2.json();
-          const folder = data2.value?.find(f => f.name.startsWith(orderNumber));
-          return folder || null;
+          if (folder) {
+            console.log('✅ Dossier trouvé:', folder.name);
+            return folder;
+          }
         }
         
-        const data = await response.json();
-        return data.value?.[0] || null;
+        // MÉTHODE 2: Recherche via search API si méthode 1 échoue
+        console.log('🔍 Essai avec recherche...');
+        const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${orderNumber}')`;
+        const searchResponse = await fetch(searchUrl, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (searchResponse.ok) {
+          const searchData = await searchResponse.json();
+          const folder = searchData.value?.find(f => 
+            f.folder && f.name.startsWith(orderNumber)
+          );
+          
+          if (folder) {
+            console.log('✅ Dossier trouvé via recherche:', folder.name);
+            return folder;
+          }
+        }
+        
+        console.log('❌ Aucun dossier trouvé pour:', orderNumber);
+        return null;
         
       } catch (error) {
         console.error('❌ Erreur recherche dossier:', error);
@@ -11311,25 +11928,41 @@ function initLogoMenu(currentMod){
       if (!token) return [];
       
       try {
-        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children?$filter=file ne null`;
+        // Récupérer tous les fichiers du dossier avec les miniatures
+        const url = `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children?$expand=thumbnails`;
+        console.log('🖼️ Récupération photos:', url);
+        
         const response = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
-        if (!response.ok) throw new Error('Erreur récupération photos');
+        if (!response.ok) {
+          console.error('❌ Erreur API:', response.status, response.statusText);
+          throw new Error('Erreur récupération photos');
+        }
         
         const data = await response.json();
+        console.log('📄 Fichiers trouvés:', data.value?.length || 0);
         
         // Filtrer pour garder uniquement les images
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.heic'];
         const photos = data.value?.filter(file => {
+          if (!file.file) return false; // Pas un fichier (c'est un dossier)
           const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
           return imageExtensions.includes(ext);
         }) || [];
         
-        // Ajouter les URLs de téléchargement
+        console.log('🖼️ Photos filtrées:', photos.length);
+        
+        // Ajouter les URLs de téléchargement et miniatures
         for (const photo of photos) {
           photo.downloadUrl = photo['@microsoft.graph.downloadUrl'];
+          // Essayer d'obtenir une miniature
+          if (photo.thumbnails && photo.thumbnails.length > 0) {
+            photo.thumbnailUrl = photo.thumbnails[0].medium?.url || photo.thumbnails[0].small?.url || photo.downloadUrl;
+          } else {
+            photo.thumbnailUrl = photo.downloadUrl;
+          }
         }
         
         return photos;
@@ -11398,6 +12031,267 @@ function initLogoMenu(currentMod){
       renderGallery(orderNumber, beneficiaryName);
     }
     window.openPhotosOneDrive = openPhotosOneDrive;
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // SIDEBAR PHOTOS + CHAT RÉDUCTIBLE
+    // ═══════════════════════════════════════════════════════════════════
+    
+    // État du chat réduit
+    let isChatMinimized = false;
+    
+    // Variables pour les photos de la sidebar
+    let sidebarPhotosLoaded = false;
+    let sidebarPhotosCardId = null;
+    let sidebarPhotos = [];
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // SYSTÈME DE REDIMENSIONNEMENT PAR SPLITTERS (comme Excel)
+    // ═══════════════════════════════════════════════════════════════════
+    
+    let isDragging = false;
+    let currentSplitter = null;
+    let startX = 0;
+    let startWidths = {};
+    
+    // Démarrer le drag d'un splitter
+    function startDrag(e, splitterId) {
+      e.preventDefault();
+      isDragging = true;
+      currentSplitter = splitterId;
+      startX = e.clientX;
+      
+      const photosZone = document.getElementById('fichePhotosZone');
+      const infoZone = document.getElementById('ficheInfoZone');
+      const chatZone = document.getElementById('ficheChatZone');
+      
+      startWidths = {
+        photos: photosZone?.offsetWidth || 0,
+        info: infoZone?.offsetWidth || 0,
+        chat: chatZone?.offsetWidth || 0
+      };
+      
+      document.getElementById(splitterId)?.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      
+      document.addEventListener('mousemove', onDrag);
+      document.addEventListener('mouseup', stopDrag);
+    }
+    window.startDrag = startDrag;
+    
+    // Pendant le drag
+    function onDrag(e) {
+      if (!isDragging) return;
+      
+      const deltaX = e.clientX - startX;
+      const photosZone = document.getElementById('fichePhotosZone');
+      const infoZone = document.getElementById('ficheInfoZone');
+      const chatZone = document.getElementById('ficheChatZone');
+      
+      if (currentSplitter === 'splitter1') {
+        // Splitter entre Photos et Fiche
+        const newPhotosWidth = Math.max(180, Math.min(500, startWidths.photos + deltaX));
+        if (photosZone) photosZone.style.width = newPhotosWidth + 'px';
+      } else if (currentSplitter === 'splitter2') {
+        // Splitter entre Fiche et Chat
+        const newInfoWidth = Math.max(300, Math.min(600, startWidths.info + deltaX));
+        if (infoZone) infoZone.style.flex = '0 0 ' + newInfoWidth + 'px';
+      }
+    }
+    
+    // Arrêter le drag
+    function stopDrag() {
+      if (!isDragging) return;
+      isDragging = false;
+      
+      document.getElementById(currentSplitter)?.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      
+      document.removeEventListener('mousemove', onDrag);
+      document.removeEventListener('mouseup', stopDrag);
+      currentSplitter = null;
+    }
+    
+    // Toggle panneau photos (checkbox dans le header)
+    function togglePhotosPanel(cb) {
+      const container = document.querySelector('.fiche-container');
+      
+      if (cb.checked) {
+        // Afficher photos - enlever la classe no-photos
+        container?.classList.remove('no-photos');
+        loadSidebarPhotos();
+      } else {
+        // Cacher photos - ajouter la classe no-photos
+        container?.classList.add('no-photos');
+      }
+      cb.closest('.fiche-header-btn')?.classList.toggle('active', cb.checked);
+    }
+    window.togglePhotosPanel = togglePhotosPanel;
+    
+    // Charger les photos dans la sidebar
+    async function loadSidebarPhotos() {
+      if (!currentCardId) return;
+      
+      // Si déjà chargé pour cette carte, ne pas recharger
+      if (sidebarPhotosLoaded && sidebarPhotosCardId === currentCardId) {
+        return;
+      }
+      
+      const card = cardsData[currentCardId];
+      if (!card) return;
+      
+      const orderNumber = card.order || '';
+      const beneficiaryName = (card.name || '').toUpperCase().trim();
+      const folderName = `${orderNumber} - ${beneficiaryName}`;
+      
+      console.log('📷 loadSidebarPhotos - Carte:', orderNumber, beneficiaryName);
+      
+      // Mettre à jour le nom du dossier
+      const folderEl = document.getElementById('sidebarPhotosFolder');
+      if (folderEl) folderEl.textContent = orderNumber ? folderName : 'Pas de numéro de commande';
+      
+      const gridEl = document.getElementById('sidebarPhotosGrid');
+      if (!gridEl) return;
+      
+      if (!orderNumber) {
+        gridEl.innerHTML = `
+          <div class="photos-sidebar-empty">
+            <div class="photos-sidebar-empty-icon">⚠️</div>
+            <div class="photos-sidebar-empty-text">Numéro de commande<br>manquant</div>
+          </div>
+        `;
+        return;
+      }
+      
+      // Afficher le chargement
+      gridEl.innerHTML = `
+        <div class="photos-sidebar-loading">
+          <div class="photos-sidebar-spinner"></div>
+          <span style="font-size:11px;color:#94a3b8;">Chargement...</span>
+        </div>
+      `;
+      
+      // Vérifier MSAL
+      if (!msalInstance) {
+        gridEl.innerHTML = `
+          <div class="photos-sidebar-connect">
+            <div style="font-size:40px;opacity:0.5;">🔐</div>
+            <button class="photos-sidebar-connect-btn" onclick="connectSidebarPhotos()">
+              <span>🔗</span> Connecter OneDrive
+            </button>
+            <div style="font-size:11px;color:#64748b;text-align:center;">
+              Connectez-vous pour voir les photos
+            </div>
+          </div>
+        `;
+        return;
+      }
+      
+      // Obtenir le token
+      const token = await getOneDriveToken();
+      if (!token) {
+        gridEl.innerHTML = `
+          <div class="photos-sidebar-connect">
+            <div style="font-size:40px;opacity:0.5;">🔐</div>
+            <button class="photos-sidebar-connect-btn" onclick="connectSidebarPhotos()">
+              <span>🔗</span> Connecter OneDrive
+            </button>
+          </div>
+        `;
+        return;
+      }
+      
+      // Rechercher le dossier
+      const folder = await findOrderFolder(orderNumber);
+      if (!folder) {
+        gridEl.innerHTML = `
+          <div class="photos-sidebar-empty">
+            <div class="photos-sidebar-empty-icon">📁</div>
+            <div class="photos-sidebar-empty-text">Aucun dossier trouvé<br>pour "${orderNumber}"</div>
+          </div>
+        `;
+        return;
+      }
+      
+      // Récupérer les photos
+      const photos = await getPhotosFromFolder(folder.id);
+      if (photos.length === 0) {
+        gridEl.innerHTML = `
+          <div class="photos-sidebar-empty">
+            <div class="photos-sidebar-empty-icon">📷</div>
+            <div class="photos-sidebar-empty-text">Aucune photo<br>dans ce dossier</div>
+          </div>
+        `;
+        return;
+      }
+      
+      // Sauvegarder les photos
+      sidebarPhotos = photos;
+      galleryPhotos = photos;
+      sidebarPhotosLoaded = true;
+      sidebarPhotosCardId = currentCardId;
+      
+      // Afficher les miniatures
+      gridEl.innerHTML = photos.map((photo, index) => `
+        <div class="photos-sidebar-thumb" onclick="openPhotoFromSidebar(${index})">
+          <img src="${photo.thumbnailUrl || photo.downloadUrl}" alt="${photo.name}" loading="lazy">
+          <div class="photos-sidebar-thumb-overlay"><span>🔍</span></div>
+        </div>
+      `).join('');
+    }
+    window.loadSidebarPhotos = loadSidebarPhotos;
+    
+    // Connecter OneDrive depuis la sidebar
+    async function connectSidebarPhotos() {
+      const connected = await loginOneDrive();
+      if (connected) {
+        loadSidebarPhotos();
+      }
+    }
+    window.connectSidebarPhotos = connectSidebarPhotos;
+    
+    // Ouvrir une photo depuis la sidebar
+    function openPhotoFromSidebar(index) {
+      if (!sidebarPhotos || sidebarPhotos.length === 0) return;
+      
+      const card = cardsData[currentCardId];
+      if (!card) return;
+      
+      const orderNumber = card.order || '';
+      const beneficiaryName = (card.name || '').toUpperCase().trim();
+      
+      currentPhotoIndex = index;
+      galleryCardId = currentCardId;
+      galleryPhotos = sidebarPhotos;
+      renderGallery(orderNumber, beneficiaryName);
+    }
+    window.openPhotoFromSidebar = openPhotoFromSidebar;
+    
+    // Réinitialiser les photos de la sidebar quand on change de carte
+    function resetSidebarPhotos() {
+      sidebarPhotosLoaded = false;
+      sidebarPhotosCardId = null;
+      sidebarPhotos = [];
+      const gridEl = document.getElementById('sidebarPhotosGrid');
+      if (gridEl) {
+        gridEl.innerHTML = `
+          <div class="photos-sidebar-empty">
+            <div class="photos-sidebar-empty-icon">📷</div>
+            <div class="photos-sidebar-empty-text">Chargement des photos...</div>
+          </div>
+        `;
+      }
+      const folderEl = document.getElementById('sidebarPhotosFolder');
+      if (folderEl) folderEl.textContent = '-';
+      // Décocher la checkbox photos
+      const photosCheckbox = document.querySelector('.fiche-photos-btn input');
+      if (photosCheckbox) {
+        photosCheckbox.checked = false;
+        document.getElementById('fichePhotosBtn')?.classList.remove('active');
+      }
+    }
+    window.resetSidebarPhotos = resetSidebarPhotos;
     
     // Afficher l'état de chargement
     function showGalleryLoading(orderNumber, name) {
