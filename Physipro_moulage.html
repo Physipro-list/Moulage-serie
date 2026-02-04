@@ -3998,7 +3998,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1580';
+    const APP_VERSION = '1581';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -15573,47 +15573,58 @@ function initLogoMenu(currentMod){
       sendBtn.disabled = true;
       statusEl.style.display = 'block';
       statusEl.className = 'photo-archive-status info';
-      statusEl.textContent = '⏳ Envoi en cours...';
       
       try {
         // Créer le nom du dossier (format: "289871 - DESG 52521")
         const folderName = `${card.order || 'SANS-NUM'} - ${card.name || 'Sans nom'}`;
         const timestamp = Date.now();
         
-        // Préparer les photos en base64 avec leurs noms
-        const photosData = photos.map((photo, i) => ({
-          name: `photo_${timestamp}_${i + 1}.jpg`,
-          data: photo // base64 déjà
-        }));
+        // ENVOI UNE PAR UNE - évite les bugs et surcharges
+        let sentCount = 0;
+        const totalPhotos = photos.length;
         
-        statusEl.textContent = `⏳ Envoi de ${photos.length} photo(s)...`;
-        
-        // Ajouter une entrée dans la base de données avec les photos en base64
-        const archiveRef = firebaseDb.ref('photoArchives').push();
-        await archiveRef.set({
-          cardId: photoArchiveCardId,
-          cardName: card.name || '',
-          cardOrder: card.order || '',
-          folderName: folderName,
-          photoCount: photos.length,
-          photos: photosData, // Les photos en base64 directement
-          timestamp: timestamp,
-          status: 'pending',
-          uploadedBy: currentUser?.email || 'unknown',
-          uploadedAt: new Date().toISOString()
-        });
-        
-        console.log(`📷 ${photos.length} photo(s) uploadée(s) pour: ${folderName}`);
+        for (let i = 0; i < totalPhotos; i++) {
+          const photo = photos[i];
+          statusEl.textContent = `⏳ Envoi photo ${i + 1}/${totalPhotos}...`;
+          
+          // Créer une entrée SÉPARÉE pour chaque photo
+          const photoData = {
+            name: `photo_${timestamp}_${i + 1}.jpg`,
+            data: photo
+          };
+          
+          const archiveRef = firebaseDb.ref('photoArchives').push();
+          await archiveRef.set({
+            cardId: photoArchiveCardId,
+            cardName: card.name || '',
+            cardOrder: card.order || '',
+            folderName: folderName,
+            photoCount: 1,
+            photos: [photoData], // UNE seule photo par envoi
+            timestamp: timestamp + i, // Timestamp unique pour ordre
+            status: 'pending',
+            uploadedBy: currentUser?.email || 'unknown',
+            uploadedAt: new Date().toISOString()
+          });
+          
+          sentCount++;
+          console.log(`📷 Photo ${sentCount}/${totalPhotos} envoyée pour: ${folderName}`);
+          
+          // Petite pause entre chaque envoi (évite surcharge)
+          if (i < totalPhotos - 1) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
         
         statusEl.className = 'photo-archive-status success';
-        statusEl.textContent = `✅ ${photos.length} photo(s) envoyée(s)! En attente du PC...`;
+        statusEl.textContent = `✅ ${sentCount} photo(s) envoyée(s)! En attente du PC...`;
         
         // Vider les photos après envoi réussi
         photoArchivePhotos = [];
         document.getElementById('photoArchiveGrid').innerHTML = '';
         updateArchivePhotoCount();
         
-        showToast(`📷 ${photos.length} photo(s) envoyée(s) pour archivage`, 'success');
+        showToast(`📷 ${sentCount} photo(s) envoyée(s) pour archivage`, 'success');
         
       } catch (error) {
         console.error('Erreur upload photos archive:', error);
