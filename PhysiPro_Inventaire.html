@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PhysiPro - Inventaire v4</title>
+  <meta name="theme-color" content="#04152c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Inventaire">
+  <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png">
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;}
+html{overflow-y:scroll;}
+:root{--bg-dark:#0a1628;--bg-medium:#0f172a;--bg-light:#1e293b;--primary:#3b82f6;--primary-dark:#1d4ed8;--success:#22c55e;--success-dark:#16a34a;--purple:#8b5cf6;--text-white:#ffffff;--text-muted:#94a3b8;--border-light:rgba(255,255,255,0.1);--gold:#c9a227;--gold-light:#fbbf24;--teal:#14b8a6;--danger:#ef4444;--orange:#f97316;}
+body{margin:0;padding:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg-dark);color:var(--text-white);min-height:100vh;display:flex;flex-direction:column;}
+
+/* ═══ LOGIN ═══ */
+.login-overlay {
+  position: fixed; inset: 0;
+  background: linear-gradient(to bottom, #0b1d36, #3f6eb8);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 99999; padding: 20px; box-sizing: border-box;
+}
+.login-overlay.hidden { display: none; }
+.login-panel {
+  background: linear-gradient(to bottom, #0b2343, #06315a);
+  border-radius: 16px; border: 1px solid rgba(255,255,255,0.25);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.85);
+  padding: 25px 30px; max-width: 420px; width: 100%;
+  color: #fff; text-align: center;
+}
+.login-logo-container {
+  width: 280px; height: 100px; margin: 10px auto 15px auto;
+  display: flex; align-items: center; justify-content: center;
+}
+.login-logo-container img { height: 90px; width: auto; object-fit: contain; }
+.login-title-container { text-align: center; margin-bottom: 8px; }
+.login-title { font-size: 16px; font-weight: 700; margin-bottom: 3px; line-height: 1.3; color: #fff; }
+.login-author {
+  font-family: 'Brush Script MT', 'Segoe Script', 'Bradley Hand', cursive;
+  font-size: 18px; color: rgba(255,255,255,0.7); font-style: italic;
+}
+.login-subtitle { font-size: 12px; opacity: 0.8; margin-bottom: 15px; color: #fff; }
+#loginForm { width: 100%; }
+.login-input {
+  width: 100%; padding: 12px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3);
+  color: #fff; font-size: 15px; text-align: center;
+  margin-bottom: 12px; box-sizing: border-box;
+}
+.login-input::placeholder { color: rgba(255,255,255,0.5); font-size: 13px; }
+.login-input:focus { outline: none; border-color: #00aaff; box-shadow: 0 0 10px rgba(0,170,255,0.3); }
+.login-btn {
+  width: 100%; padding: 12px; border-radius: 999px; border: none;
+  background: linear-gradient(to bottom, #00aaff, #0077cc);
+  color: #fff; font-weight: 700; font-size: 13px; cursor: pointer;
+  margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.login-btn:hover { background: linear-gradient(to bottom, #00bbff, #0088dd); transform: translateY(-1px); }
+.login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.login-error { color: #ff6666; font-size: 11px; margin-top: 8px; min-height: 18px; }
+.login-remember {
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px; margin: 8px 0 10px 0; font-size: 12px; color: rgba(255,255,255,0.8);
+}
+.login-remember input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #00aaff; }
+.login-remember label { cursor: pointer; }
+.login-remember{display:flex;align-items:center;justify-content:center;gap:6px;margin:8px 0 10px 0;font-size:12px;color:rgba(255,255,255,0.8);}
+.login-remember input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#00aaff;}
+.login-remember label{cursor:pointer;}
+
+/* ═══ TOPBAR ═══ */
+.topbar{width:100%;min-height:75px;padding:4px 20px 6px 20px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);box-shadow:inset 0 1px 2px rgba(255,255,255,.16),0 2px 6px rgba(0,0,0,.45);position:sticky;top:0;z-index:100;border-bottom:3px solid #c9a227;}
+.tb-left{display:flex;align-items:center;z-index:2;}
+.logo-main{display:flex;flex-direction:column;align-items:center;}
+.logo-top-fixed img{height:40px;width:auto;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));}
+.logo-bottom-text{font-size:15px;font-weight:600;color:#fff;text-shadow:1px 1px 3px rgba(0,0,0,.6);margin-top:-4px;}
+.tb-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1;pointer-events:none;max-width:calc(100% - 550px);overflow:hidden;}
+.top-title{font-size:24px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fdfdfd;text-shadow:0 2px 3px rgba(0,0,0,.85);white-space:nowrap;}
+.tb-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;z-index:2;}
+.tb-buttons-row{display:flex;align-items:center;gap:6px;}
+.tb-search-row{display:flex;align-items:center;gap:6px;}
+.search-box-small{display:flex;align-items:center;width:220px;height:22px;background:rgba(255,255,255,.95);border:2px solid #3b82f6;border-radius:11px;padding:0 4px 0 8px;}
+.search-box-small input{background:transparent;border:none;color:#1e3a5f;font-size:10px;flex:1;outline:none;}
+.search-box-small input::placeholder{color:#64748b;}
+.user-status{display:flex;align-items:center;justify-content:center;gap:4px;width:220px;height:22px;background:rgba(255,255,255,.15);border-radius:11px;font-size:10px;}
+.status-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;flex-shrink:0;}
+.user-name{color:#fff;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.topbar-btn{padding:6px 12px;background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:6px;font-size:11px;cursor:pointer;transition:all .2s;}
+.topbar-btn:hover{background:rgba(255,255,255,0.2);}
+.topbar-btn.logout{background:linear-gradient(to bottom,#ef4444,#dc2626);border-color:#ef4444;}
+.topbar-btn.logout:hover{background:linear-gradient(to bottom,#f87171,#ef4444);}
+
+/* ═══ LOGO NAV MENU ═══ */
+.logo-flip-container{position:relative;cursor:pointer;z-index:2;}
+.logo-main{display:flex;flex-direction:column;align-items:center;}
+.logo-top-fixed img{height:40px;width:auto;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));}
+.logo-bottom-text{font-size:15px;font-weight:600;color:#fff;text-shadow:1px 1px 3px rgba(0,0,0,.6);margin-top:-4px;}
+.logo-menu{position:fixed;top:0;left:145px;right:0;min-height:75px;background:linear-gradient(to bottom,#04152c 0%,#2a6bc9 100%);padding:8px 20px;opacity:0;visibility:hidden;transform:translateY(-10px);transition:all .3s ease;z-index:99990;display:flex;flex-wrap:wrap;align-items:center;gap:8px;box-shadow:0 4px 15px rgba(0,0,0,.4);}
+.logo-flip-container:hover .logo-menu{opacity:1;visibility:visible;transform:translateY(0);}
+.logo-menu:hover{opacity:1;visibility:visible;transform:translateY(0);}
+.logo-menu-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:4px 8px;font-family:'Segoe UI',sans-serif;color:#fff;cursor:pointer;transition:all .2s;border-radius:6px;background:transparent;border:2px solid transparent;min-width:70px;height:58px;text-decoration:none;position:relative;}
+.logo-menu-item:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);}
+.logo-menu-item.active{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);}
+.logo-menu-icon-img{height:32px;width:auto;object-fit:contain;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));transition:transform .2s;}
+.logo-menu-item:hover .logo-menu-icon-img{transform:scale(1.05);}
+.logo-menu-text{font-size:11px;font-weight:700;text-align:center;text-shadow:1px 1px 3px rgba(0,0,0,.8);white-space:nowrap;margin-top:-2px;letter-spacing:.3px;}
+
+/* ═══ TAB BAR ═══ */
+.tab-bar{display:flex;align-items:center;height:42px;background:linear-gradient(180deg,#2c4a6e 0%,#1e3a5f 100%);border-bottom:2px solid #c9a227;flex-shrink:0;padding:0 12px;gap:8px;}
+.tab-btn{height:30px;display:flex;align-items:center;justify-content:center;gap:6px;border:2px solid #000;border-radius:15px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;padding:0 18px;transition:all .2s;}
+.tab-btn.atelier{background:linear-gradient(to bottom,#3b82f6,#2563eb);}
+.tab-btn.atelier:hover{background:linear-gradient(to bottom,#60a5fa,#3b82f6);}
+.tab-btn.atelier.active{background:linear-gradient(to bottom,#2563eb,#1d4ed8);box-shadow:inset 0 2px 4px rgba(0,0,0,0.3);}
+.tab-btn.couture{background:linear-gradient(to bottom,#8b5cf6,#7c3aed);}
+.tab-btn.couture:hover{background:linear-gradient(to bottom,#a78bfa,#8b5cf6);}
+.tab-btn.couture.active{background:linear-gradient(to bottom,#7c3aed,#6d28d9);box-shadow:inset 0 2px 4px rgba(0,0,0,0.3);}
+.tab-count{background:rgba(255,255,255,0.25);padding:1px 7px;border-radius:10px;font-size:9px;font-weight:800;}
+.tab-spacer{flex:1;}
+.tab-btn-add{height:28px;display:flex;align-items:center;gap:4px;padding:0 14px;background:linear-gradient(to bottom,#22c55e,#16a34a);color:#fff;border:2px solid #000;border-radius:14px;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;}
+.tab-btn-add:hover{background:linear-gradient(to bottom,#4ade80,#22c55e);}
+.tab-btn-sync{height:28px;display:flex;align-items:center;gap:4px;padding:0 14px;background:linear-gradient(to bottom,var(--teal),#0d9488);color:#fff;border:2px solid #000;border-radius:14px;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;}
+.tab-btn-sync:hover{filter:brightness(1.15);}
+
+/* ═══ MAIN SPLIT ═══ */
+.main-split{flex:1;display:flex;overflow:hidden;}
+.panel-left{flex:1;display:flex;flex-direction:column;overflow:hidden;border-right:3px solid var(--gold);}
+.panel-right{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.panel-header{display:flex;align-items:center;height:36px;padding:0 14px;flex-shrink:0;gap:8px;}
+.panel-header.bassin{background:linear-gradient(to right,#1e3a5f,#2563eb);}
+.panel-header.fabrique{background:linear-gradient(to right,#0d4a44,#0f766e);}
+.panel-header-title{font-size:13px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:1px;text-shadow:1px 1px 2px rgba(0,0,0,0.5);}
+.panel-header-count{font-size:10px;font-weight:800;background:rgba(255,255,255,0.25);padding:2px 8px;border-radius:10px;color:#fff;}
+.panel-header-search{margin-left:auto;padding:4px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;background:rgba(0,0,0,0.3);color:#fff;font-size:11px;width:180px;}
+.panel-header-search:focus{outline:none;border-color:var(--primary);}
+.panel-header-search::placeholder{color:rgba(255,255,255,0.4);}
+.panel-body{flex:1;display:flex;flex-wrap:wrap;align-content:flex-start;gap:8px;padding:10px;overflow-y:auto;}
+.panel-body::-webkit-scrollbar{width:8px;}
+.panel-body::-webkit-scrollbar-track{background:rgba(0,0,0,0.2);border-radius:4px;}
+.panel-body::-webkit-scrollbar-thumb{background:rgba(59,130,246,0.5);border-radius:4px;}
+.panel-body.bassin-bg{background:linear-gradient(135deg,rgba(30,58,95,0.15),rgba(13,27,42,0.4));}
+.panel-body.fabrique-bg{background:linear-gradient(135deg,rgba(13,148,136,0.08),rgba(13,27,42,0.4));}
+
+/* ═══ CARDS ═══ */
+.inv-card{width:155px;height:90px;border:2px solid #000;border-radius:6px;cursor:default;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(0,0,0,0.4);transition:transform .15s,box-shadow .15s;position:relative;overflow:hidden;flex-shrink:0;}
+.inv-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.5);}
+.inv-card.bassin-card{background:linear-gradient(to bottom,#1e3a5f,#3b82f6);}
+.inv-card.fabrique-card{background:linear-gradient(to bottom,#0d4a44,#0f766e);}
+.inv-card.client-vermeiren{background:linear-gradient(to bottom,#4ade80,#166534);}
+.inv-card.client-hme{background:linear-gradient(to bottom,#E8B97A,#704414);}
+.inv-card.client-c1south{background:linear-gradient(to bottom,#9ca3af,#581c87);}
+.inv-card.client-cubro{background:linear-gradient(to bottom,#67e8f9,#0e7490);}
+.inv-card.client-france{background:linear-gradient(to bottom,#facc15,#854d0e);}
+.inv-card.scan-highlight{animation:scanPulse 1.5s ease-in-out 3;border-color:var(--gold-light)!important;box-shadow:0 0 15px rgba(251,191,36,0.6)!important;}
+@keyframes scanPulse{0%,100%{box-shadow:0 0 5px rgba(251,191,36,0.3);}50%{box-shadow:0 0 20px rgba(251,191,36,0.8);}}
+.card-header{display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:rgba(0,0,0,0.4);border-bottom:1px solid rgba(0,0,0,0.3);}
+.card-order{font-size:10px;font-weight:800;color:#fff;text-shadow:1px 1px 1px rgba(0,0,0,0.8);}
+.card-client-badge{font-size:7px;font-weight:700;color:#fff;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);border-radius:2px;padding:1px 5px;text-transform:uppercase;}
+.card-body{flex:1;display:flex;flex-direction:column;padding:3px 6px;gap:1px;}
+.card-name{font-size:10px;font-weight:800;color:#fff;text-shadow:1px 1px 1px rgba(0,0,0,0.6);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.card-info-row{display:flex;justify-content:space-between;align-items:center;margin-top:2px;}
+.card-grandeur{font-size:8px;font-weight:700;color:#fef08a;background:rgba(0,0,0,0.35);border:1px solid rgba(254,240,138,0.3);border-radius:2px;padding:1px 4px;}
+.card-qty-container{display:flex;align-items:center;gap:2px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.25);border-radius:2px;padding:0 4px;}
+.card-qty-label{font-size:6px;font-weight:600;color:rgba(255,255,255,0.7);text-transform:uppercase;}
+.card-qty{font-size:10px;font-weight:900;color:#fff;text-shadow:1px 1px 1px rgba(0,0,0,0.8);}
+.card-footer{display:flex;width:100%;margin-top:auto;}
+.card-btn-complete{flex:1;padding:3px;background:linear-gradient(to bottom,#22c55e,#16a34a);border:none;border-top:1px solid rgba(0,0,0,0.3);border-radius:0 0 0 4px;color:#fff;font-size:8px;font-weight:800;cursor:pointer;text-align:center;text-shadow:1px 1px 2px rgba(0,0,0,0.8);text-transform:uppercase;}
+.card-btn-complete:hover{background:linear-gradient(to bottom,#4ade80,#22c55e);}
+.card-btn-delete{width:28px;padding:3px;background:linear-gradient(to bottom,#6b7280,#4b5563);border:none;border-top:1px solid rgba(0,0,0,0.3);border-left:1px solid rgba(0,0,0,0.2);border-radius:0 0 4px 0;color:#fff;font-size:8px;cursor:pointer;text-align:center;}
+.card-btn-delete:hover{background:linear-gradient(to bottom,#ef4444,#dc2626);}
+.card-footer-info{display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:rgba(0,0,0,0.3);border-top:1px solid rgba(20,184,166,0.3);margin-top:auto;}
+.card-date{font-size:8px;color:var(--teal);font-weight:600;}
+.card-badge{font-size:7px;font-weight:800;background:var(--teal);color:#000;padding:1px 5px;border-radius:3px;}
+.card-badge.auto{background:var(--gold-light);}
+.card-restore-btn{padding:1px 5px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:3px;color:#fff;font-size:7px;cursor:pointer;font-weight:600;}
+.card-restore-btn:hover{background:rgba(255,255,255,0.3);}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-muted);width:100%;}
+.empty-state .icon{font-size:48px;margin-bottom:10px;}
+.empty-state p{font-size:13px;}
+.empty-state .sub{font-size:11px;margin-top:6px;color:rgba(255,255,255,0.3);}
+.add-card-btn{width:155px;height:90px;background:rgba(255,255,255,0.06);border:2px dashed rgba(255,255,255,0.2);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;transition:all .2s;flex-shrink:0;}
+.add-card-btn:hover{background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.4);}
+.add-card-btn .plus{font-size:22px;color:rgba(255,255,255,0.4);}
+.add-card-btn .label{font-size:9px;color:rgba(255,255,255,0.35);font-weight:600;}
+
+/* ═══ MODALS ═══ */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999;}
+.modal-overlay.hidden{display:none;}
+.modal{background:linear-gradient(to bottom,#1e3a5f,#0f172a);border:2px solid rgba(59,130,246,0.5);border-radius:12px;min-width:380px;max-width:420px;box-shadow:0 10px 40px rgba(0,0,0,0.5);animation:modalIn .2s ease;}
+@keyframes modalIn{from{transform:scale(0.95);opacity:0;}to{transform:scale(1);opacity:1;}}
+.modal-header{padding:12px 16px;background:linear-gradient(to right,#1e40af,#3b82f6);border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;}
+.modal-title{font-size:14px;font-weight:700;color:#fff;}
+.modal-close{background:rgba(255,255,255,0.2);border:none;color:#fff;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:14px;}
+.modal-close:hover{background:rgba(255,255,255,0.3);}
+.modal-body{padding:16px;display:flex;flex-direction:column;gap:12px;}
+.modal-row{display:flex;gap:10px;}
+.modal-field{flex:1;display:flex;flex-direction:column;gap:4px;}
+.modal-field label{font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;}
+.modal-field input,.modal-field select{padding:8px 10px;border:1px solid rgba(255,255,255,0.2);border-radius:6px;background:rgba(0,0,0,0.3);color:#fff;font-size:12px;}
+.modal-field input:focus,.modal-field select:focus{outline:none;border-color:#3b82f6;background:rgba(0,0,0,0.5);}
+.modal-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:flex-end;gap:10px;}
+.modal-btn{padding:8px 16px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;}
+.modal-btn.cancel{background:rgba(255,255,255,0.1);color:#94a3b8;}
+.modal-btn.cancel:hover{background:rgba(255,255,255,0.2);}
+.modal-btn.confirm{background:linear-gradient(to bottom,#22c55e,#16a34a);color:#fff;}
+.modal-btn.confirm:hover{background:linear-gradient(to bottom,#16a34a,#15803d);}
+
+/* ═══ CONTEXT MENU ═══ */
+.ctx-menu{position:fixed;background:linear-gradient(to bottom,#1e3a5f,#0f172a);border:2px solid rgba(59,130,246,0.5);border-radius:8px;padding:8px 0;min-width:180px;box-shadow:0 8px 30px rgba(0,0,0,0.5);z-index:9998;}
+.ctx-menu-header{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.1);font-size:11px;font-weight:700;color:#60a5fa;}
+.ctx-menu-item{padding:8px 12px;font-size:12px;color:#e2e8f0;cursor:pointer;display:flex;align-items:center;gap:8px;}
+.ctx-menu-item:hover{background:rgba(59,130,246,0.2);}
+.ctx-menu-item.danger{color:#f87171;}
+.ctx-menu-item.danger:hover{background:rgba(239,68,68,0.2);}
+.ctx-menu-item.teal{color:var(--teal);}
+.ctx-menu-item.teal:hover{background:rgba(20,184,166,0.2);}
+.ctx-sep{height:1px;background:rgba(255,255,255,0.1);margin:4px 0;}
+
+/* ═══ TOAST ═══ */
+.toast-container{position:fixed;bottom:20px;right:20px;z-index:99999;display:flex;flex-direction:column;gap:8px;}
+.toast{padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;color:#fff;box-shadow:0 4px 15px rgba(0,0,0,0.3);animation:slideIn .3s ease;transition:opacity .3s;}
+.toast.success{background:linear-gradient(to right,#22c55e,#16a34a);}
+.toast.error{background:linear-gradient(to right,#ef4444,#dc2626);}
+.toast.info{background:linear-gradient(to right,#3b82f6,#1d4ed8);}
+.toast.teal{background:linear-gradient(to right,var(--teal),#0d9488);}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
+
+/* ═══ RESPONSIVE ═══ */
+@media(max-width:768px){
+  .main-split{flex-direction:column;}
+  .panel-left{border-right:none;border-bottom:3px solid var(--gold);max-height:50vh;}
+  .panel-right{max-height:50vh;}
+  .inv-card,.add-card-btn{width:140px;height:84px;}
+  .topbar{min-height:60px;padding:4px 10px;}
+  .top-title{font-size:18px;}
+  .panel-header-search{width:120px;}
+}
+</style>
+</head>
+<body>
+
+<script>
+if(localStorage.getItem('physipro_last_email')){
+  document.write('<style>.login-overlay{display:none !important;}</style>');
+}
+</script>
+
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-panel">
+    <div class="login-logo-container">
+      <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro">
+    </div>
+    <div class="login-title-container">
+      <div class="login-title">Outil de gestion simplifiée</div>
+      <div class="login-author">par Daniel Charest</div>
+    </div>
+    <div class="login-subtitle">Connectez-vous avec votre email d'entreprise</div>
+    <form id="loginForm" autocomplete="on" onsubmit="doLogin(event)">
+      <input type="email" id="loginEmail" name="email" class="login-input" placeholder="Email d'entreprise" autocomplete="username">
+      <input type="password" id="loginPassword" name="password" class="login-input" placeholder="Mot de passe" maxlength="50" autocomplete="current-password">
+      <div class="login-remember">
+        <input type="checkbox" id="loginRemember" checked>
+        <label for="loginRemember">Rester connecté</label>
+      </div>
+      <button type="submit" class="login-btn" id="loginBtn">Se connecter</button>
+    </form>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<div class="topbar">
+  <div class="tb-left">
+    <div class="logo-flip-container" id="logoFlipContainer">
+      <div class="logo-main">
+        <div class="logo-top-fixed"><img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro"></div>
+        <div class="logo-bottom-text">Inventaire</div>
+      </div>
+      <div class="logo-menu" id="logoMenu"></div>
+    </div>
+  </div>
+  <div class="tb-center"><span class="top-title">Inventaire</span></div>
+  <div class="tb-right">
+    <div class="tb-buttons-row">
+      <div class="user-status"><span class="status-dot" id="statusDot"></span><span class="user-name" id="currentUserDisplay">--</span></div>
+    </div>
+    <div class="tb-search-row">
+      <div class="search-box-small">
+        <input type="text" id="globalSearch" placeholder="🔍 Rechercher..." oninput="handleGlobalSearch(this.value)">
+      </div>
+      <button class="topbar-btn logout" onclick="doLogout()" style="height:22px;padding:0 10px;border-radius:11px;font-size:9px;">Déconnexion</button>
+    </div>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn atelier active" id="tabAtelier" onclick="switchTab('atelier')">🔧 Atelier <span class="tab-count" id="countAtelier">0</span></button>
+  <button class="tab-btn couture" id="tabCouture" onclick="switchTab('couture')">🧵 Couture <span class="tab-count" id="countCouture">0</span></button>
+  <div class="tab-spacer"></div>
+  <button class="tab-btn-sync" onclick="checkAllInspection()">🔄 Vérifier Inspection</button>
+  <button class="tab-btn-add" onclick="showAddModal()">+ Ajouter</button>
+</div>
+
+<div class="main-split">
+  <div class="panel-left">
+    <div class="panel-header bassin">
+      <span class="panel-header-title">📦 Bassin — En attente</span>
+      <span class="panel-header-count" id="bassinCount">0</span>
+      <input type="text" class="panel-header-search" id="bassinSearch" placeholder="🔍 Filtrer..." oninput="renderBassin()">
+    </div>
+    <div class="panel-body bassin-bg" id="bassinGrid"></div>
+  </div>
+  <div class="panel-right">
+    <div class="panel-header fabrique">
+      <span class="panel-header-title">✅ Fabriqué</span>
+      <span class="panel-header-count" id="fabriqueCount">0</span>
+      <input type="text" class="panel-header-search" id="fabriqueSearch" placeholder="🔍 Filtrer..." oninput="renderFabrique()">
+    </div>
+    <div class="panel-body fabrique-bg" id="fabriqueGrid"></div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="modal-overlay hidden" id="addModal">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">➕ Ajouter un item</span><button class="modal-close" onclick="closeAddModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="modal-row">
+        <div class="modal-field"><label>N° Commande</label><input type="text" id="addCommande" placeholder="123456"></div>
+        <div class="modal-field"><label>Client</label><select id="addClient"></select></div>
+      </div>
+      <div class="modal-field"><label>Nom du produit</label><input type="text" id="addNom" placeholder="Premium, Ultra..."></div>
+      <div class="modal-row">
+        <div class="modal-field"><label>Grandeur</label><input type="text" id="addGrandeur" placeholder="16 x 18"></div>
+        <div class="modal-field"><label>Quantité</label><input type="number" id="addQty" value="1" min="1"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn cancel" onclick="closeAddModal()">Annuler</button>
+      <button class="modal-btn confirm" id="addConfirmBtn" onclick="confirmAddItem()">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   PHYSIPRO INVENTAIRE v4 — SPLIT BASSIN / FABRIQUÉ
+   ================================================================ */
+const FIREBASE_CONFIG={apiKey:"AIzaSyCk7bqVnx08Kz1fVq1W24AuW854KY9jPno",authDomain:"liste-des-moulages-physipro.firebaseapp.com",databaseURL:"https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",projectId:"liste-des-moulages-physipro",storageBucket:"liste-des-moulages-physipro.firebasestorage.app",messagingSenderId:"24566847562",appId:"1:24566847562:web:db492bdd33116373e0eeb3"};
+
+let currentTab='atelier', currentUser=null, db=null;
+let bassinAtelier={}, bassinCouture={}, fabriqueAtelier={}, fabriqueCouture={};
+let inspectionData={};
+
+const CLIENTS=[{key:'vermeiren',label:'Vermeiren'},{key:'hme',label:'HME'},{key:'c1south',label:'C1South'},{key:'cubro',label:'Cubro'},{key:'france',label:'France'}];
+
+/* ═══ HUB ═══ */
+var HUB_ACCESS={'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','photos'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','photos'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps'],'c3JveUBwaHlzaXByby5jb20=':['moulage','jobs','inspection','serie','psm','inventaire'],'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['moulage','jobs'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['moulage','jobs'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['moulage','jobs'],'bWFnYXNpbmF0cDFAcGh5c2lwcm8uY29t':['entrepot','calcmat'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['entrepot','inventaire','calcmat'],'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':['entrepot','calcmat'],'c2VydmljZTFAcGh5c2lwcm8uY29t':['moulage','jobs'],'c2VydmljZTNAcGh5c2lwcm8uY29t':['moulage','jobs'],'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':['moulage','jobs'],'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':['moulage','jobs','serie'],'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':['moulage','calcmat','calctemps'],'cmhAcGh5c2lwcm8uY29t':['moulage','jobs'],'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':[],'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':[],'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':[]};
+var HUB_MODULES={moulage:{label:'Moulage',file:'Physipro_moulage.html',color:'#3b82f6',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},jobs:{label:'Questionnement',file:'PhysiPro_Questionnement.html',color:'#f59e0b',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},inspection:{label:'Inspection',file:'PhysiPro_Inspection.html',color:'#22c55e',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},serie:{label:'Série+',file:'PhysiPro_Serie_.html',color:'#f97316',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},psm:{label:'PSM',file:'PhysiPro_PSM.html',color:'#ef4444',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},entrepot:{label:'Entrepôt',file:'PhysiPro_Entrepot.html',color:'#8b5cf6',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},inventaire:{label:'Inventaire',file:'PhysiPro_Inventaire.html',color:'#a855f7',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},calcmat:{label:'Calc. Matériaux',file:'PhysiPro_Calculateur_Materiaux.html',color:'#14b8a6',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},calctemps:{label:'Calc. Temps',file:'PhysiPro_Calculateur_Temps.html',color:'#0ea5e9',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},photos:{label:'Photo-Récepteur',file:'PhysiPro_Photo_Recepteur.html',color:'#06b6d4',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'}};
+var PHYSIPRO_NAME_MAP={'atelieratp@physipro.com':'Daniel','valerie18@videotron.ca':'Valérie','simdut@physipro.com':'Cassie','sroy@physipro.com':'Stéphanie','peterbass76@gmail.com':'Pierre','cncatp@physipro.com':'Sina'};
+function getPhysiproDisplayName(email){if(!email)return'—';var e=email.toLowerCase();if(PHYSIPRO_NAME_MAP[e])return PHYSIPRO_NAME_MAP[e];var n=email.split('@')[0];return n.split(/[._-]/).map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(' ');}
+function getHubAccess(email){if(!email)return[];try{return HUB_ACCESS[btoa(email)]||[];}catch(e){return[];}}
+function initLogoMenu(currentMod){
+  var menu=document.getElementById('logoMenu');if(!menu)return;
+  var email='';if(currentUser)email=currentUser.email||'';
+  var access=getHubAccess(email);
+  if(access.length<=1){menu.innerHTML='';return;}
+  menu.innerHTML='';
+  access.forEach(function(mod){
+    var m=HUB_MODULES[mod];if(!m)return;
+    var item=document.createElement('a');
+    item.className='logo-menu-item'+(mod===currentMod?' active':'');
+    item.href=(mod===currentMod)?'javascript:void(0)':m.file;
+    item.innerHTML='<img class="logo-menu-icon-img" src="'+m.img+'" alt="'+m.label+'"><span class="logo-menu-text" style="color:'+m.color+';">'+m.label+'</span>';
+    menu.appendChild(item);
+  });
+}
+
+/* ═══ LOGIN ═══ */
+function doLogin(event) {
+  if (event) event.preventDefault();
+  var email = document.getElementById('loginEmail').value.trim();
+  var password = document.getElementById('loginPassword').value;
+  var loginBtn = document.getElementById('loginBtn');
+  var rememberEl = document.getElementById('loginRemember');
+  var rememberMe = rememberEl ? rememberEl.checked : true;
+  var errorEl = document.getElementById('loginError');
+
+  errorEl.textContent = '';
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errorEl.textContent = 'Veuillez entrer une adresse email valide';
+    return;
+  }
+  if (!password) {
+    errorEl.textContent = 'Veuillez entrer votre mot de passe';
+    return;
+  }
+
+  loginBtn.disabled = true;
+  loginBtn.textContent = 'Connexion...';
+
+  var persistence = rememberMe
+    ? firebase.auth.Auth.Persistence.LOCAL
+    : firebase.auth.Auth.Persistence.SESSION;
+
+  firebase.auth().setPersistence(persistence).then(function() {
+    return firebase.auth().signInWithEmailAndPassword(email, password);
+  }).then(function() {
+    console.log('Connexion réussie');
+  }).catch(function(error) {
+    var msg = 'Une erreur est survenue.';
+    switch (error.code) {
+      case 'auth/user-not-found': msg = 'Aucun compte ne correspond à cette adresse.'; break;
+      case 'auth/wrong-password': msg = 'Mot de passe incorrect.'; break;
+      case 'auth/too-many-requests': msg = 'Trop de tentatives. Réessayez plus tard.'; break;
+      case 'auth/invalid-email': msg = 'Adresse email invalide.'; break;
+      default: msg = error.message;
+    }
+    errorEl.textContent = msg;
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Se connecter';
+  });
+}catch(err){
+    var m='Erreur de connexion.';
+    if(err.code==='auth/user-not-found')m='Aucun compte trouvé.';
+    else if(err.code==='auth/wrong-password'||err.code==='auth/invalid-credential')m='Email ou mot de passe incorrect.';
+    else if(err.code==='auth/too-many-requests')m='Trop de tentatives.';
+    document.getElementById('loginError').textContent=m;
+    btn.disabled=false;btn.textContent='Se connecter';
+  }
+}
+function doLogout(){localStorage.removeItem('physipro_last_email');firebase.auth().signOut().then(()=>showToast('Déconnexion','info'));}
+
+/* ═══ INIT ═══ */
+document.addEventListener('DOMContentLoaded',function(){
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db=firebase.database();
+  firebase.auth().onAuthStateChanged(function(user){
+    if(user){
+      currentUser=user;
+      localStorage.setItem('physipro_last_email',user.email);
+      document.getElementById('loginOverlay').classList.add('hidden');
+      document.getElementById('currentUserDisplay').textContent=getPhysiproDisplayName(user.email);
+      initLogoMenu('inventaire');
+      populateClientSelect();
+      loadData();
+    } else {
+      document.getElementById('loginOverlay').classList.remove('hidden');
+    }
+  });
+});
+
+/* ═══ FIREBASE DATA ═══ */
+function loadData(){
+  db.ref('inventaire_v4/bassin/atelier').on('value',s=>{bassinAtelier=s.val()||{};renderBassin();updateCounts();});
+  db.ref('inventaire_v4/bassin/couture').on('value',s=>{bassinCouture=s.val()||{};renderBassin();updateCounts();});
+  db.ref('inventaire_v4/fabrique/atelier').on('value',s=>{fabriqueAtelier=s.val()||{};renderFabrique();updateCounts();});
+  db.ref('inventaire_v4/fabrique/couture').on('value',s=>{fabriqueCouture=s.val()||{};renderFabrique();updateCounts();});
+  // Listen to Inspection for auto-detection
+  db.ref('inspection').on('value',s=>{inspectionData=s.val()||{};autoCheckInspection();});
+}
+function saveBassin(sec){db.ref('inventaire_v4/bassin/'+sec).set(sec==='atelier'?bassinAtelier:bassinCouture);}
+function saveFabrique(sec){db.ref('inventaire_v4/fabrique/'+sec).set(sec==='atelier'?fabriqueAtelier:fabriqueCouture);}
+
+/* ═══ TABS ═══ */
+function switchTab(tab){
+  currentTab=tab;
+  document.getElementById('tabAtelier').classList.toggle('active',tab==='atelier');
+  document.getElementById('tabCouture').classList.toggle('active',tab==='couture');
+  renderBassin();renderFabrique();updateCounts();
+}
+function updateCounts(){
+  document.getElementById('countAtelier').textContent=Object.keys(bassinAtelier).length+Object.keys(fabriqueAtelier).length;
+  document.getElementById('countCouture').textContent=Object.keys(bassinCouture).length+Object.keys(fabriqueCouture).length;
+  var bd=currentTab==='atelier'?bassinAtelier:bassinCouture;
+  var fd=currentTab==='atelier'?fabriqueAtelier:fabriqueCouture;
+  document.getElementById('bassinCount').textContent=Object.keys(bd).length;
+  document.getElementById('fabriqueCount').textContent=Object.keys(fd).length;
+}
+
+/* ═══ RENDER BASSIN ═══ */
+function renderBassin(){
+  var data=currentTab==='atelier'?bassinAtelier:bassinCouture;
+  var grid=document.getElementById('bassinGrid');
+  var filter=(document.getElementById('bassinSearch').value||'').toLowerCase();
+  var entries=Object.entries(data).filter(function(e){
+    if(!filter)return true;
+    return[e[1].commande,e[1].nom,e[1].grandeur,e[1].client].join(' ').toLowerCase().includes(filter);
+  });
+  entries.sort(function(a,b){return(b[1].dateAdded||0)-(a[1].dateAdded||0);});
+  if(entries.length===0&&!filter){
+    grid.innerHTML='<div class="empty-state"><div class="icon">📦</div><p>Aucun item en attente</p><div class="sub">Ajoutez des items ou ils arriveront de Série+</div></div>';
+  } else if(entries.length===0){
+    grid.innerHTML='<div class="empty-state"><div class="icon">🔍</div><p>Aucun résultat</p></div>';
+  } else {
+    grid.innerHTML=entries.map(function(e){return buildBassinCard(e[0],e[1]);}).join('');
+  }
+  var addBtn=document.createElement('div');addBtn.className='add-card-btn';
+  addBtn.innerHTML='<span class="plus">+</span><span class="label">Ajouter</span>';
+  addBtn.onclick=function(){showAddModal();};
+  grid.appendChild(addBtn);
+  updateCounts();
+}
+
+function buildBassinCard(id,item){
+  var cl=getClientLabel(item.client);
+  var cc=item.client?' client-'+item.client:'';
+  return '<div class="inv-card bassin-card'+cc+'" id="card_'+id+'" data-commande="'+(item.commande||'')+'" data-nom="'+(item.nom||'')+'" oncontextmenu="event.preventDefault();showCtxMenu(event,\''+id+'\',\'bassin\')"><div class="card-header"><span class="card-order">#'+(item.commande||'---')+'</span><span class="card-client-badge">'+cl+'</span></div><div class="card-body"><div class="card-name">'+(item.nom||'Sans nom')+'</div><div class="card-info-row"><span class="card-grandeur">'+(item.grandeur||'-')+'</span><div class="card-qty-container"><span class="card-qty-label">QTÉ</span><span class="card-qty">'+(item.quantite||1)+'</span></div></div></div><div class="card-footer"><button class="card-btn-complete" onclick="event.stopPropagation();moveToFabrique(\''+id+'\')">✓ FABRIQUÉ</button><button class="card-btn-delete" onclick="event.stopPropagation();deleteItem(\''+id+'\',\'bassin\')" title="Supprimer">🗑️</button></div></div>';
+}
+
+/* ═══ RENDER FABRIQUÉ ═══ */
+function renderFabrique(){
+  var data=currentTab==='atelier'?fabriqueAtelier:fabriqueCouture;
+  var grid=document.getElementById('fabriqueGrid');
+  var filter=(document.getElementById('fabriqueSearch').value||'').toLowerCase();
+  var entries=Object.entries(data).filter(function(e){
+    if(!filter)return true;
+    return[e[1].commande,e[1].nom,e[1].grandeur,e[1].client].join(' ').toLowerCase().includes(filter);
+  });
+  entries.sort(function(a,b){return new Date(b[1].completedDate||0)-new Date(a[1].completedDate||0);});
+  if(entries.length===0&&!filter){
+    grid.innerHTML='<div class="empty-state"><div class="icon">✅</div><p>Aucun item fabriqué</p><div class="sub">Les items inspectés apparaîtront ici automatiquement</div></div>';
+  } else if(entries.length===0){
+    grid.innerHTML='<div class="empty-state"><div class="icon">🔍</div><p>Aucun résultat</p></div>';
+  } else {
+    grid.innerHTML=entries.map(function(e){return buildFabriqueCard(e[0],e[1]);}).join('');
+  }
+  updateCounts();
+}
+
+function buildFabriqueCard(id,item){
+  var cl=getClientLabel(item.client);
+  var cc=item.client?' client-'+item.client:'';
+  var d=item.completedDate?new Date(item.completedDate).toLocaleDateString('fr-CA'):'—';
+  var t=item.completedDate?new Date(item.completedDate).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}):'';
+  var auto=item.autoInspection;
+  return '<div class="inv-card fabrique-card'+cc+'" id="card_'+id+'" data-commande="'+(item.commande||'')+'" data-nom="'+(item.nom||'')+'" oncontextmenu="event.preventDefault();showCtxMenu(event,\''+id+'\',\'fabrique\')"><div class="card-header"><span class="card-order">#'+(item.commande||'---')+'</span><span class="card-client-badge">'+cl+'</span></div><div class="card-body"><div class="card-name">'+(item.nom||'Sans nom')+'</div><div class="card-info-row"><span class="card-grandeur">'+(item.grandeur||'-')+'</span><div class="card-qty-container"><span class="card-qty-label">QTÉ</span><span class="card-qty">'+(item.quantite||1)+'</span></div></div></div><div class="card-footer-info"><span class="card-date">'+d+' '+t+'</span><span class="card-badge'+(auto?' auto':'')+'">'+( auto?'🔄 AUTO':'✅ FAIT')+'</span><button class="card-restore-btn" onclick="event.stopPropagation();restoreToBassin(\''+id+'\')" title="Remettre au bassin">↩️</button></div></div>';
+}
+
+/* ═══ ACTIONS ═══ */
+function moveToFabrique(id){
+  var bd=currentTab==='atelier'?bassinAtelier:bassinCouture;
+  var fd=currentTab==='atelier'?fabriqueAtelier:fabriqueCouture;
+  var item=bd[id];if(!item){showToast('Item introuvable','error');return;}
+  var fid='fab_'+Date.now();
+  fd[fid]={commande:item.commande,client:item.client,nom:item.nom,grandeur:item.grandeur,quantite:item.quantite,dateAdded:item.dateAdded,completedDate:new Date().toISOString(),completedBy:currentUser?currentUser.email:'unknown',autoInspection:false,originalId:id};
+  delete bd[id];
+  renderBassin();renderFabrique();updateCounts();
+  saveBassin(currentTab);saveFabrique(currentTab);
+  showToast('✅ '+(item.nom||'#'+item.commande)+' — Fabriqué!','teal');
+}
+
+function restoreToBassin(id){
+  var fd=currentTab==='atelier'?fabriqueAtelier:fabriqueCouture;
+  var bd=currentTab==='atelier'?bassinAtelier:bassinCouture;
+  var item=fd[id];if(!item)return;
+  if(!confirm('Remettre "'+(item.nom||'#'+item.commande)+'" dans le bassin?'))return;
+  var nid='inv_'+Date.now();
+  bd[nid]={commande:item.commande,client:item.client,nom:item.nom,grandeur:item.grandeur,quantite:item.quantite,dateAdded:Date.now()};
+  delete fd[id];
+  renderBassin();renderFabrique();updateCounts();
+  saveBassin(currentTab);saveFabrique(currentTab);
+  showToast('↩️ '+(item.nom||'')+' remis au bassin','info');
+}
+
+function deleteItem(id,zone){
+  var data;
+  if(zone==='bassin')data=currentTab==='atelier'?bassinAtelier:bassinCouture;
+  else data=currentTab==='atelier'?fabriqueAtelier:fabriqueCouture;
+  var item=data[id];if(!item)return;
+  if(!confirm('Supprimer "'+(item.nom||'#'+item.commande)+'"?'))return;
+  delete data[id];
+  renderBassin();renderFabrique();updateCounts();
+  if(zone==='bassin')saveBassin(currentTab);else saveFabrique(currentTab);
+  showToast('Item supprimé','info');
+}
+
+/* ═══ INSPECTION AUTO-DETECTION ═══ */
+function autoCheckInspection(){
+  var m=0;
+  m+=checkInspectionForSection('atelier');
+  m+=checkInspectionForSection('couture');
+  if(m>0){
+    showToast('🔄 '+m+' item(s) déplacé(s) automatiquement via Inspection','teal');
+    renderBassin();renderFabrique();updateCounts();
+  }
+}
+
+function checkInspectionForSection(sec){
+  var bd=sec==='atelier'?bassinAtelier:bassinCouture;
+  var fd=sec==='atelier'?fabriqueAtelier:fabriqueCouture;
+  var moved=0;
+  var toDelete=[];
+  for(var id in bd){
+    var item=bd[id];
+    var cmd=String(item.commande||'').trim();
+    if(!cmd)continue;
+    if(isInspected(cmd)){
+      var fid='fab_auto_'+Date.now()+'_'+Math.random().toString(36).substr(2,4);
+      fd[fid]={commande:item.commande,client:item.client,nom:item.nom,grandeur:item.grandeur,quantite:item.quantite,dateAdded:item.dateAdded,completedDate:new Date().toISOString(),completedBy:'auto-inspection',autoInspection:true,originalId:id};
+      toDelete.push(id);
+      moved++;
+    }
+  }
+  toDelete.forEach(function(id){delete bd[id];});
+  if(moved>0){
+    db.ref('inventaire_v4/bassin/'+sec).set(bd);
+    db.ref('inventaire_v4/fabrique/'+sec).set(fd);
+  }
+  return moved;
+}
+
+function isInspected(commande){
+  var term=commande.toLowerCase();
+  for(var month in inspectionData){
+    var rows=inspectionData[month];
+    if(!Array.isArray(rows))continue;
+    for(var i=0;i<rows.length;i++){
+      var row=rows[i];
+      if(row.type!=='entry')continue;
+      var bon=String(row.bon||'').toLowerCase().trim();
+      if(bon&&(bon===term||bon.includes(term)||term.includes(bon)))return true;
+    }
+  }
+  return false;
+}
+
+function checkAllInspection(){
+  var m=0;
+  m+=checkInspectionForSection('atelier');
+  m+=checkInspectionForSection('couture');
+  if(m>0)showToast('🔄 '+m+' item(s) déplacé(s) vers Fabriqué','teal');
+  else showToast('Aucun nouveau match dans l\'Inspection','info');
+  renderBassin();renderFabrique();
+}
+
+/* ═══ ADD MODAL ═══ */
+function populateClientSelect(){
+  var sel=document.getElementById('addClient');
+  if(sel)sel.innerHTML=CLIENTS.map(function(c){return'<option value="'+c.key+'">'+c.label+'</option>';}).join('');
+}
+function showAddModal(){
+  document.getElementById('addModal').classList.remove('hidden');
+  document.getElementById('addCommande').value='';
+  document.getElementById('addNom').value='';
+  document.getElementById('addGrandeur').value='';
+  document.getElementById('addQty').value='1';
+  var btn=document.getElementById('addConfirmBtn');
+  btn.textContent='Ajouter';btn.onclick=confirmAddItem;
+}
+function closeAddModal(){document.getElementById('addModal').classList.add('hidden');}
+function confirmAddItem(){
+  var cmd=document.getElementById('addCommande').value.trim();
+  var client=document.getElementById('addClient').value;
+  var nom=document.getElementById('addNom').value.trim();
+  var grandeur=document.getElementById('addGrandeur').value.trim();
+  var qty=parseInt(document.getElementById('addQty').value)||1;
+  if(!nom&&!cmd){showToast('Nom ou N° commande requis','error');return;}
+  var id='inv_'+Date.now();
+  var bd=currentTab==='atelier'?bassinAtelier:bassinCouture;
+  bd[id]={commande:cmd,client:client,nom:nom,grandeur:grandeur,quantite:qty,dateAdded:Date.now()};
+  renderBassin();updateCounts();
+  saveBassin(currentTab);closeAddModal();
+  showToast('Item ajouté au bassin!','success');
+}
+
+/* ═══ CONTEXT MENU ═══ */
+function showCtxMenu(e,id,zone){
+  closeCtxMenu();
+  var data;
+  if(zone==='bassin')data=currentTab==='atelier'?bassinAtelier:bassinCouture;
+  else data=currentTab==='atelier'?fabriqueAtelier:fabriqueCouture;
+  var item=data[id];if(!item)return;
+  var menu=document.createElement('div');menu.className='ctx-menu';menu.id='ctxMenu';
+  var h='<div class="ctx-menu-header">#'+(item.commande||'---')+' — '+(item.nom||'Sans nom')+'</div>';
+  if(zone==='bassin'){
+    h+='<div class="ctx-menu-item teal" onclick="moveToFabrique(\''+id+'\');closeCtxMenu();">✅ Marquer Fabriqué</div>';
+    h+='<div class="ctx-menu-item" onclick="editItem(\''+id+'\',\''+zone+'\');closeCtxMenu();">✏️ Modifier</div>';
+    h+='<div class="ctx-sep"></div>';
+    h+='<div class="ctx-menu-item danger" onclick="deleteItem(\''+id+'\',\''+zone+'\');closeCtxMenu();">🗑️ Supprimer</div>';
+  } else {
+    h+='<div class="ctx-menu-item" onclick="restoreToBassin(\''+id+'\');closeCtxMenu();">↩️ Remettre au bassin</div>';
+    h+='<div class="ctx-sep"></div>';
+    h+='<div class="ctx-menu-item danger" onclick="deleteItem(\''+id+'\',\''+zone+'\');closeCtxMenu();">🗑️ Supprimer</div>';
+  }
+  menu.innerHTML=h;
+  menu.style.left=Math.min(e.clientX,window.innerWidth-200)+'px';
+  menu.style.top=Math.min(e.clientY,window.innerHeight-200)+'px';
+  document.body.appendChild(menu);
+  setTimeout(function(){document.addEventListener('click',closeCtxMenu,{once:true});},10);
+}
+function closeCtxMenu(){var m=document.getElementById('ctxMenu');if(m)m.remove();}
+
+function editItem(id,zone){
+  var data;
+  if(zone==='bassin')data=currentTab==='atelier'?bassinAtelier:bassinCouture;
+  else data=currentTab==='atelier'?fabriqueAtelier:fabriqueCouture;
+  var item=data[id];if(!item)return;
+  showAddModal();
+  document.getElementById('addCommande').value=item.commande||'';
+  document.getElementById('addClient').value=item.client||'vermeiren';
+  document.getElementById('addNom').value=item.nom||'';
+  document.getElementById('addGrandeur').value=item.grandeur||'';
+  document.getElementById('addQty').value=item.quantite||1;
+  var btn=document.getElementById('addConfirmBtn');
+  btn.textContent='Modifier';
+  btn.onclick=function(){
+    item.commande=document.getElementById('addCommande').value.trim();
+    item.client=document.getElementById('addClient').value;
+    item.nom=document.getElementById('addNom').value.trim();
+    item.grandeur=document.getElementById('addGrandeur').value.trim();
+    item.quantite=parseInt(document.getElementById('addQty').value)||1;
+    renderBassin();renderFabrique();updateCounts();
+    if(zone==='bassin')saveBassin(currentTab);else saveFabrique(currentTab);
+    closeAddModal();showToast('Item modifié!','success');
+    btn.textContent='Ajouter';btn.onclick=confirmAddItem;
+  };
+}
+
+/* ═══ SEARCH ═══ */
+function handleGlobalSearch(val){
+  var term=val.trim().toLowerCase();
+  document.querySelectorAll('.inv-card').forEach(function(card){
+    if(!term){card.style.opacity='1';card.style.outline='none';card.classList.remove('scan-highlight');return;}
+    var cmd=(card.dataset.commande||'').toLowerCase();
+    var nom=(card.dataset.nom||'').toLowerCase();
+    if(cmd.includes(term)||nom.includes(term)){
+      card.style.opacity='1';card.style.outline='2px solid var(--gold-light)';card.classList.add('scan-highlight');
+    } else {
+      card.style.opacity='0.25';card.style.outline='none';card.classList.remove('scan-highlight');
+    }
+  });
+}
+
+/* ═══ UTILS ═══ */
+function getClientLabel(key){var c=CLIENTS.find(function(c){return c.key===key;});return c?c.label:key||'N/A';}
+function showToast(msg,type){
+  var c=document.getElementById('toastContainer');
+  var t=document.createElement('div');t.className='toast '+(type||'info');t.textContent=msg;
+  c.appendChild(t);
+  setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove();},300);},3000);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,2880 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PhysiPro - Questionnement</title>
+  <meta name="theme-color" content="#04152c">
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --bg-dark: #0a1628;
+  --primary: #3b82f6;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+}
+
+html { height: 100%; }
+body {
+  margin: 0;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: linear-gradient(180deg, #0a0f1a 0%, #1a1f2e 50%, #0d1420 100%);
+  color: #fff;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes calendarPop { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes modalSlideIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ===== LOGIN ===== */
+/* ═══ LOGIN ═══ */
+.login-overlay {
+  position: fixed; inset: 0;
+  background: linear-gradient(to bottom, #0b1d36, #3f6eb8);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 99999; padding: 20px; box-sizing: border-box;
+}
+.login-overlay.hidden { display: none; }
+.login-panel {
+  background: linear-gradient(to bottom, #0b2343, #06315a);
+  border-radius: 16px; border: 1px solid rgba(255,255,255,0.25);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.85);
+  padding: 25px 30px; max-width: 420px; width: 100%;
+  color: #fff; text-align: center;
+}
+.login-logo-container {
+  width: 280px; height: 100px; margin: 10px auto 15px auto;
+  display: flex; align-items: center; justify-content: center;
+}
+.login-logo-container img { height: 90px; width: auto; object-fit: contain; }
+.login-title-container { text-align: center; margin-bottom: 8px; }
+.login-title { font-size: 16px; font-weight: 700; margin-bottom: 3px; line-height: 1.3; color: #fff; }
+.login-author {
+  font-family: 'Brush Script MT', 'Segoe Script', 'Bradley Hand', cursive;
+  font-size: 18px; color: rgba(255,255,255,0.7); font-style: italic;
+}
+.login-subtitle { font-size: 12px; opacity: 0.8; margin-bottom: 15px; color: #fff; }
+#loginForm { width: 100%; }
+.login-input {
+  width: 100%; padding: 12px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3);
+  color: #fff; font-size: 15px; text-align: center;
+  margin-bottom: 12px; box-sizing: border-box;
+}
+.login-input::placeholder { color: rgba(255,255,255,0.5); font-size: 13px; }
+.login-input:focus { outline: none; border-color: #00aaff; box-shadow: 0 0 10px rgba(0,170,255,0.3); }
+.login-btn {
+  width: 100%; padding: 12px; border-radius: 999px; border: none;
+  background: linear-gradient(to bottom, #00aaff, #0077cc);
+  color: #fff; font-weight: 700; font-size: 13px; cursor: pointer;
+  margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.login-btn:hover { background: linear-gradient(to bottom, #00bbff, #0088dd); transform: translateY(-1px); }
+.login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.login-error { color: #ff6666; font-size: 11px; margin-top: 8px; min-height: 18px; }
+.login-remember {
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px; margin: 8px 0 10px 0; font-size: 12px; color: rgba(255,255,255,0.8);
+}
+.login-remember input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #00aaff; }
+.login-remember label { cursor: pointer; }
+
+/* ===== SECTION 1: TOPBAR (identique moulage) ===== */
+.topbar { width: 100%; min-height: 75px; padding: 4px 20px 6px 20px; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); box-shadow: inset 0 1px 2px rgba(255,255,255,0.16), 0 2px 6px rgba(0,0,0,0.45); position: relative; flex-shrink: 0; }
+.tb-left { display: flex; align-items: center; z-index: 2; }
+
+/* Logo nav menu */
+/* === LOGO NAV MENU === */
+.logo-flip-container{position:relative;cursor:pointer;z-index:2;}
+.logo-main{display:flex;flex-direction:column;align-items:center;}
+.logo-top-fixed img{height:40px;width:auto;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));}
+.logo-bottom-text{font-size:15px;font-weight:600;color:#fff;text-shadow:1px 1px 3px rgba(0,0,0,.6);margin-top:-4px;}
+.logo-menu{position:fixed;top:0;left:145px;right:0;min-height:75px;background:linear-gradient(to bottom,#04152c 0%,#2a6bc9 100%);padding:8px 20px;opacity:0;visibility:hidden;transform:translateY(-10px);transition:all .3s ease;z-index:99990;display:flex;flex-wrap:wrap;align-items:center;gap:8px;box-shadow:0 4px 15px rgba(0,0,0,.4);}
+.logo-flip-container:hover .logo-menu{opacity:1;visibility:visible;transform:translateY(0);}
+.logo-menu:hover{opacity:1;visibility:visible;transform:translateY(0);}
+.logo-menu-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:4px 8px;font-family:'Segoe UI',sans-serif;color:#fff;cursor:pointer;transition:all .2s;border-radius:6px;background:transparent;border:2px solid transparent;min-width:70px;height:58px;text-decoration:none;position:relative;}
+.logo-menu-item:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);}
+.logo-menu-item.active{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);}
+.logo-menu-icon-img{height:32px;width:auto;object-fit:contain;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));transition:transform .2s;}
+.logo-menu-item:hover .logo-menu-icon-img{transform:scale(1.05);}
+.logo-menu-text{font-size:11px;font-weight:700;text-align:center;text-shadow:1px 1px 3px rgba(0,0,0,.8);white-space:nowrap;margin-top:-2px;letter-spacing:.3px;}
+
+.logo-main { display: flex; flex-direction: column; align-items: center; }
+.logo-top-fixed img { height: 40px; width: auto; filter: brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
+.logo-bottom-text { font-size: 15px; font-weight: 600; color: #fff; text-shadow: 1px 1px 3px rgba(0,0,0,0.6); margin-top: -4px; }
+.tb-create-btn { position: absolute; bottom: 8px; left: 175px; z-index: 2; display: flex; gap: 4px; }
+.btn-pill { display: flex; align-items: center; gap: 4px; height: 22px; padding: 0 10px; background: linear-gradient(135deg, #3b82f6 0%, #1e3a5f 100%); color: white; border: 2px solid #000; border-radius: 11px; font-size: 9px; font-weight: 600; cursor: pointer; text-shadow: 1px 1px 0 #000; transition: all 0.2s; }
+.btn-pill:hover { transform: scale(1.02); box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+.tb-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; pointer-events: none; max-width: calc(100% - 550px); overflow: hidden; }
+.top-title { font-size: 30px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #fdfdfd; text-shadow: 0 2px 3px rgba(0,0,0,0.85); white-space: nowrap; }
+.tb-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; z-index: 2; }
+.tb-buttons-row { display: flex; align-items: center; gap: 6px; }
+.tb-search-row { display: flex; align-items: center; gap: 6px; }
+.search-box-small { display: flex; align-items: center; width: 220px; height: 22px; background: rgba(255,255,255,0.95); border: 2px solid #3b82f6; border-radius: 11px; padding: 0 4px 0 8px; }
+.search-box-small input { background: transparent; border: none; color: #1e3a5f; font-size: 10px; flex: 1; outline: none; }
+.search-box-small input::placeholder { color: #64748b; }
+.btn-settings-inside { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; background: rgba(59,130,246,0.2); color: #1e3a5f; border: none; border-radius: 50%; font-size: 11px; cursor: pointer; transition: all 0.3s; flex-shrink: 0; }
+.btn-settings-inside:hover { background: rgba(59,130,246,0.4); transform: rotate(45deg); }
+
+.user-status { display: flex; align-items: center; justify-content: center; gap: 4px; width: 220px; height: 22px; background: rgba(255,255,255,0.15); border-radius: 11px; font-size: 10px; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+.user-name { color: #fff; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Notif bell */
+.notif-bell-btn { display: flex; align-items: center; justify-content: center; gap: 3px; width: 70px; height: 22px; padding: 0 4px; background: transparent; border: 1px solid rgba(255,255,255,0.3); border-radius: 11px; cursor: pointer; transition: all 0.3s; overflow: hidden; box-sizing: border-box; }
+.notif-bell-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.5); }
+.notif-bell-icon { font-size: 12px; flex-shrink: 0; }
+.notif-bell-text { font-size: 8px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.notif-bell-btn.has-notifs { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-color: #b91c1c; animation: pcNotifFlash 0.8s ease-in-out infinite; }
+.notif-bell-btn.has-notifs .notif-bell-icon { animation: bellShake 0.4s ease-in-out infinite; }
+.notif-bell-btn.has-notifs .notif-bell-text { color: #fff; font-weight: 700; }
+@keyframes pcNotifFlash { 0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); transform: scale(1); background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); } 50% { box-shadow: 0 0 15px 6px rgba(239, 68, 68, 1); transform: scale(1.1); background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); } }
+@keyframes bellShake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-15deg); } 75% { transform: rotate(15deg); } }
+
+/* Notif popup */
+.notif-popup { position: fixed; top: 60px; right: 20px; width: 340px; max-height: 450px; background: #1f2937; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); z-index: 99997; display: none; flex-direction: column; overflow: hidden; border: 2px solid #3b82f6; }
+.notif-popup.active { display: flex; }
+.notif-popup-header { padding: 14px 16px; background: linear-gradient(135deg, #1e40af, #3b82f6); color: white; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 700; }
+.notif-popup-close { width: 28px; height: 28px; border: none; background: rgba(255,255,255,0.2); color: white; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.notif-popup-list { flex: 1; overflow-y: auto; max-height: 320px; }
+.notif-item { padding: 14px 16px; border-bottom: 1px solid #374151; cursor: pointer; transition: all 0.2s; }
+.notif-item:hover { background: #374151; transform: translateX(4px); }
+.notif-item.unread { background: rgba(239,68,68,0.15); border-left: 4px solid #ef4444; }
+.notif-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.notif-item-from { font-size: 13px; font-weight: 700; color: #fbbf24; }
+.notif-item-time { font-size: 10px; color: #9ca3af; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; }
+.notif-item-content { font-size: 12px; color: #e2e8f0; line-height: 1.4; margin-bottom: 6px; }
+.notif-item-card { font-size: 11px; color: #60a5fa; font-weight: 600; }
+.notif-item-arrow { float: right; color: #60a5fa; font-size: 14px; }
+.notif-empty { padding: 40px; text-align: center; color: #6b7280; font-size: 13px; }
+.notif-popup-footer { padding: 12px 16px; background: #111827; border-top: 1px solid #374151; }
+.notif-mark-all { width: 100%; padding: 10px; background: transparent; border: 1px solid #374151; color: #9ca3af; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+.notif-mark-all:hover { background: #374151; color: white; }
+
+/* Notif detail overlay */
+.notif-detail-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 99998; display: none; align-items: center; justify-content: center; }
+.notif-detail-overlay.active { display: flex; }
+.notif-detail-panel { background: linear-gradient(135deg, #1e293b, #0f172a); border: 3px solid #3b82f6; border-radius: 16px; width: 90%; max-width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); overflow: hidden; animation: notifSlideIn 0.3s ease; }
+@keyframes notifSlideIn { from { transform: translateY(-30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.notif-detail-header { padding: 10px 16px; background: linear-gradient(135deg, #ef4444, #dc2626); color: white; text-align: center; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.notif-detail-icon { font-size: 22px; background: white; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+.notif-detail-title { font-size: 14px; font-weight: 700; }
+.notif-detail-body { padding: 24px 20px; }
+.notif-detail-message { font-size: 15px; color: #e2e8f0; line-height: 1.8; text-align: center; }
+.notif-detail-from { font-size: 16px; font-weight: 700; color: #fbbf24; }
+.notif-detail-card { font-size: 16px; font-weight: 700; color: #60a5fa; }
+.notif-detail-footer { padding: 16px 20px; background: rgba(0,0,0,0.3); display: flex; gap: 10px; }
+.notif-detail-btn { flex: 1; padding: 14px; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.notif-detail-btn.cancel { background: linear-gradient(135deg, #6b7280, #4b5563); color: white; }
+.notif-detail-btn.go { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; }
+.notif-detail-btn:hover { filter: brightness(1.1); transform: translateY(-2px); }
+
+/* Settings modal */
+.settings-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 2000; }
+.settings-modal.active { display: flex; }
+.settings-box { background: #fff; border-radius: 12px; padding: 0; max-width: 420px; width: 90%; max-height: 85vh; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+.settings-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); }
+.settings-title { font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
+.settings-close { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.2); border: none; color: #fff; font-size: 16px; cursor: pointer; }
+.settings-close:hover { background: rgba(239,68,68,0.8); }
+.settings-body { padding: 12px; max-height: calc(85vh - 60px); overflow-y: auto; background: linear-gradient(180deg, #0a1628 0%, #1a2a4a 100%); }
+.settings-section { margin-bottom: 12px; padding: 12px; background: linear-gradient(135deg, rgba(30,58,95,0.9) 0%, rgba(15,35,67,0.95) 100%); border-radius: 10px; border: 1px solid rgba(74,142,245,0.3); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+.settings-section-title { font-size: 12px; font-weight: 700; color: #fff; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.15); text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.settings-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; }
+.settings-label { font-size: 11px; color: #94a3b8; }
+.settings-value { font-size: 11px; font-weight: 600; color: #fff; }
+.settings-btn { padding: 10px 14px; border-radius: 8px; font-size: 11px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.settings-btn.logout { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: 1px solid #b91c1c; }
+.settings-btn.logout:hover { filter: brightness(1.15); }
+
+/* ===== MAIN LAYOUT (TWO PANELS) ===== */
+.main-container {
+  flex: 1; display: flex; gap: 8px; padding: 8px; overflow: hidden; min-height: 0;
+}
+
+/* LEFT PANEL: Matériaux BO */
+.panel-matbo {
+  width: 220px; min-width: 180px; flex-shrink: 0;
+  display: flex; flex-direction: column; min-height: 0;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border: 2px solid rgba(245,158,11,0.5);
+  border-radius: 12px; overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.panel-matbo-header {
+  padding: 0 12px; text-align: center; height: 42px;
+  background: linear-gradient(to bottom, #f59e0b, #d97706);
+  color: #000; font-size: 13px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  border-bottom: 3px solid #b45309;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+}
+.panel-matbo-header .col-count { background: rgba(0,0,0,0.25); color: #000; padding: 2px 8px; border-radius: 10px; font-size: 10px; }
+.panel-matbo-header .col-add-btn { padding: 3px 10px; background: linear-gradient(to bottom, #22c55e, #16a34a); color: #fff; border: none; border-radius: 4px; font-size: 9px; font-weight: 700; cursor: pointer; }
+.panel-matbo-header .col-add-btn:hover { filter: brightness(1.1); }
+.panel-matbo-content { flex: 1; overflow-y: auto; padding: 6px; }
+
+/* RIGHT PANEL: Service Client */
+.panel-service {
+  flex: 1; display: flex; flex-direction: column; min-height: 0;
+  background: linear-gradient(180deg, #0d1b2a 0%, #0a1628 100%);
+  border: 2px solid rgba(74,142,245,0.4);
+  border-radius: 12px; overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.panel-service-header {
+  display: flex; align-items: stretch;
+  background: linear-gradient(to bottom, #04152c 0%, #1a3a5c 100%);
+  border-bottom: 3px solid #3b82f6;
+  min-height: 42px;
+}
+.service-name-tab {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 6px 4px; gap: 2px; position: relative;
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+.service-name-tab:last-child { border-right: none; }
+.service-name-label { font-size: 13px; font-weight: 800; letter-spacing: 0.5px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.service-name-label.jacynthe { color: #f87171; }
+.service-name-label.nadia { color: #60a5fa; }
+.service-name-label.sonia { color: #4ade80; }
+.service-name-label.jonathan { color: #c084fc; }
+.service-name-count { font-size: 9px; font-weight: 600; background: rgba(255,255,255,0.15); padding: 1px 8px; border-radius: 8px; color: #e2e8f0; }
+.service-name-add { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); padding: 2px 7px; background: linear-gradient(to bottom, #22c55e, #16a34a); color: #fff; border: none; border-radius: 4px; font-size: 9px; font-weight: 700; cursor: pointer; opacity: 0.7; transition: opacity 0.2s; }
+.service-name-tab:hover .service-name-add { opacity: 1; }
+.service-name-add:hover { filter: brightness(1.1); }
+
+.panel-service-columns {
+  flex: 1; display: flex; overflow: hidden; min-height: 0;
+}
+
+/* ===== SERVICE COLUMNS (inside panel) ===== */
+.col {
+  flex: 1; display: flex; flex-direction: column;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  overflow: hidden; min-width: 0; min-height: 0;
+}
+.col:last-child { border-right: none; }
+.col-content { flex: 1; overflow-y: auto; padding: 4px; }
+
+/* ===== CARDS ===== */
+.job-card {
+  background: linear-gradient(135deg, #04152c 0%, #1e3a5f 60%, #2563a8 100%);
+  border: 1px solid rgba(74,142,245,0.35);
+  border-radius: 10px; padding: 10px 12px;
+  margin-bottom: 6px; cursor: pointer;
+  transition: all 0.25s ease; position: relative;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.job-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(59,130,246,0.35), inset 0 1px 0 rgba(255,255,255,0.12); border-color: rgba(74,142,245,0.6); }
+.job-card-order { font-size: 13px; font-weight: 800; color: #fbbf24; text-shadow: 0 1px 2px rgba(0,0,0,0.5); letter-spacing: 0.3px; text-align: center; }
+.job-card-client { font-size: 11px; font-weight: 500; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; text-align: center; }
+.job-card-info { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; }
+.job-card-date { font-size: 9px; color: #93c5fd; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px; display: inline-block; }
+.job-card-assignee-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.job-card-assignee-dot.jacynthe { background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.5); }
+.job-card-assignee-dot.nadia { background: #60a5fa; box-shadow: 0 0 6px rgba(96,165,250,0.5); }
+.job-card-assignee-dot.sonia { background: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.5); }
+.job-card-assignee-dot.jonathan { background: #c084fc; box-shadow: 0 0 6px rgba(192,132,252,0.5); }
+.job-card-attente { font-size: 8px; color: #fb923c; text-align: center; margin-top: 4px; opacity: 0.85; }
+.job-card-rappel-indicator { position: absolute; top: 6px; left: 8px; font-size: 10px; animation: blink 2s infinite; }
+.job-card-badge {
+  position: absolute; top: 6px; right: 8px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: #fff; font-size: 9px; font-weight: 700;
+  padding: 2px 7px; border-radius: 10px; min-width: 18px;
+  text-align: center; box-shadow: 0 2px 6px rgba(59,130,246,0.4);
+}
+.job-card-badge.alert { background: linear-gradient(135deg, #ef4444, #dc2626); animation: blink 1s infinite; box-shadow: 0 2px 8px rgba(239,68,68,0.5); }
+
+/* MAT BO CARD */
+.mat-card {
+  background: linear-gradient(135deg, #fcd34d, #f59e0b);
+  border: 1px solid #d97706; border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 6px;
+  cursor: pointer; color: #000; position: relative;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.mat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(245,158,11,0.35); }
+.mat-card-code { font-size: 11px; font-weight: 800; }
+.mat-card-name { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+.mat-card-date { font-size: 9px; margin-top: 6px; padding: 3px 8px; background: rgba(22,163,74,0.85); color: #fff; border-radius: 6px; text-align: center; font-weight: 600; }
+
+/* EMPTY STATE */
+.empty-state { text-align: center; padding: 20px; color: #64748b; font-size: 11px; }
+
+/* ===== FICHE OVERLAY ===== */
+.fiche-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; animation: fadeIn 0.2s; }
+.fiche-overlay.hidden { display: none; }
+.fiche-container { display: flex; width: calc(100% - 1in); max-width: 1400px; height: calc(100vh - 30px); max-height: 900px; background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); overflow: hidden; }
+
+.fiche-info-zone { flex: 0 0 380px; display: flex; flex-direction: column; background: #f8fafc; border-right: 3px solid #e2e8f0; }
+.fiche-header { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 44px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); }
+.fiche-logo { flex: 1; display: flex; justify-content: center; }
+.fiche-logo img { height: 26px; filter: brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
+.fiche-delete-btn { padding: 6px 10px; background: linear-gradient(135deg, #ef4444, #dc2626); border: 2px solid #b91c1c; border-radius: 6px; color: #fff; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+.fiche-delete-btn:hover { filter: brightness(1.1); }
+
+.fiche-status-pill { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; font-size: 14px; font-weight: 800; text-align: center; text-transform: uppercase; letter-spacing: 1px; background: linear-gradient(135deg, #b45309 0%, #f59e0b 50%, #fbbf24 100%); border-bottom: 3px solid #92400e; color: #000; text-shadow: 1px 1px 0 rgba(255,255,255,0.5); box-shadow: 0 4px 15px rgba(245,158,11,0.5); }
+
+.fiche-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.fiche-fields-list { display: flex; flex-direction: column; }
+.fiche-field-row { display: flex; align-items: center; padding: 4px 12px; border-bottom: 1px solid #e5e7eb; }
+.fiche-field-row:hover { background: #f1f5f9; }
+.fiche-field-row:last-child { border-bottom: none; }
+.fiche-field-label { width: 140px; flex-shrink: 0; font-size: 13px; font-weight: 600; color: #374151; text-align: left; padding-left: 10px; }
+.fiche-field-value { flex: 1; display: flex; justify-content: center; align-items: center; font-size: 13px; color: #1f2937; padding: 2px 4px; border-radius: 4px; min-height: 28px; position: relative; }
+.fiche-field-value select, .fiche-field-value input { width: 100%; max-width: 200px; text-align: center; text-align-last: center; font-size: 13px; color: #1f2937; background: transparent; border: none; outline: none; cursor: pointer; padding: 2px; }
+.fiche-field-value select:focus, .fiche-field-value input:focus { background: #fff; box-shadow: 0 0 0 2px #3b82f6; border-radius: 4px; }
+.fiche-field-value.date-field { color: #3b82f6; font-weight: 500; cursor: pointer; justify-content: center; }
+.fiche-field-value.date-field:hover { background: #e5e7eb; }
+
+/* ===== RAPPEL SECTION IN FICHE ===== */
+.fiche-rappel-section {
+  background: linear-gradient(135deg, #fefce8, #fef9c3);
+  border-top: 2px solid #fde047;
+  padding: 10px 12px;
+}
+.fiche-rappel-title {
+  font-size: 11px; font-weight: 700; color: #a16207;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+}
+.fiche-rappel-row {
+  display: flex; gap: 8px; align-items: flex-end; margin-bottom: 6px;
+}
+.fiche-rappel-field { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.fiche-rappel-label { font-size: 9px; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: 0.3px; }
+.fiche-rappel-select {
+  padding: 6px 8px; border: 1px solid #d97706; border-radius: 6px;
+  background: #fff; color: #1f2937; font-size: 11px; font-weight: 600;
+  cursor: pointer; width: 100%;
+}
+.fiche-rappel-select:focus { border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.3); outline: none; }
+.fiche-rappel-checkbox { display: flex; align-items: center; gap: 4px; padding: 6px 0; }
+.fiche-rappel-checkbox input { accent-color: #f59e0b; width: 14px; height: 14px; cursor: pointer; }
+.fiche-rappel-checkbox label { font-size: 10px; color: #92400e; font-weight: 600; cursor: pointer; }
+.fiche-rappel-clear-btn {
+  padding: 6px 10px; background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5;
+  border-radius: 6px; font-size: 10px; font-weight: 700; cursor: pointer;
+  white-space: nowrap;
+}
+.fiche-rappel-clear-btn:hover { background: #fecaca; }
+.fiche-rappel-dates {
+  margin-top: 4px; padding: 6px 8px; background: rgba(255,255,255,0.6);
+  border-radius: 6px; font-size: 10px; color: #78350f; line-height: 1.6;
+}
+.fiche-rappel-dates .rappel-date-item { display: flex; align-items: center; gap: 4px; }
+.fiche-rappel-dates .rappel-date-past { color: #dc2626; font-weight: 700; }
+.fiche-rappel-dates .rappel-date-today { color: #16a34a; font-weight: 700; }
+.fiche-rappel-dates .rappel-date-future { color: #78350f; }
+
+/* ===== CHAT ZONE (identical to moulage) ===== */
+.fiche-notes-zone { flex: 1; display: flex; flex-direction: column; background: #fff; min-width: 500px; border-radius: 0 16px 16px 0; overflow: hidden; }
+.fiche-notes-header { display: flex; align-items: center; justify-content: space-between; padding: 0 12px; height: 44px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); position: relative; }
+.fiche-notes-title { font-size: 12px; font-weight: 700; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); position: absolute; left: 50%; transform: translateX(-50%); }
+.fiche-close-btn { padding: 5px 12px; background: linear-gradient(135deg, #ef4444, #dc2626); border: 1px solid #b91c1c; border-radius: 5px; color: #fff; font-size: 10px; font-weight: 600; cursor: pointer; }
+
+.chat-scroll-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-height: 0; }
+
+/* Pinned section */
+.pinned-section { background: linear-gradient(135deg, #fefce8, #fef9c3); border-bottom: 2px solid #fde047; padding: 8px; margin-bottom: 0; }
+.pinned-section-header { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: #a16207; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.pinned-section-header .pin-icon { font-size: 12px; }
+.pinned-section .chat-message { margin-bottom: 6px; }
+.pinned-section .chat-message:last-child { margin-bottom: 0; }
+
+/* Questions section */
+.questions-section { background: #f8fafc; padding: 6px 8px; }
+.questions-section-header { font-size: 9px; font-weight: 700; color: #dc2626; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* Thread */
+.thread-block { margin-bottom: 25px; background: white; border-radius: 8px; padding: 8px; }
+.thread-question { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; padding: 8px 10px; position: relative; }
+.thread-question.has-replies { border-radius: 6px 6px 0 0; margin-bottom: 0; border-bottom: none; }
+.thread-question .msg-type { font-weight: 700; font-size: 9px; color: #dc2626; text-transform: uppercase; margin-bottom: 2px; }
+.thread-question .msg-author { font-size: 10px; color: #64748b; margin-bottom: 4px; }
+.thread-question .msg-content { font-size: 11px; color: #1e293b; line-height: 1.4; }
+.thread-question .msg-delete { position: absolute; top: 4px; right: 4px; background: rgba(239,68,68,0.1); border: none; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; color: #dc2626; cursor: pointer; opacity: 0.5; }
+.thread-question .msg-delete:hover { opacity: 1; }
+.thread-question .msg-edit { position: absolute; top: 4px; right: 24px; background: rgba(59,130,246,0.1); border: none; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; color: #2563eb; cursor: pointer; opacity: 0.5; }
+.thread-question .msg-edit:hover { opacity: 1; }
+
+.thread-discussion { background: #eff6ff; border: 1px solid #93c5fd; border-top: 1px solid #cbd5e1; padding: 8px 10px; position: relative; }
+.thread-discussion:last-of-type { border-radius: 0 0 6px 6px; }
+.thread-discussion .msg-type { font-weight: 700; font-size: 9px; color: #2563eb; text-transform: uppercase; margin-bottom: 2px; }
+.thread-discussion .msg-author { font-size: 10px; color: #64748b; margin-bottom: 4px; }
+.thread-discussion .msg-content { font-size: 11px; color: #1e293b; line-height: 1.4; }
+.thread-discussion .msg-delete { position: absolute; top: 4px; right: 4px; background: rgba(239,68,68,0.1); border: none; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; color: #dc2626; cursor: pointer; opacity: 0.5; }
+.thread-discussion .msg-delete:hover { opacity: 1; }
+.thread-discussion .msg-edit { position: absolute; top: 4px; right: 24px; background: rgba(59,130,246,0.1); border: none; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; color: #2563eb; cursor: pointer; opacity: 0.5; }
+.thread-discussion .msg-edit:hover { opacity: 1; }
+
+.thread-reply-zone { clear: both; margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(0,0,0,0.1); }
+.thread-reply-btn { display: inline-block; padding: 5px 12px; background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; border-radius: 4px; color: white; font-size: 9px; font-weight: 600; cursor: pointer; }
+.thread-reply-btn:hover { filter: brightness(1.1); }
+.thread-question .msg-image, .thread-discussion .msg-image { display: block; max-width: 100%; max-height: 100px; border-radius: 4px; margin-top: 6px; margin-bottom: 4px; cursor: pointer; }
+
+/* Inline compose */
+.inline-compose { display: none; background: #eff6ff; border: 1px solid #3b82f6; border-top: none; padding: 10px; border-radius: 0 0 6px 6px; }
+.inline-compose.active { display: block; }
+.inline-compose-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.inline-compose-title { font-size: 9px; font-weight: 700; color: #2563eb; text-transform: uppercase; }
+.inline-compose-close { background: rgba(239,68,68,0.1); border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; color: #dc2626; cursor: pointer; }
+.inline-compose-content-wrapper { border: 1px solid #93c5fd; border-radius: 4px; background: white; overflow: hidden; }
+.inline-compose-content-wrapper:focus-within { border-color: #3b82f6; }
+.inline-compose-textarea { width: 100%; min-height: 60px; padding: 8px; border: none; background: transparent; font-size: 11px; font-family: inherit; resize: vertical; outline: none; }
+.inline-compose-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.inline-compose-hint { font-size: 9px; color: #64748b; }
+.inline-compose-btn { padding: 6px 14px; background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; border-radius: 4px; color: white; font-size: 10px; font-weight: 600; cursor: pointer; }
+.inline-compose-btn:hover { filter: brightness(1.1); }
+.inline-compose-image { display: none; padding: 8px; border-top: 1px dashed rgba(0,0,0,0.1); position: relative; }
+.inline-compose-image.has-image { display: block; }
+.inline-compose-image img { max-width: 100%; max-height: 60px; border-radius: 4px; display: block; }
+.inline-compose-image-remove { position: absolute; top: 12px; right: 12px; background: #ef4444; border: none; border-radius: 50%; width: 18px; height: 18px; color: white; cursor: pointer; font-size: 10px; display: flex; align-items: center; justify-content: center; }
+
+/* Regular messages */
+.fiche-messages-list { flex: 1; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: #f8fafc; min-height: 100px; }
+.chat-message { padding: 8px 10px; border-radius: 6px; font-size: 11px; line-height: 1.4; position: relative; }
+.chat-msg-delete { position: absolute; top: 3px; right: 3px; background: rgba(239,68,68,0.15); border: none; border-radius: 50%; width: 16px; height: 16px; cursor: pointer; font-size: 10px; color: #dc2626; }
+.chat-msg-edit { position: absolute; top: 3px; right: 23px; background: rgba(59,130,246,0.15); border: none; border-radius: 50%; width: 16px; height: 16px; cursor: pointer; font-size: 10px; color: #2563eb; }
+.chat-msg-type { font-weight: 700; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+.chat-msg-author { font-size: 10px; font-weight: 600; color: #1e293b; margin-bottom: 3px; }
+.chat-msg-content { color: #334155; font-size: 11px; }
+
+/* Compose zone */
+.chat-compose-zone { display: none; max-width: 95%; padding: 8px 12px; border-radius: 8px; position: relative; margin: 8px; animation: slideDown 0.15s ease; }
+.chat-compose-zone.active { display: block; }
+.chat-compose-zone.problem { background: #fef2f2; border: 2px solid #fca5a5; }
+.chat-compose-zone.normal { background: #eff6ff; border: 2px solid #93c5fd; }
+.chat-compose-zone.pinned { background: #fefce8; border: 2px solid #fde047; }
+.chat-compose-close { position: absolute; top: 3px; right: 3px; background: rgba(239,68,68,0.15); border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; font-size: 11px; color: #dc2626; }
+.chat-compose-type { font-weight: 700; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+.chat-compose-zone.problem .chat-compose-type { color: #dc2626; }
+.chat-compose-zone.normal .chat-compose-type { color: #2563eb; }
+.chat-compose-zone.pinned .chat-compose-type { color: #ca8a04; }
+.chat-compose-author { font-size: 10px; font-weight: 600; color: #1e293b; margin-bottom: 4px; }
+.chat-compose-content-wrapper { border: 1px dashed rgba(0,0,0,0.2); border-radius: 4px; background: rgba(255,255,255,0.8); overflow: hidden; }
+.chat-compose-content-wrapper:focus-within { border-style: solid; border-color: #3b82f6; background: white; }
+.chat-compose-textarea { width: 100%; min-height: 80px; padding: 8px 10px; border: none; background: transparent; color: #1e293b; font-size: 12px; font-family: inherit; resize: vertical; outline: none; }
+.chat-compose-image-zone { display: none; padding: 8px; border-top: 1px dashed rgba(0,0,0,0.1); position: relative; }
+.chat-compose-image-zone.has-image { display: block; }
+.chat-compose-image-zone img { max-width: 100%; max-height: 80px; border-radius: 4px; display: block; }
+.chat-compose-image-remove { position: absolute; top: 12px; right: 12px; background: #ef4444; border: none; border-radius: 50%; width: 20px; height: 20px; color: white; cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+.chat-compose-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.chat-compose-hint { font-size: 9px; color: #94a3b8; }
+.chat-compose-btn { padding: 6px 14px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; border: none; }
+.chat-compose-btn.send { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }
+.chat-compose-btn.send:hover { filter: brightness(1.1); }
+
+/* Type buttons row */
+.chat-type-buttons-row { display: flex; gap: 4px; justify-content: center; padding: 6px 8px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+.chat-type-btn-new { flex: 1; padding: 6px 4px; border: 1px solid transparent; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; transition: all 0.2s; }
+.chat-type-btn-new .btn-icon { font-size: 14px; }
+.chat-type-btn-new .btn-label { font-size: 8px; text-transform: uppercase; }
+.chat-type-btn-new.problem { background: #fef2f2; color: #dc2626; border-color: #fca5a5; }
+.chat-type-btn-new.problem:hover { background: #fee2e2; }
+.chat-type-btn-new.normal { background: #eff6ff; color: #2563eb; border-color: #93c5fd; }
+.chat-type-btn-new.normal:hover { background: #dbeafe; }
+.chat-type-btn-new.pinned { background: #fefce8; color: #ca8a04; border-color: #fde047; }
+.chat-type-btn-new.pinned:hover { background: #fef9c3; }
+
+/* Edit mode */
+.edit-mode-badge { background: linear-gradient(to right, #04152c, #4a8ef5); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; color: #fff; display: inline-block; margin-left: 8px; vertical-align: middle; }
+.edit-mode-buttons { display: flex; gap: 6px; margin-top: 6px; }
+.edit-mode-buttons button { padding: 6px 12px; border: none; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.edit-mode-buttons .cancel-btn { background: #94a3b8; color: #fff; }
+.edit-mode-buttons .save-btn { background: #22c55e; color: #fff; }
+
+/* ===== CALENDAR ===== */
+.calendar-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 2000; }
+.calendar-overlay.active { display: flex; }
+.calendar-popup { background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); overflow: hidden; animation: calendarPop 0.2s ease-out; min-width: 340px; }
+.calendar-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); color: #fff; }
+.calendar-nav-btn { width: 36px; height: 36px; border: none; border-radius: 50%; background: rgba(255,255,255,0.15); color: #fff; font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.calendar-nav-btn:hover { background: rgba(255,255,255,0.3); }
+.calendar-grid { padding: 12px 16px; }
+.calendar-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 8px; }
+.calendar-weekday { text-align: center; font-size: 11px; font-weight: 700; color: #64748b; padding: 4px 0; }
+.calendar-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.calendar-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #1f2937; border-radius: 8px; cursor: pointer; min-width: 36px; min-height: 36px; }
+.calendar-day:hover { background: #e5e7eb; }
+.calendar-day.empty { cursor: default; }
+.calendar-day.empty:hover { background: transparent; }
+.calendar-day.today { background: #dbeafe; color: #1e40af; border: 2px solid #3b82f6; }
+.calendar-day.selected { background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); color: #fff; }
+.calendar-day.other-month { color: #cbd5e1; }
+.calendar-actions { display: flex; gap: 8px; padding: 12px 16px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+.calendar-action-btn { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.calendar-action-btn.today-btn { background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); color: #fff; }
+.calendar-action-btn.clear-btn { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
+.calendar-action-btn.close-btn { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+
+/* ===== MODALS ===== */
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 2000; }
+.modal-overlay.active { display: flex; }
+.modal-box { background: linear-gradient(180deg, #0d1b2a 0%, #1a2a4a 100%); border: 2px solid rgba(74,142,245,0.5); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 30px rgba(59,130,246,0.15); overflow: hidden; animation: calendarPop 0.2s ease-out; width: 440px; }
+.modal-header { padding: 14px 18px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); display: flex; justify-content: space-between; align-items: center; }
+.modal-title { font-size: 16px; font-weight: 700; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+.modal-close { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.2); border: none; color: #fff; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.modal-close:hover { background: rgba(239,68,68,0.8); }
+.modal-body { padding: 18px; }
+.modal-row { display: flex; gap: 12px; margin-bottom: 14px; }
+.modal-field { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.modal-field label { font-size: 10px; font-weight: 700; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.5px; }
+.modal-field input, .modal-field select { padding: 10px 12px; border: 1px solid rgba(74,142,245,0.3); border-radius: 8px; background: rgba(255,255,255,0.07); color: #e2e8f0; font-size: 13px; transition: all 0.2s; }
+.modal-field input::placeholder { color: rgba(255,255,255,0.3); }
+.modal-field input:focus, .modal-field select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.2); background: rgba(255,255,255,0.1); }
+.modal-field select option { background: #1e3a5f; color: #e2e8f0; }
+.modal-date-field {
+  padding: 10px 12px; border: 1px solid rgba(74,142,245,0.3); border-radius: 8px;
+  background: rgba(255,255,255,0.07); color: #93c5fd; font-size: 13px;
+  cursor: pointer; text-align: center; transition: all 0.2s; user-select: none;
+}
+.modal-date-field:hover { border-color: #3b82f6; background: rgba(255,255,255,0.1); }
+.modal-date-field.has-date { color: #e2e8f0; font-weight: 600; }
+.modal-footer { padding: 14px 18px; border-top: 1px solid rgba(74,142,245,0.2); display: flex; justify-content: flex-end; gap: 10px; background: rgba(0,0,0,0.2); }
+.modal-btn { padding: 11px 24px; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+.modal-btn.cancel { background: rgba(255,255,255,0.1); color: #94a3b8; border: 1px solid rgba(255,255,255,0.2); }
+.modal-btn.cancel:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.modal-btn.confirm { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; box-shadow: 0 4px 12px rgba(34,197,94,0.3); }
+.modal-btn.confirm:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+/* ===== DEST MODAL ===== */
+.dest-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 99998; display: none; align-items: center; justify-content: center; }
+.dest-modal-overlay.active { display: flex; }
+.dest-modal { background: linear-gradient(135deg, #1e3a5f, #04152c); border: 3px solid #3b82f6; border-radius: 14px; width: 95%; max-width: 700px; max-height: 85vh; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 30px rgba(59,130,246,0.3); animation: modalSlideIn 0.3s ease; }
+.dest-modal-header { padding: 14px 18px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); color: white; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 700; text-shadow: 1px 1px 0 #000; }
+.dest-modal-close { width: 28px; height: 28px; border: none; background: #ef4444; color: white; border-radius: 50%; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.dest-modal-body { padding: 16px; max-height: 50vh; overflow-y: auto; background: rgba(0,0,0,0.2); }
+.dest-option.no-send { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: rgba(107,114,128,0.3); border-radius: 8px; cursor: pointer; margin-bottom: 16px; border: 2px solid rgba(255,255,255,0.2); transition: all 0.2s; }
+.dest-option.no-send:hover { background: rgba(107,114,128,0.5); }
+.dest-option.no-send.selected { background: rgba(245,158,11,0.3); border-color: #f59e0b; }
+.dest-option-icon { font-size: 20px; }
+.dest-option-text { font-size: 14px; font-weight: 600; color: #e5e7eb; }
+.dest-grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.dest-person-full { padding: 10px 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; font-size: 12px; font-weight: 500; color: #e5e7eb; cursor: pointer; text-align: center; transition: all 0.15s; }
+.dest-person-full:hover { background: rgba(34,197,94,0.3); border-color: #22c55e; }
+.dest-person-full.selected { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; border-color: #16a34a; font-weight: 700; }
+.dest-modal-footer { padding: 14px 18px; background: rgba(0,0,0,0.3); border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+.dest-selected-count { font-size: 12px; color: #93c5fd; font-weight: 600; }
+.dest-send-btn { padding: 10px 24px; background: linear-gradient(to bottom, #22c55e 0%, #15803d 100%); color: white; border: 2px solid #000; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; text-shadow: 1px 1px 0 rgba(0,0,0,0.5); }
+.dest-send-btn:hover { transform: scale(1.02); box-shadow: 0 4px 12px rgba(34,197,94,0.4); }
+
+/* ===== DELETE CONFIRM ===== */
+.delete-confirm-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 99999; }
+.delete-confirm-modal.active { display: flex; }
+.delete-confirm-panel { background: linear-gradient(to bottom, #04152c 0%, #1a3a5c 50%, #4a8ef5 100%); border: 3px solid #4a8ef5; border-radius: 16px; width: 90%; max-width: 340px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); overflow: hidden; }
+.delete-confirm-header { padding: 14px 16px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); display: flex; align-items: center; justify-content: center; position: relative; }
+.delete-confirm-title { color: #fff; font-size: 18px; font-weight: 700; }
+.delete-confirm-close { position: absolute; right: 12px; background: rgba(255,255,255,0.2); border: none; color: white; width: 28px; height: 28px; border-radius: 50%; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.delete-confirm-body { padding: 20px 16px; background: rgba(0,0,0,0.15); text-align: center; }
+.delete-confirm-icon { font-size: 48px; margin-bottom: 12px; }
+.delete-confirm-text { color: #fff; font-size: 15px; line-height: 1.5; }
+.delete-confirm-footer { padding: 14px 16px; background: linear-gradient(to bottom, #1a3a5c 0%, #04152c 100%); display: flex; gap: 12px; justify-content: center; }
+.delete-confirm-btn { padding: 10px 28px; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.delete-confirm-btn.cancel { background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3); }
+.delete-confirm-btn.delete { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
+
+/* ===== LIGHTBOX ===== */
+.image-lightbox { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 99999; display: none; align-items: center; justify-content: center; cursor: zoom-out; }
+.image-lightbox.active { display: flex; }
+.lightbox-content { position: relative; display: flex; align-items: center; justify-content: center; }
+.lightbox-content img { max-width: 90vw; max-height: 85vh; object-fit: contain; border-radius: 4px; transition: transform 0.3s ease; box-shadow: 0 0 50px rgba(0,0,0,0.5); }
+.lightbox-controls { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 16px; background: rgba(0,0,0,0.7); padding: 12px 20px; border-radius: 30px; }
+.lightbox-btn { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; color: white; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.lightbox-btn:hover { background: rgba(255,255,255,0.3); transform: scale(1.1); }
+.lightbox-btn.close { background: rgba(220,38,38,0.8); }
+
+/* ===== TOAST ===== */
+.toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 99999; }
+.toast { padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #fff; margin-top: 8px; animation: slideIn 0.3s ease; max-width: 320px; }
+.toast.success { background: linear-gradient(to right, #22c55e, #16a34a); }
+.toast.error { background: linear-gradient(to right, #ef4444, #dc2626); }
+.toast.info { background: linear-gradient(to right, #3b82f6, #1d4ed8); }
+.toast.warning { background: linear-gradient(to right, #f59e0b, #d97706); color: #000; }
+
+/* ===== MOBILE ===== */
+@media (max-width: 768px) {
+  .main-container { display: none; }
+  .tb-create-btn { display: none; }
+  .tb-center { display: none; }
+  .topbar { min-height: 50px; padding: 4px 10px; }
+  .logo-top-fixed img { height: 30px; }
+  .logo-bottom-text { font-size: 12px; }
+  .search-box-small { width: 140px; }
+  .user-status { width: 140px; }
+  .notif-bell-btn { width: 50px; }
+}
+
+@media (min-width: 769px) {
+  .mobile-container { display: none !important; }
+}
+
+/* Mobile container */
+.mobile-container { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+@media (max-width: 768px) {
+  .mobile-container { display: flex; }
+}
+
+.mobile-tabs { display: flex; background: linear-gradient(to bottom, #1e3a5f, #0f172a); border-bottom: 2px solid #3b82f6; }
+.mobile-tab { flex: 1; padding: 10px; text-align: center; font-size: 12px; font-weight: 700; cursor: pointer; color: #94a3b8; border-bottom: 3px solid transparent; }
+.mobile-tab.active { color: #fff; border-bottom-color: #fbbf24; background: rgba(59,130,246,0.2); }
+
+.mobile-list { flex: 1; overflow-y: auto; padding: 8px; }
+
+.mobile-job-card { background: linear-gradient(to bottom, #374151, #1f2937); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; margin-bottom: 8px; cursor: pointer; position: relative; }
+.mobile-job-card:active { transform: scale(0.98); }
+.mobile-job-order { font-size: 14px; font-weight: 800; color: #fbbf24; }
+.mobile-job-client { font-size: 12px; color: #e2e8f0; margin-top: 2px; }
+.mobile-job-date { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+.mobile-job-assignee { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; color: #fff; margin-top: 4px; }
+.mobile-job-assignee.jacynthe { background: #dc2626; }
+.mobile-job-assignee.nadia { background: #2563eb; }
+.mobile-job-assignee.sonia { background: #16a34a; }
+.mobile-job-assignee.jonathan { background: #9333ea; }
+.mobile-job-badge { position: absolute; top: 8px; right: 10px; background: #3b82f6; color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 8px; }
+.mobile-job-badge.alert { background: #ef4444; animation: blink 1s infinite; }
+
+.mobile-mat-card { background: linear-gradient(to bottom, #fcd34d, #f59e0b); border: 1px solid #d97706; border-radius: 8px; padding: 12px; margin-bottom: 8px; color: #000; position: relative; }
+.mobile-mat-code { font-size: 12px; font-weight: 800; }
+.mobile-mat-name { font-size: 12px; margin-top: 2px; }
+.mobile-mat-date { font-size: 11px; margin-top: 4px; padding: 3px 8px; background: rgba(22,163,74,0.8); color: #fff; border-radius: 4px; display: inline-block; }
+.mobile-mat-delete { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; background: #ef4444; border: 2px solid #fff; color: #fff; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+/* Mobile Fiche Page */
+.mobile-fiche-page { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f8fafc; z-index: 500; display: none; flex-direction: column; }
+.mobile-fiche-page.active { display: flex; }
+.mobile-fiche-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); color: #fff; }
+.mobile-fiche-back { padding: 6px 10px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; color: #fff; font-size: 12px; cursor: pointer; }
+.mobile-fiche-title { flex: 1; font-size: 14px; font-weight: 700; text-align: center; }
+.mobile-fiche-chat-btn { padding: 6px 12px; background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; border-radius: 6px; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+.mobile-fiche-delete-btn { padding: 6px 10px; background: linear-gradient(135deg, #ef4444, #dc2626); border: none; border-radius: 6px; color: #fff; font-size: 11px; cursor: pointer; }
+.mobile-fiche-body { flex: 1; overflow-y: auto; padding: 12px; }
+.mobile-fiche-field { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
+.mobile-fiche-field-label { width: 120px; font-size: 12px; font-weight: 600; color: #374151; }
+.mobile-fiche-field-value { flex: 1; }
+.mobile-fiche-field-value input, .mobile-fiche-field-value select { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; color: #1f2937; background: #fff; }
+
+/* Mobile Chat Page */
+.mobile-chat-page { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f8fafc; z-index: 600; display: none; flex-direction: column; }
+.mobile-chat-page.active { display: flex; }
+.mobile-chat-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); color: #fff; }
+.mobile-chat-back { padding: 6px 10px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; color: #fff; font-size: 12px; cursor: pointer; }
+.mobile-chat-title { flex: 1; font-size: 14px; font-weight: 700; text-align: center; }
+.mobile-chat-messages { flex: 1; overflow-y: auto; padding: 10px; }
+.mobile-chat-compose { padding: 10px; background: #fff; border-top: 2px solid #e5e7eb; }
+
+/* Mobile pinned/questions/threads */
+.mobile-pinned-section { background: linear-gradient(135deg, #fefce8, #fef9c3); border: 1px solid #fde047; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.mobile-pinned-header { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #a16207; margin-bottom: 8px; text-transform: uppercase; }
+.mobile-questions-section { background: #fff; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.mobile-questions-header { font-size: 11px; font-weight: 700; color: #dc2626; margin-bottom: 8px; text-transform: uppercase; }
+.mobile-thread-block { margin-bottom: 16px; }
+.mobile-thread-question { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px 8px 0 0; padding: 10px; }
+.mobile-thread-reply { background: #eff6ff; border: 1px solid #93c5fd; border-top: 1px solid #cbd5e1; padding: 10px; }
+.mobile-thread-reply:last-of-type { border-radius: 0 0 8px 8px; }
+.mobile-msg-type { font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
+.mobile-msg-type.question { color: #dc2626; }
+.mobile-msg-type.reply { color: #2563eb; }
+.mobile-msg-author { font-size: 11px; color: #64748b; margin-bottom: 4px; }
+.mobile-msg-content { font-size: 13px; color: #1e293b; line-height: 1.5; }
+.mobile-msg-image { max-width: 100%; border-radius: 6px; margin-top: 8px; cursor: pointer; }
+.mobile-msg-images-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.mobile-msg-images-grid img { width: 80px; height: 80px; object-fit: cover; border-radius: 6px; cursor: pointer; }
+.mobile-msg-images-grid.single img { width: auto; height: auto; max-width: 100%; max-height: 200px; }
+.mobile-reply-btn { margin-top: 8px; padding: 8px 16px; background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; border-radius: 6px; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+.mobile-msg-delete-btn { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; background: #ef4444; border: 2px solid #fff; color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 5; }
+.mobile-msg-edit-btn { position: absolute; top: 4px; right: 30px; width: 22px; height: 22px; border-radius: 50%; background: #3b82f6; border: 2px solid #fff; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 5; }
+
+/* Mobile compose zone */
+.mobile-compose-zone { display: none; padding: 12px; border-radius: 8px; margin-bottom: 10px; position: relative; }
+.mobile-compose-zone.active { display: block; }
+.mobile-compose-zone.problem { background: #fef2f2; border: 2px solid #fca5a5; }
+.mobile-compose-zone.normal { background: #eff6ff; border: 2px solid #93c5fd; }
+.mobile-compose-zone.pinned { background: #fefce8; border: 2px solid #fde047; }
+.mobile-compose-close { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%; background: rgba(239,68,68,0.15); border: none; color: #dc2626; font-size: 14px; cursor: pointer; }
+.mobile-compose-type { font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }
+.mobile-compose-zone.problem .mobile-compose-type { color: #dc2626; }
+.mobile-compose-zone.normal .mobile-compose-type { color: #2563eb; }
+.mobile-compose-zone.pinned .mobile-compose-type { color: #ca8a04; }
+.mobile-compose-author { font-size: 11px; font-weight: 600; color: #1e293b; margin-bottom: 8px; }
+.mobile-compose-content-wrapper { border: 1px dashed rgba(0,0,0,0.2); border-radius: 6px; background: #fff; overflow: hidden; }
+.mobile-compose-content-wrapper:focus-within { border-style: solid; border-color: #3b82f6; }
+.mobile-compose-textarea { width: 100%; min-height: 100px; padding: 12px; border: none; background: transparent; color: #1e293b; font-size: 14px; font-family: inherit; resize: vertical; outline: none; }
+.mobile-compose-footer { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.mobile-compose-send-btn { flex: 1; padding: 8px; border-radius: 6px; background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.mobile-compose-photo-btn { flex: 1; padding: 8px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); border: none; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.mobile-compose-preview { display: none; margin-top: 8px; }
+.mobile-compose-preview.active { display: flex; flex-wrap: wrap; gap: 6px; }
+.mobile-compose-preview-item { position: relative; width: 70px; height: 70px; }
+.mobile-compose-preview-item img { width: 70px; height: 70px; object-fit: cover; border-radius: 8px; border: 2px solid #e2e8f0; }
+.mobile-compose-preview-item .photo-remove-btn { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: #ef4444; border: 2px solid #fff; color: #fff; font-size: 10px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+.mobile-type-buttons { display: flex; gap: 6px; justify-content: center; padding: 8px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+.mobile-type-btn { flex: 1; padding: 10px 6px; border: 1px solid transparent; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; transition: all 0.2s; }
+.mobile-type-btn .btn-icon { font-size: 18px; }
+.mobile-type-btn .btn-label { font-size: 9px; text-transform: uppercase; }
+.mobile-type-btn.problem { background: #fef2f2; color: #dc2626; border-color: #fca5a5; }
+.mobile-type-btn.normal { background: #eff6ff; color: #2563eb; border-color: #93c5fd; }
+.mobile-type-btn.pinned { background: #fefce8; color: #ca8a04; border-color: #fde047; }
+
+.mobile-add-fab { position: fixed; bottom: 20px; right: 20px; width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #22c55e, #16a34a); border: 3px solid #fff; color: #fff; font-size: 28px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 100; }
+</style>
+</head>
+<body>
+<script>if(localStorage.getItem('physipro_last_email')){document.write('<style>.login-overlay{display:none !important;}</style>');}</script>
+
+<!-- LOGIN -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-panel">
+    <div class="login-logo-container">
+      <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro">
+    </div>
+    <div class="login-title-container">
+      <div class="login-title">Outil de gestion simplifiée</div>
+      <div class="login-author">par Daniel Charest</div>
+    </div>
+    <div class="login-subtitle">Connectez-vous avec votre email d'entreprise</div>
+    <form id="loginForm" autocomplete="on" onsubmit="doLogin(event)">
+      <input type="email" id="loginEmail" name="email" class="login-input" placeholder="Email d'entreprise" autocomplete="username">
+      <input type="password" id="loginPassword" name="password" class="login-input" placeholder="Mot de passe" maxlength="50" autocomplete="current-password">
+      <div class="login-remember">
+        <input type="checkbox" id="loginRemember" checked>
+        <label for="loginRemember">Rester connecté</label>
+      </div>
+      <button type="submit" class="login-btn" id="loginBtn">Se connecter</button>
+    </form>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- HEADER (identique moulage) -->
+<header class="topbar">
+  <div class="tb-left">
+    <div class="logo-flip-container" id="logoFlipContainer">
+      <div class="logo-main">
+        <div class="logo-top-fixed"><img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro"></div>
+        <div class="logo-bottom-text">Questionnement</div>
+      </div>
+      <div class="logo-menu" id="logoMenu"></div>
+    </div>
+  </div>
+  <div class="tb-create-btn"><button class="btn-pill" onclick="openJobModal()"><span>+</span><span>Créer job</span></button></div>
+  <div class="tb-center"><span class="top-title">Questionnement</span></div>
+  <div class="tb-right">
+    <div class="tb-buttons-row">
+      <div class="user-status"><span class="status-dot" id="statusDot"></span><span class="user-name" id="currentUserName">--</span></div>
+    </div>
+    <div class="tb-search-row">
+      <button class="notif-bell-btn" id="notifBellBtn" onclick="toggleNotifPopup()" title="Notifications">
+        <span class="notif-bell-icon">🔔</span>
+        <span class="notif-bell-text" id="notifBellText"></span>
+      </button>
+      <div class="search-box-small">
+        <input type="text" id="globalSearch" placeholder="🔍 Rechercher..." oninput="handleGlobalSearch(this.value)">
+        <button class="btn-settings-inside" onclick="openSettingsModal()" title="Paramètres">⚙️</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN DESKTOP (Two panels) -->
+<div class="main-container" id="mainDesktop">
+  <!-- LEFT: Matériaux BO -->
+  <div class="panel-matbo">
+    <div class="panel-matbo-header">
+      📦 Matériaux BO <span class="col-count" id="countMatBO">0</span>
+      <button class="col-add-btn" onclick="openMatModal()">+ Mat</button>
+    </div>
+    <div class="panel-matbo-content" id="listMatBO"></div>
+  </div>
+
+  <!-- RIGHT: Service Client -->
+  <div class="panel-service">
+    <div class="panel-service-header">
+      <div class="service-name-tab">
+        <span class="service-name-label jacynthe">Jacynthe</span>
+        <span class="service-name-count" id="countJacynthe">0</span>
+        <button class="service-name-add" onclick="openJobModal('Jacynthe')">+</button>
+      </div>
+      <div class="service-name-tab">
+        <span class="service-name-label nadia">Nadia</span>
+        <span class="service-name-count" id="countNadia">0</span>
+        <button class="service-name-add" onclick="openJobModal('Nadia')">+</button>
+      </div>
+      <div class="service-name-tab">
+        <span class="service-name-label sonia">Sonia</span>
+        <span class="service-name-count" id="countSonia">0</span>
+        <button class="service-name-add" onclick="openJobModal('Sonia')">+</button>
+      </div>
+      <div class="service-name-tab">
+        <span class="service-name-label jonathan">Jonathan</span>
+        <span class="service-name-count" id="countJonathan">0</span>
+        <button class="service-name-add" onclick="openJobModal('Jonathan')">+</button>
+      </div>
+    </div>
+    <div class="panel-service-columns">
+      <div class="col"><div class="col-content" id="listJacynthe"></div></div>
+      <div class="col"><div class="col-content" id="listNadia"></div></div>
+      <div class="col"><div class="col-content" id="listSonia"></div></div>
+      <div class="col"><div class="col-content" id="listJonathan"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE CONTAINER -->
+<div class="mobile-container" id="mobileContainer">
+  <div class="mobile-tabs">
+    <div class="mobile-tab active" onclick="switchMobileTab('jobs')">📋 Tous les jobs</div>
+    <div class="mobile-tab" onclick="switchMobileTab('mat')">📦 Matériaux</div>
+  </div>
+  <div class="mobile-list" id="mobileList"></div>
+  <button class="mobile-add-fab" id="mobileAddFab" onclick="openJobModal()">+</button>
+</div>
+
+<!-- MOBILE FICHE PAGE -->
+<div class="mobile-fiche-page" id="mobileFichePage">
+  <div class="mobile-fiche-header">
+    <button class="mobile-fiche-back" onclick="closeMobileFiche()">← Retour</button>
+    <div class="mobile-fiche-title" id="mobileFicheTitle">Job</div>
+    <button class="mobile-fiche-chat-btn" onclick="openMobileChat()">💬 Chat</button>
+    <button class="mobile-fiche-delete-btn" onclick="deleteMobileJob()">🗑️</button>
+  </div>
+  <div class="mobile-fiche-body" id="mobileFicheBody"></div>
+</div>
+
+<!-- MOBILE CHAT PAGE -->
+<div class="mobile-chat-page" id="mobileChatPage">
+  <div class="mobile-chat-header">
+    <button class="mobile-chat-back" onclick="closeMobileChat()">← Fiche</button>
+    <div class="mobile-chat-title" id="mobileChatTitle">💬 Chat</div>
+  </div>
+  <div class="mobile-chat-messages" id="mobileChatMessages"></div>
+  <div class="mobile-chat-compose" id="mobileChatCompose"></div>
+</div>
+
+<!-- FICHE OVERLAY (DESKTOP) -->
+<div class="fiche-overlay hidden" id="ficheOverlay" onclick="closeFiche(event)">
+  <div class="fiche-container" onclick="event.stopPropagation()">
+    <div class="fiche-info-zone">
+      <div class="fiche-header">
+        <div class="fiche-logo"><img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro"></div>
+        <button type="button" class="fiche-delete-btn" onclick="deleteCurrentJob()"><span>🗑️</span><span>Supprimer</span></button>
+      </div>
+      <div class="fiche-status-pill" id="ficheStatusBanner">📋 <span id="ficheAssigneeName">Job</span></div>
+      <div class="fiche-body">
+        <div class="fiche-fields-list" id="ficheFieldsList"></div>
+      </div>
+      <div class="fiche-rappel-section" id="ficheRappelSection"></div>
+    </div>
+    <div class="fiche-notes-zone">
+      <div class="fiche-notes-header">
+        <span></span>
+        <span class="fiche-notes-title">💬 Notes & Chat</span>
+        <button class="fiche-close-btn" onclick="closeFiche(event)">✕ Fermer</button>
+      </div>
+      <div class="chat-scroll-container" id="chatScrollContainer">
+        <div class="pinned-section" id="pinnedSection" style="display:none;">
+          <div class="pinned-section-header"><span class="pin-icon">📌</span> Messages épinglés</div>
+          <div id="pinnedMessagesList"></div>
+        </div>
+        <div class="questions-section" id="questionsSection" style="display:none;">
+          <div class="questions-section-header">❓ Questions</div>
+          <div id="questionsMessagesList"></div>
+        </div>
+        <div class="fiche-messages-list" id="ficheMessagesList"></div>
+      </div>
+      <div class="chat-compose-zone" id="composeZone">
+        <button class="chat-compose-close" onclick="closeCompose()">✕</button>
+        <div class="chat-compose-type" id="composeType">❓ QUESTIONNEMENT</div>
+        <div class="chat-compose-author" id="composeAuthor"></div>
+        <div class="chat-compose-content-wrapper">
+          <textarea class="chat-compose-textarea" id="composeTextarea" placeholder="Écrivez ici... (Ctrl+V pour image)" onpaste="handlePaste(event)"></textarea>
+          <div class="chat-compose-image-zone" id="composeImageZone"><img src="" id="composeImg"><button class="chat-compose-image-remove" onclick="removeImage()">✕</button></div>
+        </div>
+        <div class="chat-compose-footer"><span class="chat-compose-hint">Ctrl+V = image</span><button class="chat-compose-btn send" onclick="sendMessage()">➤ Envoyer</button></div>
+      </div>
+      <div class="chat-type-buttons-row">
+        <button class="chat-type-btn-new problem" onclick="openCompose('problem')"><span class="btn-icon">❓</span><span class="btn-label">Question</span></button>
+        <button class="chat-type-btn-new normal" onclick="openCompose('normal')"><span class="btn-icon">💬</span><span class="btn-label">Discussion</span></button>
+        <button class="chat-type-btn-new pinned" onclick="openCompose('pinned')"><span class="btn-icon">📌</span><span class="btn-label">Épinglé</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CALENDAR -->
+<div class="calendar-overlay" id="calendarOverlay" onclick="closeCalendar(event)">
+  <div class="calendar-popup" onclick="event.stopPropagation()">
+    <div class="calendar-header">
+      <button class="calendar-nav-btn" onclick="navigateCalendar(-1)">‹</button>
+      <span class="calendar-month-year" id="calendarMonthYear"></span>
+      <button class="calendar-nav-btn" onclick="navigateCalendar(1)">›</button>
+    </div>
+    <div class="calendar-grid">
+      <div class="calendar-weekdays"><div class="calendar-weekday">Dim</div><div class="calendar-weekday">Lun</div><div class="calendar-weekday">Mar</div><div class="calendar-weekday">Mer</div><div class="calendar-weekday">Jeu</div><div class="calendar-weekday">Ven</div><div class="calendar-weekday">Sam</div></div>
+      <div class="calendar-days" id="calendarDays"></div>
+    </div>
+    <div class="calendar-actions">
+      <button class="calendar-action-btn today-btn" onclick="selectToday()">📅 Aujourd'hui</button>
+      <button class="calendar-action-btn clear-btn" onclick="clearDate()">🗑️ Effacer</button>
+      <button class="calendar-action-btn close-btn" onclick="closeCalendar(event, true)">✕ Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL JOB -->
+<div class="modal-overlay" id="jobModal" onclick="if(event.target===this)closeJobModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">➕ Nouveau job</span>
+      <button class="modal-close" onclick="closeJobModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-row">
+        <div class="modal-field">
+          <label>N° Commande</label>
+          <input type="text" id="jobOrder" placeholder="287001">
+        </div>
+        <div class="modal-field">
+          <label>Assigné à</label>
+          <select id="jobAssignee">
+            <option value="Jacynthe">Jacynthe</option>
+            <option value="Nadia">Nadia</option>
+            <option value="Sonia">Sonia</option>
+            <option value="Jonathan">Jonathan</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-field" style="margin-bottom:12px;">
+        <label>Client</label>
+        <input type="text" id="jobClient" placeholder="Nom du client">
+      </div>
+      <div class="modal-row">
+        <div class="modal-field">
+          <label>N° PO</label>
+          <input type="text" id="jobPO">
+        </div>
+        <div class="modal-field">
+          <label>Représentant</label>
+          <input type="text" id="jobRep">
+        </div>
+      </div>
+      <div class="modal-row">
+        <div class="modal-field">
+          <label>Date reçue</label>
+          <div class="modal-date-field" id="jobDateRecueDisplay" onclick="openModalCalendar('jobDateRecue')">Sélectionner...</div>
+          <input type="hidden" id="jobDateRecue">
+        </div>
+        <div class="modal-field">
+          <label>Date livraison</label>
+          <div class="modal-date-field" id="jobDateLivDisplay" onclick="openModalCalendar('jobDateLiv')">Sélectionner...</div>
+          <input type="hidden" id="jobDateLiv">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn cancel" onclick="closeJobModal()">Annuler</button>
+      <button class="modal-btn confirm" onclick="saveJob()">Créer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MAT BO -->
+<div class="modal-overlay" id="matModal" onclick="if(event.target===this)closeMatModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">📦 Ajouter matériau BO</span>
+      <button class="modal-close" onclick="closeMatModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field" style="margin-bottom:12px;">
+        <label>Matériau</label>
+        <select id="matSelect">
+          <option value="">-- Sélectionner --</option>
+          <option value="Mousse haute densité|100001">Mousse haute densité (100001)</option>
+          <option value="Mousse mémoire|100002">Mousse mémoire (100002)</option>
+          <option value="Tissu Spacer|100003">Tissu Spacer (100003)</option>
+          <option value="Tissu anti-feu|100004">Tissu anti-feu (100004)</option>
+          <option value="Velcro industriel|100005">Velcro industriel (100005)</option>
+          <option value="Plaque aluminium|100006">Plaque aluminium (100006)</option>
+          <option value="Sangles positionnement|100013">Sangles positionnement (100013)</option>
+          <option value="Coussins gel|100014">Coussins gel (100014)</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>Date réception estimée</label>
+        <div class="modal-date-field" id="matDateReceptionDisplay" onclick="openModalCalendar('matDateReception')">Sélectionner...</div>
+        <input type="hidden" id="matDateReception">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn cancel" onclick="closeMatModal()">Annuler</button>
+      <button class="modal-btn confirm" onclick="saveMat()">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- DEST MODAL -->
+<div class="dest-modal-overlay" id="destModalOverlay" onclick="closeDestModal(event, false)">
+  <div class="dest-modal" onclick="event.stopPropagation()">
+    <div class="dest-modal-header">
+      <span>📤 Envoyer à</span>
+      <button class="dest-modal-close" onclick="event.stopPropagation(); closeDestModal(null, true)">✕</button>
+    </div>
+    <div class="dest-modal-body">
+      <div class="dest-option no-send" onclick="event.stopPropagation(); selectDestOption('none')">
+        <span class="dest-option-icon">🚫</span>
+        <span class="dest-option-text">Ne pas envoyer</span>
+      </div>
+      <div class="dest-columns" id="destColumns"></div>
+    </div>
+    <div class="dest-modal-footer">
+      <span class="dest-selected-count" id="destSelectedCount">0 sélectionné(s)</span>
+      <button class="dest-send-btn" onclick="event.stopPropagation(); sendToSelectedDestinatairesFinal()">📤 Envoyer</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM -->
+<div class="delete-confirm-modal" id="deleteConfirmModal">
+  <div class="delete-confirm-panel">
+    <div class="delete-confirm-header">
+      <span class="delete-confirm-title">🗑️ Suppression</span>
+      <button class="delete-confirm-close" onclick="closeDeleteConfirmModal()">✕</button>
+    </div>
+    <div class="delete-confirm-body">
+      <div class="delete-confirm-icon">⚠️</div>
+      <div class="delete-confirm-text">Êtes-vous sûr de vouloir<br>supprimer ce message ?</div>
+    </div>
+    <div class="delete-confirm-footer">
+      <button class="delete-confirm-btn cancel" onclick="closeDeleteConfirmModal()">Annuler</button>
+      <button class="delete-confirm-btn delete" onclick="confirmDeleteMsg()">🗑️ Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="image-lightbox" id="imageLightbox" onclick="closeLightbox(event)">
+  <div class="lightbox-content" onclick="event.stopPropagation()">
+    <img id="lightboxImage" src="">
+  </div>
+  <div class="lightbox-controls">
+    <button class="lightbox-btn" onclick="zoomImage(1.3)">🔍+</button>
+    <button class="lightbox-btn" onclick="zoomImage(0.7)">🔍−</button>
+    <button class="lightbox-btn close" onclick="closeLightbox(null, true)">✕</button>
+  </div>
+</div>
+
+<!-- NOTIFICATION POPUP -->
+<div class="notif-popup" id="notifPopup">
+  <div class="notif-popup-header">
+    <span>🔔 Notifications</span>
+    <button class="notif-popup-close" onclick="closeNotifPopup()">✕</button>
+  </div>
+  <div class="notif-popup-list" id="notifPopupList">
+    <div class="notif-empty">Aucune notification</div>
+  </div>
+  <div class="notif-popup-footer">
+    <button class="notif-mark-all" onclick="markAllNotifsRead()">✓ Tout marquer comme lu</button>
+  </div>
+</div>
+
+<!-- NOTIFICATION DETAIL -->
+<div class="notif-detail-overlay" id="notifDetailOverlay" onclick="closeNotifDetail()">
+  <div class="notif-detail-panel" onclick="event.stopPropagation()">
+    <div class="notif-detail-header">
+      <div class="notif-detail-icon" id="notifDetailIcon">💬</div>
+      <div class="notif-detail-title">Nouveau message</div>
+    </div>
+    <div class="notif-detail-body">
+      <div class="notif-detail-message">
+        Vous avez reçu un message de<br>
+        <span class="notif-detail-from" id="notifDetailFrom">Utilisateur</span><br><br>
+        pour le job<br>
+        <span class="notif-detail-card" id="notifDetailCard">Job</span>
+      </div>
+    </div>
+    <div class="notif-detail-footer">
+      <button class="notif-detail-btn cancel" onclick="closeNotifDetail()">Plus tard</button>
+      <button class="notif-detail-btn go" id="notifDetailGoBtn" onclick="goToNotifCard()">👁️ Aller voir</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="settings-modal" id="settingsModal" onclick="closeSettingsModal(event)">
+  <div class="settings-box" onclick="event.stopPropagation()">
+    <div class="settings-header">
+      <span class="settings-title">⚙️ Paramètres</span>
+      <button class="settings-close" onclick="closeSettingsModal(null, true)">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-section">
+        <div class="settings-section-title">👤 Compte</div>
+        <div class="settings-row">
+          <span class="settings-label">Email</span>
+          <span class="settings-value" id="settingsUserEmail">--</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-label">Statut Firebase</span>
+          <span class="settings-value" id="settingsFirebaseStatus">--</span>
+        </div>
+        <button class="settings-btn logout" onclick="doLogout(); closeSettingsModal(null, true);" style="width:100%;margin-top:8px;">
+          🚪 Se déconnecter
+        </button>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">📊 Statistiques</div>
+        <div class="settings-row">
+          <span class="settings-label">Total Jobs</span>
+          <span class="settings-value" id="settingsJobCount">0</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-label">Matériaux BO</span>
+          <span class="settings-value" id="settingsMatCount">0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ===== FIREBASE CONFIG =====
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCk7bqVnx08Kz1fVq1W24AuW854KY9jPno",
+  authDomain: "liste-des-moulages-physipro.firebaseapp.com",
+  databaseURL: "https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",
+  projectId: "liste-des-moulages-physipro",
+  storageBucket: "liste-des-moulages-physipro.firebasestorage.app",
+  messagingSenderId: "24566847562",
+  appId: "1:24566847562:web:db492bdd33116373e0eeb3"
+};
+
+// ===== TEAM MEMBERS =====
+const _E = (b) => { try { return atob(b); } catch(e) { return b; } };
+const _D = [
+  ['Daniel Charest', 'YXRlbGllcmF0cEBwaHlzaXByby5jb20=', 'Atelier'],
+  ['Valérie Fréchette', 'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==', 'Atelier'],
+  ['Jacynthe Gaumond', 'c2VydmljZTNAcGh5c2lwcm8uY29t', 'Service'],
+  ['Jonathan Perreault', 'c2VydmljZTFAcGh5c2lwcm8uY29t', 'Service'],
+  ['Nadia Gagne', 'bmdhZ25lQHBoeXNpcHJvLmNvbQ==', 'Service'],
+  ['Sonia Boulanger', 'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==', 'Service'],
+  ['Marie-Pier Languedoc', 'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t', 'Représentante'],
+  ['Marie-Soleil Riverin', 'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==', 'Représentante'],
+  ['Fabrys Frechette', 'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=', 'Administration'],
+  ['Mario Ouellette', 'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t', 'Administration'],
+  ['Pierre Caron', 'cGV0ZXJiYXNzNzZAZ21haWwuY29t', 'Direction'],
+  ['Roxanne Valois', 'cmhAcGh5c2lwcm8uY29t', 'Administration']
+];
+const TEAM_MEMBERS = _D.map(d => ({ name: d[0], email: _E(d[1]), dept: d[2] }));
+
+const ASSIGNEES = ['Jacynthe', 'Nadia', 'Sonia', 'Jonathan'];
+const MOIS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+// ===== STATE =====
+let db = null;
+let currentUser = null;
+let jobsData = {};
+let matBOData = {};
+let currentJobId = null;
+let currentComposeType = 'normal';
+let currentComposeImage = null;
+let inlineComposeImages = {};
+let pendingMessageData = null;
+let selectedDestinataires = [];
+let mobileCurrentJobId = null;
+let mobileComposeType = 'normal';
+let mobilePhotosData = [];
+let mobileCurrentTab = 'jobs';
+let currentLightboxZoom = 1;
+
+// Delete confirm state
+let deleteMsgCurrentJobId = null;
+let deleteMsgCurrentIndex = null;
+let deleteMsgIsMobile = false;
+
+// Edit state
+let editMsgCurrentJobId = null;
+let editMsgCurrentIndex = null;
+let editMsgOriginalText = '';
+
+// Calendar state
+let calendarTargetElement = null;
+let calendarTargetField = null;
+let calendarTargetJobId = null;
+let calendarCurrentDate = new Date();
+let calendarSelectedDate = null;
+
+// Notification state
+let allNotifications = {};
+let notifDetailData = null;
+let currentSearchFilter = '';
+
+// HUB navigation
+var HUB_ACCESS={'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','photos'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','photos'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps'],'c3JveUBwaHlzaXByby5jb20=':['moulage','jobs','inspection','serie','psm','inventaire'],'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['moulage','jobs'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['moulage','jobs'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['moulage','jobs'],'bWFnYXNpbmF0cDFAcGh5c2lwcm8uY29t':['entrepot','calcmat'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['entrepot','inventaire','calcmat'],'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':['entrepot','calcmat'],'c2VydmljZTFAcGh5c2lwcm8uY29t':['moulage','jobs'],'c2VydmljZTNAcGh5c2lwcm8uY29t':['moulage','jobs'],'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':['moulage','jobs'],'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':['moulage','jobs','serie'],'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':['moulage','calcmat','calctemps'],'cmhAcGh5c2lwcm8uY29t':['moulage','jobs'],'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':[],'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':[],'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':[]};
+var HUB_MODULES={moulage:{label:'Moulage',file:'Physipro_moulage.html',color:'#3b82f6',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},jobs:{label:'Questionnement',file:'PhysiPro_Questionnement.html',color:'#f59e0b',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},inspection:{label:'Inspection',file:'PhysiPro_Inspection.html',color:'#22c55e',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},serie:{label:'Série+',file:'PhysiPro_Serie_.html',color:'#f97316',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},psm:{label:'PSM',file:'PhysiPro_PSM.html',color:'#ef4444',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},entrepot:{label:'Entrepôt',file:'PhysiPro_Entrepot.html',color:'#8b5cf6',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},inventaire:{label:'Inventaire',file:'PhysiPro_Inventaire.html',color:'#a855f7',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},calcmat:{label:'Calc. Matériaux',file:'PhysiPro_Calculateur_Materiaux.html',color:'#14b8a6',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},calctemps:{label:'Calc. Temps',file:'PhysiPro_Calculateur_Temps.html',color:'#0ea5e9',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},photos:{label:'Photo-Récepteur',file:'PhysiPro_Photo_Recepteur.html',color:'#06b6d4',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'}};
+var PHYSIPRO_NAME_MAP={'atelieratp@physipro.com':'Daniel','valerie18@videotron.ca':'Valérie','simdut@physipro.com':'Cassie','sroy@physipro.com':'Stéphanie','peterbass76@gmail.com':'Pierre','cncatp@physipro.com':'Sina'};
+function getHubAccess(email){if(!email)return[];try{return HUB_ACCESS[btoa(email)]||[];}catch(e){return[];}}
+function initLogoMenu(currentMod){
+  var menu=document.getElementById('logoMenu');if(!menu)return;
+  var email='';
+  if(typeof currentUser!=='undefined'&&currentUser)email=currentUser.email||currentUser;
+  else if(typeof fbUser!=='undefined'&&fbUser)email=fbUser.email||fbUser;
+  if(typeof email!=='string'){try{email=email.email||'';}catch(e){email='';}}
+  var access=getHubAccess(email);
+  var others=access.filter(function(mod){return mod!==currentMod;});
+  if(others.length===0){menu.innerHTML='';return;}
+  menu.innerHTML='';
+  others.forEach(function(mod){
+    var m=HUB_MODULES[mod];if(!m)return;
+    var item=document.createElement('a');
+    item.className='logo-menu-item';
+    item.href=m.file;
+    item.innerHTML='<img class="logo-menu-icon-img" src="'+m.img+'" alt="'+m.label+'"><span class="logo-menu-text" style="color:'+m.color+';">'+m.label+'</span>';
+    menu.appendChild(item);
+  });
+  /* Logo menu hover: hide topbar buttons (debounced) */
+  var flipC = document.getElementById('logoFlipContainer');
+  var topbar = flipC ? flipC.closest('.topbar') : null;
+  if (flipC && topbar) {
+    var _menuCloseTimer = null;
+    function menuOpen() { clearTimeout(_menuCloseTimer); topbar.classList.add('menu-open'); }
+    function menuClose() { _menuCloseTimer = setTimeout(function() { topbar.classList.remove('menu-open'); }, 120); }
+    flipC.addEventListener('mouseenter', menuOpen);
+    flipC.addEventListener('mouseleave', menuClose);
+    var logoMenuEl = document.getElementById('logoMenu');
+    if (logoMenuEl) {
+      logoMenuEl.addEventListener('mouseenter', menuOpen);
+      logoMenuEl.addEventListener('mouseleave', menuClose);
+    }
+  }
+}
+
+// ===== UTILITY FUNCTIONS =====
+function escapeHtml(t) { return t ? String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+function formatDateDisplay(d) { if (!d) return ''; if (d.includes('-')) { const p = d.split('-'); return p[2]+'/'+p[1]+'/'+p[0].slice(2); } return d; }
+function formatDateISO(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+function getUserDisplayName(email) {
+  if (!email) return 'Utilisateur';
+  var lower = email.toLowerCase();
+  if (PHYSIPRO_NAME_MAP && PHYSIPRO_NAME_MAP[lower]) return PHYSIPRO_NAME_MAP[lower];
+  var member = TEAM_CHAT_MEMBERS.find(function(m) { return m.email.toLowerCase() === lower; });
+  if (member) return member.name;
+  return email.split('@')[0];
+}
+
+function getCurrentUserName() {
+  if (!currentUser?.email) return 'Utilisateur';
+  return getUserDisplayName(currentUser.email);
+}
+
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3500);
+}
+
+function compressImage(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if (w > 800) { h = (h * 800) / w; w = 800; }
+      if (h > 600) { w = (w * 600) / h; h = 600; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      let quality = 0.6;
+      let result = canvas.toDataURL('image/jpeg', quality);
+      while (result.length > 100000 && quality > 0.1) { quality -= 0.1; result = canvas.toDataURL('image/jpeg', quality); }
+      resolve(result);
+    };
+    img.src = dataUrl;
+  });
+}
+
+function compressMobileImage(file, callback) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if (w > 600) { h = (h * 600) / w; w = 600; }
+      if (h > 600) { w = (w * 600) / h; h = 600; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', 0.5));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function hasUnresolvedQuestions(jobId) {
+  const job = jobsData[jobId];
+  if (!job?.messages?.length) return false;
+  return job.messages.some(m => m.type === 'problem' && !m.resolved);
+}
+
+function getMessageCount(jobId) {
+  const job = jobsData[jobId];
+  return job?.messages?.length || 0;
+}
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', function() {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.database();
+  
+  firebase.auth().onAuthStateChanged(user => {
+    if (user) {
+      currentUser = user;
+      document.getElementById('loginOverlay').classList.add('hidden');
+      document.getElementById('loginOverlay').style.display='none';
+      document.getElementById('currentUserName').textContent = getUserDisplayName(user.email);
+      localStorage.setItem('physipro_last_email', user.email);
+      initLogoMenu('jobs');
+      initData();
+      listenForNotifications();
+    } else {
+      localStorage.removeItem('physipro_last_email');
+      document.getElementById('loginOverlay').style.display='';
+      document.getElementById('loginOverlay').classList.remove('hidden');
+    }
+  });
+});
+
+function doLogin(event) {
+  if (event) event.preventDefault();
+  var email = document.getElementById('loginEmail').value.trim();
+  var password = document.getElementById('loginPassword').value;
+  var loginBtn = document.getElementById('loginBtn');
+  var rememberEl = document.getElementById('loginRemember');
+  var rememberMe = rememberEl ? rememberEl.checked : true;
+  var errorEl = document.getElementById('loginError');
+
+  errorEl.textContent = '';
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errorEl.textContent = 'Veuillez entrer une adresse email valide';
+    return;
+  }
+  if (!password) {
+    errorEl.textContent = 'Veuillez entrer votre mot de passe';
+    return;
+  }
+
+  loginBtn.disabled = true;
+  loginBtn.textContent = 'Connexion...';
+
+  var persistence = rememberMe
+    ? firebase.auth.Auth.Persistence.LOCAL
+    : firebase.auth.Auth.Persistence.SESSION;
+
+  firebase.auth().setPersistence(persistence).then(function() {
+    return firebase.auth().signInWithEmailAndPassword(email, password);
+  }).then(function() {
+    console.log('Connexion réussie');
+  }).catch(function(error) {
+    var msg = 'Une erreur est survenue.';
+    switch (error.code) {
+      case 'auth/user-not-found': msg = 'Aucun compte ne correspond à cette adresse.'; break;
+      case 'auth/wrong-password': msg = 'Mot de passe incorrect.'; break;
+      case 'auth/too-many-requests': msg = 'Trop de tentatives. Réessayez plus tard.'; break;
+      case 'auth/invalid-email': msg = 'Adresse email invalide.'; break;
+      default: msg = error.message;
+    }
+    errorEl.textContent = msg;
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Se connecter';
+  });
+}
+
+function doLogout() { firebase.auth().signOut(); }
+
+function initData() {
+  db.ref('jobs').on('value', snap => {
+    jobsData = snap.val() || {};
+    renderJobs();
+    if (window.innerWidth <= 768) renderMobileList();
+  });
+  db.ref('materiauxBO').on('value', snap => {
+    matBOData = snap.val() || {};
+    renderMatBO();
+    if (window.innerWidth <= 768 && mobileCurrentTab === 'mat') renderMobileList();
+  });
+}
+
+// ===== RENDER JOBS =====
+function renderJobs() {
+  const lists = { Jacynthe: [], Nadia: [], Sonia: [], Jonathan: [] };
+  const filter = currentSearchFilter.toLowerCase();
+  Object.entries(jobsData).forEach(([id, job]) => {
+    // Apply search filter
+    if (filter) {
+      const searchable = `${job.order||''} ${job.client||''} ${job.assignee||''} ${job.numeroPO||''} ${job.representant||''}`.toLowerCase();
+      if (!searchable.includes(filter)) return;
+    }
+    const a = job.assignee || 'Jacynthe';
+    if (lists[a]) lists[a].push({ id, ...job });
+  });
+  
+  Object.keys(lists).forEach(name => {
+    const container = document.getElementById('list' + name);
+    const count = document.getElementById('count' + name);
+    const jobs = lists[name].sort((a, b) => new Date(a.dateRecue || 0) - new Date(b.dateRecue || 0));
+    count.textContent = jobs.length;
+    
+    if (jobs.length === 0) {
+      container.innerHTML = '<div class="empty-state">Aucun job</div>';
+    } else {
+      container.innerHTML = jobs.map(job => {
+        const msgCount = getMessageCount(job.id);
+        const hasQ = hasUnresolvedQuestions(job.id);
+        const badgeClass = hasQ ? 'job-card-badge alert' : 'job-card-badge';
+        const assigneeLow = (job.assignee || '').toLowerCase();
+        
+        // En attente depuis
+        let attenteHtml = '';
+        if (job.dateRecue) {
+          const recue = new Date(job.dateRecue);
+          const now = new Date();
+          const diff = Math.floor((now - recue) / (1000 * 60 * 60 * 24));
+          if (diff >= 0) {
+            attenteHtml = `<div class="job-card-attente">⏳ En attente depuis ${diff} jour${diff > 1 ? 's' : ''}</div>`;
+          }
+        }
+        
+        // Rappel indicator
+        let rappelHtml = '';
+        if (job.rappelDate) {
+          const today = new Date().toISOString().split('T')[0];
+          if (job.rappelDate <= today) {
+            rappelHtml = '<span class="job-card-rappel-indicator">🔔</span>';
+          } else {
+            rappelHtml = '<span class="job-card-rappel-indicator" style="animation:none;opacity:0.5;">🔔</span>';
+          }
+        }
+        
+        return `
+          <div class="job-card" onclick="openFiche('${job.id}')">
+            ${rappelHtml}
+            <div class="job-card-order">#${escapeHtml(job.order || '---')}</div>
+            <div class="job-card-client">${escapeHtml(job.client || 'Client')}</div>
+            <div class="job-card-info">
+              <span class="job-card-assignee-dot ${assigneeLow}"></span>
+              <span class="job-card-date">📅 ${formatDateDisplay(job.dateLivraison) || 'N/D'}</span>
+            </div>
+            ${attenteHtml}
+            ${msgCount > 0 ? `<span class="${badgeClass}">💬 ${msgCount}</span>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+  });
+}
+
+// ===== RENDER MATÉRIAUX BO =====
+function renderMatBO() {
+  const container = document.getElementById('listMatBO');
+  const count = document.getElementById('countMatBO');
+  const filter = currentSearchFilter.toLowerCase();
+  let entries = Object.entries(matBOData).sort((a, b) => new Date(a[1].dateReception || 0) - new Date(b[1].dateReception || 0));
+  if (filter) {
+    entries = entries.filter(([id, mat]) => `${mat.nom||''} ${mat.code||''}`.toLowerCase().includes(filter));
+  }
+  count.textContent = entries.length;
+  
+  if (entries.length === 0) {
+    container.innerHTML = '<div class="empty-state">📦 Aucun matériau en rupture</div>';
+  } else {
+    container.innerHTML = entries.map(([id, mat]) => `
+      <div class="mat-card" onclick="deleteMat('${id}')">
+        <div class="mat-card-code">${escapeHtml(mat.code || '-')}</div>
+        <div class="mat-card-name">${escapeHtml(mat.nom || 'Matériau')}</div>
+        <div class="mat-card-date">📅 ${formatDateDisplay(mat.dateReception) || 'N/D'}</div>
+      </div>
+    `).join('');
+  }
+}
+
+// ===== JOB MODAL =====
+function openJobModal(assignee) {
+  if (!currentUser) { showToast('⚠️ Veuillez vous connecter d\'abord', 'error'); return; }
+  document.getElementById('jobModal').classList.add('active');
+  document.getElementById('jobOrder').value = '';
+  document.getElementById('jobClient').value = '';
+  document.getElementById('jobPO').value = '';
+  document.getElementById('jobRep').value = '';
+  // Set date reçue to today
+  const todayISO = formatDateISO(new Date());
+  document.getElementById('jobDateRecue').value = todayISO;
+  document.getElementById('jobDateRecueDisplay').textContent = formatDateDisplay(todayISO);
+  document.getElementById('jobDateRecueDisplay').classList.add('has-date');
+  document.getElementById('jobDateLiv').value = '';
+  document.getElementById('jobDateLivDisplay').textContent = 'Sélectionner...';
+  document.getElementById('jobDateLivDisplay').classList.remove('has-date');
+  document.getElementById('jobAssignee').value = assignee || 'Jacynthe';
+}
+function closeJobModal() { document.getElementById('jobModal').classList.remove('active'); }
+
+function saveJob() {
+  const order = document.getElementById('jobOrder').value.trim();
+  const client = document.getElementById('jobClient').value.trim();
+  const assignee = document.getElementById('jobAssignee').value;
+  const po = document.getElementById('jobPO').value.trim();
+  const rep = document.getElementById('jobRep').value.trim();
+  const dateRecue = document.getElementById('jobDateRecue').value;
+  const dateLiv = document.getElementById('jobDateLiv').value;
+  
+  if (!order) { showToast('⚠️ N° commande requis', 'error'); return; }
+  if (!currentUser) { showToast('⚠️ Veuillez vous connecter', 'error'); return; }
+  if (!db) { showToast('❌ Base de données non connectée', 'error'); return; }
+  
+  const id = 'job_' + Date.now();
+  const jobData = {
+    order: order,
+    client: client || '',
+    assignee: assignee || 'Jacynthe',
+    numeroPO: po || '',
+    representant: rep || '',
+    dateRecue: dateRecue || '',
+    dateLivraison: dateLiv || '',
+    createdBy: currentUser.email || '',
+    createdAt: new Date().toISOString()
+  };
+  
+  // Close modal immediately for snappy UX
+  closeJobModal();
+  
+  db.ref('jobs/' + id).set(jobData)
+    .then(() => {
+      showToast('✅ Job #' + order + ' créé!', 'success');
+    })
+    .catch((err) => {
+      console.error('Firebase save error:', err);
+      showToast('❌ Erreur Firebase: ' + (err.message || 'Écriture refusée'), 'error');
+    });
+}
+
+// ===== MAT MODAL =====
+function openMatModal() {
+  if (!currentUser) { showToast('⚠️ Veuillez vous connecter d\'abord', 'error'); return; }
+  document.getElementById('matModal').classList.add('active');
+  document.getElementById('matSelect').value = '';
+  document.getElementById('matDateReception').value = '';
+  document.getElementById('matDateReceptionDisplay').textContent = 'Sélectionner...';
+  document.getElementById('matDateReceptionDisplay').classList.remove('has-date');
+}
+function closeMatModal() { document.getElementById('matModal').classList.remove('active'); }
+
+function saveMat() {
+  const selectVal = document.getElementById('matSelect').value;
+  const dateReception = document.getElementById('matDateReception').value;
+  if (!selectVal) { showToast('Sélectionnez un matériau', 'error'); return; }
+  if (!db) { showToast('Erreur: base de données non connectée', 'error'); return; }
+  const [nom, code] = selectVal.split('|');
+  const id = 'mat_' + Date.now();
+  db.ref('materiauxBO/' + id).set({ nom, code, dateReception: dateReception || '', createdAt: new Date().toISOString() })
+    .then(() => { closeMatModal(); showToast('✅ Matériau ajouté!', 'success'); })
+    .catch((err) => { showToast('❌ Erreur: ' + err.message, 'error'); });
+}
+
+function deleteMat(id) {
+  if (!confirm('Supprimer ce matériau?')) return;
+  db.ref('materiauxBO/' + id).remove().catch(e => showToast('❌ ' + e.message, 'error'));
+  showToast('Matériau supprimé', 'info');
+}
+
+// ===== FICHE (DESKTOP) =====
+function openFiche(jobId) {
+  currentJobId = jobId;
+  const d = jobsData[jobId];
+  if (!d) return;
+  
+  document.getElementById('ficheAssigneeName').textContent = `${d.assignee || 'Job'} — #${d.order || '?'}`;
+  
+  document.getElementById('ficheFieldsList').innerHTML = `
+    <div class="fiche-field-row"><div class="fiche-field-label">🔢 N° Commande</div><div class="fiche-field-value"><input value="${escapeHtml(d.order)}" onchange="updateJobField('${jobId}','order',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">👤 Client</div><div class="fiche-field-value"><input value="${escapeHtml(d.client)}" onchange="updateJobField('${jobId}','client',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">👥 Assigné à</div><div class="fiche-field-value"><select onchange="updateJobField('${jobId}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===d.assignee?'selected':''}>${a}</option>`).join('')}</select></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">🧾 N° PO</div><div class="fiche-field-value"><input value="${escapeHtml(d.numeroPO || '')}" onchange="updateJobField('${jobId}','numeroPO',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">👩‍💼 Représentant</div><div class="fiche-field-value"><input value="${escapeHtml(d.representant || '')}" onchange="updateJobField('${jobId}','representant',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">📥 Date Reçue</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateRecue','${jobId}')">${formatDateDisplay(d.dateRecue)||'📅 Sélectionner...'}</div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">📦 Date Livraison</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison','${jobId}')">${formatDateDisplay(d.dateLivraison)||'📅 Sélectionner...'}</div></div>
+  `;
+  
+  // Render rappel section
+  renderRappelSection(jobId, d);
+  
+  renderMessages(jobId);
+  document.getElementById('ficheOverlay').classList.remove('hidden');
+  scrollChatToBottom();
+}
+
+function updateJobField(jobId, field, value) {
+  db.ref('jobs/' + jobId + '/' + field).set(value).catch(err => showToast('❌ ' + err.message, 'error'));
+}
+
+function closeFiche(e) {
+  if (e.target === document.getElementById('ficheOverlay') || e.target.classList.contains('fiche-close-btn')) {
+    document.getElementById('ficheOverlay').classList.add('hidden');
+    closeCompose();
+    currentJobId = null;
+  }
+}
+
+function deleteCurrentJob() {
+  if (!currentJobId) return;
+  if (!confirm('Supprimer ce job?')) return;
+  db.ref('jobs/' + currentJobId).remove().catch(e => showToast('❌ ' + e.message, 'error'));
+  document.getElementById('ficheOverlay').classList.add('hidden');
+  currentJobId = null;
+  showToast('Job supprimé', 'info');
+}
+
+// ===== CHAT SYSTEM (IDENTICAL TO MOULAGE) =====
+function renderMessages(jobId) {
+  const job = jobsData[jobId];
+  const mainList = document.getElementById('ficheMessagesList');
+  const pinnedSection = document.getElementById('pinnedSection');
+  const pinnedList = document.getElementById('pinnedMessagesList');
+  const questionsSection = document.getElementById('questionsSection');
+  const questionsList = document.getElementById('questionsMessagesList');
+  
+  if (!job?.messages?.length) {
+    mainList.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px;">Aucun message</div>';
+    pinnedSection.style.display = 'none';
+    questionsSection.style.display = 'none';
+    return;
+  }
+  
+  // Index all messages
+  job.messages.forEach((m, i) => { m._index = i; });
+  
+  const pinnedMessages = [];
+  const questionThreads = [];
+  const regularMessages = [];
+  
+  job.messages.forEach((m, i) => {
+    if (m.type === 'pinned') {
+      pinnedMessages.push(m);
+    } else if (m.type === 'problem' && !m.resolved) {
+      const replies = job.messages.filter(r => r.type === 'reply' && r.parentQuestionIndex === i);
+      questionThreads.push({ question: m, replies });
+    } else if (m.type === 'problem' && m.resolved) {
+      const replies = job.messages.filter(r => r.type === 'reply' && r.parentQuestionIndex === i);
+      regularMessages.push({ question: m, replies, isResolved: true });
+    } else if (m.type !== 'reply') {
+      regularMessages.push(m);
+    }
+  });
+  
+  // Pinned
+  if (pinnedMessages.length > 0) {
+    pinnedSection.style.display = 'block';
+    pinnedList.innerHTML = pinnedMessages.map(m => createRegularMessageHtml(m)).join('');
+  } else { pinnedSection.style.display = 'none'; }
+  
+  // Questions
+  if (questionThreads.length > 0) {
+    questionsSection.style.display = 'block';
+    questionsList.innerHTML = questionThreads.map(t => createThreadHtml(t.question, t.replies)).join('');
+  } else { questionsSection.style.display = 'none'; }
+  
+  // Regular
+  if (regularMessages.length > 0) {
+    mainList.innerHTML = regularMessages.map(item => {
+      if (item.question) return createThreadHtml(item.question, item.replies, true);
+      return createRegularMessageHtml(item);
+    }).join('');
+  } else {
+    mainList.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px;font-size:11px;">Tous les messages sont affichés en haut ⬆️</div>';
+  }
+}
+
+function createThreadHtml(question, replies, isResolved = false) {
+  const hasReplies = replies.length > 0;
+  const questionClass = hasReplies ? 'thread-question has-replies' : 'thread-question';
+  
+  let html = `<div class="thread-block" data-question-index="${question._index}">`;
+  html += `
+    <div class="${questionClass}" data-index="${question._index}">
+      <button class="msg-delete" onclick="deleteMessage(${question._index})" title="Supprimer">✕</button>
+      <button class="msg-edit" onclick="editMessage(${question._index})" title="Modifier">✏️</button>
+      <div class="msg-type">❓ Question</div>
+      <div class="msg-author">${escapeHtml(question.author)} • ${question.date}</div>
+      <div class="msg-content">${escapeHtml(question.content)}</div>
+      ${question.image ? `<img class="msg-image" src="${question.image}" onclick="openLightbox(this.src)">` : ''}
+      ${!hasReplies && !isResolved ? `<div class="thread-reply-zone"><button class="thread-reply-btn" onclick="openInlineCompose(${question._index})">💬 Répondre</button><button class="thread-resolve-btn" onclick="resolveThread(${question._index})" style="background:#16a34a;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:10px;cursor:pointer;font-weight:600;">✅ Résoudre</button></div>` : ''}
+    </div>`;
+  
+  replies.forEach((r, idx) => {
+    const isLast = idx === replies.length - 1;
+    html += `
+      <div class="thread-discussion" data-index="${r._index}">
+        <button class="msg-delete" onclick="deleteMessage(${r._index})" title="Supprimer">✕</button>
+        <button class="msg-edit" onclick="editMessage(${r._index})" title="Modifier">✏️</button>
+        <div class="msg-type">💬 Discussion</div>
+        <div class="msg-author">${escapeHtml(r.author)} • ${r.date}</div>
+        <div class="msg-content">${escapeHtml(r.content)}</div>
+        ${r.image ? `<img class="msg-image" src="${r.image}" onclick="openLightbox(this.src)">` : ''}
+        ${isLast && !isResolved ? `<div class="thread-reply-zone"><button class="thread-reply-btn" onclick="openInlineCompose(${question._index})">💬 Répondre</button><button class="thread-resolve-btn" onclick="resolveThread(${question._index})" style="background:#16a34a;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:10px;cursor:pointer;font-weight:600;">✅ Résoudre</button></div>` : ''}
+      </div>`;
+  });
+  
+  if (!isResolved) {
+    html += `
+      <div class="inline-compose" id="inlineCompose_${question._index}">
+        <div class="inline-compose-header">
+          <span class="inline-compose-title">💬 Votre message</span>
+          <button class="inline-compose-close" onclick="closeInlineCompose(${question._index})">✕</button>
+        </div>
+        <div class="inline-compose-content-wrapper">
+          <textarea class="inline-compose-textarea" id="inlineText_${question._index}" placeholder="Écrivez votre message..." onpaste="handleInlinePaste(event, ${question._index})"></textarea>
+          <div class="inline-compose-image" id="inlineImageZone_${question._index}">
+            <img id="inlineImagePreview_${question._index}" src="" alt="">
+            <button class="inline-compose-image-remove" onclick="removeInlineImage(${question._index})">✕</button>
+          </div>
+        </div>
+        <div class="inline-compose-footer">
+          <span class="inline-compose-hint">📎 Ctrl+V pour image</span>
+          <button class="inline-compose-btn" onclick="sendInlineReply(${question._index})">Envoyer</button>
+        </div>
+      </div>`;
+  }
+  
+  html += '</div>';
+  return html;
+}
+
+function createRegularMessageHtml(m) {
+  const typeLabels = { problem: '❓ Question', normal: '💬 Discussion', pinned: '📌 Épinglé' };
+  const typeColors = { problem: '#dc2626', normal: '#2563eb', pinned: '#ca8a04' };
+  const bgColors = { problem: '#fef2f2', normal: '#eff6ff', pinned: '#fefce8' };
+  const borderColors = { problem: '#fca5a5', normal: '#93c5fd', pinned: '#fde047' };
+  
+  return `
+    <div class="chat-message" data-index="${m._index}" style="background:${bgColors[m.type]||'#f8fafc'};border:1px solid ${borderColors[m.type]||'#e2e8f0'};">
+      <button class="chat-msg-delete" onclick="deleteMessage(${m._index})" title="Supprimer">✕</button>
+      <button class="chat-msg-edit" onclick="editMessage(${m._index})" title="Modifier">✏️</button>
+      <div class="chat-msg-type" style="color:${typeColors[m.type]||'#64748b'}">${typeLabels[m.type]||'💬 Message'}</div>
+      <div class="chat-msg-author">${escapeHtml(m.author)} • ${m.date}</div>
+      <div class="chat-msg-content">${escapeHtml(m.content)}</div>
+      ${m.image ? `<img src="${m.image}" style="max-width:100%;max-height:100px;margin-top:5px;border-radius:4px;cursor:pointer;" onclick="openLightbox(this.src)">` : ''}
+    </div>`;
+}
+
+// ===== INLINE COMPOSE =====
+function openInlineCompose(questionIndex) {
+  document.querySelectorAll('.inline-compose').forEach(z => z.classList.remove('active'));
+  const zone = document.getElementById(`inlineCompose_${questionIndex}`);
+  if (zone) {
+    zone.classList.add('active');
+    const textarea = document.getElementById(`inlineText_${questionIndex}`);
+    if (textarea) { textarea.value = ''; textarea.focus(); }
+    zone.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+function closeInlineCompose(qi) {
+  const zone = document.getElementById(`inlineCompose_${qi}`);
+  if (zone) zone.classList.remove('active');
+  inlineComposeImages[qi] = null;
+}
+
+function handleInlinePaste(e, qi) {
+  for (const item of e.clipboardData.items) {
+    if (item.type.includes('image')) {
+      e.preventDefault();
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const compressed = await compressImage(ev.target.result);
+        inlineComposeImages[qi] = compressed;
+        const preview = document.getElementById(`inlineImagePreview_${qi}`);
+        const zone = document.getElementById(`inlineImageZone_${qi}`);
+        if (preview) preview.src = compressed;
+        if (zone) zone.classList.add('has-image');
+      };
+      reader.readAsDataURL(item.getAsFile());
+      break;
+    }
+  }
+}
+
+function removeInlineImage(qi) {
+  inlineComposeImages[qi] = null;
+  const zone = document.getElementById(`inlineImageZone_${qi}`);
+  if (zone) zone.classList.remove('has-image');
+}
+
+function sendInlineReply(questionIndex) {
+  const textarea = document.getElementById(`inlineText_${questionIndex}`);
+  const content = textarea?.value?.trim();
+  const image = inlineComposeImages[questionIndex];
+  if (!content && !image) { showToast('⚠️ Écrivez un message', 'warning'); return; }
+  
+  const authorName = getCurrentUserName();
+  const authorEmail = currentUser?.email || 'unknown';
+  const job = jobsData[currentJobId];
+  const parentQuestion = job.messages[questionIndex];
+  let threadParticipants = parentQuestion?.threadParticipants || [];
+  
+  if (!threadParticipants.find(p => p.email === authorEmail)) {
+    threadParticipants.push({ name: authorName, email: authorEmail });
+    if (job.messages[questionIndex]) job.messages[questionIndex].threadParticipants = threadParticipants;
+  }
+  
+  const newMessage = {
+    id: 'msg_' + Date.now(), type: 'reply',
+    author: authorName, authorEmail,
+    date: new Date().toISOString().split('T')[0],
+    content: content || '(Image)', image: image || '',
+    parentQuestionIndex: questionIndex, sentTo: []
+  };
+  
+  if (!job.messages) job.messages = [];
+  job.messages.push(newMessage);
+  inlineComposeImages[questionIndex] = null;
+  
+  // Auto-notify thread participants
+  const destinataires = threadParticipants.filter(p => p.email !== authorEmail);
+  if (destinataires.length > 0) {
+    destinataires.forEach(dest => {
+      createNotification({ to: dest.email, toName: dest.name, from: authorEmail, fromName: authorName, jobId: currentJobId, jobName: `#${job.order}`, messageType: 'reply', messageContent: (content || '(Image)').substring(0, 100), timestamp: Date.now() });
+    });
+    const msgIndex = job.messages.length - 1;
+    job.messages[msgIndex].sentTo = destinataires.map(d => ({ name: d.name, email: d.email, sentAt: new Date().toISOString() }));
+    showToast(`📤 Réponse envoyée à: ${destinataires.map(d => d.name.split(' ')[0]).join(', ')}`, 'success');
+  } else { showToast('💬 Message ajouté', 'info'); }
+  
+  db.ref('jobs/' + currentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+  renderMessages(currentJobId);
+}
+
+// ===== RESOLVE THREAD =====
+function resolveThread(questionIndex) {
+  const jobId = currentJobId || mobileCurrentJobId;
+  if (!jobId) return;
+  const job = jobsData[jobId];
+  if (!job?.messages?.[questionIndex]) return;
+  job.messages[questionIndex].resolved = true;
+  job.messages[questionIndex].resolvedAt = new Date().toISOString();
+  job.messages[questionIndex].resolvedBy = getCurrentUserName();
+  db.ref('jobs/' + jobId).set(job).catch(err => showToast('❌ Erreur: ' + err.message, 'error'));
+  if (currentJobId) renderMessages(currentJobId);
+  if (mobileCurrentJobId && window.innerWidth <= 768) openMobileChat();
+  showToast('✅ Question résolue', 'success');
+}
+
+// ===== COMPOSE (DESKTOP) =====
+function openCompose(type) {
+  currentComposeType = type;
+  document.getElementById('composeZone').className = 'chat-compose-zone active ' + type;
+  document.getElementById('composeType').textContent = {problem:'❓ QUESTIONNEMENT',normal:'💬 DISCUSSION',pinned:'📌 ÉPINGLÉ'}[type];
+  document.getElementById('composeAuthor').textContent = getCurrentUserName();
+  document.getElementById('composeTextarea').focus();
+  scrollChatToBottom();
+}
+
+function closeCompose() {
+  document.getElementById('composeZone').className = 'chat-compose-zone';
+  document.getElementById('composeTextarea').value = '';
+  removeImage();
+}
+
+async function handlePaste(e) {
+  for (const item of e.clipboardData.items) {
+    if (item.type.includes('image')) {
+      e.preventDefault();
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const compressed = await compressImage(ev.target.result);
+        currentComposeImage = compressed;
+        document.getElementById('composeImg').src = compressed;
+        document.getElementById('composeImageZone').classList.add('has-image');
+      };
+      reader.readAsDataURL(item.getAsFile());
+    }
+  }
+}
+
+function removeImage() { currentComposeImage = null; document.getElementById('composeImg').src = ''; document.getElementById('composeImageZone').classList.remove('has-image'); }
+
+function sendMessage() {
+  if (!currentJobId) return;
+  const content = document.getElementById('composeTextarea').value.trim();
+  if (!content && !currentComposeImage) return;
+  
+  const job = jobsData[currentJobId];
+  if (!job.messages) job.messages = [];
+  
+  const authorName = getCurrentUserName();
+  const authorEmail = currentUser?.email || 'unknown';
+  
+  const newMessage = {
+    id: 'msg_' + Date.now(), type: currentComposeType,
+    author: authorName, authorEmail,
+    date: new Date().toISOString().split('T')[0],
+    content, image: currentComposeImage || '',
+    sentTo: [],
+    threadParticipants: currentComposeType === 'problem' ? [{ name: authorName, email: authorEmail }] : null
+  };
+  
+  job.messages.push(newMessage);
+  closeCompose();
+  renderMessages(currentJobId);
+  db.ref('jobs/' + currentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+  scrollChatToBottom();
+  
+  if (currentComposeType !== 'pinned') {
+    pendingMessageData = {
+      jobId: currentJobId, messageIndex: job.messages.length - 1,
+      message: newMessage, jobName: `#${job.order}`,
+      isNewThread: currentComposeType === 'problem'
+    };
+    showDestModal();
+  }
+}
+
+function scrollChatToBottom() {
+  const c = document.getElementById('chatScrollContainer');
+  if (c) setTimeout(() => { c.scrollTop = c.scrollHeight; }, 50);
+}
+
+// ===== DELETE MESSAGE =====
+function deleteMessage(i) {
+  if (!currentJobId) return;
+  deleteMsgCurrentJobId = currentJobId;
+  deleteMsgCurrentIndex = i;
+  deleteMsgIsMobile = false;
+  document.getElementById('deleteConfirmModal').classList.add('active');
+}
+
+function closeDeleteConfirmModal() {
+  document.getElementById('deleteConfirmModal').classList.remove('active');
+  deleteMsgCurrentJobId = null;
+  deleteMsgCurrentIndex = null;
+}
+
+function confirmDeleteMsg() {
+  if (!deleteMsgCurrentJobId || deleteMsgCurrentIndex === null) return;
+  const job = jobsData[deleteMsgCurrentJobId];
+  const deletedIndex = deleteMsgCurrentIndex;
+  job.messages.splice(deletedIndex, 1);
+  
+  // Reindex parentQuestionIndex to prevent orphaned replies
+  job.messages.forEach(m => {
+    if (m.parentQuestionIndex !== undefined && m.parentQuestionIndex !== null) {
+      if (m.parentQuestionIndex > deletedIndex) {
+        m.parentQuestionIndex = m.parentQuestionIndex - 1;
+      } else if (m.parentQuestionIndex === deletedIndex) {
+        // Parent was deleted — convert reply to normal message
+        m.type = 'normal';
+        delete m.parentQuestionIndex;
+      }
+    }
+  });
+  
+  if (deleteMsgIsMobile) { openMobileChat(); } else { renderMessages(deleteMsgCurrentJobId); }
+  db.ref('jobs/' + deleteMsgCurrentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+  closeDeleteConfirmModal();
+  showToast('🗑️ Message supprimé');
+}
+
+// ===== EDIT MESSAGE =====
+function editMessage(i) {
+  const jobId = currentJobId || mobileCurrentJobId;
+  if (!jobId) return;
+  const job = jobsData[jobId];
+  const msg = job.messages[i];
+  if (!msg) return;
+  
+  const container = document.querySelector(`[data-index="${i}"]`);
+  if (!container) return;
+  
+  const typeEl = container.querySelector('.msg-type, .chat-msg-type, .mobile-msg-type');
+  const textEl = container.querySelector('.msg-content, .chat-msg-content, .mobile-msg-content');
+  if (!textEl) return;
+  
+  editMsgOriginalText = msg.content || '';
+  editMsgCurrentJobId = jobId;
+  editMsgCurrentIndex = i;
+  
+  if (typeEl && !document.getElementById('editBadge')) {
+    const badge = document.createElement('span');
+    badge.className = 'edit-mode-badge'; badge.id = 'editBadge';
+    badge.textContent = '✏️ Modification';
+    typeEl.appendChild(badge);
+  }
+  
+  textEl.contentEditable = 'true'; textEl.id = 'editTextArea';
+  textEl.style.outline = 'none'; textEl.focus();
+  
+  const btns = document.createElement('div');
+  btns.className = 'edit-mode-buttons'; btns.id = 'editButtons';
+  btns.innerHTML = '<button class="cancel-btn" onclick="cancelEdit()">Annuler</button><button class="save-btn" onclick="saveEdit()">Sauvegarder</button>';
+  textEl.parentNode.insertBefore(btns, textEl.nextSibling);
+}
+
+function cancelEdit() {
+  const textEl = document.getElementById('editTextArea');
+  const badge = document.getElementById('editBadge');
+  const btns = document.getElementById('editButtons');
+  if (textEl) { textEl.textContent = editMsgOriginalText; textEl.contentEditable = 'false'; textEl.removeAttribute('id'); }
+  if (badge) badge.remove();
+  if (btns) btns.remove();
+  editMsgCurrentJobId = null; editMsgCurrentIndex = null;
+}
+
+function saveEdit() {
+  const textEl = document.getElementById('editTextArea');
+  const badge = document.getElementById('editBadge');
+  const btns = document.getElementById('editButtons');
+  if (!textEl || !editMsgCurrentJobId) return;
+  const newText = textEl.innerText.trim();
+  const job = jobsData[editMsgCurrentJobId];
+  const msg = job.messages[editMsgCurrentIndex];
+  if (newText && msg) {
+    msg.content = newText; msg.edited = true; msg.editedAt = new Date().toISOString();
+    db.ref('jobs/' + editMsgCurrentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+    showToast('✏️ Modifié');
+  }
+  if (textEl) { textEl.contentEditable = 'false'; textEl.removeAttribute('id'); }
+  if (badge) badge.remove();
+  if (btns) btns.remove();
+  editMsgCurrentJobId = null; editMsgCurrentIndex = null;
+}
+
+// ===== DEST MODAL =====
+function showDestModal() {
+  selectedDestinataires = [];
+  let membersHtml = '';
+  TEAM_MEMBERS.forEach(m => {
+    membersHtml += `<button type="button" class="dest-person-full" data-name="${m.name}" data-email="${m.email}" onclick="event.stopPropagation(); toggleDestinataire(this)">${m.name}</button>`;
+  });
+  document.getElementById('destColumns').innerHTML = `<div class="dest-grid-2col">${membersHtml}</div>`;
+  document.getElementById('destSelectedCount').textContent = '0 sélectionné(s)';
+  document.getElementById('destModalOverlay').classList.add('active');
+  document.querySelector('.dest-option.no-send')?.classList.remove('selected');
+}
+
+function closeDestModal(e, force) {
+  if (force || (e && e.target === document.getElementById('destModalOverlay'))) {
+    document.getElementById('destModalOverlay').classList.remove('active');
+    pendingMessageData = null; selectedDestinataires = [];
+  }
+}
+
+function selectDestOption(option) {
+  if (option === 'none') {
+    selectedDestinataires = [];
+    document.querySelectorAll('.dest-person-full').forEach(btn => btn.classList.remove('selected'));
+    document.querySelector('.dest-option.no-send').classList.add('selected');
+    closeDestModal(null, true);
+    showToast('📤 Message non envoyé', 'info');
+  }
+}
+
+function toggleDestinataire(btn) {
+  document.querySelector('.dest-option.no-send')?.classList.remove('selected');
+  btn.classList.toggle('selected');
+  const email = btn.dataset.email, name = btn.dataset.name;
+  if (btn.classList.contains('selected')) {
+    if (!selectedDestinataires.find(d => d.email === email)) selectedDestinataires.push({ name, email });
+  } else { selectedDestinataires = selectedDestinataires.filter(d => d.email !== email); }
+  document.getElementById('destSelectedCount').textContent = `${selectedDestinataires.length} sélectionné(s)`;
+}
+
+function sendToSelectedDestinatairesFinal() {
+  if (selectedDestinataires.length === 0) { showToast('⚠️ Sélectionnez au moins un destinataire', 'warning'); return; }
+  if (!pendingMessageData) { closeDestModal(null, true); return; }
+  
+  const { jobId, messageIndex, message, jobName, isNewThread } = pendingMessageData;
+  const authorEmail = currentUser?.email || 'unknown';
+  const authorName = getCurrentUserName();
+  
+  if (jobsData[jobId] && jobsData[jobId].messages[messageIndex]) {
+    jobsData[jobId].messages[messageIndex].sentTo = selectedDestinataires.map(d => ({ name: d.name, email: d.email, sentAt: new Date().toISOString() }));
+    
+    if (isNewThread || message.type === 'problem') {
+      jobsData[jobId].messages[messageIndex].threadParticipants = [{ name: authorName, email: authorEmail }, ...selectedDestinataires];
+    }
+    
+    selectedDestinataires.forEach(dest => {
+      createNotification({ to: dest.email, toName: dest.name, from: authorEmail, fromName: authorName, jobId, jobName, messageType: message.type, messageContent: message.content?.substring(0, 100) || '', timestamp: Date.now() });
+    });
+    
+    db.ref('jobs/' + jobId).set(jobsData[jobId]).catch(err => showToast('❌ ' + err.message, 'error'));
+    renderMessages(jobId);
+  }
+  
+  showToast(`📤 Envoyé à: ${selectedDestinataires.map(d => d.name.split(' ')[0]).join(', ')}`, 'success');
+  closeDestModal(null, true);
+}
+
+// ===== NOTIFICATIONS =====
+function createNotification(data) {
+  if (!db || !data.to || !data.from) return;
+  const notifData = {
+    to: data.to, toName: data.toName || '',
+    from: data.from, fromName: data.fromName || '',
+    jobId: data.jobId || '', jobName: data.jobName || '',
+    messageType: data.messageType || 'normal',
+    messageContent: (data.messageContent || '').substring(0, 150),
+    timestamp: data.timestamp || Date.now(),
+    read: false, createdAt: firebase.database.ServerValue.TIMESTAMP
+  };
+  db.ref('jobNotifications').push().set(notifData).catch(e => console.log('Notification error:', e.message));
+}
+
+// ===== CALENDAR =====
+function openCalendar(el, field, jobId) {
+  calendarTargetElement = el;
+  calendarTargetField = field;
+  calendarTargetJobId = jobId || currentJobId || mobileCurrentJobId;
+  calendarCurrentDate = new Date();
+  calendarSelectedDate = null;
+  renderCalendar();
+  document.getElementById('calendarOverlay').classList.add('active');
+}
+
+function closeCalendar(e, force) { if (force || (e && e.target === document.getElementById('calendarOverlay'))) document.getElementById('calendarOverlay').classList.remove('active'); }
+
+function renderCalendar() {
+  const y = calendarCurrentDate.getFullYear(), m = calendarCurrentDate.getMonth();
+  document.getElementById('calendarMonthYear').textContent = `${MOIS_FR[m]} ${y}`;
+  const firstDay = new Date(y,m,1).getDay(), totalDays = new Date(y,m+1,0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+  let html = '';
+  for (let i = firstDay-1; i >= 0; i--) html += `<div class="calendar-day other-month">${new Date(y,m,0).getDate()-i}</div>`;
+  for (let d = 1; d <= totalDays; d++) {
+    const curr = new Date(y,m,d); curr.setHours(0,0,0,0);
+    const cls = `calendar-day${curr.getTime()===today.getTime()?' today':''}${calendarSelectedDate&&curr.getTime()===calendarSelectedDate.getTime()?' selected':''}`;
+    html += `<div class="${cls}" onclick="selectDay(${y},${m},${d})">${d}</div>`;
+  }
+  for (let d = 1; d <= 42-firstDay-totalDays; d++) html += `<div class="calendar-day other-month">${d}</div>`;
+  document.getElementById('calendarDays').innerHTML = html;
+}
+
+function navigateCalendar(delta) { calendarCurrentDate.setMonth(calendarCurrentDate.getMonth()+delta); renderCalendar(); }
+function selectDay(y,m,d) { calendarSelectedDate = new Date(y,m,d); calendarCurrentDate = new Date(y,m,d); applyDateSelection(); }
+function selectToday() { calendarSelectedDate = new Date(); calendarCurrentDate = new Date(); applyDateSelection(); }
+function clearDate() { calendarSelectedDate = null; applyDateSelection(); }
+
+function applyDateSelection() {
+  // Handle modal calendar (job/mat creation modals)
+  if (modalCalendarTarget) {
+    const iso = calendarSelectedDate ? formatDateISO(calendarSelectedDate) : '';
+    const disp = calendarSelectedDate ? `${String(calendarSelectedDate.getDate()).padStart(2,'0')}/${String(calendarSelectedDate.getMonth()+1).padStart(2,'0')}/${String(calendarSelectedDate.getFullYear()).slice(2)}` : '';
+    
+    document.getElementById(modalCalendarTarget).value = iso;
+    const display = document.getElementById(modalCalendarTarget + 'Display');
+    if (display) {
+      display.textContent = disp || 'Sélectionner...';
+      if (disp) display.classList.add('has-date'); else display.classList.remove('has-date');
+    }
+    modalCalendarTarget = null;
+    closeCalendar(null, true);
+    return;
+  }
+  
+  // Handle fiche fields calendar
+  if (!calendarTargetElement) return;
+  const disp = calendarSelectedDate ? `${String(calendarSelectedDate.getDate()).padStart(2,'0')}/${String(calendarSelectedDate.getMonth()+1).padStart(2,'0')}/${String(calendarSelectedDate.getFullYear()).slice(2)}` : '--';
+  const iso = calendarSelectedDate ? formatDateISO(calendarSelectedDate) : '';
+  calendarTargetElement.textContent = disp === '--' ? '📅 Sélectionner...' : disp;
+  if (calendarTargetJobId && calendarTargetField) {
+    updateJobField(calendarTargetJobId, calendarTargetField, iso);
+  }
+  closeCalendar(null, true);
+}
+
+// ===== LIGHTBOX =====
+function openLightbox(imgSrc) {
+  currentLightboxZoom = 1;
+  const lb = document.getElementById('imageLightbox');
+  const img = document.getElementById('lightboxImage');
+  img.src = imgSrc; img.style.transform = 'scale(1)';
+  lb.classList.add('active');
+  lb.addEventListener('wheel', handleLightboxWheel, { passive: false });
+}
+
+function closeLightbox(e, force) {
+  if (force || (e && e.target === document.getElementById('imageLightbox'))) {
+    const lb = document.getElementById('imageLightbox');
+    lb.classList.remove('active'); document.getElementById('lightboxImage').src = '';
+    currentLightboxZoom = 1; lb.removeEventListener('wheel', handleLightboxWheel);
+  }
+}
+
+function handleLightboxWheel(e) { e.preventDefault(); zoomImage(e.deltaY < 0 ? 1.15 : 0.85); }
+
+function zoomImage(factor) {
+  currentLightboxZoom *= factor;
+  currentLightboxZoom = Math.max(0.3, Math.min(8, currentLightboxZoom));
+  document.getElementById('lightboxImage').style.transform = `scale(${currentLightboxZoom})`;
+}
+
+// ===== MOBILE =====
+function switchMobileTab(tab) {
+  mobileCurrentTab = tab;
+  document.querySelectorAll('.mobile-tab').forEach((t, i) => t.classList.toggle('active', (i === 0 && tab === 'jobs') || (i === 1 && tab === 'mat')));
+  document.getElementById('mobileAddFab').onclick = tab === 'jobs' ? () => openJobModal() : () => openMatModal();
+  renderMobileList();
+}
+
+function renderMobileList() {
+  const list = document.getElementById('mobileList');
+  if (mobileCurrentTab === 'jobs') {
+    const jobs = Object.entries(jobsData).sort((a, b) => new Date(a[1].dateRecue || 0) - new Date(b[1].dateRecue || 0));
+    if (jobs.length === 0) { list.innerHTML = '<div class="empty-state" style="padding:40px;">Aucun job</div>'; return; }
+    list.innerHTML = jobs.map(([id, job]) => {
+      const msgCount = getMessageCount(id);
+      const hasQ = hasUnresolvedQuestions(id);
+      return `
+        <div class="mobile-job-card" onclick="openMobileFiche('${id}')">
+          <div class="mobile-job-order">#${escapeHtml(job.order || '---')}</div>
+          <div class="mobile-job-client">${escapeHtml(job.client || 'Client')}</div>
+          <span class="mobile-job-assignee ${(job.assignee||'').toLowerCase()}">${escapeHtml(job.assignee||'')}</span>
+          <div class="mobile-job-date">📅 Livraison: ${formatDateDisplay(job.dateLivraison) || 'N/D'}</div>
+          ${msgCount > 0 ? `<span class="mobile-job-badge${hasQ?' alert':''}">${msgCount}</span>` : ''}
+        </div>`;
+    }).join('');
+  } else {
+    const mats = Object.entries(matBOData).sort((a, b) => new Date(a[1].dateReception || 0) - new Date(b[1].dateReception || 0));
+    if (mats.length === 0) { list.innerHTML = '<div class="empty-state" style="padding:40px;">📦 Aucun matériau en rupture</div>'; return; }
+    list.innerHTML = mats.map(([id, mat]) => `
+      <div class="mobile-mat-card">
+        <button class="mobile-mat-delete" onclick="event.stopPropagation();deleteMat('${id}')">✕</button>
+        <div class="mobile-mat-code">${escapeHtml(mat.code || '-')}</div>
+        <div class="mobile-mat-name">${escapeHtml(mat.nom || 'Matériau')}</div>
+        <span class="mobile-mat-date">📅 ${formatDateDisplay(mat.dateReception) || 'N/D'}</span>
+      </div>`).join('');
+  }
+}
+
+function openMobileFiche(jobId) {
+  mobileCurrentJobId = jobId;
+  const job = jobsData[jobId];
+  if (!job) return;
+  
+  document.getElementById('mobileFicheTitle').textContent = `#${job.order || '?'} — ${job.assignee || ''}`;
+  
+  document.getElementById('mobileFicheBody').innerHTML = `
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🔢 Commande</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.order)}" onchange="updateJobField('${jobId}','order',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👤 Client</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.client)}" onchange="updateJobField('${jobId}','client',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👥 Assigné à</div><div class="mobile-fiche-field-value"><select onchange="updateJobField('${jobId}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===job.assignee?'selected':''}>${a}</option>`).join('')}</select></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🧾 N° PO</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.numeroPO||'')}" onchange="updateJobField('${jobId}','numeroPO',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👩‍💼 Représentant</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.representant||'')}" onchange="updateJobField('${jobId}','representant',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📥 Date Reçue</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateRecue','${jobId}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateRecue)||'Sélectionner...'}</div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📦 Livraison</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison','${jobId}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateLivraison)||'Sélectionner...'}</div></div>
+    <div id="mobileRappelSection" style="margin-top:8px;"></div>
+  `;
+  
+  // Render rappel in mobile
+  const mobileRappelEl = document.getElementById('mobileRappelSection');
+  if (mobileRappelEl) {
+    const rappelJours = job.rappelJours || '';
+    const rappelAction = job.rappelAction || '';
+    const rappelRenouvelable = job.rappelRenouvelable || false;
+    let datesHtml = generateRappelDatesHtml(job);
+    mobileRappelEl.innerHTML = `
+      <div class="fiche-rappel-section" style="margin:0;border-radius:8px;">
+        <div class="fiche-rappel-title">🔔 Rappel</div>
+        <div class="fiche-rappel-row" style="flex-wrap:wrap;">
+          <div class="fiche-rappel-field">
+            <div class="fiche-rappel-label">Rappel dans</div>
+            <select class="fiche-rappel-select" onchange="setRappelFromDays('${jobId}', this.value)">
+              <option value="">-- Aucun --</option>
+              <option value="1" ${rappelJours==1?'selected':''}>1 jour</option>
+              <option value="2" ${rappelJours==2?'selected':''}>2 jours</option>
+              <option value="3" ${rappelJours==3?'selected':''}>3 jours</option>
+              <option value="5" ${rappelJours==5?'selected':''}>5 jours</option>
+              <option value="7" ${rappelJours==7?'selected':''}>1 semaine</option>
+              <option value="14" ${rappelJours==14?'selected':''}>2 semaines</option>
+              <option value="30" ${rappelJours==30?'selected':''}>1 mois</option>
+            </select>
+          </div>
+          <div class="fiche-rappel-field">
+            <div class="fiche-rappel-label">Action</div>
+            <select class="fiche-rappel-select" onchange="updateRappelAction('${jobId}', this.value)">
+              <option value="">-- Choisir --</option>
+              <option value="Appeler client" ${rappelAction==='Appeler client'?'selected':''}>Appeler client</option>
+              <option value="Faire le suivi" ${rappelAction==='Faire le suivi'?'selected':''}>Faire le suivi</option>
+              <option value="Vérifier statut" ${rappelAction==='Vérifier statut'?'selected':''}>Vérifier statut</option>
+              <option value="Envoyer courriel" ${rappelAction==='Envoyer courriel'?'selected':''}>Envoyer courriel</option>
+              <option value="Contacter intervenant" ${rappelAction==='Contacter intervenant'?'selected':''}>Contacter intervenant</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding-top:4px;">
+            <input type="checkbox" ${rappelRenouvelable?'checked':''} onchange="toggleRappelRenouvelable('${jobId}', this.checked)" style="accent-color:#f59e0b;">
+            <span style="font-size:10px;color:#92400e;font-weight:600;">Auto</span>
+            <button onclick="clearRappel('${jobId}')" style="background:#fee2e2;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px;">🗑️</button>
+          </div>
+        </div>
+        <div>${datesHtml}</div>
+      </div>
+    `;
+  }
+  
+  document.getElementById('mobileFichePage').classList.add('active');
+}
+
+function closeMobileFiche() {
+  document.getElementById('mobileFichePage').classList.remove('active');
+  mobileCurrentJobId = null;
+}
+
+function deleteMobileJob() {
+  if (!mobileCurrentJobId) return;
+  if (!confirm('Supprimer ce job?')) return;
+  db.ref('jobs/' + mobileCurrentJobId).remove().catch(e => showToast('❌ ' + e.message, 'error'));
+  closeMobileFiche();
+  showToast('Job supprimé', 'info');
+}
+
+// ===== MOBILE CHAT =====
+function renderMsgImages(msg) {
+  if (msg.images && msg.images.length > 0) {
+    const cls = msg.images.length === 1 ? 'mobile-msg-images-grid single' : 'mobile-msg-images-grid';
+    return `<div class="${cls}">${msg.images.map(img => `<img src="${img}" onclick="openLightbox(this.src)">`).join('')}</div>`;
+  }
+  if (msg.image) return `<img class="mobile-msg-image" src="${msg.image}" onclick="openLightbox(this.src)">`;
+  return '';
+}
+
+function openMobileChat() {
+  if (!mobileCurrentJobId) return;
+  const job = jobsData[mobileCurrentJobId];
+  if (!job) return;
+  
+  document.getElementById('mobileChatTitle').textContent = `💬 #${job.order || '?'}`;
+  
+  const messages = job.messages || [];
+  let html = '';
+  
+  // Pinned
+  const pinnedMsgs = messages.filter(m => m.type === 'pinned');
+  if (pinnedMsgs.length > 0) {
+    html += '<div class="mobile-pinned-section"><div class="mobile-pinned-header">📌 Messages épinglés</div>';
+    pinnedMsgs.forEach(msg => {
+      const idx = messages.indexOf(msg);
+      html += `<div class="mobile-chat-msg" data-index="${idx}" style="background:#fff;border-radius:6px;padding:8px;margin-bottom:6px;position:relative;">
+        <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${idx})">✕</button>
+        <button class="mobile-msg-edit-btn" onclick="editMessage(${idx})">✏️</button>
+        <div class="mobile-msg-author">${msg.author||''} • ${msg.date||''}</div>
+        <div class="mobile-msg-content">${escapeHtml(msg.content||'')}</div>
+        ${renderMsgImages(msg)}
+      </div>`;
+    });
+    html += '</div>';
+  }
+  
+  // Questions & threads
+  html += '<div class="mobile-questions-section"><div class="mobile-questions-header">❓ Questions & discussions</div>';
+  
+  const threads = {};
+  messages.forEach((msg, idx) => { if (msg.type === 'problem') threads[idx] = { question: msg, questionIdx: idx, replies: [] }; });
+  messages.forEach((msg, idx) => {
+    if (msg.type === 'reply' && msg.parentQuestionIndex !== undefined && threads[msg.parentQuestionIndex]) {
+      threads[msg.parentQuestionIndex].replies.push(msg);
+    }
+  });
+  
+  Object.values(threads).forEach(thread => {
+    const qIdx = messages.indexOf(thread.question);
+    html += `<div class="mobile-thread-block">
+      <div class="mobile-thread-question mobile-chat-msg" data-index="${qIdx}" style="position:relative;">
+        <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${qIdx})">✕</button>
+        <button class="mobile-msg-edit-btn" onclick="editMessage(${qIdx})">✏️</button>
+        <div class="mobile-msg-type question">❓ Question</div>
+        <div class="mobile-msg-author">${thread.question.author||''} • ${thread.question.date||''}</div>
+        <div class="mobile-msg-content">${escapeHtml(thread.question.content||'')}</div>
+        ${renderMsgImages(thread.question)}
+      </div>`;
+    thread.replies.forEach(reply => {
+      const rIdx = messages.indexOf(reply);
+      html += `<div class="mobile-thread-reply mobile-chat-msg" data-index="${rIdx}" style="position:relative;">
+        <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${rIdx})">✕</button>
+        <button class="mobile-msg-edit-btn" onclick="editMessage(${rIdx})">✏️</button>
+        <div class="mobile-msg-type reply">💬 Réponse</div>
+        <div class="mobile-msg-author">${reply.author||''} • ${reply.date||''}</div>
+        <div class="mobile-msg-content">${escapeHtml(reply.content||'')}</div>
+        ${renderMsgImages(reply)}
+      </div>`;
+    });
+    html += `<button class="mobile-reply-btn" onclick="mobileReplyTo(${thread.questionIdx})">💬 Répondre</button></div>`;
+  });
+  
+  // Normal messages
+  messages.filter(m => m.type === 'normal').forEach(msg => {
+    const idx = messages.indexOf(msg);
+    html += `<div class="mobile-chat-msg" data-index="${idx}" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;position:relative;">
+      <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${idx})">✕</button>
+      <button class="mobile-msg-edit-btn" onclick="editMessage(${idx})">✏️</button>
+      <div class="mobile-msg-author">💬 ${msg.author||''} • ${msg.date||''}</div>
+      <div class="mobile-msg-content">${escapeHtml(msg.content||'')}</div>
+      ${renderMsgImages(msg)}
+    </div>`;
+  });
+  
+  if (messages.length === 0) html += '<div style="text-align:center;padding:20px;color:#9ca3af;">Aucun message</div>';
+  html += '</div>';
+  
+  document.getElementById('mobileChatMessages').innerHTML = html;
+  
+  // Compose zone
+  document.getElementById('mobileChatCompose').innerHTML = `
+    <div class="mobile-compose-zone" id="mobileComposeZone">
+      <button class="mobile-compose-close" onclick="closeMobileCompose()">✕</button>
+      <div class="mobile-compose-type" id="mobileComposeTypeLabel">❓ QUESTIONNEMENT</div>
+      <div class="mobile-compose-author">${getCurrentUserName()}</div>
+      <div class="mobile-compose-content-wrapper"><textarea class="mobile-compose-textarea" id="mobileComposeTextarea" placeholder="Écrivez ici..."></textarea></div>
+      <div class="mobile-compose-preview" id="mobileComposePreview"></div>
+      <div class="mobile-compose-footer">
+        <button class="mobile-compose-photo-btn" onclick="document.getElementById('mobilePhotoInput').click()"><span class="btn-icon">📷</span><span class="btn-label">Photo</span></button>
+        <input type="file" id="mobilePhotoInput" accept="image/*" capture="environment" style="display:none" onchange="handleMobilePhoto(this)">
+        <button class="mobile-compose-send-btn" onclick="sendMobileMessage()"><span class="btn-icon">➤</span><span class="btn-label">Envoyer</span></button>
+      </div>
+    </div>
+    <div class="mobile-type-buttons">
+      <button class="mobile-type-btn problem" onclick="openMobileCompose('problem')"><span class="btn-icon">❓</span><span class="btn-label">Question</span></button>
+      <button class="mobile-type-btn normal" onclick="openMobileCompose('normal')"><span class="btn-icon">💬</span><span class="btn-label">Discussion</span></button>
+      <button class="mobile-type-btn pinned" onclick="openMobileCompose('pinned')"><span class="btn-icon">📌</span><span class="btn-label">Épinglé</span></button>
+    </div>`;
+  
+  document.getElementById('mobileChatPage').classList.add('active');
+}
+
+function openMobileCompose(type) {
+  mobileComposeType = type;
+  const zone = document.getElementById('mobileComposeZone');
+  zone.className = 'mobile-compose-zone active ' + type;
+  document.getElementById('mobileComposeTypeLabel').textContent = {problem:'❓ QUESTIONNEMENT',normal:'💬 DISCUSSION',pinned:'📌 ÉPINGLÉ'}[type];
+  document.getElementById('mobileComposeTextarea').focus();
+}
+
+function closeMobileCompose() {
+  document.getElementById('mobileComposeZone').className = 'mobile-compose-zone';
+  document.getElementById('mobileComposeTextarea').value = '';
+  mobilePhotosData = []; updateMobilePhotosPreview();
+}
+
+function handleMobilePhoto(input) {
+  if (!input.files[0]) return;
+  if (mobilePhotosData.length >= 6) { showToast('Max 6 photos', 'warning'); return; }
+  compressMobileImage(input.files[0], (compressed) => {
+    mobilePhotosData.push(compressed);
+    updateMobilePhotosPreview();
+  });
+  input.value = '';
+}
+
+function updateMobilePhotosPreview() {
+  const preview = document.getElementById('mobileComposePreview');
+  if (!preview) return;
+  if (mobilePhotosData.length === 0) { preview.classList.remove('active'); preview.innerHTML = ''; return; }
+  preview.classList.add('active');
+  preview.innerHTML = mobilePhotosData.map((img, i) => `
+    <div class="mobile-compose-preview-item">
+      <img src="${img}">
+      <button class="photo-remove-btn" onclick="removeMobilePhoto(${i})">✕</button>
+    </div>`).join('');
+}
+
+function removeMobilePhoto(idx) { mobilePhotosData.splice(idx, 1); updateMobilePhotosPreview(); }
+
+function mobileReplyTo(questionIdx) {
+  window.mobileReplyToIdx = questionIdx;
+  mobileComposeType = 'reply';
+  openMobileCompose('normal');
+  document.getElementById('mobileComposeTypeLabel').textContent = '💬 RÉPONSE';
+}
+
+function sendMobileMessage() {
+  const content = document.getElementById('mobileComposeTextarea').value.trim();
+  const hasPhotos = mobilePhotosData && mobilePhotosData.length > 0;
+  if ((!content && !hasPhotos) || !mobileCurrentJobId) return;
+  
+  const job = jobsData[mobileCurrentJobId];
+  if (!job.messages) job.messages = [];
+  
+  const authorName = getCurrentUserName();
+  const authorEmail = currentUser?.email || 'unknown';
+  const questionIdx = window.mobileReplyToIdx;
+  const imageData = hasPhotos ? mobilePhotosData[0] : '';
+  const imagesData = hasPhotos ? [...mobilePhotosData] : [];
+  
+  // Reply to existing question
+  if (mobileComposeType === 'reply' && questionIdx !== null && questionIdx !== undefined) {
+    const parentQuestion = job.messages[questionIdx];
+    let threadParticipants = parentQuestion?.threadParticipants || [];
+    if (!threadParticipants.find(p => p.email === authorEmail)) {
+      threadParticipants.push({ name: authorName, email: authorEmail });
+      if (job.messages[questionIdx]) job.messages[questionIdx].threadParticipants = threadParticipants;
+    }
+    
+    job.messages.push({
+      id: 'msg_' + Date.now(), type: 'reply', author: authorName, authorEmail,
+      date: new Date().toISOString().split('T')[0], content, image: imageData, images: imagesData,
+      sentTo: [], parentQuestionIndex: questionIdx
+    });
+    
+    const destinataires = threadParticipants.filter(p => p.email !== authorEmail);
+    if (destinataires.length > 0) {
+      destinataires.forEach(dest => createNotification({ to: dest.email, toName: dest.name, from: authorEmail, fromName: authorName, jobId: mobileCurrentJobId, jobName: `#${job.order}`, messageType: 'reply', messageContent: content.substring(0, 100), timestamp: Date.now() }));
+      const mi = job.messages.length - 1;
+      job.messages[mi].sentTo = destinataires.map(d => ({ name: d.name, email: d.email, sentAt: new Date().toISOString() }));
+      showToast(`📤 Réponse envoyée à: ${destinataires.map(d => d.name.split(' ')[0]).join(', ')}`, 'success');
+    } else { showToast('💬 Message ajouté', 'info'); }
+    
+    db.ref('jobs/' + mobileCurrentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+    closeMobileCompose(); window.mobileReplyToIdx = null; openMobileChat();
+    return;
+  }
+  
+  // New message
+  const newMessage = {
+    id: 'msg_' + Date.now(), type: mobileComposeType, author: authorName, authorEmail,
+    date: new Date().toISOString().split('T')[0], content, image: imageData, images: imagesData,
+    sentTo: [], threadParticipants: mobileComposeType === 'problem' ? [{ name: authorName, email: authorEmail }] : null
+  };
+  
+  job.messages.push(newMessage);
+  db.ref('jobs/' + mobileCurrentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+  closeMobileCompose(); window.mobileReplyToIdx = null; openMobileChat();
+  
+  if (mobileComposeType !== 'pinned') {
+    pendingMessageData = { jobId: mobileCurrentJobId, messageIndex: job.messages.length - 1, message: newMessage, jobName: `#${job.order}`, isNewThread: mobileComposeType === 'problem' };
+    showDestModal();
+  }
+}
+
+function deleteMobileMessage(msgIndex) {
+  deleteMsgCurrentJobId = mobileCurrentJobId;
+  deleteMsgCurrentIndex = msgIndex;
+  deleteMsgIsMobile = true;
+  document.getElementById('deleteConfirmModal').classList.add('active');
+}
+
+function closeMobileChat() {
+  document.getElementById('mobileChatPage').classList.remove('active');
+}
+
+// ===== SEARCH =====
+function handleGlobalSearch(value) {
+  currentSearchFilter = value.trim();
+  renderJobs();
+  renderMatBO();
+  if (window.innerWidth <= 768) renderMobileList();
+}
+
+// ===== NOTIFICATIONS SYSTEM =====
+function listenForNotifications() {
+  if (!db || !currentUser?.email) return;
+  db.ref('jobNotifications').orderByChild('to').equalTo(currentUser.email).on('value', snap => {
+    allNotifications = snap.val() || {};
+    updateNotifBell();
+  });
+}
+
+function updateNotifBell() {
+  const btn = document.getElementById('notifBellBtn');
+  const text = document.getElementById('notifBellText');
+  const unreadCount = Object.values(allNotifications).filter(n => !n.read).length;
+  if (unreadCount > 0) {
+    btn.classList.add('has-notifs');
+    text.textContent = `${unreadCount} new`;
+  } else {
+    btn.classList.remove('has-notifs');
+    text.textContent = '';
+  }
+}
+
+function toggleNotifPopup() {
+  const popup = document.getElementById('notifPopup');
+  popup.classList.toggle('active');
+  if (popup.classList.contains('active')) renderNotifList();
+}
+
+function closeNotifPopup() {
+  document.getElementById('notifPopup').classList.remove('active');
+}
+
+function renderNotifList() {
+  const list = document.getElementById('notifPopupList');
+  const entries = Object.entries(allNotifications).sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+  if (entries.length === 0) { list.innerHTML = '<div class="notif-empty">Aucune notification</div>'; return; }
+  list.innerHTML = entries.slice(0, 30).map(([id, n]) => {
+    const date = n.timestamp ? new Date(n.timestamp) : new Date();
+    const timeStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+    const icons = { problem: '❓', normal: '💬', reply: '↩️', pinned: '📌' };
+    return `<div class="notif-item${n.read ? '' : ' unread'}" onclick="openNotifDetail('${id}')">
+      <div class="notif-item-header">
+        <span class="notif-item-from">${icons[n.messageType]||'💬'} ${escapeHtml(n.fromName||'Utilisateur')}</span>
+        <span class="notif-item-time">${timeStr}</span>
+      </div>
+      <div class="notif-item-content">${escapeHtml((n.messageContent||'').substring(0, 80))}${(n.messageContent||'').length > 80 ? '...' : ''}</div>
+      <div class="notif-item-card">${escapeHtml(n.jobName||'Job')} <span class="notif-item-arrow">→</span></div>
+    </div>`;
+  }).join('');
+}
+
+function markAllNotifsRead() {
+  Object.entries(allNotifications).forEach(([id, n]) => {
+    if (!n.read) db.ref('jobNotifications/' + id + '/read').set(true).catch(() => {});
+  });
+  showToast('✓ Toutes les notifications marquées comme lues', 'info');
+  closeNotifPopup();
+}
+
+function openNotifDetail(notifId) {
+  const n = allNotifications[notifId];
+  if (!n) return;
+  notifDetailData = { notifId, ...n };
+  document.getElementById('notifDetailFrom').textContent = n.fromName || 'Utilisateur';
+  document.getElementById('notifDetailCard').textContent = n.jobName || 'Job';
+  const icons = { problem: '❓', normal: '💬', reply: '↩️', pinned: '📌' };
+  document.getElementById('notifDetailIcon').textContent = icons[n.messageType] || '💬';
+  if (!n.read) db.ref('jobNotifications/' + notifId + '/read').set(true).catch(() => {});
+  closeNotifPopup();
+  document.getElementById('notifDetailOverlay').classList.add('active');
+}
+
+function closeNotifDetail() {
+  document.getElementById('notifDetailOverlay').classList.remove('active');
+  notifDetailData = null;
+}
+
+function goToNotifCard() {
+  if (!notifDetailData?.jobId) { closeNotifDetail(); return; }
+  const jobId = notifDetailData.jobId;
+  closeNotifDetail();
+  if (window.innerWidth <= 768) { openMobileFiche(jobId); } else { openFiche(jobId); }
+}
+
+// ===== SETTINGS =====
+function openSettingsModal() {
+  document.getElementById('settingsUserEmail').textContent = currentUser?.email || '--';
+  document.getElementById('settingsFirebaseStatus').textContent = db ? '🟢 Connecté' : '🔴 Déconnecté';
+  document.getElementById('settingsJobCount').textContent = Object.keys(jobsData).length;
+  document.getElementById('settingsMatCount').textContent = Object.keys(matBOData).length;
+  document.getElementById('settingsModal').classList.add('active');
+}
+
+function closeSettingsModal(e, force) {
+  if (force || (e && e.target === document.getElementById('settingsModal'))) {
+    document.getElementById('settingsModal').classList.remove('active');
+  }
+}
+
+// ===== RAPPEL SYSTEM =====
+function renderRappelSection(jobId, d) {
+  const section = document.getElementById('ficheRappelSection');
+  if (!section) return;
+  
+  const rappelJours = d.rappelJours || '';
+  const rappelAction = d.rappelAction || '';
+  const rappelRenouvelable = d.rappelRenouvelable || false;
+  
+  let datesHtml = generateRappelDatesHtml(d);
+  
+  section.innerHTML = `
+    <div class="fiche-rappel-title">🔔 Rappel</div>
+    <div class="fiche-rappel-row">
+      <div class="fiche-rappel-field">
+        <div class="fiche-rappel-label">Rappel dans</div>
+        <select class="fiche-rappel-select" id="ficheRappelJours" onchange="setRappelFromDays('${jobId}', this.value)">
+          <option value="">-- Aucun --</option>
+          <option value="1" ${rappelJours==1?'selected':''}>1 jour</option>
+          <option value="2" ${rappelJours==2?'selected':''}>2 jours</option>
+          <option value="3" ${rappelJours==3?'selected':''}>3 jours</option>
+          <option value="5" ${rappelJours==5?'selected':''}>5 jours</option>
+          <option value="7" ${rappelJours==7?'selected':''}>1 semaine</option>
+          <option value="14" ${rappelJours==14?'selected':''}>2 semaines</option>
+          <option value="30" ${rappelJours==30?'selected':''}>1 mois</option>
+        </select>
+      </div>
+      <div class="fiche-rappel-field">
+        <div class="fiche-rappel-label">Action</div>
+        <select class="fiche-rappel-select" id="ficheRappelAction" onchange="updateRappelAction('${jobId}', this.value)">
+          <option value="">-- Choisir --</option>
+          <option value="Appeler client" ${rappelAction==='Appeler client'?'selected':''}>Appeler client</option>
+          <option value="Faire le suivi" ${rappelAction==='Faire le suivi'?'selected':''}>Faire le suivi</option>
+          <option value="Vérifier statut" ${rappelAction==='Vérifier statut'?'selected':''}>Vérifier statut</option>
+          <option value="Envoyer courriel" ${rappelAction==='Envoyer courriel'?'selected':''}>Envoyer courriel</option>
+          <option value="Contacter intervenant" ${rappelAction==='Contacter intervenant'?'selected':''}>Contacter intervenant</option>
+        </select>
+      </div>
+      <div class="fiche-rappel-field" style="flex:0.6;">
+        <div class="fiche-rappel-label">Renouveler</div>
+        <div class="fiche-rappel-checkbox">
+          <input type="checkbox" id="ficheRappelRenouvelable" ${rappelRenouvelable?'checked':''} onchange="toggleRappelRenouvelable('${jobId}', this.checked)">
+          <label for="ficheRappelRenouvelable">Auto</label>
+        </div>
+      </div>
+      <div style="flex:0 0 auto; display:flex; align-items:flex-end;">
+        <button class="fiche-rappel-clear-btn" onclick="clearRappel('${jobId}')">🗑️</button>
+      </div>
+    </div>
+    <div id="ficheRappelDates">${datesHtml}</div>
+  `;
+}
+
+function setRappelFromDays(jobId, jours) {
+  if (!jobsData[jobId]) return;
+  
+  if (!jours) {
+    delete jobsData[jobId].rappelJours;
+    delete jobsData[jobId].rappelDate;
+  } else {
+    const days = parseInt(jours);
+    jobsData[jobId].rappelJours = days;
+    const rappelDate = new Date();
+    rappelDate.setDate(rappelDate.getDate() + days);
+    jobsData[jobId].rappelDate = rappelDate.toISOString().split('T')[0];
+  }
+  
+  updateRappelDatesDisplay(jobId);
+  db.ref('jobs/' + jobId + '/rappelJours').set(jobsData[jobId].rappelJours || null).catch(err => showToast('❌ ' + err.message, 'error'));
+  db.ref('jobs/' + jobId + '/rappelDate').set(jobsData[jobId].rappelDate || null).catch(err => showToast('❌ ' + err.message, 'error'));
+  
+  if (jours) showToast('🔔 Rappel dans ' + jours + ' jour(s)', 'success');
+  renderJobs();
+}
+
+function updateRappelAction(jobId, action) {
+  if (!jobsData[jobId]) return;
+  jobsData[jobId].rappelAction = action;
+  db.ref('jobs/' + jobId + '/rappelAction').set(action || null).catch(err => showToast('❌ ' + err.message, 'error'));
+}
+
+function toggleRappelRenouvelable(jobId, checked) {
+  if (!jobsData[jobId]) return;
+  jobsData[jobId].rappelRenouvelable = checked;
+  updateRappelDatesDisplay(jobId);
+  db.ref('jobs/' + jobId + '/rappelRenouvelable').set(checked).catch(err => showToast('❌ ' + err.message, 'error'));
+}
+
+function clearRappel(jobId) {
+  if (!jobsData[jobId]) return;
+  delete jobsData[jobId].rappelJours;
+  delete jobsData[jobId].rappelDate;
+  delete jobsData[jobId].rappelAction;
+  delete jobsData[jobId].rappelRenouvelable;
+  
+  const joursSelect = document.getElementById('ficheRappelJours');
+  const actionSelect = document.getElementById('ficheRappelAction');
+  const renouvelableCheck = document.getElementById('ficheRappelRenouvelable');
+  if (joursSelect) joursSelect.value = '';
+  if (actionSelect) actionSelect.value = '';
+  if (renouvelableCheck) renouvelableCheck.checked = false;
+  
+  updateRappelDatesDisplay(jobId);
+  
+  db.ref('jobs/' + jobId + '/rappelJours').remove().catch(e => console.error(e));
+  db.ref('jobs/' + jobId + '/rappelDate').remove().catch(e => console.error(e));
+  db.ref('jobs/' + jobId + '/rappelAction').remove().catch(e => console.error(e));
+  db.ref('jobs/' + jobId + '/rappelRenouvelable').remove().catch(e => console.error(e));
+  
+  showToast('🔔 Rappel annulé', 'info');
+  renderJobs();
+}
+
+function generateRappelDatesHtml(data) {
+  if (!data.rappelDate || !data.rappelJours) return '';
+  
+  const jours = parseInt(data.rappelJours);
+  const dates = [];
+  const today = new Date().toISOString().split('T')[0];
+  
+  if (data.rappelRenouvelable) {
+    for (let i = 0; i < 6; i++) {
+      const date = new Date(data.rappelDate);
+      date.setDate(date.getDate() + (jours * i));
+      dates.push(date.toISOString().split('T')[0]);
+    }
+  } else {
+    dates.push(data.rappelDate);
+  }
+  
+  let html = '<div class="fiche-rappel-dates">';
+  dates.forEach(d => {
+    let cls = 'rappel-date-future';
+    let prefix = '📅';
+    if (d < today) { cls = 'rappel-date-past'; prefix = '⚠️'; }
+    else if (d === today) { cls = 'rappel-date-today'; prefix = '🔔'; }
+    
+    const formatted = formatDateDisplay(d) || d;
+    const action = data.rappelAction ? ` — ${data.rappelAction}` : '';
+    html += `<div class="rappel-date-item ${cls}">${prefix} ${formatted}${action}</div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+function updateRappelDatesDisplay(jobId) {
+  const el = document.getElementById('ficheRappelDates');
+  if (!el || !jobsData[jobId]) return;
+  el.innerHTML = generateRappelDatesHtml(jobsData[jobId]);
+}
+
+// ===== MODAL CALENDAR (for creation modals) =====
+let modalCalendarTarget = null;
+
+function openModalCalendar(targetId) {
+  modalCalendarTarget = targetId;
+  const currentVal = document.getElementById(targetId).value;
+  if (currentVal) {
+    calendarCurrentDate = new Date(currentVal + 'T12:00:00');
+    calendarSelectedDate = new Date(currentVal + 'T12:00:00');
+  } else {
+    calendarCurrentDate = new Date();
+    calendarSelectedDate = null;
+  }
+  renderCalendar();
+  document.getElementById('calendarOverlay').classList.add('active');
+}
+
+// ===== RESET MODAL DATES ON OPEN =====
+
+/* ═══ BACKUP / RECOVERY LOG ═══ */
+function jobsCreateBackup() {
+  if (!db) return;
+  var backup = { timestamp: new Date().toISOString(), jobs: jobsData };
+  var backupKey = 'backup_' + new Date().toISOString().replace(/[:.]/g, '-');
+  db.ref('jobsBackups/' + backupKey).set(backup).then(function() {
+    console.log('💾 Jobs backup créé:', backupKey);
+  }).catch(function(err) { console.error('❌ Jobs backup error:', err.message); });
+}
+setInterval(function() { jobsCreateBackup(); }, 30 * 60 * 1000);
+window.addEventListener('beforeunload', function() { jobsCreateBackup(); });
+</script>
+</body>
+</html>

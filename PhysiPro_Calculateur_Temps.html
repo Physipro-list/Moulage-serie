@@ -1,0 +1,2047 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PhysiPro - Calculateur Temps</title>
+  <meta name="theme-color" content="#1e3a5f">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-dark: #0a1628;
+  --bg-card: #0f1d32;
+  --bg-panel: #132240;
+  --primary: #3b82f6;
+  --primary-deep: #1e40af;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --cyan: #0ea5e9;
+  --text: #e2e8f0;
+  --text-muted: #64748b;
+  --border: rgba(59,130,246,0.2);
+}
+
+body {
+  font-family: 'Outfit', 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg-dark);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══ LOGIN ═══ */
+.login-overlay {
+  position: fixed; inset: 0;
+  background: linear-gradient(to bottom, #0b1d36, #3f6eb8);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 99999; padding: 20px; box-sizing: border-box;
+}
+.login-overlay.hidden { display: none; }
+.login-panel {
+  background: linear-gradient(to bottom, #0b2343, #06315a);
+  border-radius: 16px; border: 1px solid rgba(255,255,255,0.25);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.85);
+  padding: 25px 30px; max-width: 420px; width: 100%;
+  color: #fff; text-align: center;
+}
+.login-logo-container {
+  width: 280px; height: 100px; margin: 10px auto 15px auto;
+  display: flex; align-items: center; justify-content: center;
+}
+.login-logo-container img { height: 90px; width: auto; object-fit: contain; }
+.login-title-container { text-align: center; margin-bottom: 8px; }
+.login-title { font-size: 16px; font-weight: 700; margin-bottom: 3px; line-height: 1.3; color: #fff; }
+.login-author {
+  font-family: 'Brush Script MT', 'Segoe Script', 'Bradley Hand', cursive;
+  font-size: 18px; color: rgba(255,255,255,0.7); font-style: italic;
+}
+.login-subtitle { font-size: 12px; opacity: 0.8; margin-bottom: 15px; color: #fff; }
+#loginForm { width: 100%; }
+.login-input {
+  width: 100%; padding: 12px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3);
+  color: #fff; font-size: 15px; text-align: center;
+  margin-bottom: 12px; box-sizing: border-box;
+}
+.login-input::placeholder { color: rgba(255,255,255,0.5); font-size: 13px; }
+.login-input:focus { outline: none; border-color: #00aaff; box-shadow: 0 0 10px rgba(0,170,255,0.3); }
+.login-btn {
+  width: 100%; padding: 12px; border-radius: 999px; border: none;
+  background: linear-gradient(to bottom, #00aaff, #0077cc);
+  color: #fff; font-weight: 700; font-size: 13px; cursor: pointer;
+  margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.login-btn:hover { background: linear-gradient(to bottom, #00bbff, #0088dd); transform: translateY(-1px); }
+.login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.login-error { color: #ff6666; font-size: 11px; margin-top: 8px; min-height: 18px; }
+.login-remember {
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px; margin: 8px 0 10px 0; font-size: 12px; color: rgba(255,255,255,0.8);
+}
+.login-remember input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #00aaff; }
+.login-remember label { cursor: pointer; }
+
+/* ═══ TOPBAR ═══ */
+.topbar {
+  height: 75px; min-height: 75px;
+  background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%);
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.16), 0 2px 6px rgba(0,0,0,0.45);
+  display: flex; align-items: center; padding: 0 24px;
+  position: relative; z-index: 10; flex-shrink: 0;
+}
+.topbar-left { display: flex; align-items: center; gap: 14px; min-width: 200px; }
+.topbar-center { flex: 1; text-align: center; }
+.topbar-title {
+  font-family: 'Outfit', sans-serif; font-size: 18px; font-weight: 600;
+  color: rgba(255,255,255,.9); letter-spacing: 0.8px; text-transform: uppercase;
+}
+.topbar-right { display: flex; align-items: center; gap: 14px; min-width: 200px; justify-content: flex-end; }
+.topbar-user { font-size: 12px; color: rgba(255,255,255,.7); font-weight: 400; text-align: right; line-height: 1.3; }
+.topbar-user strong { color: #fff; font-weight: 600; }
+.topbar-btn {
+  background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+  color: rgba(255,255,255,.8); font-family: 'Outfit', sans-serif;
+  font-size: 11px; font-weight: 500; padding: 6px 14px; border-radius: 8px;
+  cursor: pointer; transition: all 0.25s; letter-spacing: 0.3px;
+}
+.topbar-btn:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.3); }
+.topbar-btn.logout:hover { background: rgba(239,68,68,.2); border-color: rgba(239,68,68,.4); color: #fca5a5; }
+
+/* === LOGO NAV MENU === */
+.logo-flip-container{position:relative;cursor:pointer;z-index:2;}
+.logo-main{display:flex;flex-direction:column;align-items:center;}
+.logo-top-fixed img{height:40px;width:auto;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));}
+.logo-bottom-text{font-size:15px;font-weight:600;color:#fff;text-shadow:1px 1px 3px rgba(0,0,0,.6);margin-top:-4px;}
+.logo-menu{position:fixed;top:0;left:145px;right:0;min-height:75px;background:linear-gradient(to bottom,#04152c 0%,#2a6bc9 100%);padding:8px 20px;opacity:0;visibility:hidden;transform:translateY(-10px);transition:all .3s ease;z-index:99990;display:flex;flex-wrap:wrap;align-items:center;gap:8px;box-shadow:0 4px 15px rgba(0,0,0,.4);}
+.logo-flip-container:hover .logo-menu{opacity:1;visibility:visible;transform:translateY(0);}
+.logo-menu:hover{opacity:1;visibility:visible;transform:translateY(0);}
+.logo-menu-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:4px 8px;font-family:'Segoe UI',sans-serif;color:#fff;cursor:pointer;transition:all .2s;border-radius:6px;background:transparent;border:2px solid transparent;min-width:70px;height:58px;text-decoration:none;position:relative;}
+.logo-menu-item:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);}
+.logo-menu-item.active{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);}
+.logo-menu-icon-img{height:32px;width:auto;object-fit:contain;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));transition:transform .2s;}
+.logo-menu-item:hover .logo-menu-icon-img{transform:scale(1.05);}
+.logo-menu-text{font-size:11px;font-weight:700;text-align:center;text-shadow:1px 1px 3px rgba(0,0,0,.8);white-space:nowrap;margin-top:-2px;letter-spacing:.3px;}
+
+/* ═══ MAIN LAYOUT ═══ */
+.main-container {
+  flex: 1; display: flex; flex-direction: column;
+  max-width: 1100px; width: 100%; margin: 0 auto;
+  padding: 16px; overflow: auto;
+}
+
+/* ═══ CALC HEADER ═══ */
+.calc-header {
+  text-align: center; margin-bottom: 16px;
+}
+.calc-header h2 {
+  font-size: 22px; font-weight: 800; color: #fff;
+  letter-spacing: 0.5px;
+}
+.calc-subtitle {
+  font-size: 13px; color: var(--text-muted); margin-top: 4px;
+}
+
+/* ═══ TABS ═══ */
+.calc-tabs {
+  display: flex; gap: 4px; margin-bottom: 16px;
+  background: rgba(0,0,0,0.3); border-radius: 10px; padding: 4px;
+}
+.calc-tab {
+  flex: 1; padding: 10px 12px; border: none; border-radius: 8px;
+  background: transparent; color: var(--text-muted);
+  font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.25s; text-align: center;
+}
+.calc-tab:hover { color: #fff; background: rgba(255,255,255,0.05); }
+.calc-tab.active {
+  background: linear-gradient(135deg, var(--primary-deep), var(--primary));
+  color: #fff; box-shadow: 0 2px 8px rgba(59,130,246,0.3);
+}
+.calc-tab-content { display: none; }
+.calc-tab-content.active { display: block; }
+
+/* ═══ SEARCH / FILTER BAR ═══ */
+.filter-bar {
+  display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
+}
+.filter-bar input, .filter-bar select {
+  padding: 10px 14px; border: 1px solid var(--border);
+  border-radius: 8px; background: rgba(0,0,0,0.3); color: #fff;
+  font-family: 'Outfit', sans-serif; font-size: 13px; flex: 1; min-width: 180px;
+}
+.filter-bar input:focus, .filter-bar select:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+}
+.filter-bar select option { background: #1e3a5f; color: #fff; }
+
+/* ═══ TABLE ═══ */
+.calc-table-wrap {
+  max-height: 500px; overflow-y: auto; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg-card);
+}
+.calc-table-wrap::-webkit-scrollbar { width: 6px; }
+.calc-table-wrap::-webkit-scrollbar-track { background: transparent; }
+.calc-table-wrap::-webkit-scrollbar-thumb { background: rgba(59,130,246,0.3); border-radius: 3px; }
+
+.calc-table {
+  width: 100%; border-collapse: collapse;
+}
+.calc-table thead {
+  background: linear-gradient(135deg, var(--primary-deep), var(--primary));
+  position: sticky; top: 0; z-index: 2;
+}
+.calc-table th {
+  padding: 12px 14px; font-size: 12px; font-weight: 700;
+  text-align: left; color: #fff; letter-spacing: 0.5px; text-transform: uppercase;
+}
+.calc-table td {
+  padding: 10px 14px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.calc-table tbody tr { transition: background 0.15s; }
+.calc-table tbody tr:hover { background: rgba(59,130,246,0.08); }
+.calc-table .code-cell { font-weight: 700; color: var(--cyan); white-space: nowrap; }
+.calc-table .cat-cell { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.calc-table .time-cell { font-weight: 600; white-space: nowrap; }
+.calc-table .time-cell.zero { color: var(--text-muted); }
+.calc-table .time-cell.set { color: var(--success); }
+
+.calc-counter {
+  text-align: center; font-size: 12px; color: var(--text-muted);
+  margin-top: 10px; font-weight: 500;
+}
+
+/* ═══ DEVIS TAB ═══ */
+.devis-textarea {
+  width: 100%; min-height: 280px; padding: 16px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: rgba(0,0,0,0.3); color: #fff;
+  font-family: 'Outfit', monospace; font-size: 13px; line-height: 1.6;
+  resize: vertical;
+}
+.devis-textarea:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+}
+.devis-textarea::placeholder { color: var(--text-muted); }
+
+.devis-buttons {
+  display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap;
+}
+.btn {
+  padding: 10px 20px; border: none; border-radius: 8px;
+  font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; display: inline-flex;
+  align-items: center; gap: 6px;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary-deep), var(--primary));
+  color: #fff; box-shadow: 0 2px 8px rgba(59,130,246,0.25);
+}
+.btn-primary:hover { box-shadow: 0 4px 16px rgba(59,130,246,0.35); }
+.btn-secondary {
+  background: rgba(255,255,255,0.08); color: var(--text-muted);
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.btn-secondary:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.btn-success {
+  background: linear-gradient(135deg, #059669, var(--success));
+  color: #fff; box-shadow: 0 2px 8px rgba(16,185,129,0.25);
+}
+.btn-success:hover { box-shadow: 0 4px 16px rgba(16,185,129,0.35); }
+.btn-warning {
+  background: linear-gradient(135deg, #d97706, var(--warning));
+  color: #fff;
+}
+.btn-print { display: none; }
+.btn-print.visible { display: inline-flex; }
+
+/* ═══ RESULTS ═══ */
+.results-section { margin-top: 20px; }
+
+.result-total {
+  background: linear-gradient(135deg, rgba(14,165,233,0.15), rgba(59,130,246,0.1));
+  border: 1px solid rgba(14,165,233,0.3); border-radius: 10px;
+  padding: 16px 20px; margin-bottom: 16px; text-align: center;
+}
+.result-total-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+.result-total-value { font-size: 28px; font-weight: 800; color: var(--cyan); margin-top: 4px; }
+
+.result-found, .result-notfound {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px; margin-bottom: 14px;
+}
+.result-found h3, .result-notfound h3 {
+  font-size: 14px; font-weight: 700; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.result-found h3 { color: var(--success); }
+.result-notfound h3 { color: var(--danger); }
+
+.notfound-list { list-style: none; }
+.notfound-list li {
+  padding: 6px 0; font-size: 13px; color: var(--text-muted);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.notfound-list li::before { content: "• "; color: var(--danger); }
+
+/* ═══ EDIT TAB ═══ */
+.edit-denied {
+  text-align: center; padding: 60px 20px;
+  color: var(--text-muted); font-size: 15px;
+}
+.edit-denied-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+
+.edit-actions {
+  display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;
+}
+.edit-stat {
+  margin-left: auto; font-size: 12px; color: var(--text-muted); font-weight: 500;
+}
+
+/* Add code modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: none; align-items: center; justify-content: center; z-index: 99998;
+}
+.modal-overlay.show { display: flex; }
+.modal-box {
+  background: var(--bg-panel); border: 2px solid var(--primary);
+  border-radius: 14px; padding: 24px; width: 100%; max-width: 440px;
+}
+.modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+.modal-field { margin-bottom: 12px; }
+.modal-field label { display: block; font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.modal-field input, .modal-field select {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: 8px; background: rgba(0,0,0,0.3); color: #fff;
+  font-family: 'Outfit', sans-serif; font-size: 13px;
+}
+.modal-field input:focus, .modal-field select:focus { outline: none; border-color: var(--primary); }
+.modal-field select option { background: #1e3a5f; }
+.modal-buttons { display: flex; gap: 10px; margin-top: 16px; }
+.modal-buttons .btn { flex: 1; justify-content: center; }
+
+.btn-delete-code {
+  background: none; border: none; color: var(--danger); cursor: pointer;
+  font-size: 16px; padding: 4px 8px; border-radius: 4px; opacity: 0.5;
+  transition: all 0.2s;
+}
+.btn-delete-code:hover { opacity: 1; background: rgba(239,68,68,0.15); }
+
+.calc-time-input {
+  width: 70px; padding: 6px 8px; text-align: center;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: rgba(0,0,0,0.3); color: #fff;
+  font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 600;
+  -moz-appearance: textfield;
+}
+.calc-time-input::-webkit-outer-spin-button,
+.calc-time-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.calc-time-input:focus {
+  outline: none; border-color: var(--warning);
+  box-shadow: 0 0 0 3px rgba(245,158,11,0.15);
+}
+
+.save-bar {
+  position: sticky; bottom: 0; padding: 14px;
+  background: linear-gradient(to top, var(--bg-dark) 60%, transparent);
+  text-align: center;
+}
+
+/* ═══ TOAST ═══ */
+.toast-container {
+  position: fixed; top: 85px; right: 20px; z-index: 99999;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+  padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  color: #fff; animation: slideIn 0.3s ease, fadeOut 0.5s ease 2.5s forwards;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.toast.success { background: linear-gradient(135deg, #059669, var(--success)); }
+.toast.warning { background: linear-gradient(135deg, #d97706, var(--warning)); }
+.toast.info { background: linear-gradient(135deg, var(--primary-deep), var(--primary)); }
+
+@keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes fadeOut { to { opacity: 0; transform: translateY(-10px); } }
+
+/* ═══ PRINT ═══ */
+#printContent { display: none; }
+
+@media print {
+  body * { visibility: hidden; }
+  #printContent, #printContent * { visibility: visible; }
+  #printContent {
+    position: absolute; left: 0; top: 0; width: 100%;
+    display: block !important;
+  }
+  .print-grid {
+    display: flex; flex-wrap: wrap; gap: 0;
+  }
+  .print-ticket {
+    width: 31%; display: inline-block; margin: 1%;
+    padding: 12px; border: 1px solid #ddd;
+    page-break-inside: avoid; font-family: Arial, sans-serif; color: #000;
+  }
+  .print-header { font-size: 10px; color: #666; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-bottom: 6px; }
+  .print-code { font-size: 18px; font-weight: bold; margin: 4px 0; }
+  .print-desc { font-size: 10px; color: #555; margin-bottom: 4px; }
+  .print-time { font-size: 14px; color: #1e40af; font-weight: bold; }
+}
+
+/* ═══ RESPONSIVE ═══ */
+@media (max-width: 768px) {
+  .topbar { padding: 0 12px; }
+  .topbar-title { font-size: 14px; }
+  .topbar-user { display: none; }
+  .main-container { padding: 10px; }
+  .calc-header h2 { font-size: 18px; }
+  .filter-bar { flex-direction: column; }
+  .filter-bar input, .filter-bar select { min-width: 100%; }
+  .calc-table th, .calc-table td { padding: 8px 10px; font-size: 12px; }
+  .calc-table .cat-cell { display: none; }
+  .devis-textarea { min-height: 200px; }
+  .result-total-value { font-size: 22px; }
+  .logo-menu { left: 0; padding: 8px 10px; }
+}
+
+@media (max-width: 480px) {
+  .topbar-left { min-width: auto; }
+  .topbar-right { min-width: auto; }
+  .devis-buttons { flex-direction: column; }
+  .btn { width: 100%; justify-content: center; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ LOGIN ═══ -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-panel">
+    <div class="login-logo-container">
+      <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro">
+    </div>
+    <div class="login-title-container">
+      <div class="login-title">Outil de gestion simplifiée</div>
+      <div class="login-author">par Daniel Charest</div>
+    </div>
+    <div class="login-subtitle">Connectez-vous avec votre email d'entreprise</div>
+    <form id="loginForm" autocomplete="on" onsubmit="doLogin(event)">
+      <input type="email" id="loginEmail" name="email" class="login-input" placeholder="Email d'entreprise" autocomplete="username">
+      <input type="password" id="loginPassword" name="password" class="login-input" placeholder="Mot de passe" maxlength="50" autocomplete="current-password">
+      <div class="login-remember">
+        <input type="checkbox" id="loginRemember" checked>
+        <label for="loginRemember">Rester connecté</label>
+      </div>
+      <button type="submit" class="login-btn" id="loginBtn">Se connecter</button>
+    </form>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- ═══ TOPBAR ═══ -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo-flip-container" id="logoFlipContainer">
+      <div class="logo-main">
+        <div class="logo-top-fixed"><img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro"></div>
+        <div class="logo-bottom-text">Calc. Temps</div>
+      </div>
+      <div class="logo-menu" id="logoMenu"></div>
+    </div>
+  </div>
+  <div class="topbar-center">
+    <span class="topbar-title">⏱️ Calculateur de Temps</span>
+  </div>
+  <div class="topbar-right">
+    <span class="topbar-user"><strong id="currentUserDisplay">-</strong></span>
+    <button class="topbar-btn logout" onclick="doLogout()">Déconnexion</button>
+  </div>
+</div>
+
+<!-- ═══ MAIN ═══ -->
+<div class="main-container">
+  
+  <!-- Header -->
+  <div class="calc-header">
+    <h2>⏱️ Calculateur de Temps de Production</h2>
+    <p class="calc-subtitle">Analysez vos devis et calculez le temps de production nécessaire</p>
+  </div>
+
+  <!-- Tabs -->
+  <div class="calc-tabs">
+    <button class="calc-tab active" data-tab="recherche" onclick="showCalcTab('recherche', this)">🔍 Recherche</button>
+    <button class="calc-tab" data-tab="devis" onclick="showCalcTab('devis', this)">📋 Analyser Devis</button>
+    <button class="calc-tab" data-tab="edit" onclick="showCalcTab('edit', this)">✏️ Modifier Temps</button>
+  </div>
+
+  <!-- ═══ TAB 1: RECHERCHE ═══ -->
+  <div id="calcTabRecherche" class="calc-tab-content active">
+    <div class="filter-bar">
+      <input type="text" id="calcSearch" placeholder="🔍 Rechercher code ou description..." oninput="searchCalcCodes()">
+      <select id="calcCategoryFilter" onchange="searchCalcCodes()">
+        <option value="all">Toutes les catégories</option>
+      </select>
+    </div>
+    <div class="calc-table-wrap">
+      <table class="calc-table">
+        <thead>
+          <tr><th>Code</th><th>Description</th><th>Catégorie</th><th>Temps</th></tr>
+        </thead>
+        <tbody id="calcTableBody"></tbody>
+      </table>
+    </div>
+    <div class="calc-counter" id="calcCounter">0 codes sur 0 total</div>
+  </div>
+
+  <!-- ═══ TAB 2: ANALYSER DEVIS ═══ -->
+  <div id="calcTabDevis" class="calc-tab-content">
+    <textarea class="devis-textarea" id="calcDevisInput" placeholder="Collez le contenu de votre devis ici...&#10;&#10;Le système analysera automatiquement tous les codes produits trouvés dans le texte et calculera le temps de production total."></textarea>
+    
+    <div class="devis-buttons">
+      <button class="btn btn-primary" onclick="analyzeCalcDevis()">🔍 Analyser le devis</button>
+      <button class="btn btn-secondary" onclick="clearDevis()">🗑️ Effacer</button>
+      <button class="btn btn-success btn-print" id="calcPrintBtn" onclick="printCalcAnalysis()">🖨️ Imprimer</button>
+    </div>
+
+    <div class="results-section" id="calcResults" style="display:none;">
+      <div class="result-total">
+        <div class="result-total-label">⏱️ Temps total de production</div>
+        <div class="result-total-value" id="calcTotalTime">—</div>
+      </div>
+      <div class="result-found" id="calcFoundCodes"></div>
+      <div class="result-notfound" id="calcNotFoundCodes"></div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 3: MODIFIER TEMPS ═══ -->
+  <div id="calcTabEdit" class="calc-tab-content">
+    <div id="editDenied" class="edit-denied" style="display:none;">
+      <div class="edit-denied-icon">🔒</div>
+      <div>Accès réservé aux administrateurs</div>
+    </div>
+    <div id="editContent" style="display:none;">
+      <div class="edit-actions">
+        <button class="btn btn-success" onclick="openAddCodeModal()">➕ Ajouter un code</button>
+        <button class="btn btn-warning" onclick="saveCalcTimes()">💾 Sauvegarder tous les temps</button>
+        <span class="edit-stat" id="editStat">0 codes</span>
+      </div>
+      <div class="filter-bar">
+        <input type="text" id="editSearch" placeholder="🔍 Rechercher code ou description..." oninput="searchEditCodes()">
+        <select id="editCategoryFilter" onchange="searchEditCodes()">
+          <option value="all">Toutes les catégories</option>
+        </select>
+      </div>
+      <div class="calc-table-wrap" style="max-height:450px;">
+        <table class="calc-table">
+          <thead>
+            <tr><th>Code</th><th>Description</th><th>Catégorie</th><th>Temps (min)</th><th style="width:40px;"></th></tr>
+          </thead>
+          <tbody id="editTableBody"></tbody>
+        </table>
+      </div>
+      <div class="save-bar">
+        <button class="btn btn-warning" onclick="saveCalcTimes()">💾 Sauvegarder tous les temps</button>
+      </div>
+    </div>
+
+  <!-- Add Code Modal -->
+  <div class="modal-overlay" id="addCodeModal">
+    <div class="modal-box">
+      <div class="modal-title">➕ Ajouter un nouveau code</div>
+      <div class="modal-field">
+        <label>Code produit</label>
+        <input type="text" id="newCodeInput" placeholder="Ex: S2366" style="text-transform:uppercase;">
+      </div>
+      <div class="modal-field">
+        <label>Description</label>
+        <input type="text" id="newDescInput" placeholder="Ex: CONTOUR INSERT 3&quot; - 17&quot; X 17&quot;">
+      </div>
+      <div class="modal-field">
+        <label>Catégorie</label>
+        <select id="newCatSelect"></select>
+      </div>
+      <div class="modal-field">
+        <label>Temps (minutes)</label>
+        <input type="number" id="newTimeInput" value="0" min="0" step="1">
+      </div>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" onclick="closeAddCodeModal()">Annuler</button>
+        <button class="btn btn-success" onclick="addNewCode()">✅ Ajouter</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+</div>
+
+<!-- ═══ PRINT CONTAINER ═══ -->
+<div id="printContent"></div>
+
+<!-- ═══ TOAST ═══ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ══════════════════════════════════════════
+// FIREBASE CONFIG
+// ══════════════════════════════════════════
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCk7bqVnx08Kz1fVq1W24AuW854KY9jPno",
+  authDomain: "liste-des-moulages-physipro.firebaseapp.com",
+  databaseURL: "https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",
+  projectId: "liste-des-moulages-physipro",
+  storageBucket: "liste-des-moulages-physipro.appspot.com",
+  messagingSenderId: "48aborede425501778498",
+  appId: "1:425501778498:web:94a5b83f4ca5cdb58ee498"
+};
+
+var db = null;
+var currentUser = null;
+var currentUserEmail = '';
+var isAdmin = false;
+
+// Admin emails (can edit times)
+var ADMIN_EMAILS = [
+  'atelieratp@physipro.com',
+  'valerie18@videotron.ca',
+  'simdut@physipro.com',
+  'sroy@physipro.com'
+];
+
+// ══════════════════════════════════════════
+// HUB NAVIGATION
+// ══════════════════════════════════════════
+var HUB_ACCESS={'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','photos'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','photos'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps'],'c3JveUBwaHlzaXByby5jb20=':['moulage','jobs','inspection','serie','psm','inventaire'],'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['moulage','jobs'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['moulage','jobs'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['moulage','jobs'],'bWFnYXNpbmF0cDFAcGh5c2lwcm8uY29t':['entrepot','calcmat'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['entrepot','inventaire','calcmat'],'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':['entrepot','calcmat'],'c2VydmljZTFAcGh5c2lwcm8uY29t':['moulage','jobs'],'c2VydmljZTNAcGh5c2lwcm8uY29t':['moulage','jobs'],'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':['moulage','jobs'],'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':['moulage','jobs','serie'],'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':['moulage','calcmat','calctemps'],'cmhAcGh5c2lwcm8uY29t':['moulage','jobs'],'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':[],'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':[],'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':[]};
+
+var HUB_MODULES={moulage:{label:'Moulage',file:'Physipro_moulage.html',color:'#3b82f6',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},jobs:{label:'Questionnement',file:'PhysiPro_Questionnement.html',color:'#f59e0b',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},inspection:{label:'Inspection',file:'PhysiPro_Inspection.html',color:'#22c55e',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},serie:{label:'Série+',file:'PhysiPro_Serie_.html',color:'#f97316',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},psm:{label:'PSM',file:'PhysiPro_PSM.html',color:'#ef4444',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},entrepot:{label:'Entrepôt',file:'PhysiPro_Entrepot.html',color:'#8b5cf6',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},inventaire:{label:'Inventaire',file:'PhysiPro_Inventaire.html',color:'#a855f7',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},calcmat:{label:'Calc. Matériaux',file:'PhysiPro_Calculateur_Materiaux.html',color:'#14b8a6',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},calctemps:{label:'Calc. Temps',file:'PhysiPro_Calculateur_Temps.html',color:'#0ea5e9',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'},photos:{label:'Photo-Récepteur',file:'PhysiPro_Photo_Recepteur.html',color:'#06b6d4',img:'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png'}};
+
+function getHubAccess(email) {
+  if (!email) return [];
+  try { return HUB_ACCESS[btoa(email)] || []; } catch(e) { return []; }
+}
+
+function initLogoMenu(currentMod) {
+  var menu = document.getElementById('logoMenu');
+  if (!menu) return;
+  var email = currentUser ? (currentUser.email || '') : '';
+  var access = getHubAccess(email);
+  if (access.length <= 1) { menu.innerHTML = ''; return; }
+  menu.innerHTML = '';
+  access.forEach(function(mod) {
+    var m = HUB_MODULES[mod]; if (!m) return;
+    var item = document.createElement('a');
+    item.className = 'logo-menu-item' + (mod === currentMod ? ' active' : '');
+    item.href = (mod === currentMod) ? 'javascript:void(0)' : m.file;
+    item.innerHTML = '<img class="logo-menu-icon-img" src="' + m.img + '" alt="' + m.label + '"><span class="logo-menu-text" style="color:' + m.color + ';">' + m.label + '</span>';
+    menu.appendChild(item);
+  });
+}
+
+// ══════════════════════════════════════════
+// CODES DATABASE (666 codes)
+// ══════════════════════════════════════════
+// TODO: Replace this placeholder with the actual 666 codes from PhysiPro_v16_3.html
+// Each object: { code: "S2366", temps_minutes: 0, description: "CONTOUR INSERT...", categorie: "Coussin Contour Insert" }
+var CALC_CODES_DATA = [
+{code:"AT5000",temps_minutes:0,description:"Appui-tête simple 7\"×4\"",categorie:"Appui-tête"},
+{code:"AT5005",temps_minutes:0,description:"Appui-tête simple 8\"x5\"",categorie:"Dossier Axis"},
+{code:"AT5010",temps_minutes:0,description:"Appui-tête simple 9\"x6\"",categorie:"Dossier Axis"},
+{code:"AT5030",temps_minutes:0,description:"Appui-tête combiné 6\"×4½\"",categorie:"Appui-tête"},
+{code:"AT5041",temps_minutes:0,description:"Appui-tête combiné 8\"×6\"",categorie:"Appui-tête"},
+{code:"AT5056",temps_minutes:0,description:"Appui-tête personnalisé",categorie:"Appui-tête"},
+{code:"AT5060",temps_minutes:0,description:"Prolongement latéral intégré",categorie:"Appui-tête"},
+{code:"AT5070",temps_minutes:0,description:"Appui-tête à prolongements latéraux 6\"x5½\"",categorie:"Dossier Axis"},
+{code:"AT5090",temps_minutes:0,description:"Bandeau frontal néoprène 14\"",categorie:"Appui-tête"},
+{code:"AT5106",temps_minutes:0,description:"Bandeau frontal néoprène 22\"",categorie:"Appui-tête"},
+{code:"AT5115",temps_minutes:0,description:"Support appui-tête multi-réglable droit",categorie:"Appui-tête"},
+{code:"AT5120",temps_minutes:0,description:"Support appui-tête multi-réglable déporté",categorie:"Appui-tête"},
+{code:"AT5135",temps_minutes:0,description:"Ancrage externe 13\"-18\"",categorie:"Appui-tête"},
+{code:"AT5140",temps_minutes:0,description:"Ancrage interne ¾\"",categorie:"Appui-tête"},
+{code:"AT5155",temps_minutes:0,description:"Ancrage interne 1\"",categorie:"Appui-tête"},
+{code:"AT5196",temps_minutes:0,description:"Barre de tension pliable avec ancrage 12\"-15\"",categorie:"Dossier Axis"},
+{code:"AT5197",temps_minutes:0,description:"Barre de tension pliable avec ancrage 15\"-18\"",categorie:"Dossier Axis"},
+{code:"AT5198",temps_minutes:0,description:"Barre de tension pliable avec ancrage 18\"-22\"",categorie:"Dossier Axis"},
+{code:"AT5330",temps_minutes:0,description:"Prolongement latéral réglable",categorie:"Appui-tête"},
+{code:"AT5450",temps_minutes:0,description:"Support appui-tête SYMBIO",categorie:"Appui-tête"},
+{code:"AT5455",temps_minutes:0,description:"Support appui-tête pédiatrique",categorie:"Appui-tête"},
+{code:"AT5530",temps_minutes:0,description:"Ensemble Symbio et appui-tête 7\"x4\"",categorie:"Dossier HP2"},
+{code:"AT5531",temps_minutes:0,description:"Ensemble Symbio et appui-tête 8\"x5\"",categorie:"Dossier HP2"},
+{code:"AT5532",temps_minutes:0,description:"Ensemble Symbio et appui-tête 9\"x6\"",categorie:"Dossier HP2"},
+{code:"AT5533",temps_minutes:0,description:"Ensemble Symbio et appui-tête personnalisé",categorie:"Dossier HP2"},
+{code:"AT5720",temps_minutes:0,description:"Appui-tête simple 14\"×7\"",categorie:"Appui-tête"},
+{code:"BP-0.5U-M",temps_minutes:0,description:"FIPS Sunmate moyen ½ unité",categorie:"Dossier Axis"},
+{code:"BP-0.5U-S",temps_minutes:0,description:"FIPS Sunmate mou ½ unité",categorie:"Dossier Axis"},
+{code:"BP-0.5U-XS",temps_minutes:0,description:"FIPS Sunmate extra-mou ½ unité",categorie:"Dossier Axis"},
+{code:"BP-1U-M",temps_minutes:0,description:"FIPS Sunmate moyen 1 unité",categorie:"Dossier Axis"},
+{code:"BP-1U-S",temps_minutes:0,description:"FIPS Sunmate mou 1 unité",categorie:"Dossier Axis"},
+{code:"BP-1U-XS",temps_minutes:0,description:"FIPS Sunmate extra-mou 1 unité",categorie:"Dossier Axis"},
+{code:"CINCH1416",temps_minutes:0,description:"Contour Cinch 14\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1418",temps_minutes:0,description:"Contour Cinch 14\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1420",temps_minutes:0,description:"Contour Cinch 14\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1516",temps_minutes:0,description:"Contour Cinch 15\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1518",temps_minutes:0,description:"Contour Cinch 15\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1520",temps_minutes:0,description:"Contour Cinch 15\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1616",temps_minutes:0,description:"Contour Cinch 16\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1618",temps_minutes:0,description:"Contour Cinch 16\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1620",temps_minutes:0,description:"Contour Cinch 16\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1716",temps_minutes:0,description:"Contour Cinch 17\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1718",temps_minutes:0,description:"Contour Cinch 17\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1720",temps_minutes:0,description:"Contour Cinch 17\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1816",temps_minutes:0,description:"Contour Cinch 18\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1818",temps_minutes:0,description:"Contour Cinch 18\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1820",temps_minutes:0,description:"Contour Cinch 18\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1916",temps_minutes:0,description:"Contour Cinch 19\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1918",temps_minutes:0,description:"Contour Cinch 19\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH1920",temps_minutes:0,description:"Contour Cinch 19\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2016",temps_minutes:0,description:"Contour Cinch 20\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2018",temps_minutes:0,description:"Contour Cinch 20\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2020",temps_minutes:0,description:"Contour Cinch 20\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2116",temps_minutes:0,description:"Contour Cinch 21\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2118",temps_minutes:0,description:"Contour Cinch 21\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2120",temps_minutes:0,description:"Contour Cinch 21\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2216",temps_minutes:0,description:"Contour Cinch 22\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2218",temps_minutes:0,description:"Contour Cinch 22\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2220",temps_minutes:0,description:"Contour Cinch 22\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2316",temps_minutes:0,description:"Contour Cinch 23\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2318",temps_minutes:0,description:"Contour Cinch 23\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2320",temps_minutes:0,description:"Contour Cinch 23\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2416",temps_minutes:0,description:"Contour Cinch 24\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2418",temps_minutes:0,description:"Contour Cinch 24\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2420",temps_minutes:0,description:"Contour Cinch 24\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2516",temps_minutes:0,description:"Contour Cinch 25\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2518",temps_minutes:0,description:"Contour Cinch 25\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2520",temps_minutes:0,description:"Contour Cinch 25\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2616",temps_minutes:0,description:"Contour Cinch 26\"x16\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2618",temps_minutes:0,description:"Contour Cinch 26\"x18\"",categorie:"Dossier Contour Cinch"},
+{code:"CINCH2620",temps_minutes:0,description:"Contour Cinch 26\"x20\"",categorie:"Dossier Contour Cinch"},
+{code:"D3200",temps_minutes:0,description:"Syst. Crochets/équerres 2 trous 3/4\"",categorie:"Dossier Modulaire Rigide"},
+{code:"D3205",temps_minutes:0,description:"Syst. Crochets/équerres 2 trous 7/8\"",categorie:"Dossier Modulaire Rigide"},
+{code:"D3210",temps_minutes:0,description:"Syst. Crochets/équerres 2 trous 1\"",categorie:"Dossier Modulaire Rigide"},
+{code:"D3215",temps_minutes:0,description:"Syst. Crochets/équerres 5 trous 3/4\"",categorie:"Dossier Modulaire Rigide"},
+{code:"D3220",temps_minutes:0,description:"Syst. Crochets/équerres 5 trous 7/8\"",categorie:"Dossier Modulaire Rigide"},
+{code:"D3225",temps_minutes:0,description:"Syst. Crochets/équerres 5 trous 1\"",categorie:"Dossier Modulaire Rigide"},
+{code:"D3245",temps_minutes:0,description:"Plaque plastique 1/4\" adulte",categorie:"Dossier Modulaire Rigide"},
+{code:"D3250",temps_minutes:0,description:"Plaque plastique 3/8\" adulte",categorie:"Dossier Modulaire Rigide"},
+{code:"D3255",temps_minutes:0,description:"Plaque aluminium 3/16\" adulte",categorie:"Dossier Modulaire Rigide"},
+{code:"D3260",temps_minutes:0,description:"Plaque plastique 1/4\" pédiatrique",categorie:"Dossier Modulaire Rigide"},
+{code:"D3265",temps_minutes:0,description:"Plaque plastique 3/8\" pédiatrique",categorie:"Dossier Modulaire Rigide"},
+{code:"D3270",temps_minutes:0,description:"Plaque aluminium 3/16\" pédiatrique",categorie:"Dossier Modulaire Rigide"},
+{code:"D3345",temps_minutes:0,description:"Stabilisateur fixe tube 1\"",categorie:"Dossier Valeo"},
+{code:"D3350",temps_minutes:0,description:"Mousse Plastazote/Uréthane",categorie:"Dossier Modulaire Rigide"},
+{code:"D3355",temps_minutes:0,description:"Mousse Plastazote/T-38/Uréthane",categorie:"Dossier Modulaire Rigide"},
+{code:"D3360",temps_minutes:0,description:"Mousse Plastazote/Latex",categorie:"Dossier Modulaire Rigide"},
+{code:"D3365",temps_minutes:0,description:"Mousse Plastazote/Sunmate/Uréthane",categorie:"Dossier Modulaire Rigide"},
+{code:"D3380",temps_minutes:0,description:"Biseau thoracique - Constructa foam",categorie:"Dossier HP2"},
+{code:"D3385",temps_minutes:0,description:"Biseau thoracique - Uréthane",categorie:"Dossier HP2"},
+{code:"D3388",temps_minutes:0,description:"Housse Velcro biseau thoracique",categorie:"Dossier Premium"},
+{code:"D3390",temps_minutes:0,description:"Biseau dorso-lombaire - Constructa foam",categorie:"Dossier HP2"},
+{code:"D3395",temps_minutes:0,description:"Biseau dorso-lombaire - Uréthane",categorie:"Dossier HP2"},
+{code:"D3396",temps_minutes:0,description:"Housse Velcro biseau dorso-lombaire",categorie:"Dossier Premium"},
+{code:"D3400",temps_minutes:0,description:"Biseau lombaire - Constructa foam",categorie:"Dossier HP2"},
+{code:"D3405",temps_minutes:0,description:"Biseau lombaire - Uréthane",categorie:"Dossier HP2"},
+{code:"D3408",temps_minutes:0,description:"Housse Velcro biseau lombaire",categorie:"Dossier Premium"},
+{code:"D3410",temps_minutes:0,description:"Butée sacro lombaire - Uréthane L:9½\" P:1\" H:10\"",categorie:"Dossier HP2"},
+{code:"D3415",temps_minutes:0,description:"Butée sacro lombaire - Uréthane L:9½\" P:1½\" H:11\"",categorie:"Dossier HP2"},
+{code:"D3420",temps_minutes:0,description:"Butée sacro lombaire - Uréthane L:9½\" P:2\" H:12\"",categorie:"Dossier HP2"},
+{code:"D3425",temps_minutes:0,description:"Butée sacro lombaire - Constructa L:9½\" P:1\" H:10\"",categorie:"Dossier HP2"},
+{code:"D3430",temps_minutes:0,description:"Butée sacro lombaire - Constructa L:9½\" P:1½\" H:11\"",categorie:"Dossier HP2"},
+{code:"D3435",temps_minutes:0,description:"Butée sacro lombaire - Constructa L:9½\" P:2\" H:12\"",categorie:"Dossier HP2"},
+{code:"D3440",temps_minutes:0,description:"Appui-thoracique rigide droit #1",categorie:"Dossier Modulaire Rigide"},
+{code:"D3445",temps_minutes:0,description:"Appui-thoracique rigide droit #2",categorie:"Dossier Modulaire Rigide"},
+{code:"D3450",temps_minutes:0,description:"Appui-thoracique rigide droit #3",categorie:"Dossier Modulaire Rigide"},
+{code:"D3455",temps_minutes:0,description:"Appui-thoracique rigide droit #4",categorie:"Dossier Modulaire Rigide"},
+{code:"D3476",temps_minutes:0,description:"Appui-thoracique rigide droit personnalisé",categorie:"Dossier Modulaire Rigide"},
+{code:"D3500",temps_minutes:0,description:"Appui-thoracique rigide courbé #2",categorie:"Dossier Modulaire Rigide"},
+{code:"D3505",temps_minutes:0,description:"Appui-thoracique rigide courbé #3",categorie:"Dossier Modulaire Rigide"},
+{code:"D3510",temps_minutes:0,description:"Appui-thoracique rigide courbé #4",categorie:"Dossier Modulaire Rigide"},
+{code:"D3511",temps_minutes:0,description:"Appui-thoracique rigide courbé personnalisé",categorie:"Dossier Modulaire Rigide"},
+{code:"D3535",temps_minutes:0,description:"Appui-thoracique rigide englobant #1",categorie:"Dossier Modulaire Rigide"},
+{code:"D3540",temps_minutes:0,description:"Appui-thoracique rigide englobant #2",categorie:"Dossier Modulaire Rigide"},
+{code:"D3545",temps_minutes:0,description:"Appui-thoracique rigide englobant #3",categorie:"Dossier Modulaire Rigide"},
+{code:"D3550",temps_minutes:0,description:"Appui-thoracique rigide englobant #4",categorie:"Dossier Modulaire Rigide"},
+{code:"D3551",temps_minutes:0,description:"Appui-thoracique rigide englobant personnalisé",categorie:"Dossier Modulaire Rigide"},
+{code:"D3851",temps_minutes:0,description:"Appui-thoracique réglable mini",categorie:"Dossier Premium"},
+{code:"D3852",temps_minutes:0,description:"Appui-thoracique réglable petit",categorie:"Dossier Premium"},
+{code:"D3853",temps_minutes:0,description:"Appui-thoracique réglable moyen",categorie:"Dossier Premium"},
+{code:"D3854",temps_minutes:0,description:"Appui-thoracique réglable grand",categorie:"Dossier Premium"},
+{code:"D3865",temps_minutes:0,description:"Courroie lombaire 1\"",categorie:"Dossier Premium"},
+{code:"D3866",temps_minutes:0,description:"Courroie lombaire sans coussin",categorie:"Dossier Premium"},
+{code:"D3868",temps_minutes:0,description:"Courroie lombaire 1.5\"",categorie:"Dossier Premium"},
+{code:"D3869",temps_minutes:0,description:"Courroie lombaire 2\"",categorie:"Dossier Premium"},
+{code:"D38699",temps_minutes:0,description:"Système courroies thoracique/support lombaire",categorie:"Dossier Axis"},
+{code:"D3895",temps_minutes:0,description:"Barre de tension pliable 14\"",categorie:"Dossier Axis"},
+{code:"D3900",temps_minutes:0,description:"Barre de tension pliable 16\"",categorie:"Dossier Axis"},
+{code:"D3905",temps_minutes:0,description:"Barre de tension pliable 18\"",categorie:"Dossier Axis"},
+{code:"D3910",temps_minutes:0,description:"Barre de tension pliable 20\"",categorie:"Dossier Axis"},
+{code:"D3975",temps_minutes:0,description:"Appui-thoracique façonné #1",categorie:"Dossier Toile Velcro"},
+{code:"D3980",temps_minutes:0,description:"Housse rechange appui façonné #1",categorie:"Dossier Toile Velcro"},
+{code:"D3985",temps_minutes:0,description:"Appui-thoracique façonné #2",categorie:"Dossier Toile Velcro"},
+{code:"D3990",temps_minutes:0,description:"Housse rechange appui façonné #2",categorie:"Dossier Toile Velcro"},
+{code:"D3995",temps_minutes:0,description:"Appui-thoracique AEH fixation velcro 14½\"H x 5½\"P",categorie:"Dossier Axis"},
+{code:"D3995-V",temps_minutes:0,description:"Appui-thoracique façonné AEH #1",categorie:"Dossier Toile Velcro"},
+{code:"D4000",temps_minutes:0,description:"Housse rechange appui AEH #1",categorie:"Dossier Toile Velcro"},
+{code:"D4005",temps_minutes:0,description:"Appui-thoracique AEH fixation velcro 14½\"H x 6½\"P",categorie:"Dossier Axis"},
+{code:"D4005-V",temps_minutes:0,description:"Appui-thoracique façonné AEH #2",categorie:"Dossier Toile Velcro"},
+{code:"D4010",temps_minutes:0,description:"Housse rechange appui AEH #2",categorie:"Dossier Toile Velcro"},
+{code:"D4020",temps_minutes:0,description:"Housse Velcro butée sacro-lombaire 9.5\"x1\"x10\"",categorie:"Dossier Premium"},
+{code:"D4030",temps_minutes:0,description:"Housse Velcro butée sacro-lombaire 9.5\"x1.5\"x11\"",categorie:"Dossier Premium"},
+{code:"D4040",temps_minutes:0,description:"Housse Velcro butée sacro-lombaire 9.5\"x2\"x12\"",categorie:"Dossier Premium"},
+{code:"D4045",temps_minutes:0,description:"Coussin d\'appoint Néocor 12\" large",categorie:"Dossier Axis"},
+{code:"D4050",temps_minutes:0,description:"Coussin d\'appoint Néocor 14\" large",categorie:"Dossier Axis"},
+{code:"D4060",temps_minutes:0,description:"Toile Velcro #1 14\"x16\"",categorie:"Dossier Toile Velcro"},
+{code:"D4065",temps_minutes:0,description:"Toile Velcro #2 16\"x16\"",categorie:"Dossier Toile Velcro"},
+{code:"D4070",temps_minutes:0,description:"Toile Velcro #3 18\"x16\"",categorie:"Dossier Toile Velcro"},
+{code:"D4695",temps_minutes:0,description:"Recouvrement montants avec fermeture éclair",categorie:"Dossier Premium"},
+{code:"D4700",temps_minutes:0,description:"Recouvrement montants sans fermeture éclair",categorie:"Dossier Premium"},
+{code:"D5200",temps_minutes:0,description:"Premium Standard avec fermeture éclair",categorie:"Dossier Premium"},
+{code:"D5208",temps_minutes:0,description:"Surcharge largeur ou hauteur > 20\"",categorie:"Dossier Axis"},
+{code:"D5209",temps_minutes:0,description:"Dossier Axis",categorie:"Dossier Axis"},
+{code:"D5211",temps_minutes:0,description:"Dossier Axis avec Surface Velcro",categorie:"Dossier Axis"},
+{code:"D5212",temps_minutes:0,description:"Housse en Lycra pour FIPS",categorie:"Dossier Axis"},
+{code:"D5213",temps_minutes:0,description:"Housse d\'incontinence Valeo",categorie:"Dossier Valeo"},
+{code:"D5216",temps_minutes:0,description:"Ajout d\'appui thoracique réglable",categorie:"Dossier Axis"},
+{code:"D5217",temps_minutes:0,description:"Ajout appui thoracique réglable Valeo",categorie:"Dossier Valeo"},
+{code:"D5250",temps_minutes:0,description:"Dossier Valdis",categorie:"Dossier Valdis"},
+{code:"D5252",temps_minutes:0,description:"Ajout appui thoracique réglable Valdis",categorie:"Dossier Valdis"},
+{code:"D5440",temps_minutes:0,description:"Premium Surface Velcro",categorie:"Dossier Premium"},
+{code:"D5445",temps_minutes:0,description:"Appui-thoracique rabattable grand",categorie:"Dossier Premium"},
+{code:"D5446",temps_minutes:0,description:"Appui-thoracique rabattable moyen",categorie:"Dossier Premium"},
+{code:"D5447",temps_minutes:0,description:"Appui-thoracique rabattable petit",categorie:"Dossier Premium"},
+{code:"D5448",temps_minutes:0,description:"Appui-thoracique rabattable mini",categorie:"Dossier Premium"},
+{code:"D5455",temps_minutes:0,description:"Mousse Plastazote/Sunmate/Sunmate mou",categorie:"Dossier Modulaire Rigide"},
+{code:"D5650",temps_minutes:0,description:"Appui-thoracique réglable personnalisé",categorie:"Dossier Premium"},
+{code:"D5655",temps_minutes:0,description:"Appui-thoracique rabattable personnalisé",categorie:"Dossier Premium"},
+{code:"D6000",temps_minutes:0,description:"Dossier Valeo standard 3/32\"",categorie:"Dossier Valeo"},
+{code:"D6005",temps_minutes:0,description:"Dossier Valeo robuste 1/8\"",categorie:"Dossier Valeo"},
+{code:"D6020",temps_minutes:0,description:"Appui-thoracique contour 7\"H x 6\"P - Gauche",categorie:"Dossier HP2"},
+{code:"D6025",temps_minutes:0,description:"Appui-thoracique contour 7\"H x 7\"P - Gauche",categorie:"Dossier HP2"},
+{code:"D6035",temps_minutes:0,description:"Appui-thoracique contour 8\"H x 6\"P - Gauche",categorie:"Dossier HP2"},
+{code:"D6040",temps_minutes:0,description:"Appui-thoracique contour 8\"H x 7\"P - Gauche",categorie:"Dossier HP2"},
+{code:"D6050",temps_minutes:0,description:"Appui-thoracique contour 9\"H x 6\"P - Gauche",categorie:"Dossier HP2"},
+{code:"D6055",temps_minutes:0,description:"Appui-thoracique contour 9\"H x 7\"P - Gauche",categorie:"Dossier HP2"},
+{code:"D6065",temps_minutes:0,description:"Appui-thoracique contour 7\"H x 6\"P - Droite",categorie:"Dossier HP2"},
+{code:"D6070",temps_minutes:0,description:"Appui-thoracique contour 7\"H x 7\"P - Droite",categorie:"Dossier HP2"},
+{code:"D6080",temps_minutes:0,description:"Appui-thoracique contour 8\"H x 6\"P - Droite",categorie:"Dossier HP2"},
+{code:"D6085",temps_minutes:0,description:"Appui-thoracique contour 8\"H x 7\"P - Droite",categorie:"Dossier HP2"},
+{code:"D6095",temps_minutes:0,description:"Appui-thoracique contour 9\"H x 6\"P - Droite",categorie:"Dossier HP2"},
+{code:"D6100",temps_minutes:0,description:"Appui-thoracique contour 9\"H x 7\"P - Droite",categorie:"Dossier HP2"},
+{code:"DV001D",temps_minutes:0,description:"Appui-thoracique droit 4\"H x 4\"P - Droite",categorie:"Dossier Axis"},
+{code:"DV001G",temps_minutes:0,description:"Appui-thoracique droit 4\"H x 4\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DV002D",temps_minutes:0,description:"Appui-thoracique droit 6\"H x 4½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DV002G",temps_minutes:0,description:"Appui-thoracique droit 6\"H x 4½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DV003D",temps_minutes:0,description:"Appui-thoracique droit 7\"H x 4½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DV003G",temps_minutes:0,description:"Appui-thoracique droit 7\"H x 4½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DV004D",temps_minutes:0,description:"Appui-thoracique droit 8\"H x 4½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DV004G",temps_minutes:0,description:"Appui-thoracique droit 8\"H x 4½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DV005D",temps_minutes:0,description:"Appui-thoracique droit 8\"H x 5½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DV005G",temps_minutes:0,description:"Appui-thoracique droit 8\"H x 5½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DV006D",temps_minutes:0,description:"Appui-thoracique droit 10\"H x 4½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DV006G",temps_minutes:0,description:"Appui-thoracique droit 10\"H x 4½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DV007D",temps_minutes:0,description:"Appui-thoracique droit 10\"H x 5½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DV007G",temps_minutes:0,description:"Appui-thoracique droit 10\"H x 5½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DVMD",temps_minutes:0,description:"Appui-thoracique fixé aux montants - Droite",categorie:"Dossier Axis"},
+{code:"DVMG",temps_minutes:0,description:"Appui-thoracique fixé aux montants - Gauche",categorie:"Dossier Axis"},
+{code:"DVP001D",temps_minutes:0,description:"Appui-thoracique profilé 4\"H x 4\"P - Droite",categorie:"Dossier Axis"},
+{code:"DVP001G",temps_minutes:0,description:"Appui-thoracique profilé 4\"H x 4\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DVP002D",temps_minutes:0,description:"Appui-thoracique profilé 6\"H x 4½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DVP002G",temps_minutes:0,description:"Appui-thoracique profilé 6\"H x 4½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DVP003D",temps_minutes:0,description:"Appui-thoracique profilé 7\"H x 4½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DVP003G",temps_minutes:0,description:"Appui-thoracique profilé 7\"H x 4½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DVP004D",temps_minutes:0,description:"Appui-thoracique profilé 8\"H x 4½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DVP004G",temps_minutes:0,description:"Appui-thoracique profilé 8\"H x 4½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DVP005D",temps_minutes:0,description:"Appui-thoracique profilé 8\"H x 5½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DVP005G",temps_minutes:0,description:"Appui-thoracique profilé 8\"H x 5½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DVP006D",temps_minutes:0,description:"Appui-thoracique profilé 10\"H x 4½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DVP006G",temps_minutes:0,description:"Appui-thoracique profilé 10\"H x 4½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DVP007D",temps_minutes:0,description:"Appui-thoracique profilé 10\"H x 5½\"P - Droite",categorie:"Dossier Axis"},
+{code:"DVP007G",temps_minutes:0,description:"Appui-thoracique profilé 10\"H x 5½\"P - Gauche",categorie:"Dossier Axis"},
+{code:"DVRD",temps_minutes:0,description:"Appui-thoracique ajustable Valeo D",categorie:"Dossier Valeo"},
+{code:"DVRG",temps_minutes:0,description:"Appui-thoracique ajustable Valeo G",categorie:"Dossier Valeo"},
+{code:"DVTD",temps_minutes:0,description:"Appui-thoracique droit personnalisé - Droite",categorie:"Dossier Axis"},
+{code:"DVTG",temps_minutes:0,description:"Appui-thoracique droit personnalisé - Gauche",categorie:"Dossier Axis"},
+{code:"GCP050-PZ-1/2/3",temps_minutes:0,description:"Gel plat - Installé au niveau de la cuvette",categorie:"Coussin Pression Zéro"},
+{code:"GCP050-UL-1/2/3",temps_minutes:0,description:"Gel plat - Installé au niveau de la cuvette",categorie:"Coussin Ultra"},
+{code:"GEL-BMD01-2428",temps_minutes:0,description:"Gel Géo-Matrix Pillowtop",categorie:"Éléments Fusion"},
+{code:"GEL-BMD04",temps_minutes:0,description:"Gel carrelé",categorie:"Éléments Fusion"},
+{code:"GEL-CABA01",temps_minutes:0,description:"Gel pebble bleu petit",categorie:"Éléments Fusion"},
+{code:"GEL-CABA02",temps_minutes:0,description:"Gel pebble bleu moyen",categorie:"Éléments Fusion"},
+{code:"GEL-DG14145",temps_minutes:0,description:"Gel silicone 14\"×14\" ½\"",categorie:"Éléments Fusion"},
+{code:"GEL-DG18185",temps_minutes:0,description:"Gel silicone 18\"×18\" ½\"",categorie:"Éléments Fusion"},
+{code:"GEL-DG20205",temps_minutes:0,description:"Gel silicone 20\"×20\" ½\"",categorie:"Éléments Fusion"},
+{code:"GEL-PEBA03",temps_minutes:0,description:"Gel pebble bleu grand",categorie:"Éléments Fusion"},
+{code:"HP01",temps_minutes:0,description:"Options housse - Découpe pour appui-tête",categorie:"Dossier HP2"},
+{code:"HP02",temps_minutes:0,description:"Options housse - Découpe pour harnais et appui-tête",categorie:"Dossier HP2"},
+{code:"HP1C",temps_minutes:0,description:"Housse supplémentaire",categorie:"Dossier HP2"},
+{code:"HPC",temps_minutes:0,description:"Dossier HP2 Contour",categorie:"Dossier HP2"},
+{code:"HPP",temps_minutes:0,description:"Dossier HP2 Profilé",categorie:"Dossier HP2"},
+{code:"HPS1",temps_minutes:0,description:"Housse supplémentaire HP2 Sport",categorie:"Dossier HP2 Sport"},
+{code:"HPS12",temps_minutes:0,description:"HP2 Sport 12\"x9\"",categorie:"Dossier HP2 Sport"},
+{code:"HPS14",temps_minutes:0,description:"HP2 Sport 14\"x9\"",categorie:"Dossier HP2 Sport"},
+{code:"HPS16",temps_minutes:0,description:"HP2 Sport 16\"x9\"",categorie:"Dossier HP2 Sport"},
+{code:"HPS18",temps_minutes:0,description:"HP2 Sport 18\"x9\"",categorie:"Dossier HP2 Sport"},
+{code:"HPT001D",temps_minutes:0,description:"Appui-thoracique réglable Pédiatrique 4\"H x 4\"P - Droite",categorie:"Dossier HP2"},
+{code:"HPT001G",temps_minutes:0,description:"Appui-thoracique réglable Pédiatrique 4\"H x 4\"P - Gauche",categorie:"Dossier HP2"},
+{code:"HPT002D",temps_minutes:0,description:"Appui-thoracique réglable Mini 6\"H x 4½\"P - Droite",categorie:"Dossier HP2"},
+{code:"HPT002G",temps_minutes:0,description:"Appui-thoracique réglable Mini 6\"H x 4½\"P - Gauche",categorie:"Dossier HP2"},
+{code:"HPT003D",temps_minutes:0,description:"Appui-thoracique réglable Petit 7\"H x 4½\"P - Droite",categorie:"Dossier HP2"},
+{code:"HPT003G",temps_minutes:0,description:"Appui-thoracique réglable Petit 7\"H x 4½\"P - Gauche",categorie:"Dossier HP2"},
+{code:"HPT004D",temps_minutes:0,description:"Appui-thoracique réglable Moyen 8\"H x 4½\"P - Droite",categorie:"Dossier HP2"},
+{code:"HPT004G",temps_minutes:0,description:"Appui-thoracique réglable Moyen 8\"H x 4½\"P - Gauche",categorie:"Dossier HP2"},
+{code:"HPT005D",temps_minutes:0,description:"Appui-thoracique réglable Large 10\"H x 4½\"P - Droite",categorie:"Dossier HP2"},
+{code:"HPT005G",temps_minutes:0,description:"Appui-thoracique réglable Large 10\"H x 4½\"P - Gauche",categorie:"Dossier HP2"},
+{code:"HPT006D",temps_minutes:0,description:"Appui-thoracique réglable Moyen 8\"H x 5½\"P - Droite",categorie:"Dossier HP2"},
+{code:"HPT006G",temps_minutes:0,description:"Appui-thoracique réglable Moyen 8\"H x 5½\"P - Gauche",categorie:"Dossier HP2"},
+{code:"HPT007D",temps_minutes:0,description:"Appui-thoracique réglable Large 10\"H x 5½\"P - Droite",categorie:"Dossier HP2"},
+{code:"HPT007G",temps_minutes:0,description:"Appui-thoracique réglable Large 10\"H x 5½\"P - Gauche",categorie:"Dossier HP2"},
+{code:"HPTD",temps_minutes:0,description:"Appui-thoracique réglable personnalisé - Droite",categorie:"Dossier HP2"},
+{code:"HPTG",temps_minutes:0,description:"Appui-thoracique réglable personnalisé - Gauche",categorie:"Dossier HP2"},
+{code:"HPTI001",temps_minutes:0,description:"Appui-thoracique intégré Pédiatrique - Paire",categorie:"Dossier HP2"},
+{code:"HPTI001D",temps_minutes:0,description:"Appui-thoracique intégré Pédiatrique - Droite",categorie:"Dossier HP2"},
+{code:"HPTI001G",temps_minutes:0,description:"Appui-thoracique intégré Pédiatrique - Gauche",categorie:"Dossier HP2"},
+{code:"HPTI002",temps_minutes:0,description:"Appui-thoracique intégré Mini - Paire",categorie:"Dossier HP2"},
+{code:"HPTI002D",temps_minutes:0,description:"Appui-thoracique intégré Mini - Droite",categorie:"Dossier HP2"},
+{code:"HPTI002G",temps_minutes:0,description:"Appui-thoracique intégré Mini - Gauche",categorie:"Dossier HP2"},
+{code:"HPTI003",temps_minutes:0,description:"Appui-thoracique intégré Petit - Paire",categorie:"Dossier HP2"},
+{code:"HPTI003D",temps_minutes:0,description:"Appui-thoracique intégré Petit - Droite",categorie:"Dossier HP2"},
+{code:"HPTI003G",temps_minutes:0,description:"Appui-thoracique intégré Petit - Gauche",categorie:"Dossier HP2"},
+{code:"HPTI004",temps_minutes:0,description:"Appui-thoracique intégré Moyen - Paire",categorie:"Dossier HP2"},
+{code:"HPTI004D",temps_minutes:0,description:"Appui-thoracique intégré Moyen - Droite",categorie:"Dossier HP2"},
+{code:"HPTI004G",temps_minutes:0,description:"Appui-thoracique intégré Moyen - Gauche",categorie:"Dossier HP2"},
+{code:"HPTI005",temps_minutes:0,description:"Appui-thoracique intégré Grand - Paire",categorie:"Dossier HP2"},
+{code:"HPTI005D",temps_minutes:0,description:"Appui-thoracique intégré Grand - Droite",categorie:"Dossier HP2"},
+{code:"HPTI005G",temps_minutes:0,description:"Appui-thoracique intégré Grand - Gauche",categorie:"Dossier HP2"},
+{code:"HPTR001D",temps_minutes:0,description:"Appui-thoracique rabattable Pédiatrique - Droite",categorie:"Dossier HP2"},
+{code:"HPTR001G",temps_minutes:0,description:"Appui-thoracique rabattable Pédiatrique - Gauche",categorie:"Dossier HP2"},
+{code:"HPTR002D",temps_minutes:0,description:"Appui-thoracique rabattable Mini - Droite",categorie:"Dossier HP2"},
+{code:"HPTR002G",temps_minutes:0,description:"Appui-thoracique rabattable Mini - Gauche",categorie:"Dossier HP2"},
+{code:"HPTR003D",temps_minutes:0,description:"Appui-thoracique rabattable Petit - Droite",categorie:"Dossier HP2"},
+{code:"HPTR003G",temps_minutes:0,description:"Appui-thoracique rabattable Petit - Gauche",categorie:"Dossier HP2"},
+{code:"HPTR004D",temps_minutes:0,description:"Appui-thoracique rabattable Moyen 8\"H x 4½\"P - Droite",categorie:"Dossier HP2"},
+{code:"HPTR004G",temps_minutes:0,description:"Appui-thoracique rabattable Moyen 8\"H x 4½\"P - Gauche",categorie:"Dossier HP2"},
+{code:"HPTR005D",temps_minutes:0,description:"Appui-thoracique rabattable Large 10\"H x 4½\"P - Droite",categorie:"Dossier HP2"},
+{code:"HPTR005G",temps_minutes:0,description:"Appui-thoracique rabattable Large 10\"H x 4½\"P - Gauche",categorie:"Dossier HP2"},
+{code:"HPTR006D",temps_minutes:0,description:"Appui-thoracique rabattable Moyen 8\"H x 5½\"P - Droite",categorie:"Dossier HP2"},
+{code:"HPTR006G",temps_minutes:0,description:"Appui-thoracique rabattable Moyen 8\"H x 5½\"P - Gauche",categorie:"Dossier HP2"},
+{code:"HPTR007D",temps_minutes:0,description:"Appui-thoracique rabattable Large 10\"H x 5½\"P - Droite",categorie:"Dossier HP2"},
+{code:"HPTR007G",temps_minutes:0,description:"Appui-thoracique rabattable Large 10\"H x 5½\"P - Gauche",categorie:"Dossier HP2"},
+{code:"HPTRD",temps_minutes:0,description:"Appui-thoracique rabattable personnalisé - Droite",categorie:"Dossier HP2"},
+{code:"HPTRG",temps_minutes:0,description:"Appui-thoracique rabattable personnalisé - Gauche",categorie:"Dossier HP2"},
+{code:"HPX",temps_minutes:0,description:"Frais additionnel hauteur hors-standard",categorie:"Dossier HP2"},
+{code:"HPZ",temps_minutes:0,description:"Surcharge largeur ou hauteur > 20\"",categorie:"Dossier HP2"},
+{code:"LAF10-1/2/3",temps_minutes:0,description:"Mousse de finition - Latex",categorie:"Coussin Ultra"},
+{code:"LF-30100-1",temps_minutes:0,description:"Uréthane LXA souple 1\"",categorie:"Éléments Fusion"},
+{code:"LF-30100-2",temps_minutes:0,description:"Uréthane LXA souple 2\"",categorie:"Éléments Fusion"},
+{code:"LF-30100-3",temps_minutes:0,description:"Uréthane LXA ferme 1\"",categorie:"Éléments Fusion"},
+{code:"LF-50100-1/2/3",temps_minutes:0,description:"Épaisseur du coussin 3\" (Latex 1\")",categorie:"Coussin Temper-Flo"},
+{code:"LF-50200-1/2/3",temps_minutes:0,description:"Épaisseur du coussin 4\" (Latex 2\")",categorie:"Coussin Temper-Flo"},
+{code:"LF-80050-1",temps_minutes:0,description:"Mousse mémoire extra-souple ½\"",categorie:"Éléments Fusion"},
+{code:"LF-80050-2",temps_minutes:0,description:"Mousse mémoire souple ½\"",categorie:"Éléments Fusion"},
+{code:"LF-80050-3",temps_minutes:0,description:"Mousse mémoire souple 1\"",categorie:"Éléments Fusion"},
+{code:"LF-80100-1",temps_minutes:0,description:"Temper T-38 ½\"",categorie:"Éléments Fusion"},
+{code:"LF-80100-2",temps_minutes:0,description:"Temper T-38 1\"",categorie:"Éléments Fusion"},
+{code:"LF-80100-3",temps_minutes:0,description:"Temper T-36 ½\"",categorie:"Éléments Fusion"},
+{code:"LF-82100-1",temps_minutes:0,description:"Latex 1\"",categorie:"Éléments Fusion"},
+{code:"LF-82100-2",temps_minutes:0,description:"Latex 2\"",categorie:"Éléments Fusion"},
+{code:"LF-82100-3",temps_minutes:0,description:"Viscose ½\"",categorie:"Éléments Fusion"},
+{code:"LI8005",temps_minutes:0,description:"Toile velcro 57½\"×17\"",categorie:"Appuis-thoraciques"},
+{code:"LI8070",temps_minutes:0,description:"Système appuis-thoraciques au lit complet",categorie:"Appuis-thoraciques"},
+{code:"LI8075",temps_minutes:0,description:"Appui-thoracique droit",categorie:"Appuis-thoraciques"},
+{code:"LI8080",temps_minutes:0,description:"Appui-thoracique gauche",categorie:"Appuis-thoraciques"},
+{code:"LI8090",temps_minutes:0,description:"Housse remplacement Startex droit",categorie:"Appuis-thoraciques"},
+{code:"LI8095",temps_minutes:0,description:"Housse remplacement Startex gauche",categorie:"Appuis-thoraciques"},
+{code:"LI8310",temps_minutes:0,description:"Coussin 1/2 bouée",categorie:"Positionnement au lit"},
+{code:"LI8315",temps_minutes:0,description:"Housse Startex coussin 1/2 bouée",categorie:"Positionnement au lit"},
+{code:"LI8315_BAMBOU",temps_minutes:0,description:"Housse bambou coussin 1/2 bouée",categorie:"Positionnement au lit"},
+{code:"LI8320",temps_minutes:0,description:"Coussin universel petit",categorie:"Positionnement au lit"},
+{code:"LI8325",temps_minutes:0,description:"Housse Startex coussin universel petit",categorie:"Positionnement au lit"},
+{code:"LI8325_BAMBOU",temps_minutes:0,description:"Housse bambou coussin universel petit",categorie:"Positionnement au lit"},
+{code:"LI8330",temps_minutes:0,description:"Coussin universel moyen",categorie:"Positionnement au lit"},
+{code:"LI8335",temps_minutes:0,description:"Housse Startex coussin universel moyen",categorie:"Positionnement au lit"},
+{code:"LI8335_BAMBOU",temps_minutes:0,description:"Housse bambou coussin universel moyen",categorie:"Positionnement au lit"},
+{code:"LI8340",temps_minutes:0,description:"Coussin base cylindrique",categorie:"Positionnement au lit"},
+{code:"LI8345",temps_minutes:0,description:"Housse Startex coussin cylindrique",categorie:"Positionnement au lit"},
+{code:"LI8345_BAMBOU",temps_minutes:0,description:"Housse bambou coussin cylindrique",categorie:"Positionnement au lit"},
+{code:"LI8350",temps_minutes:0,description:"Coussin positionnement talon",categorie:"Positionnement au lit"},
+{code:"LI8355",temps_minutes:0,description:"Housse Startex coussin talon",categorie:"Positionnement au lit"},
+{code:"LI8355_BAMBOU",temps_minutes:0,description:"Housse bambou coussin talon",categorie:"Positionnement au lit"},
+{code:"LI8360",temps_minutes:0,description:"Coussin positionnement main",categorie:"Positionnement au lit"},
+{code:"LI8365",temps_minutes:0,description:"Housse Startex coussin main",categorie:"Positionnement au lit"},
+{code:"LI8365_BAMBOU",temps_minutes:0,description:"Housse bambou coussin main",categorie:"Positionnement au lit"},
+{code:"LI8370",temps_minutes:0,description:"Coussin d\'abduction",categorie:"Positionnement au lit"},
+{code:"LI8375",temps_minutes:0,description:"Housse Startex coussin abduction",categorie:"Positionnement au lit"},
+{code:"LI8375_BAMBOU",temps_minutes:0,description:"Housse bambou coussin abduction",categorie:"Positionnement au lit"},
+{code:"LI8410",temps_minutes:0,description:"Coussin bouée forme circulaire",categorie:"Positionnement au lit"},
+{code:"LI8415",temps_minutes:0,description:"Housse Startex coussin bouée",categorie:"Positionnement au lit"},
+{code:"LI8415_BAMBOU",temps_minutes:0,description:"Housse bambou coussin bouée",categorie:"Positionnement au lit"},
+{code:"LI8465",temps_minutes:0,description:"Système anti-chute bilatéral (6 blocs + toile)",categorie:"Système anti-chute"},
+{code:"LI8470",temps_minutes:0,description:"Système anti-chute unilatéral (3 blocs + toile)",categorie:"Système anti-chute"},
+{code:"LI8475",temps_minutes:0,description:"Toile velcro pour blocs anti-chute 36\"x80\"",categorie:"Système anti-chute"},
+{code:"LI8480",temps_minutes:0,description:"Bloc anti-chute 11.5\"x24\"x6\"",categorie:"Système anti-chute"},
+{code:"MI7025",temps_minutes:0,description:"Équerre correctrice coussinée/pied",categorie:"Membres inférieurs"},
+{code:"MI7040",temps_minutes:0,description:"Housse équerre correctrice",categorie:"Membres inférieurs"},
+{code:"MI7045",temps_minutes:0,description:"Palette appui-pied coussinée",categorie:"Membres inférieurs"},
+{code:"MI7046",temps_minutes:0,description:"Palette appui-pied ABS 1/4\"",categorie:"Membres inférieurs"},
+{code:"MI7050",temps_minutes:0,description:"Palette appui-pied avec antidérapant",categorie:"Membres inférieurs"},
+{code:"MI7055",temps_minutes:0,description:"Coussinage palette appui-pied",categorie:"Membres inférieurs"},
+{code:"MI7060",temps_minutes:0,description:"Housse Dartex Cuirette palette",categorie:"Membres inférieurs"},
+{code:"MI7066",temps_minutes:0,description:"Boîte d\'appuis-pieds",categorie:"Membres inférieurs"},
+{code:"MI7070",temps_minutes:0,description:"Boîte d\'appuis-pieds structure ABS",categorie:"Membres inférieurs"},
+{code:"MI7085",temps_minutes:0,description:"Mécanisme multi réglable",categorie:"Membres inférieurs"},
+{code:"MI7115",temps_minutes:0,description:"Équerres (2 unités)",categorie:"Membres inférieurs"},
+{code:"MI7120",temps_minutes:0,description:"Courroie appui-mollet simple 4po",categorie:"Membres inférieurs"},
+{code:"MI7125",temps_minutes:0,description:"Courroie appui-mollet double 8po",categorie:"Membres inférieurs"},
+{code:"MI7130",temps_minutes:0,description:"Talonnière 2\"",categorie:"Membres inférieurs"},
+{code:"MI7131",temps_minutes:0,description:"Talonnière 4\"",categorie:"Membres inférieurs"},
+{code:"MI7133",temps_minutes:0,description:"Talonnière 4\" avec coussinage néoprène",categorie:"Membres inférieurs"},
+{code:"MI7135",temps_minutes:0,description:"Cale-pied",categorie:"Membres inférieurs"},
+{code:"MI7140",temps_minutes:0,description:"Chevillère #1 6.5\"-8.5\"",categorie:"Membres inférieurs"},
+{code:"MI7145",temps_minutes:0,description:"Chevillère #2 8.5\"-10\"",categorie:"Membres inférieurs"},
+{code:"MI7150",temps_minutes:0,description:"Chevillère #3 10\"-12.5\"",categorie:"Membres inférieurs"},
+{code:"MI7155",temps_minutes:0,description:"Coussin remplacement stabilisateur X petit",categorie:"Membres inférieurs"},
+{code:"MI7160",temps_minutes:0,description:"Coussin remplacement stabilisateur petit",categorie:"Membres inférieurs"},
+{code:"MI7165",temps_minutes:0,description:"Coussin remplacement stabilisateur moyen",categorie:"Membres inférieurs"},
+{code:"MI7181",temps_minutes:0,description:"Stabilisateur genou X petit",categorie:"Membres inférieurs"},
+{code:"MI7182",temps_minutes:0,description:"Stabilisateur genou petit",categorie:"Membres inférieurs"},
+{code:"MI7183",temps_minutes:0,description:"Stabilisateur genou moyen",categorie:"Membres inférieurs"},
+{code:"MI7195",temps_minutes:0,description:"Courroie stabilisatrice aux genoux",categorie:"Membres inférieurs"},
+{code:"MI7215",temps_minutes:0,description:"Protège-genou droit",categorie:"Membres inférieurs"},
+{code:"MI7220",temps_minutes:0,description:"Protège-genou gauche",categorie:"Membres inférieurs"},
+{code:"MI7230",temps_minutes:0,description:"Bottine rigide petite",categorie:"Membres inférieurs"},
+{code:"MI7235",temps_minutes:0,description:"Bottine rigide moyenne",categorie:"Membres inférieurs"},
+{code:"MI7240",temps_minutes:0,description:"Bottine rigide grande",categorie:"Membres inférieurs"},
+{code:"MI7245",temps_minutes:0,description:"Bottine rigide personnalisée",categorie:"Membres inférieurs"},
+{code:"MI7250",temps_minutes:0,description:"Courroie au pied",categorie:"Membres inférieurs"},
+{code:"MI7256",temps_minutes:0,description:"Appui-moignon standard",categorie:"Appui-moignon"},
+{code:"MI7262",temps_minutes:0,description:"Appui-moignon standard",categorie:"Appui-moignon"},
+{code:"MI7267",temps_minutes:0,description:"Appui-moignon multi-réglable 7\"×8\"",categorie:"Appui-moignon"},
+{code:"MI7268",temps_minutes:0,description:"Appui-moignon multi-réglable 8\"×11\"",categorie:"Appui-moignon"},
+{code:"MI7288",temps_minutes:0,description:"Palette pleine largeur ABS antidérapant",categorie:"Membres inférieurs"},
+{code:"MI7289",temps_minutes:0,description:"Palette pleine largeur ABS",categorie:"Membres inférieurs"},
+{code:"MI7290",temps_minutes:0,description:"Palette pleine largeur coussinée ABS",categorie:"Membres inférieurs"},
+{code:"MI7295",temps_minutes:0,description:"Coussinage palette pleine largeur",categorie:"Membres inférieurs"},
+{code:"MI7300",temps_minutes:0,description:"Gaine protectrice pleine longueur",categorie:"Membres inférieurs"},
+{code:"MI7301",temps_minutes:0,description:"Gaine protectrice genou oeillet gauche",categorie:"Membres inférieurs"},
+{code:"MI7302",temps_minutes:0,description:"Gaine protectrice genou velcro droit",categorie:"Membres inférieurs"},
+{code:"MI7303",temps_minutes:0,description:"Gaine protectrice genou velcro gauche",categorie:"Membres inférieurs"},
+{code:"MI7304",temps_minutes:0,description:"Gaine protectrice genou oeillet droit",categorie:"Membres inférieurs"},
+{code:"MI7320",temps_minutes:0,description:"Appui-moignon profilé",categorie:"Appui-moignon"},
+{code:"MI7385",temps_minutes:0,description:"Appui-moignon personnalisé",categorie:"Appui-moignon"},
+{code:"MI7443",temps_minutes:0,description:"Gaine protectrice non-standard",categorie:"Membres inférieurs"},
+{code:"MI7480",temps_minutes:0,description:"Gaine protectrice plaque siège rigide",categorie:"Gaines protectrices"},
+{code:"MI7520",temps_minutes:0,description:"Courroie appui-mollet simple avec gel",categorie:"Membres inférieurs"},
+{code:"MI7525",temps_minutes:0,description:"Courroie appui-mollet double avec gel",categorie:"Membres inférieurs"},
+{code:"MI7550",temps_minutes:0,description:"Gaine protectrice traverse Neox Dynamic petite",categorie:"Gaines protectrices"},
+{code:"MI7555",temps_minutes:0,description:"Gaine protectrice traverse Neox Dynamic moyenne",categorie:"Gaines protectrices"},
+{code:"MI7560",temps_minutes:0,description:"Gaine protectrice traverse Neox Dynamic grande",categorie:"Gaines protectrices"},
+{code:"MI7575-D",temps_minutes:0,description:"Gaine protectrice repose-jambe élévateur droit",categorie:"Gaines protectrices"},
+{code:"MI7575-L",temps_minutes:0,description:"Gaine protectrice repose-jambe élévateur gauche",categorie:"Gaines protectrices"},
+{code:"MI7600",temps_minutes:0,description:"Gaine protectrice XL châssis",categorie:"Gaines protectrices"},
+{code:"MI7605",temps_minutes:0,description:"Gaine protectrice XL-Hémi",categorie:"Gaines protectrices"},
+{code:"MI7610",temps_minutes:0,description:"Gaine protectrice Neox",categorie:"Gaines protectrices"},
+{code:"MI7615",temps_minutes:0,description:"Gaine protectrice universelle",categorie:"Gaines protectrices"},
+{code:"NS75",temps_minutes:0,description:"Insert Roho 7×5 cellules",categorie:"Inserts"},
+{code:"NS75-...DV",temps_minutes:0,description:"Insert Roho 7x5 cellules Double valve (3\" ou 4\")",categorie:"Coussin Resolve Air"},
+{code:"NS85",temps_minutes:0,description:"Insert Roho 8×5 cellules",categorie:"Inserts"},
+{code:"NS85-...DV",temps_minutes:0,description:"Insert Roho 8x5 cellules Double valve (3\" ou 4\")",categorie:"Coussin Resolve Air"},
+{code:"NS85-DV",temps_minutes:0,description:"Insert Roho Standard 8×5 cellules",categorie:"Inserts"},
+{code:"NS95",temps_minutes:0,description:"Insert Roho Bariatrique 9×5 cellules",categorie:"Inserts"},
+{code:"NS95-...DV",temps_minutes:0,description:"Insert Roho 9x5 cellules Double valve (3\")",categorie:"Coussin Resolve Air"},
+{code:"NS95-DV",temps_minutes:0,description:"Insert Roho Bariatrique DV",categorie:"Inserts"},
+{code:"PD50715",temps_minutes:0,description:"Housse d\'incontinence",categorie:"Dossier Axis"},
+{code:"PH-00174",temps_minutes:0,description:"Glissière de table en ABS gauche",categorie:"Gouttière"},
+{code:"PH-00175",temps_minutes:0,description:"Glissière de table en ABS droite",categorie:"Gouttière"},
+{code:"PH-02341",temps_minutes:0,description:"Option extension (1\" additionnel en largeur)",categorie:"Dossier HP2"},
+{code:"PH-05862",temps_minutes:0,description:"Glissières réglables en U épaisse",categorie:"Table éléments posture"},
+{code:"PH-05882",temps_minutes:0,description:"Glissières réglables en U mince",categorie:"Table éléments posture"},
+{code:"PH-05883",temps_minutes:0,description:"Glissières réglables en L épaisse",categorie:"Table éléments posture"},
+{code:"PH-05884",temps_minutes:0,description:"Glissières réglables en L mince",categorie:"Table éléments posture"},
+{code:"PHY60",temps_minutes:0,description:"Densité base souple 3.4",categorie:"Coussin Physiair"},
+{code:"PHY75",temps_minutes:0,description:"Densité base ferme 4.5",categorie:"Coussin Physiair"},
+{code:"PVB40630",temps_minutes:0,description:"Segufix",categorie:"Ceintures"},
+{code:"PZ5525-1/2",temps_minutes:0,description:"Base en mousse - Uréthane Densité souple",categorie:"Coussin Pression Zéro"},
+{code:"PZ7525-1/2/3",temps_minutes:0,description:"Base en mousse - Uréthane Densité ferme",categorie:"Coussin Pression Zéro"},
+{code:"S1000",temps_minutes:0,description:"Siège conventionnel plastique 1/4\"",categorie:"Siège rigide"},
+{code:"S1005",temps_minutes:0,description:"Siège conventionnel plastique 3/8\"",categorie:"Siège rigide"},
+{code:"S1010",temps_minutes:0,description:"Siège conventionnel aluminium 3/16\"",categorie:"Siège rigide"},
+{code:"S1015",temps_minutes:0,description:"Siège profondeur inégale plastique 1/4\" droite",categorie:"Siège rigide"},
+{code:"S1020",temps_minutes:0,description:"Siège profondeur inégale plastique 3/8\" droite",categorie:"Siège rigide"},
+{code:"S1025",temps_minutes:0,description:"Siège profondeur inégale plastique 1/4\" gauche",categorie:"Siège rigide"},
+{code:"S1030",temps_minutes:0,description:"Siège profondeur inégale plastique 3/8\" gauche",categorie:"Siège rigide"},
+{code:"S1035",temps_minutes:0,description:"Siège profondeur inégale aluminium 3/16\" droite",categorie:"Siège rigide"},
+{code:"S1040",temps_minutes:0,description:"Siège profondeur inégale aluminium 3/16\" gauche",categorie:"Siège rigide"},
+{code:"S1045",temps_minutes:0,description:"Siège réglable angle/profondeur plastique 1/4\"",categorie:"Siège rigide"},
+{code:"S1050",temps_minutes:0,description:"Siège réglable angle/profondeur plastique 3/8\"",categorie:"Siège rigide"},
+{code:"S1055",temps_minutes:0,description:"Siège réglable angle/profondeur aluminium 3/16\"",categorie:"Siège rigide"},
+{code:"S1060",temps_minutes:0,description:"Siège réglable inégal plastique 1/4\" droite",categorie:"Siège rigide"},
+{code:"S1065",temps_minutes:0,description:"Siège réglable inégal plastique 3/8\" droite",categorie:"Siège rigide"},
+{code:"S1070",temps_minutes:0,description:"Siège réglable inégal plastique 1/4\" gauche",categorie:"Siège rigide"},
+{code:"S1075",temps_minutes:0,description:"Siège réglable inégal plastique 3/8\" gauche",categorie:"Siège rigide"},
+{code:"S1080",temps_minutes:0,description:"Siège réglable inégal aluminium 3/16\" droite",categorie:"Siège rigide"},
+{code:"S1085",temps_minutes:0,description:"Siège réglable inégal aluminium 3/16\" gauche",categorie:"Siège rigide"},
+{code:"S1095",temps_minutes:0,description:"Syst. ancrage crochets/équerres 2 trous 7/8\"",categorie:"Siège rigide"},
+{code:"S1100",temps_minutes:0,description:"Syst. ancrage crochets/équerres 2 trous 1\"",categorie:"Siège rigide"},
+{code:"S1110",temps_minutes:0,description:"Syst. ancrage crochets/équerres 5 trous 7/8\"",categorie:"Siège rigide"},
+{code:"S1115",temps_minutes:0,description:"Syst. ancrage crochets/équerres 5 trous 1\"",categorie:"Siège rigide"},
+{code:"S1332-C3S-CA",temps_minutes:0,description:"Coupe anatomique C3S",categorie:"Coussin C3S"},
+{code:"S1332-C3S-CPI",temps_minutes:0,description:"Coupe profondeur inégale C3S",categorie:"Coussin C3S"},
+{code:"S1332-C3S-CSB-L",temps_minutes:0,description:"Coupe surbaissé gauche C3S",categorie:"Coussin C3S"},
+{code:"S1332-C3S-CSB-R",temps_minutes:0,description:"Coupe surbaissé droite C3S",categorie:"Coussin C3S"},
+{code:"S1332-C3S-DO",temps_minutes:0,description:"Coupe devant oblique C3S",categorie:"Coussin C3S"},
+{code:"S1332-C3S-DS",temps_minutes:0,description:"Coupe dégagement sacrum C3S",categorie:"Coussin C3S"},
+{code:"S1332-FUS-CA",temps_minutes:0,description:"Coupe anatomique Fusion",categorie:"Coussin Fusion"},
+{code:"S1332-FUS-CPI",temps_minutes:0,description:"Coupe profondeur inégale Fusion",categorie:"Coussin Fusion"},
+{code:"S1332-FUS-CSB-L",temps_minutes:0,description:"Coupe surbaissé gauche Fusion",categorie:"Coussin Fusion"},
+{code:"S1332-FUS-CSB-R",temps_minutes:0,description:"Coupe surbaissé droite Fusion",categorie:"Coussin Fusion"},
+{code:"S1332-FUS-DO",temps_minutes:0,description:"Coupe devant oblique Fusion",categorie:"Coussin Fusion"},
+{code:"S1332-FUS-DS",temps_minutes:0,description:"Coupe dégagement sacrum Fusion",categorie:"Coussin Fusion"},
+{code:"S1332-INS-CA",temps_minutes:0,description:"Coupe anatomique Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S1332-INS-CPI",temps_minutes:0,description:"Coupe profondeur inégale Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S1332-INS-CSB-L",temps_minutes:0,description:"Coupe surbaissé gauche Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S1332-INS-CSB-R",temps_minutes:0,description:"Coupe surbaissé droite Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S1332-INS-DO",temps_minutes:0,description:"Coupe devant oblique Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S1332-LXA-CA",temps_minutes:0,description:"Coupe anatomique LXA",categorie:"Coussin LXA"},
+{code:"S1332-LXA-CPI",temps_minutes:0,description:"Coupe profondeur inégale LXA",categorie:"Coussin LXA"},
+{code:"S1332-LXA-CSB-L",temps_minutes:0,description:"Coupe surbaissé gauche LXA",categorie:"Coussin LXA"},
+{code:"S1332-LXA-CSB-R",temps_minutes:0,description:"Coupe surbaissé droite LXA",categorie:"Coussin LXA"},
+{code:"S1332-LXA-DA",temps_minutes:0,description:"Coupe devant arrondi LXA",categorie:"Coussin LXA"},
+{code:"S1332-LXA-DO",temps_minutes:0,description:"Coupe devant oblique LXA",categorie:"Coussin LXA"},
+{code:"S1332-PZ-CA",temps_minutes:0,description:"Coupe Anatomique - Abaissement de 1½\"",categorie:"Coussin Pression Zéro"},
+{code:"S1332-PZ-CSB-L",temps_minutes:0,description:"Coupe Surbaissé Gauche - Abaissement de 1½\"",categorie:"Coussin Pression Zéro"},
+{code:"S1332-PZ-CSB-R",temps_minutes:0,description:"Coupe Surbaissé Droite - Abaissement de 1½\"",categorie:"Coussin Pression Zéro"},
+{code:"S1332-PZ-DO",temps_minutes:0,description:"Coupe Devant oblique",categorie:"Coussin Pression Zéro"},
+{code:"S1332-PZ-PB",temps_minutes:0,description:"Coupe Profil Bas - Diminution du devant de 1\"",categorie:"Coussin Pression Zéro"},
+{code:"S1332-SK-CA",temps_minutes:0,description:"Coupe Anatomique",categorie:"Coussin Siliko"},
+{code:"S1332-SK-CSB-L",temps_minutes:0,description:"Coupe Surbaissé Gauche",categorie:"Coussin Siliko"},
+{code:"S1332-SK-CSB-R",temps_minutes:0,description:"Coupe Surbaissé Droite",categorie:"Coussin Siliko"},
+{code:"S1332-SK-DO",temps_minutes:0,description:"Coupe Devant oblique",categorie:"Coussin Siliko"},
+{code:"S1332-SK-PB",temps_minutes:0,description:"Coupe Profil Bas",categorie:"Coussin Siliko"},
+{code:"S1332-TEF-CA",temps_minutes:0,description:"Coupe Anatomique",categorie:"Coussin Temper-Flo"},
+{code:"S1332-TEF-CSB-L",temps_minutes:0,description:"Coupe Surbaissé Gauche",categorie:"Coussin Temper-Flo"},
+{code:"S1332-TEF-CSB-R",temps_minutes:0,description:"Coupe Surbaissé Droite",categorie:"Coussin Temper-Flo"},
+{code:"S1332-TEF-DA",temps_minutes:0,description:"Coupe Devant arrondi",categorie:"Coussin Temper-Flo"},
+{code:"S1332-TEF-DO",temps_minutes:0,description:"Coupe Devant oblique",categorie:"Coussin Temper-Flo"},
+{code:"S1332-TEF-DS",temps_minutes:0,description:"Coupe Dégagement au sacrum",categorie:"Coussin Temper-Flo"},
+{code:"S1332-TEF-PB",temps_minutes:0,description:"Coupe Profil Bas",categorie:"Coussin Temper-Flo"},
+{code:"S1332-UL-CA",temps_minutes:0,description:"Coupe Anatomique",categorie:"Coussin Ultra"},
+{code:"S1332-UL-CSB-L",temps_minutes:0,description:"Coupe Surbaissé Gauche",categorie:"Coussin Ultra"},
+{code:"S1332-UL-CSB-R",temps_minutes:0,description:"Coupe Surbaissé Droite",categorie:"Coussin Ultra"},
+{code:"S1332-UL-DO",temps_minutes:0,description:"Coupe Devant oblique",categorie:"Coussin Ultra"},
+{code:"S1332-UL-PB",temps_minutes:0,description:"Coupe Profil Bas",categorie:"Coussin Ultra"},
+{code:"S1900-AF",temps_minutes:0,description:"Installation plate Air Foam",categorie:"Coussin Air Foam"},
+{code:"S1900-BR",temps_minutes:0,description:"Installation plate Brio",categorie:"Coussin Brio"},
+{code:"S1900-C3S",temps_minutes:0,description:"Installation plate C3S",categorie:"Coussin C3S"},
+{code:"S1900-EAS",temps_minutes:0,description:"Installation plate Easy Fit",categorie:"Coussin Easy Fit"},
+{code:"S1900-ELL",temps_minutes:0,description:"Installation plate Ellipse",categorie:"Coussin Ellipse"},
+{code:"S1900-FUS",temps_minutes:0,description:"Installation plate Fusion",categorie:"Coussin Fusion"},
+{code:"S1900-INS",temps_minutes:0,description:"Installation plate Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S1900-LXA",temps_minutes:0,description:"Installation plate LXA",categorie:"Coussin LXA"},
+{code:"S1900-PHY",temps_minutes:0,description:"Installation plate Physiair",categorie:"Coussin Physiair"},
+{code:"S1900-PZ",temps_minutes:0,description:"Installation Plate - Sans renfort en ABS",categorie:"Coussin Pression Zéro"},
+{code:"S1900-RES",temps_minutes:0,description:"Installation Plate",categorie:"Coussin Resolve Air"},
+{code:"S1900-SK",temps_minutes:0,description:"Installation Plate - Sans renfort en ABS",categorie:"Coussin Siliko"},
+{code:"S1900-TEF",temps_minutes:0,description:"Installation Plate - Sans renfort en ABS",categorie:"Coussin Temper-Flo"},
+{code:"S1900-UL",temps_minutes:0,description:"Installation Plate - Sans renfort en ABS",categorie:"Coussin Ultra"},
+{code:"S1901-AF",temps_minutes:0,description:"Installation encastrée Air Foam",categorie:"Coussin Air Foam"},
+{code:"S1901-BR",temps_minutes:0,description:"Installation encastrée Brio",categorie:"Coussin Brio"},
+{code:"S1901-C3S",temps_minutes:0,description:"Installation encastrée C3S",categorie:"Coussin C3S"},
+{code:"S1901-ELL",temps_minutes:0,description:"Installation encastrée Ellipse",categorie:"Coussin Ellipse"},
+{code:"S1901-FUS",temps_minutes:0,description:"Installation encastrée Fusion",categorie:"Coussin Fusion"},
+{code:"S1901-INS",temps_minutes:0,description:"Installation encastrée Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S1901-LXA",temps_minutes:0,description:"Installation encastrée LXA",categorie:"Coussin LXA"},
+{code:"S1901-PHY",temps_minutes:0,description:"Installation encastrée Physiair",categorie:"Coussin Physiair"},
+{code:"S1902-AF",temps_minutes:0,description:"Installation canevas Air Foam",categorie:"Coussin Air Foam"},
+{code:"S1902-BR",temps_minutes:0,description:"Installation canevas Brio",categorie:"Coussin Brio"},
+{code:"S1902-C3S",temps_minutes:0,description:"Installation canevas C3S",categorie:"Coussin C3S"},
+{code:"S1902-EAS",temps_minutes:0,description:"Installation canevas Easy Fit",categorie:"Coussin Easy Fit"},
+{code:"S1902-ELL",temps_minutes:0,description:"Installation canevas Ellipse",categorie:"Coussin Ellipse"},
+{code:"S1902-FUS",temps_minutes:0,description:"Installation canevas Fusion",categorie:"Coussin Fusion"},
+{code:"S1902-INS",temps_minutes:0,description:"Installation canevas Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S1902-LXA",temps_minutes:0,description:"Installation canevas LXA",categorie:"Coussin LXA"},
+{code:"S1902-PHY",temps_minutes:0,description:"Installation canevas Physiair",categorie:"Coussin Physiair"},
+{code:"S1902-PZ",temps_minutes:0,description:"Installation Canevas - Sans renfort en ABS",categorie:"Coussin Pression Zéro"},
+{code:"S1902-SK",temps_minutes:0,description:"Installation Canevas - Sans renfort en ABS",categorie:"Coussin Siliko"},
+{code:"S1902-TEF",temps_minutes:0,description:"Installation Canevas - Sans renfort en ABS",categorie:"Coussin Temper-Flo"},
+{code:"S1902-UL",temps_minutes:0,description:"Installation Canevas - Sans renfort en ABS",categorie:"Coussin Ultra"},
+{code:"S2240",temps_minutes:0,description:"Housse imperméable Fusion",categorie:"Coussin Fusion"},
+{code:"S2290",temps_minutes:0,description:"Housse extensible Fusion",categorie:"Coussin Fusion"},
+{code:"S2292",temps_minutes:0,description:"Housse antiglissement Fusion",categorie:"Coussin Fusion"},
+{code:"S2361",temps_minutes:0,description:"Coussin Contour Insert 2\"",categorie:"Coussin Contour Insert"},
+{code:"S2366",temps_minutes:0,description:"Coussin Contour Insert 3\"",categorie:"Coussin Contour Insert"},
+{code:"S2367",temps_minutes:0,description:"Housse extensible Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S2369",temps_minutes:0,description:"Housse antiglissement Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S2371",temps_minutes:0,description:"Coussin Contour Insert 4\"",categorie:"Coussin Contour Insert"},
+{code:"S2390",temps_minutes:0,description:"Enveloppe éclair Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S2455",temps_minutes:0,description:"Coussin LXA standard",categorie:"Coussin LXA"},
+{code:"S2460",temps_minutes:0,description:"Housse extensible LXA",categorie:"Coussin LXA"},
+{code:"S2464",temps_minutes:0,description:"Housse antiglissement LXA",categorie:"Coussin LXA"},
+{code:"S2465",temps_minutes:0,description:"Pellicule transparente",categorie:"Accessoires coussins"},
+{code:"S2468",temps_minutes:0,description:"Housse imperméable LXA",categorie:"Coussin LXA"},
+{code:"S2575",temps_minutes:0,description:"Housse Lycra imperméable à velcro",categorie:"Éléments forme"},
+{code:"S2655",temps_minutes:0,description:"Biseau crural en pointe standard",categorie:"Éléments forme"},
+{code:"S2655-4",temps_minutes:0,description:"Biseau crural en pointe - Non-standard",categorie:"Éléments forme"},
+{code:"S2665",temps_minutes:0,description:"Biseau à couper vrac",categorie:"Éléments forme"},
+{code:"S2670",temps_minutes:0,description:"Biseau crural plat",categorie:"Éléments forme"},
+{code:"S2670-0.5",temps_minutes:0,description:"Biseau crural - Épaisseur ½\" (petit seulement)",categorie:"Coussin Resolve Foam"},
+{code:"S2670-1",temps_minutes:0,description:"Biseau crural plat - Épaisseur 1\"",categorie:"Coussin Resolve Air"},
+{code:"S2670-4",temps_minutes:0,description:"Biseau crural pointe",categorie:"Éléments forme"},
+{code:"S2675",temps_minutes:0,description:"Biseau fessier",categorie:"Éléments forme"},
+{code:"S2680",temps_minutes:0,description:"Biseau fessier alt",categorie:"Éléments forme"},
+{code:"S2681",temps_minutes:0,description:"Housse biseau fessier",categorie:"Éléments forme"},
+{code:"S2685",temps_minutes:0,description:"Biseau anti-effet hamac en pointe standard",categorie:"Éléments forme"},
+{code:"S2685-1",temps_minutes:0,description:"Canevas avec biseau anti-effet hamac en pointe 1\"",categorie:"Coussin Resolve Air"},
+{code:"S2690",temps_minutes:0,description:"Housse pour biseau AEH - En pointe",categorie:"Éléments forme"},
+{code:"S2695",temps_minutes:0,description:"Biseau AEH plat",categorie:"Éléments forme"},
+{code:"S2705",temps_minutes:0,description:"Biseau AEH pointe",categorie:"Éléments forme"},
+{code:"S2724-0",temps_minutes:0,description:"Butée ABD stratifiée 0",categorie:"Éléments forme"},
+{code:"S2724-1",temps_minutes:0,description:"Butée ABD stratifiée 1",categorie:"Éléments forme"},
+{code:"S2724-2",temps_minutes:0,description:"Butée ABD stratifiée 2",categorie:"Éléments forme"},
+{code:"S2724-3",temps_minutes:0,description:"Butée ABD stratifiée 3",categorie:"Éléments forme"},
+{code:"S2725-0",temps_minutes:0,description:"Butée ABD velcro 0",categorie:"Éléments forme"},
+{code:"S2725-1",temps_minutes:0,description:"Butée d\'abduction à velcro - Uréthane L:3\" P:7\" H:2\"",categorie:"Éléments forme"},
+{code:"S2725-2",temps_minutes:0,description:"Butée d\'abduction à velcro - Uréthane L:4\" P:7\" H:2½\"",categorie:"Éléments forme"},
+{code:"S2725-3",temps_minutes:0,description:"Butée ABD velcro 3",categorie:"Éléments forme"},
+{code:"S2725-P",temps_minutes:0,description:"Butée ABD velcro petit",categorie:"Éléments forme"},
+{code:"S2726-0",temps_minutes:0,description:"Butée d\'abduction à velcro - EVA foam Non-standard",categorie:"Éléments forme"},
+{code:"S2726-1",temps_minutes:0,description:"Butée d\'abduction à velcro - EVA foam L:3\" P:7\" H:2\"",categorie:"Éléments forme"},
+{code:"S2726-2",temps_minutes:0,description:"Butée d\'abduction à velcro - EVA foam L:4\" P:7\" H:2½\"",categorie:"Éléments forme"},
+{code:"S2726-3",temps_minutes:0,description:"Butée d\'abduction à velcro - EVA foam L:5\" P:7\" H:3\"",categorie:"Éléments forme"},
+{code:"S2726-P",temps_minutes:0,description:"Butée d\'abduction à velcro - EVA foam L:2\" P:5\" H:2\"",categorie:"Éléments forme"},
+{code:"S2727",temps_minutes:0,description:"Housse pour butée d\'abduction à velcro",categorie:"Éléments forme"},
+{code:"S2740",temps_minutes:0,description:"Butée abduction vrac 3\"x44\"x2\"",categorie:"Éléments forme"},
+{code:"S2745",temps_minutes:0,description:"Butée abduction vrac 4\"x44\"x2.5\"",categorie:"Éléments forme"},
+{code:"S2750",temps_minutes:0,description:"Butée abduction vrac 5\"x44\"x3\"",categorie:"Éléments forme"},
+{code:"S2755",temps_minutes:0,description:"Pommeau abduction 2½\"×3\"×3\"",categorie:"Abduction"},
+{code:"S2760",temps_minutes:0,description:"Pommeau abduction 3\"×4\"×3\"",categorie:"Abduction"},
+{code:"S2800",temps_minutes:0,description:"Mécanisme bouton pression",categorie:"Abduction"},
+{code:"S2805",temps_minutes:0,description:"Mécanisme enclenchement rail",categorie:"Abduction"},
+{code:"S2810",temps_minutes:0,description:"Pommeau abduction 4½\"×5\"×4\"",categorie:"Abduction"},
+{code:"S2815",temps_minutes:0,description:"Mécanisme dégagement horizontal/vertical",categorie:"Abduction"},
+{code:"S2821",temps_minutes:0,description:"Mécanisme adduction tubulure ⅞\"",categorie:"Adduction"},
+{code:"S2826",temps_minutes:0,description:"Mécanisme adduction tubulure 1\"",categorie:"Adduction"},
+{code:"S2828",temps_minutes:0,description:"Coussin adduction standard alt",categorie:"Adduction"},
+{code:"S2828-GEL",temps_minutes:0,description:"Coussin adduction gel alt",categorie:"Adduction"},
+{code:"S2829",temps_minutes:0,description:"Coussin adduction standard",categorie:"Adduction"},
+{code:"S2829-GEL",temps_minutes:0,description:"Coussin adduction gel",categorie:"Adduction"},
+{code:"S2861",temps_minutes:0,description:"Appui-pelvien amovible petit",categorie:"Éléments forme"},
+{code:"S2866",temps_minutes:0,description:"Appui-pelvien amovible 1.5\" épaisseur",categorie:"Éléments forme"},
+{code:"S2871",temps_minutes:0,description:"Appui-pelvien amovible 2\" épaisseur",categorie:"Éléments forme"},
+{code:"S2875",temps_minutes:0,description:"Housse nylon à velcro appui-pelvien",categorie:"Éléments forme"},
+{code:"S2883",temps_minutes:0,description:"Appui-pelvien amovible personnalisé",categorie:"Éléments forme"},
+{code:"S2886",temps_minutes:0,description:"Housse nylon appui-pelvien personnalisé",categorie:"Éléments forme"},
+{code:"S2887",temps_minutes:0,description:"Appui-pelvien amovible grand",categorie:"Éléments forme"},
+{code:"S2890-0",temps_minutes:0,description:"Appui-pelvien stratifié 0",categorie:"Éléments forme"},
+{code:"S2890-1",temps_minutes:0,description:"Appui-pelvien stratifié 1",categorie:"Éléments forme"},
+{code:"S2890-2",temps_minutes:0,description:"Appui-pelvien stratifié 2",categorie:"Éléments forme"},
+{code:"S2890-3",temps_minutes:0,description:"Appui-pelvien stratifié 3",categorie:"Éléments forme"},
+{code:"S2937",temps_minutes:0,description:"Plaque ABS ¼\" seul - H:5½\" P:9½\"",categorie:"Éléments forme"},
+{code:"S2938",temps_minutes:0,description:"Plaque ABS ¼\" avec système fixation sur plaque siège",categorie:"Éléments forme"},
+{code:"S2950",temps_minutes:0,description:"Coussin Brio standard",categorie:"Coussin Brio"},
+{code:"S2951",temps_minutes:0,description:"Housse extensible Brio",categorie:"Coussin Brio"},
+{code:"S2955",temps_minutes:0,description:"Coussin Fusion standard",categorie:"Coussin Fusion"},
+{code:"S2956",temps_minutes:0,description:"Coussin Fusion personnalisé",categorie:"Coussin Fusion"},
+{code:"S2960",temps_minutes:0,description:"Housse pour biseau crural - En pointe",categorie:"Éléments forme"},
+{code:"S2961",temps_minutes:0,description:"Housse pour biseau crural - Plat",categorie:"Éléments forme"},
+{code:"S2965-0",temps_minutes:0,description:"Butée ADD stratifiée 0",categorie:"Éléments forme"},
+{code:"S2965-1",temps_minutes:0,description:"Butée ADD stratifiée 1",categorie:"Éléments forme"},
+{code:"S2965-2",temps_minutes:0,description:"Butée ADD stratifiée 2",categorie:"Éléments forme"},
+{code:"S2965-3",temps_minutes:0,description:"Butée ADD stratifiée 3",categorie:"Éléments forme"},
+{code:"S2980-AF",temps_minutes:0,description:"Renfort ABS Air Foam",categorie:"Coussin Air Foam"},
+{code:"S2980-BR",temps_minutes:0,description:"Renfort ABS Brio",categorie:"Coussin Brio"},
+{code:"S2980-C3S",temps_minutes:0,description:"Renfort ABS C3S",categorie:"Coussin C3S"},
+{code:"S2980-EAS",temps_minutes:0,description:"Renfort ABS Easy Fit",categorie:"Coussin Easy Fit"},
+{code:"S2980-ELL",temps_minutes:0,description:"Renfort ABS Ellipse",categorie:"Coussin Ellipse"},
+{code:"S2980-FUS",temps_minutes:0,description:"Renfort ABS Fusion",categorie:"Coussin Fusion"},
+{code:"S2980-INS",temps_minutes:0,description:"Renfort ABS Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S2980-LXA",temps_minutes:0,description:"Renfort ABS LXA",categorie:"Coussin LXA"},
+{code:"S2980-PHY",temps_minutes:0,description:"Renfort ABS Physiair",categorie:"Coussin Physiair"},
+{code:"S2980-PZ",temps_minutes:0,description:"Installation Plate - Avec renfort en ABS",categorie:"Coussin Pression Zéro"},
+{code:"S2980-SK",temps_minutes:0,description:"Installation Plate - Avec renfort en ABS",categorie:"Coussin Siliko"},
+{code:"S2980-TEF",temps_minutes:0,description:"Installation Plate - Avec renfort en ABS",categorie:"Coussin Temper-Flo"},
+{code:"S2980-UL",temps_minutes:0,description:"Installation Plate - Avec renfort en ABS",categorie:"Coussin Ultra"},
+{code:"S2985",temps_minutes:0,description:"Coussin C3S standard",categorie:"Coussin C3S"},
+{code:"S2991",temps_minutes:0,description:"Coussin Ellipse standard",categorie:"Coussin Ellipse"},
+{code:"S2998",temps_minutes:0,description:"Housse extensible Ellipse",categorie:"Coussin Ellipse"},
+{code:"S3000",temps_minutes:0,description:"Housse extensible C3S",categorie:"Coussin C3S"},
+{code:"S3003",temps_minutes:0,description:"Housse antiglissement C3S",categorie:"Coussin C3S"},
+{code:"S3016",temps_minutes:0,description:"Insert mousse",categorie:"Inserts"},
+{code:"S3033",temps_minutes:0,description:"Insert gel Géo-Matrix Pillowtop",categorie:"Inserts"},
+{code:"S3035",temps_minutes:0,description:"Insert gel carrelé bleu",categorie:"Inserts"},
+{code:"S3037",temps_minutes:0,description:"Insert gel pebble bleu",categorie:"Inserts"},
+{code:"S3043",temps_minutes:0,description:"Housse antiglissement Ellipse",categorie:"Coussin Ellipse"},
+{code:"S3051",temps_minutes:0,description:"Housse antiglissement Brio",categorie:"Coussin Brio"},
+{code:"S4400",temps_minutes:0,description:"Pochette amovible velcro",categorie:"Accessoires coussins"},
+{code:"S5000",temps_minutes:0,description:"Coussin Physiair standard",categorie:"Coussin Physiair"},
+{code:"S5001",temps_minutes:0,description:"Housse extensible Physiair",categorie:"Coussin Physiair"},
+{code:"S5002",temps_minutes:0,description:"Enveloppe imperméable éclair Physiair",categorie:"Coussin Physiair"},
+{code:"S5006",temps_minutes:0,description:"Housse antiglissement Physiair",categorie:"Coussin Physiair"},
+{code:"S5007",temps_minutes:0,description:"Housse imperméable Physiair",categorie:"Coussin Physiair"},
+{code:"S5012",temps_minutes:0,description:"Housse imperméable Brio",categorie:"Coussin Brio"},
+{code:"S5013",temps_minutes:0,description:"Housse imperméable Ellipse",categorie:"Coussin Ellipse"},
+{code:"S5014",temps_minutes:0,description:"Housse imperméable C3S",categorie:"Coussin C3S"},
+{code:"S5015",temps_minutes:0,description:"Housse imperméable Contour Insert",categorie:"Coussin Contour Insert"},
+{code:"S5360",temps_minutes:0,description:"Coussin Air Foam standard",categorie:"Coussin Air Foam"},
+{code:"S5400",temps_minutes:0,description:"Coussin Easy Fit standard",categorie:"Coussin Easy Fit"},
+{code:"S5406",temps_minutes:0,description:"Mousse viscoélastique ½\" Easy Fit",categorie:"Coussin Easy Fit"},
+{code:"S5408",temps_minutes:0,description:"Insert gel cuvette Easy Fit",categorie:"Coussin Easy Fit"},
+{code:"S5410",temps_minutes:0,description:"Housse extensible Easy Fit",categorie:"Coussin Easy Fit"},
+{code:"S5415",temps_minutes:0,description:"Housse antiglissement Easy Fit",categorie:"Coussin Easy Fit"},
+{code:"S5420",temps_minutes:0,description:"Housse imperméable Easy Fit",categorie:"Coussin Easy Fit"},
+{code:"S9880",temps_minutes:0,description:"Enveloppe éclair C3S",categorie:"Coussin C3S"},
+{code:"S9980",temps_minutes:0,description:"Enveloppe imperméable fermeture éclair",categorie:"Accessoires coussins"},
+{code:"SBS-1",temps_minutes:0,description:"Stimulite ½\" sans pellicule",categorie:"Dossier Axis"},
+{code:"SBS-5-XS",temps_minutes:0,description:"Stimulite 1\" avec pellicule",categorie:"Dossier Axis"},
+{code:"SC7500",temps_minutes:0,description:"Ceinture métal 2\"",categorie:"Ceintures"},
+{code:"SC7505",temps_minutes:0,description:"Ceinture plastique 1\"",categorie:"Ceintures"},
+{code:"SC7520",temps_minutes:0,description:"Ceinture plastique 2\"",categorie:"Ceintures"},
+{code:"SC7540",temps_minutes:0,description:"Ceinture coussinée adulte",categorie:"Ceintures"},
+{code:"SC7546",temps_minutes:0,description:"Ceinture coussinée enfant",categorie:"Ceintures"},
+{code:"SC7550",temps_minutes:0,description:"Plastron hauteurs 3\"-7\" largeurs 4\"-12\"",categorie:"Plastrons"},
+{code:"SC7590",temps_minutes:0,description:"Ceinture 4 pointes Y adulte plastique",categorie:"Ceintures"},
+{code:"SC7594",temps_minutes:0,description:"Ceinture 4 pointes Y enfant métal 65°",categorie:"Ceintures"},
+{code:"SC7595",temps_minutes:0,description:"Harnais poitrine homme petit",categorie:"Ceintures"},
+{code:"SC7600",temps_minutes:0,description:"Harnais poitrine homme moyen",categorie:"Ceintures"},
+{code:"SC7605",temps_minutes:0,description:"Harnais poitrine homme grand",categorie:"Ceintures"},
+{code:"SC7610",temps_minutes:0,description:"Harnais poitrine femme petit",categorie:"Ceintures"},
+{code:"SC7615",temps_minutes:0,description:"Harnais de poitrine souple femme - Moyen",categorie:"Dossier HP2"},
+{code:"SC7620",temps_minutes:0,description:"Harnais poitrine femme grand",categorie:"Ceintures"},
+{code:"SC7625",temps_minutes:0,description:"Harnais poitrine enfant",categorie:"Ceintures"},
+{code:"SC7629",temps_minutes:0,description:"Plaque ancrage rigide",categorie:"Plastrons"},
+{code:"SC7631",temps_minutes:0,description:"Plaque ancrage rigide alt",categorie:"Plastrons"},
+{code:"SC7710-WB",temps_minutes:0,description:"Couche maintien standard boucles plastique",categorie:"Couche maintien"},
+{code:"SC7710-WS",temps_minutes:0,description:"Couche maintien standard boutons pression",categorie:"Couche maintien"},
+{code:"SC7710-WV",temps_minutes:0,description:"Couche maintien standard velcro",categorie:"Couche maintien"},
+{code:"SC7712-WB",temps_minutes:0,description:"Couche maintien non-standard boucles plastique",categorie:"Couche maintien"},
+{code:"SC7712-WS",temps_minutes:0,description:"Couche maintien non-standard boutons pression",categorie:"Couche maintien"},
+{code:"SC7712-WV",temps_minutes:0,description:"Couche maintien non-standard velcro",categorie:"Couche maintien"},
+{code:"ST-03753",temps_minutes:0,description:"Garniture d\'appui-bras profilé gel #1",categorie:"Table éléments posture"},
+{code:"ST-52143",temps_minutes:0,description:"Garniture d\'appui-bras profilé gel #2",categorie:"Table éléments posture"},
+{code:"TA6010",temps_minutes:0,description:"Table surdimensionnée (Lexan)",categorie:"Table éléments posture"},
+{code:"TA6015",temps_minutes:0,description:"Table standard (Lexan)",categorie:"Table éléments posture"},
+{code:"TA6020",temps_minutes:0,description:"Courroie de retenue pour table",categorie:"Table éléments posture"},
+{code:"TA6035",temps_minutes:0,description:"Demi-table rabattable standard droite",categorie:"Demi-table rabattable"},
+{code:"TA6036",temps_minutes:0,description:"Demi-table rabattable non-standard droite",categorie:"Demi-table rabattable"},
+{code:"TA6040",temps_minutes:0,description:"Demi-table rabattable standard gauche",categorie:"Demi-table rabattable"},
+{code:"TA6041",temps_minutes:0,description:"Demi-table rabattable non-standard gauche",categorie:"Demi-table rabattable"},
+{code:"TA6045",temps_minutes:0,description:"Extenseur de main",categorie:"Table éléments posture"},
+{code:"TA6050",temps_minutes:0,description:"Coussin de table housse cuirette",categorie:"Table éléments posture"},
+{code:"TA6055",temps_minutes:0,description:"Housse rechange cuirette coussin table",categorie:"Table éléments posture"},
+{code:"TA6060",temps_minutes:0,description:"Coussin demi-table cuirette gauche",categorie:"Demi-table rabattable"},
+{code:"TA6061",temps_minutes:0,description:"Housse rechange cuirette demi-table gauche",categorie:"Demi-table rabattable"},
+{code:"TA6065",temps_minutes:0,description:"Coussin demi-table cuirette droit",categorie:"Demi-table rabattable"},
+{code:"TA6066",temps_minutes:0,description:"Housse rechange cuirette demi-table droit",categorie:"Demi-table rabattable"},
+{code:"TA6070",temps_minutes:0,description:"Coussin de coude housse cuirette gauche",categorie:"Table éléments posture"},
+{code:"TA6075",temps_minutes:0,description:"Coussin de coude housse cuirette droit",categorie:"Table éléments posture"},
+{code:"TA6076",temps_minutes:0,description:"Option couche de gel coude",categorie:"Table éléments posture"},
+{code:"TA6095",temps_minutes:0,description:"Housse rechange cuirette coude gauche",categorie:"Table éléments posture"},
+{code:"TA6100",temps_minutes:0,description:"Housse rechange cuirette coude droit",categorie:"Table éléments posture"},
+{code:"TA6145",temps_minutes:0,description:"Glissière de table en aluminium",categorie:"Gouttière"},
+{code:"TA6160",temps_minutes:0,description:"Gouttière standard petit",categorie:"Gouttière"},
+{code:"TA6161",temps_minutes:0,description:"Gouttière standard moyen",categorie:"Gouttière"},
+{code:"TA6162",temps_minutes:0,description:"Gouttière standard grand",categorie:"Gouttière"},
+{code:"TA6163",temps_minutes:0,description:"Gouttière standard non-standard",categorie:"Gouttière"},
+{code:"TA6175",temps_minutes:0,description:"Courroie pour avant-bras",categorie:"Gouttière"},
+{code:"TA6176",temps_minutes:0,description:"Gouttière avec gel petit",categorie:"Gouttière"},
+{code:"TA6177",temps_minutes:0,description:"Gouttière avec gel moyen",categorie:"Gouttière"},
+{code:"TA6178",temps_minutes:0,description:"Gouttière avec gel grand",categorie:"Gouttière"},
+{code:"TA6180",temps_minutes:0,description:"Mécanisme d\'ancrage à réglages multiples",categorie:"Gouttière"},
+{code:"TA6183",temps_minutes:0,description:"Gouttière avec gel non-standard",categorie:"Gouttière"},
+{code:"TA6185",temps_minutes:0,description:"Garniture d\'appui-bras coussiné standard",categorie:"Table éléments posture"},
+{code:"TA6190",temps_minutes:0,description:"Housse rechange garniture appui-bras",categorie:"Table éléments posture"},
+{code:"TA6195",temps_minutes:0,description:"Garniture d\'appui-bras coussiné non-standard",categorie:"Table éléments posture"},
+{code:"TA6200",temps_minutes:0,description:"Housse rechange garniture appui-bras NS",categorie:"Table éléments posture"},
+{code:"TA6215",temps_minutes:0,description:"Bordure de table avant",categorie:"Table éléments posture"},
+{code:"TA6216",temps_minutes:0,description:"Inhibiteur avant-bras central standard",categorie:"Table éléments posture"},
+{code:"TA6217",temps_minutes:0,description:"Inhibiteur avant-bras latéral profilé standard",categorie:"Table éléments posture"},
+{code:"TA6218",temps_minutes:0,description:"Bordure de table gauche",categorie:"Table éléments posture"},
+{code:"TA6219",temps_minutes:0,description:"Bordure de table droit",categorie:"Table éléments posture"},
+{code:"TA6220",temps_minutes:0,description:"Équerre de blocage (paire)",categorie:"Table éléments posture"},
+{code:"TA6244",temps_minutes:0,description:"Inhibiteur avant-bras latéral droit standard",categorie:"Table éléments posture"},
+{code:"TA6245",temps_minutes:0,description:"Inhibiteur avant-bras latéral droit non-standard",categorie:"Table éléments posture"},
+{code:"TA6266",temps_minutes:0,description:"Inhibiteur avant-bras central non-standard",categorie:"Table éléments posture"},
+{code:"TA6267",temps_minutes:0,description:"Inhibiteur avant-bras latéral profilé non-standard",categorie:"Table éléments posture"},
+{code:"TA6270",temps_minutes:0,description:"Housse rechange inhibiteur central",categorie:"Table éléments posture"},
+{code:"TA6271",temps_minutes:0,description:"Housse rechange inhibiteur central NS",categorie:"Table éléments posture"},
+{code:"TA6273",temps_minutes:0,description:"Housse rechange inhibiteur latéral profilé",categorie:"Table éléments posture"},
+{code:"TA6274",temps_minutes:0,description:"Housse rechange inhibiteur latéral profilé NS",categorie:"Table éléments posture"},
+{code:"TA6276",temps_minutes:0,description:"Housse rechange inhibiteur latéral droit",categorie:"Table éléments posture"},
+{code:"TA6277",temps_minutes:0,description:"Housse rechange inhibiteur latéral droit NS",categorie:"Table éléments posture"},
+{code:"TA6310",temps_minutes:0,description:"Support feuillet communication Lexan",categorie:"Table éléments posture"},
+{code:"TA6340",temps_minutes:0,description:"Table personnalisée 3/8\"",categorie:"Table éléments posture"},
+{code:"TA6345",temps_minutes:0,description:"Table personnalisée 1/4\"",categorie:"Table éléments posture"},
+{code:"TA6430",temps_minutes:0,description:"Écarteur de main",categorie:"Table éléments posture"},
+{code:"TA6500",temps_minutes:0,description:"Coussin de table housse Startex imperméable",categorie:"Table éléments posture"},
+{code:"TA6505",temps_minutes:0,description:"Housse rechange Startex imperméable",categorie:"Table éléments posture"},
+{code:"TA6510",temps_minutes:0,description:"Coussin demi-table Startex gauche",categorie:"Demi-table rabattable"},
+{code:"TA6515",temps_minutes:0,description:"Coussin demi-table Startex droit",categorie:"Demi-table rabattable"},
+{code:"TA6520",temps_minutes:0,description:"Housse rechange Startex demi-table gauche",categorie:"Demi-table rabattable"},
+{code:"TA6525",temps_minutes:0,description:"Housse rechange Startex demi-table droit",categorie:"Demi-table rabattable"},
+{code:"TA6530",temps_minutes:0,description:"Coussin de coude Startex gauche",categorie:"Table éléments posture"},
+{code:"TA6535",temps_minutes:0,description:"Coussin de coude Startex droit",categorie:"Table éléments posture"},
+{code:"TA6540",temps_minutes:0,description:"Housse rechange Startex coude gauche",categorie:"Table éléments posture"},
+{code:"TA6545",temps_minutes:0,description:"Housse rechange Startex coude droit",categorie:"Table éléments posture"},
+{code:"TA6550",temps_minutes:0,description:"Mécanisme rabattable",categorie:"Gouttière"},
+{code:"UL5530-1/2",temps_minutes:0,description:"Base en mousse - Uréthane Densité souple",categorie:"Coussin Ultra"},
+{code:"UL7530-1/2/3",temps_minutes:0,description:"Base en mousse - Uréthane Densité ferme",categorie:"Coussin Ultra"},
+{code:"VIF10-1/2/3",temps_minutes:0,description:"Mousse de finition - Viscose",categorie:"Coussin Ultra"},
+{code:"VP1C",temps_minutes:0,description:"Housse Air knit supplémentaire",categorie:"Dossier Valeo"},
+{code:"VP1CC",temps_minutes:0,description:"Housse standard Valeo",categorie:"Dossier Valeo"},
+{code:"VPU",temps_minutes:0,description:"Personnalisation coussinage Valeo",categorie:"Dossier Valeo"},
+{code:"VPX",temps_minutes:0,description:"Frais hauteur hors-standard Valeo",categorie:"Dossier Valeo"},
+{code:"VPZ",temps_minutes:0,description:"Coussinage de base Valeo Néocor 1.5\"",categorie:"Dossier Valeo"},
+{code:"VR10073",temps_minutes:0,description:"Viscose 1\"",categorie:"Dossier Axis"},
+{code:"VR10074",temps_minutes:0,description:"Viscose ½\"",categorie:"Dossier Axis"},
+{code:"VR10076",temps_minutes:0,description:"Néocor 1\" (Valeo)",categorie:"Dossier Valeo"},
+{code:"VR10077",temps_minutes:0,description:"Néocor 1\" - Coussinage de base",categorie:"Dossier Axis"},
+{code:"VR10084C",temps_minutes:0,description:"Néocor ½\"",categorie:"Dossier Axis"},
+{code:"VR10085C",temps_minutes:0,description:"Latex 1\"",categorie:"Dossier Axis"},
+{code:"VR10091C",temps_minutes:0,description:"Sunmate mou 1\"",categorie:"Dossier Axis"},
+{code:"VR10093C",temps_minutes:0,description:"Temper T-36 1\"",categorie:"Dossier Premium"},
+{code:"VR10095C",temps_minutes:0,description:"Temper T38 1\"",categorie:"Dossier Valeo"},
+{code:"VR10110C",temps_minutes:0,description:"Sunmate mou ½\"",categorie:"Dossier Axis"},
+{code:"VR10111C",temps_minutes:0,description:"Temper T-36 1/2\"",categorie:"Dossier Premium"},
+{code:"VR9080C",temps_minutes:0,description:"Plastazote 1/4\"",categorie:"Éléments forme"},
+{code:"VR9085-VNC",temps_minutes:0,description:"EVA foam ¼\"",categorie:"Éléments Fusion"},
+{code:"VR9085VNC",temps_minutes:0,description:"Mousse - EVA foam ¼\"",categorie:"Éléments forme"},
+{code:"VR9090C",temps_minutes:0,description:"Plastazote 1/2\"",categorie:"Éléments forme"},
+{code:"VR9097-VNC",temps_minutes:0,description:"EVA foam ½\"",categorie:"Éléments Fusion"},
+{code:"VR9097VNC",temps_minutes:0,description:"Mousse - EVA foam ½\"",categorie:"Éléments forme"},
+{code:"VR9225C",temps_minutes:0,description:"Mousse - Uréthane ferme ½\"",categorie:"Éléments forme"},
+{code:"VR9235C",temps_minutes:0,description:"Mousse - Uréthane ferme 1\"",categorie:"Éléments forme"},
+{code:"VR9390C",temps_minutes:0,description:"Mousse - Mousse mémoire souple ½\"",categorie:"Éléments forme"},
+{code:"VR9400C",temps_minutes:0,description:"Mousse - Mousse mémoire souple 1\"",categorie:"Éléments forme"}
+];
+
+var TOTAL_CODES = CALC_CODES_DATA.length;
+
+// ══════════════════════════════════════════
+// TAB NAVIGATION
+// ══════════════════════════════════════════
+function showCalcTab(tabName, btnEl) {
+  // Hide all tabs
+  document.querySelectorAll('.calc-tab-content').forEach(function(tab) {
+    tab.classList.remove('active');
+  });
+  // Deactivate all buttons
+  document.querySelectorAll('.calc-tab').forEach(function(btn) {
+    btn.classList.remove('active');
+  });
+  
+  // Show selected tab
+  var tabMap = { recherche: 'calcTabRecherche', devis: 'calcTabDevis', edit: 'calcTabEdit' };
+  var tabEl = document.getElementById(tabMap[tabName]);
+  if (tabEl) tabEl.classList.add('active');
+  if (btnEl) btnEl.classList.add('active');
+  
+  // Handle edit tab permissions
+  if (tabName === 'edit') {
+    if (isAdmin) {
+      document.getElementById('editDenied').style.display = 'none';
+      document.getElementById('editContent').style.display = 'block';
+      renderEditTable(CALC_CODES_DATA);
+    } else {
+      document.getElementById('editDenied').style.display = 'block';
+      document.getElementById('editContent').style.display = 'none';
+    }
+  }
+}
+
+// ══════════════════════════════════════════
+// SEARCH & FILTER
+// ══════════════════════════════════════════
+function getFilteredCodes(searchId, filterId) {
+  var searchTerm = document.getElementById(searchId).value.toLowerCase().trim();
+  var category = document.getElementById(filterId).value;
+  
+  var filtered = CALC_CODES_DATA;
+  
+  if (category !== 'all') {
+    filtered = filtered.filter(function(item) { return item.categorie === category; });
+  }
+  
+  if (searchTerm) {
+    filtered = filtered.filter(function(item) {
+      return item.code.toLowerCase().includes(searchTerm) ||
+             item.description.toLowerCase().includes(searchTerm);
+    });
+  }
+  
+  return filtered;
+}
+
+function searchCalcCodes() {
+  var filtered = getFilteredCodes('calcSearch', 'calcCategoryFilter');
+  renderSearchTable(filtered);
+  updateCalcCounter(filtered.length);
+}
+
+function searchEditCodes() {
+  var filtered = getFilteredCodes('editSearch', 'editCategoryFilter');
+  renderEditTable(filtered);
+}
+
+function renderSearchTable(codes) {
+  var tbody = document.getElementById('calcTableBody');
+  if (!tbody) return;
+  
+  if (codes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:30px;">Aucun code trouvé</td></tr>';
+    return;
+  }
+  
+  var html = '';
+  codes.forEach(function(c) {
+    var timeClass = c.temps_minutes > 0 ? 'set' : 'zero';
+    var timeText = c.temps_minutes > 0 ? c.temps_minutes + ' min' : '0 min';
+    html += '<tr>' +
+      '<td class="code-cell">' + c.code + '</td>' +
+      '<td>' + c.description + '</td>' +
+      '<td class="cat-cell">' + c.categorie + '</td>' +
+      '<td class="time-cell ' + timeClass + '">' + timeText + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function renderEditTable(codes) {
+  var tbody = document.getElementById('editTableBody');
+  if (!tbody) return;
+  
+  document.getElementById('editStat').textContent = codes.length + ' / ' + TOTAL_CODES + ' codes';
+  
+  if (codes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:30px;">Aucun code trouvé</td></tr>';
+    return;
+  }
+  
+  var html = '';
+  codes.forEach(function(c) {
+    html += '<tr>' +
+      '<td class="code-cell">' + c.code + '</td>' +
+      '<td>' + c.description + '</td>' +
+      '<td class="cat-cell">' + c.categorie + '</td>' +
+      '<td><input type="number" class="calc-time-input" data-code="' + c.code + '" value="' + (c.temps_minutes || 0) + '" min="0" step="1" onfocus="this.select()"></td>' +
+      '<td><button class="btn-delete-code" onclick="deleteCode(\'' + c.code.replace(/'/g, "\\'") + '\')" title="Supprimer">🗑️</button></td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function updateCalcCounter(count) {
+  document.getElementById('calcCounter').textContent = count + ' codes sur ' + TOTAL_CODES + ' total';
+}
+
+// ══════════════════════════════════════════
+// CATEGORY DROPDOWN
+// ══════════════════════════════════════════
+function populateCalcCategories() {
+  var cats = {};
+  CALC_CODES_DATA.forEach(function(c) {
+    if (c.categorie) cats[c.categorie] = true;
+  });
+  
+  var sorted = Object.keys(cats).sort();
+  var optionsHTML = '<option value="all">Toutes les catégories (' + TOTAL_CODES + ')</option>';
+  sorted.forEach(function(cat) {
+    var count = CALC_CODES_DATA.filter(function(c) { return c.categorie === cat; }).length;
+    optionsHTML += '<option value="' + cat + '">' + cat + ' (' + count + ')</option>';
+  });
+  
+  document.getElementById('calcCategoryFilter').innerHTML = optionsHTML;
+  document.getElementById('editCategoryFilter').innerHTML = optionsHTML;
+}
+
+// ══════════════════════════════════════════
+// DEVIS ANALYSIS
+// ══════════════════════════════════════════
+function getCalcBaseCode(fullCode) {
+  return fullCode.split('-')[0];
+}
+
+function findCalcCodeInDB(searchCode) {
+  var upperCode = searchCode.toUpperCase();
+  
+  // 1. Exact match
+  var found = CALC_CODES_DATA.find(function(c) { return c.code.toUpperCase() === upperCode; });
+  if (found) return found;
+  
+  // 2. Fallback: base code (before first hyphen)
+  var baseCode = getCalcBaseCode(upperCode);
+  if (baseCode !== upperCode) {
+    found = CALC_CODES_DATA.find(function(c) { return c.code.toUpperCase() === baseCode; });
+    if (found) return found;
+  }
+  
+  // 3. Fallback: partial match (code starts with search)
+  found = CALC_CODES_DATA.find(function(c) { return c.code.toUpperCase().startsWith(upperCode); });
+  return found || null;
+}
+
+function analyzeCalcDevis() {
+  var devisText = document.getElementById('calcDevisInput').value;
+  if (!devisText.trim()) {
+    showToast('Collez un devis dans la zone de texte', 'warning');
+    return;
+  }
+  
+  // Extract codes with regex
+  var regex = /\b([A-Z]{1,4}[-]?[\d]{2,5}[-]?[\w.\-]*)\b/gi;
+  var rawMatches = devisText.match(regex) || [];
+  
+  // Deduplicate (case-insensitive)
+  var seen = {};
+  var matches = [];
+  rawMatches.forEach(function(m) {
+    var upper = m.toUpperCase();
+    if (!seen[upper]) {
+      seen[upper] = true;
+      matches.push(m);
+    }
+  });
+  
+  // Search in DB
+  var found = [];
+  var foundCodes = {};
+  var notFound = [];
+  var totalMinutes = 0;
+  
+  matches.forEach(function(code) {
+    var dbCode = findCalcCodeInDB(code);
+    if (dbCode && !foundCodes[dbCode.code]) {
+      foundCodes[dbCode.code] = true;
+      found.push(dbCode);
+      totalMinutes += (dbCode.temps_minutes || 0);
+    } else if (!dbCode) {
+      notFound.push(code);
+    }
+  });
+  
+  // Display results
+  displayCalcResults(found, notFound, totalMinutes);
+  
+  // Store for printing
+  window.lastCalcAnalysis = { found: found, notFound: notFound, totalMinutes: totalMinutes };
+  
+  // Show print button
+  document.getElementById('calcPrintBtn').classList.add('visible');
+  document.getElementById('calcResults').style.display = 'block';
+  
+  showToast('Analyse terminée: ' + found.length + ' codes trouvés', 'success');
+}
+
+function displayCalcResults(found, notFound, totalMinutes) {
+  // Calculate hours/minutes
+  var hours = Math.floor(totalMinutes / 60);
+  var minutes = totalMinutes % 60;
+  var timeStr;
+  if (totalMinutes === 0) {
+    timeStr = '0 minute (temps non définis)';
+  } else if (hours > 0) {
+    timeStr = hours + ' heure' + (hours > 1 ? 's' : '') + ' ' + minutes + ' minute' + (minutes > 1 ? 's' : '');
+  } else {
+    timeStr = minutes + ' minute' + (minutes > 1 ? 's' : '');
+  }
+  
+  document.getElementById('calcTotalTime').textContent = timeStr;
+  
+  // Found codes table
+  var foundEl = document.getElementById('calcFoundCodes');
+  if (found.length > 0) {
+    var foundHTML = '<h3>✅ CODES TROUVÉS (' + found.length + ')</h3>';
+    foundHTML += '<div class="calc-table-wrap" style="max-height:300px;">';
+    foundHTML += '<table class="calc-table"><thead><tr><th>Code</th><th>Description</th><th>Temps</th></tr></thead><tbody>';
+    found.forEach(function(c) {
+      var tClass = c.temps_minutes > 0 ? 'set' : 'zero';
+      foundHTML += '<tr><td class="code-cell">' + c.code + '</td><td>' + c.description + '</td><td class="time-cell ' + tClass + '">' + (c.temps_minutes || 0) + ' min</td></tr>';
+    });
+    foundHTML += '</tbody></table></div>';
+    foundEl.innerHTML = foundHTML;
+    foundEl.style.display = 'block';
+  } else {
+    foundEl.innerHTML = '<h3>✅ CODES TROUVÉS (0)</h3><p style="color:var(--text-muted);font-size:13px;">Aucun code trouvé dans la base de données</p>';
+    foundEl.style.display = 'block';
+  }
+  
+  // Not found codes
+  var notFoundEl = document.getElementById('calcNotFoundCodes');
+  if (notFound.length > 0) {
+    var nfHTML = '<h3>❌ CODES NON TROUVÉS (' + notFound.length + ')</h3>';
+    nfHTML += '<ul class="notfound-list">';
+    notFound.forEach(function(c) {
+      nfHTML += '<li>' + c + ' (absent de la base)</li>';
+    });
+    nfHTML += '</ul>';
+    notFoundEl.innerHTML = nfHTML;
+    notFoundEl.style.display = 'block';
+  } else {
+    notFoundEl.innerHTML = '<h3 style="color:var(--success);">✅ Tous les codes ont été trouvés!</h3>';
+    notFoundEl.style.display = 'block';
+  }
+}
+
+function clearDevis() {
+  document.getElementById('calcDevisInput').value = '';
+  document.getElementById('calcResults').style.display = 'none';
+  document.getElementById('calcPrintBtn').classList.remove('visible');
+  window.lastCalcAnalysis = null;
+  showToast('Zone effacée', 'info');
+}
+
+// ══════════════════════════════════════════
+// PRINT
+// ══════════════════════════════════════════
+function printCalcAnalysis() {
+  if (!window.lastCalcAnalysis) {
+    showToast('Veuillez d\'abord analyser un devis', 'warning');
+    return;
+  }
+  
+  var found = window.lastCalcAnalysis.found;
+  var totalMinutes = window.lastCalcAnalysis.totalMinutes;
+  var printDiv = document.getElementById('printContent');
+  
+  var html = '<div class="print-grid">';
+  found.forEach(function(item) {
+    html += '<div class="print-ticket">' +
+      '<div class="print-header"><strong>PHYSIPRO</strong> | BON DE PRODUCTION</div>' +
+      '<div class="print-code">' + item.code + '</div>' +
+      '<div class="print-desc">' + item.description + '</div>' +
+      '<div class="print-time">⏱ ' + (item.temps_minutes || 0) + ' minutes</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  
+  printDiv.innerHTML = html;
+  window.print();
+  setTimeout(function() { printDiv.innerHTML = ''; }, 500);
+}
+
+// ══════════════════════════════════════════
+// ADD / DELETE CODES
+// ══════════════════════════════════════════
+function openAddCodeModal() {
+  // Populate category select with existing categories + option to type new
+  var cats = {};
+  CALC_CODES_DATA.forEach(function(c) { if (c.categorie) cats[c.categorie] = true; });
+  var sorted = Object.keys(cats).sort();
+  var html = '<option value="">-- Choisir --</option>';
+  sorted.forEach(function(cat) {
+    html += '<option value="' + cat + '">' + cat + '</option>';
+  });
+  html += '<option value="__new__">+ Nouvelle catégorie...</option>';
+  document.getElementById('newCatSelect').innerHTML = html;
+  
+  // Reset fields
+  document.getElementById('newCodeInput').value = '';
+  document.getElementById('newDescInput').value = '';
+  document.getElementById('newTimeInput').value = '0';
+  
+  document.getElementById('addCodeModal').classList.add('show');
+}
+
+function closeAddCodeModal() {
+  document.getElementById('addCodeModal').classList.remove('show');
+}
+
+function addNewCode() {
+  var code = document.getElementById('newCodeInput').value.trim().toUpperCase();
+  var desc = document.getElementById('newDescInput').value.trim();
+  var catSelect = document.getElementById('newCatSelect');
+  var cat = catSelect.value;
+  var time = parseInt(document.getElementById('newTimeInput').value) || 0;
+  
+  if (!code) { showToast('Le code est obligatoire', 'warning'); return; }
+  if (!desc) { showToast('La description est obligatoire', 'warning'); return; }
+  
+  // Check if new category
+  if (cat === '__new__') {
+    cat = prompt('Nom de la nouvelle catégorie:');
+    if (!cat || !cat.trim()) { showToast('Catégorie annulée', 'warning'); return; }
+    cat = cat.trim();
+  }
+  if (!cat) { showToast('Choisissez une catégorie', 'warning'); return; }
+  
+  // Check duplicate
+  var exists = CALC_CODES_DATA.find(function(c) { return c.code.toUpperCase() === code; });
+  if (exists) {
+    showToast('Le code ' + code + ' existe déjà!', 'warning');
+    return;
+  }
+  
+  // Add to array
+  CALC_CODES_DATA.push({
+    code: code,
+    description: desc,
+    categorie: cat,
+    temps_minutes: time
+  });
+  
+  // Sort
+  CALC_CODES_DATA.sort(function(a, b) { return a.code.localeCompare(b.code); });
+  TOTAL_CODES = CALC_CODES_DATA.length;
+  
+  // Refresh UI
+  populateCalcCategories();
+  searchEditCodes();
+  searchCalcCodes();
+  closeAddCodeModal();
+  
+  showToast('✅ Code ' + code + ' ajouté! N\'oubliez pas de sauvegarder.', 'success');
+}
+
+function deleteCode(code) {
+  if (!confirm('Supprimer le code ' + code + ' ?')) return;
+  
+  var idx = CALC_CODES_DATA.findIndex(function(c) { return c.code === code; });
+  if (idx === -1) { showToast('Code non trouvé', 'warning'); return; }
+  
+  CALC_CODES_DATA.splice(idx, 1);
+  TOTAL_CODES = CALC_CODES_DATA.length;
+  
+  // Refresh
+  populateCalcCategories();
+  searchEditCodes();
+  searchCalcCodes();
+  
+  showToast('🗑️ Code ' + code + ' supprimé. N\'oubliez pas de sauvegarder.', 'info');
+}
+
+// ══════════════════════════════════════════
+// SAVE TIMES
+// ══════════════════════════════════════════
+async function saveCalcTimes() {
+  if (!isAdmin) {
+    showToast('Accès refusé', 'warning');
+    return;
+  }
+  
+  // Update times from edit inputs
+  var inputs = document.querySelectorAll('.calc-time-input');
+  inputs.forEach(function(input) {
+    var code = input.dataset.code;
+    var minutes = parseInt(input.value) || 0;
+    var item = CALC_CODES_DATA.find(function(c) { return c.code === code; });
+    if (item) item.temps_minutes = minutes;
+  });
+  
+  // Save full array to Firebase
+  if (db) {
+    try {
+      await db.ref('calculateur_temps/codes').set(CALC_CODES_DATA);
+      showToast('✅ ' + CALC_CODES_DATA.length + ' codes sauvegardés dans Firebase!', 'success');
+    } catch(err) {
+      console.error('Firebase save error:', err);
+      showToast('Erreur Firebase: ' + err.message, 'warning');
+    }
+  }
+  
+  // Save times to localStorage as backup
+  try {
+    var timesData = {};
+    CALC_CODES_DATA.forEach(function(item) { timesData[item.code] = item.temps_minutes; });
+    localStorage.setItem('physipro_calc_times', JSON.stringify(timesData));
+    // Also save full array for offline recovery
+    localStorage.setItem('physipro_calc_codes_full', JSON.stringify(CALC_CODES_DATA));
+  } catch(e) { /* ignore */ }
+  
+  // Refresh search table
+  TOTAL_CODES = CALC_CODES_DATA.length;
+  searchCalcCodes();
+}
+
+// ══════════════════════════════════════════
+// LOAD TIMES FROM FIREBASE / localStorage
+// ══════════════════════════════════════════
+function loadCalcTimes() {
+  if (!db) {
+    loadFromLocalStorage();
+    return;
+  }
+  
+  db.ref('calculateur_temps/codes').on('value', function(snap) {
+    var data = snap.val();
+    if (data && Array.isArray(data) && data.length > 0) {
+      // Full array from Firebase — replace entire dataset
+      CALC_CODES_DATA = data;
+      TOTAL_CODES = CALC_CODES_DATA.length;
+      console.log('Loaded ' + TOTAL_CODES + ' codes from Firebase (full array)');
+    } else if (data && typeof data === 'object') {
+      // Partial times object
+      CALC_CODES_DATA.forEach(function(item) {
+        if (data[item.code] !== undefined) {
+          item.temps_minutes = data[item.code];
+        }
+      });
+      console.log('Loaded times from Firebase (partial)');
+    } else {
+      loadFromLocalStorage();
+    }
+    
+    // Refresh UI
+    populateCalcCategories();
+    renderSearchTable(CALC_CODES_DATA);
+    updateCalcCounter(CALC_CODES_DATA.length);
+  }, function(err) {
+    console.error('Firebase load error:', err);
+    loadFromLocalStorage();
+  });
+}
+
+function loadFromLocalStorage() {
+  try {
+    var saved = localStorage.getItem('physipro_calc_times');
+    if (saved) {
+      var timesData = JSON.parse(saved);
+      CALC_CODES_DATA.forEach(function(item) {
+        if (timesData[item.code] !== undefined) {
+          item.temps_minutes = timesData[item.code];
+        }
+      });
+      console.log('Loaded times from localStorage');
+    }
+  } catch(e) { /* ignore */ }
+  
+  populateCalcCategories();
+  renderSearchTable(CALC_CODES_DATA);
+  updateCalcCounter(CALC_CODES_DATA.length);
+}
+
+// ══════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════
+function doLogin(event) {
+  if (event) event.preventDefault();
+  var email = document.getElementById('loginEmail').value.trim();
+  var password = document.getElementById('loginPassword').value;
+  var loginBtn = document.getElementById('loginBtn');
+  var rememberEl = document.getElementById('loginRemember');
+  var rememberMe = rememberEl ? rememberEl.checked : true;
+  var errorEl = document.getElementById('loginError');
+
+  errorEl.textContent = '';
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errorEl.textContent = 'Veuillez entrer une adresse email valide';
+    return;
+  }
+  if (!password) {
+    errorEl.textContent = 'Veuillez entrer votre mot de passe';
+    return;
+  }
+
+  loginBtn.disabled = true;
+  loginBtn.textContent = 'Connexion...';
+
+  var persistence = rememberMe
+    ? firebase.auth.Auth.Persistence.LOCAL
+    : firebase.auth.Auth.Persistence.SESSION;
+
+  firebase.auth().setPersistence(persistence).then(function() {
+    return firebase.auth().signInWithEmailAndPassword(email, password);
+  }).then(function() {
+    console.log('Connexion réussie');
+  }).catch(function(error) {
+    var msg = 'Une erreur est survenue.';
+    switch (error.code) {
+      case 'auth/user-not-found': msg = 'Aucun compte ne correspond à cette adresse.'; break;
+      case 'auth/wrong-password': msg = 'Mot de passe incorrect.'; break;
+      case 'auth/too-many-requests': msg = 'Trop de tentatives. Réessayez plus tard.'; break;
+      case 'auth/invalid-email': msg = 'Adresse email invalide.'; break;
+      default: msg = error.message;
+    }
+    errorEl.textContent = msg;
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Se connecter';
+  });
+}
+
+function doLogout() {
+  firebase.auth().signOut();
+  location.reload();
+}
+
+function formatUserName(email) {
+  if (!email) return '—';
+  var nameMap = {
+    'atelieratp@physipro.com': 'Daniel',
+    'valerie18@videotron.ca': 'Valérie',
+    'simdut@physipro.com': 'Cassie',
+    'sroy@physipro.com': 'Stéphanie',
+    'peterbass76@gmail.com': 'Pierre',
+    'cncatp@physipro.com': 'Sina'
+  };
+  var lower = email.toLowerCase();
+  if (nameMap[lower]) return nameMap[lower];
+  var name = email.split('@')[0];
+  return name.split(/[._-]/).map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+}
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+function showToast(msg, type) {
+  type = type || 'info';
+  var container = document.getElementById('toastContainer');
+  var toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(function() { toast.remove(); }, 3000);
+}
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('PhysiPro Calculateur Temps - Initializing...');
+  
+  // Initialize Firebase
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    console.log('Firebase initialized');
+    
+    firebase.auth().onAuthStateChanged(function(user) {
+      if (user) {
+        currentUser = user;
+        currentUserEmail = user.email || '';
+        isAdmin = ADMIN_EMAILS.includes(currentUserEmail.toLowerCase());
+        
+        document.getElementById('loginOverlay').classList.add('hidden');
+        document.getElementById('currentUserDisplay').textContent = formatUserName(currentUserEmail);
+        
+        initLogoMenu('calctemps');
+        loadCalcTimes();
+        
+        console.log('Logged in as:', currentUserEmail, '| Admin:', isAdmin);
+      } else {
+        document.getElementById('loginOverlay').classList.remove('hidden');
+        // Still init UI with defaults
+        populateCalcCategories();
+        renderSearchTable(CALC_CODES_DATA);
+        updateCalcCounter(CALC_CODES_DATA.length);
+      }
+    });
+  } catch(e) {
+    console.error('Firebase error:', e);
+    populateCalcCategories();
+    renderSearchTable(CALC_CODES_DATA);
+    updateCalcCounter(CALC_CODES_DATA.length);
+  }
+});
+</script>
+</body>
+</html>
