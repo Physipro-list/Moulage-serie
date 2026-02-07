@@ -1858,9 +1858,30 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
 .mcard.client-france .mcard-btn-move { background: linear-gradient(to bottom, #facc15, #854d0e); }
 .mcard.client-default .mcard-btn-move { background: linear-gradient(to bottom, #3b82f6, #1e3a5f); }
 
-/* Carte active (sélectionnée) */
+/* Carte active (sélectionnée) - Effet renforcé */
 .mcard.active {
-  box-shadow: 0 0 0 2px #60a5fa, 0 0 10px rgba(96,165,250,0.5) !important;
+  box-shadow: 0 0 0 3px #fff, 0 0 0 5px #60a5fa, 0 0 20px rgba(96,165,250,0.6) !important;
+  transform: scale(1.03);
+  filter: brightness(1.15);
+  transition: all 0.2s ease;
+  z-index: 5;
+  position: relative;
+}
+.mcard {
+  transition: all 0.15s ease, transform 0.2s ease;
+}
+.mcard:hover {
+  filter: brightness(1.08);
+}
+/* Animation flash au clic */
+@keyframes mcardClickFlash {
+  0% { transform: scale(1); filter: brightness(1); }
+  15% { transform: scale(0.96); filter: brightness(0.9); }
+  40% { transform: scale(1.06); filter: brightness(1.3); box-shadow: 0 0 0 3px #fff, 0 0 0 6px #60a5fa, 0 0 30px rgba(96,165,250,0.8); }
+  100% { transform: scale(1.03); filter: brightness(1.15); box-shadow: 0 0 0 3px #fff, 0 0 0 5px #60a5fa, 0 0 20px rgba(96,165,250,0.6); }
+}
+.mcard.click-flash {
+  animation: mcardClickFlash 0.35s ease forwards;
 }
 
 /* --- 4.4 CARTES SÉRIE+ COMMANDES - STYLE SIMPLIFIÉ --- */
@@ -5972,6 +5993,21 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
 </head>
 <body>
 
+<!-- MOBILE BLOCKER - Série+ n'est pas disponible sur téléphone -->
+<div id="mobileBlocker" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#0f172a,#1e3a5f);z-index:999999;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:30px;">
+  <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" style="width:120px;margin-bottom:30px;opacity:0.9;" alt="PhysiPro">
+  <div style="font-size:48px;margin-bottom:16px;">🖥️</div>
+  <div style="font-size:20px;font-weight:700;margin-bottom:12px;">Série+ — Accès PC uniquement</div>
+  <div style="font-size:14px;color:#94a3b8;max-width:300px;line-height:1.6;">Ce module n'est pas disponible sur téléphone. Veuillez utiliser un ordinateur.</div>
+  <a href="Physipro_moulage.html" style="margin-top:30px;padding:14px 28px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;">📱 Aller au Moulage</a>
+</div>
+<script>
+(function(){
+  var m=/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)||window.innerWidth<=768;
+  if(m){document.getElementById('mobileBlocker').style.display='flex';document.body.style.overflow='hidden';}
+})();
+</script>
+
 <!-- INSTANT LOGIN BYPASS -->
 <script>
 if(localStorage.getItem('physipro_last_email')){
@@ -6308,9 +6344,12 @@ function initLogoMenu(currentMod){
   if(typeof email!=='string'){try{email=email.email||'';}catch(e){email='';}}
   var access=getHubAccess(email);
   grid.innerHTML='';
+  var _isMob=/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)||window.innerWidth<=768;
+  var MOBILE_ALLOWED=['moulage'];
   var order=['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','photos','archives'];
   order.forEach(function(mod){
     if(access.indexOf(mod)===-1)return;
+    if(_isMob&&MOBILE_ALLOWED.indexOf(mod)===-1)return;
     var m=NAV_MODULES[mod];if(!m)return;
     var a=document.createElement('a');
     a.className='nav-modal-item'+(mod===currentMod?' current':'');
@@ -7757,9 +7796,17 @@ function selectSerieCard(cardId, fromUserClick = false) {
     initSerieCardData(cardId);
   }
 
-  // Mettre à jour la classe active sur les cartes
+  // Mettre à jour la classe active sur les cartes + animation flash
   document.querySelectorAll('#serieCardsList .mcard, #serieBoList .mcard').forEach(card => {
-    card.classList.toggle('active', card.dataset.id === cardId);
+    const isTarget = card.dataset.id === cardId;
+    card.classList.toggle('active', isTarget);
+    if (isTarget) {
+      card.classList.remove('click-flash');
+      void card.offsetWidth;
+      card.classList.add('click-flash');
+    } else {
+      card.classList.remove('click-flash');
+    }
   });
 
   // Afficher la fiche (tableau)
