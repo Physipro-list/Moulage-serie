@@ -291,7 +291,7 @@ body.col-resizing *{cursor:col-resize!important;}
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 </head>
 <body>
-<script>if(localStorage.getItem('physipro_last_email')){document.write('<style>.login-overlay{display:none !important;}</style>');}</script>
+<script>if(localStorage.getItem('physipro_last_email')){document.write('<style id="preauth-hide">.login-overlay{display:none !important;}</style>');}</script>
 <!-- LOGIN -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-panel">
@@ -450,26 +450,15 @@ function doLogin(event) {
       case 'auth/wrong-password': msg = 'Mot de passe incorrect.'; break;
       case 'auth/too-many-requests': msg = 'Trop de tentatives. Réessayez plus tard.'; break;
       case 'auth/invalid-email': msg = 'Adresse email invalide.'; break;
+      case 'auth/user-disabled': msg = 'Ce compte a été désactivé.'; break;
+      case 'auth/network-request-failed': msg = 'Erreur de connexion réseau.'; break;
+      case 'auth/invalid-credential': msg = 'Email ou mot de passe incorrect.'; break;
       default: msg = error.message;
     }
     errorEl.textContent = msg;
     loginBtn.disabled = false;
     loginBtn.textContent = 'Se connecter';
   });
-}catch(err){
-    var m='Une erreur est survenue.';
-    switch(err.code){
-      case'auth/user-not-found':m='Aucun compte ne correspond à cette adresse email.';break;
-      case'auth/wrong-password':m='Mot de passe incorrect.';break;
-      case'auth/invalid-email':m='Adresse email invalide.';break;
-      case'auth/user-disabled':m='Ce compte a été désactivé.';break;
-      case'auth/too-many-requests':m='Trop de tentatives. Veuillez patienter quelques minutes.';break;
-      case'auth/network-request-failed':m='Erreur de connexion réseau.';break;
-      case'auth/invalid-credential':m='Email ou mot de passe incorrect.';break;
-    }
-    document.getElementById('loginError').textContent=m;
-    btn.disabled=false;btn.textContent='Se connecter';
-  }
 }
 function doLogout(){
   if(!confirm('Déconnexion?'))return;
@@ -527,6 +516,7 @@ firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(funct
   fbUser=user;
   var overlay=document.getElementById('loginOverlay');
   if(user){
+    var ps=document.getElementById('preauth-hide');if(ps)ps.remove();
     overlay.classList.add('hidden');
     overlay.style.display='none';
     initLogoMenu('inspection');
@@ -538,10 +528,17 @@ firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(funct
     localStorage.setItem('physipro_last_email',user.email);
     setSyncBadge('online');
     startFirebaseSync();
+    // Safety re-render: ensure data displays even if race conditions occur
+    setTimeout(function(){
+      renderTable('inspection');
+      renderTable('couture');
+      console.log('[INIT] Safety re-render completed');
+    }, 2500);
   }else{
+    var savedEmail=localStorage.getItem('physipro_last_email');
     localStorage.removeItem('physipro_last_email');
-    var lastEmail=localStorage.getItem('physipro_last_email');
-    if(lastEmail){var em=document.getElementById('loginEmail');if(em)em.value=lastEmail;}
+    var ps2=document.getElementById('preauth-hide');if(ps2)ps2.remove();
+    if(savedEmail){var em=document.getElementById('loginEmail');if(em&&!em.value)em.value=savedEmail;}
     overlay.style.display='';
     overlay.classList.remove('hidden');
     var badge2=document.getElementById('userBadge');
@@ -564,7 +561,6 @@ document.addEventListener('DOMContentLoaded',function(){
     document.body.classList.add('app-mode');
     var lfc=document.getElementById('logoFlipContainer');if(lfc)lfc.style.pointerEvents='none';
     var lm=document.getElementById('logoMenu');if(lm)lm.style.display='none';
-    document.querySelectorAll('.tab[data-tab="couture"],.tab[data-tab="stats"]').forEach(function(t){t.style.display='none';});
     switchTab('inspection');
   }
 });
@@ -680,7 +676,8 @@ function startFirebaseSync(){
         pushToFB(dept);
       }
       listenFB(dept);
-    }).catch(function(){
+    }).catch(function(err){
+      console.error('[FB] Load error for',dept,':',err);
       listenFB(dept);
       renderTable(dept);
     });
@@ -689,14 +686,16 @@ function startFirebaseSync(){
   fbDb.ref(FB_PATHS.lists).once('value').then(function(snap){
     var d=snap.val();if(!d)return;
     Object.keys(d).forEach(function(k){localStorage.setItem('physipro_list_'+k,JSON.stringify(d[k]));});
+    // Re-render after lists are loaded to ensure dropdowns are populated
+    renderTable('inspection');renderTable('couture');
   }).catch(function(e){console.error('[FB] Lists sync error:',e);});
   // Sync col config
   ['inspection','couture'].forEach(function(dept){
     fbDb.ref(FB_PATHS.colCfg+'/'+dept).once('value').then(function(snap){
-      var d=snap.val();if(d)localStorage.setItem('physipro_colcfg_'+dept,JSON.stringify(d));
+      var d=snap.val();if(d){localStorage.setItem('physipro_colcfg_'+dept,JSON.stringify(d));renderTable(dept);}
     }).catch(function(e){console.error('[FB] ColCfg load error:',dept,e);});
     fbDb.ref(FB_PATHS.colWidths+'/'+dept).once('value').then(function(snap){
-      var d=snap.val();if(d)localStorage.setItem('physipro_colwidths_'+dept,JSON.stringify(d));
+      var d=snap.val();if(d){localStorage.setItem('physipro_colwidths_'+dept,JSON.stringify(d));renderTable(dept);}
     }).catch(function(e){console.error('[FB] ColWidths load error:',dept,e);});
   });
 }
