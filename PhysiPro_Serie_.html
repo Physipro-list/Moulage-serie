@@ -1065,6 +1065,11 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
   background: rgba(251, 191, 36, 0.1);
 }
 
+/* Ligne déjà envoyée en inventaire (teal pâle) */
+.grandeur-row.row-distributed td {
+  background: rgba(20, 184, 166, 0.08);
+}
+
 /* Colonne employé */
 
 /* Quantité total */
@@ -8839,9 +8844,10 @@ function renderSerieAtelier(cardId, items) {
         const gInsp = g.atelier?.inspected || false;
         const isSent = g.atelier?.sentToCouture || false;
         const noteClass = g.atelier?.note ? 'has-note' : '';
+        const isDistributed = g.atelier?.distributed || false;
         
         // Classe de ligne
-        const rowCls = (gInsp && isSent) ? ' row-complete' : (gFait > 0 && gFait < gQty) ? ' row-partial' : '';
+        const rowCls = (gInsp && isSent) ? ' row-complete' : (gFait > 0 && gFait < gQty) ? ' row-partial' : isDistributed ? ' row-distributed' : '';
         
         // Status button: En attente (0) → Partiel (entre 1 et max-1) → Complet (max)
         let statusBtnClass = 'attente', statusBtnText = 'En attente';
@@ -8854,8 +8860,12 @@ function renderSerieAtelier(cardId, items) {
         else if (g.atelier?.inspected) { sendBtnClass = 'inspected'; sendBtnText = 'Inspecté'; }
         
         html += '<tr class="grandeur-row' + rowCls + '" data-item="' + itemIdx + '" data-gidx="' + gIdx + '">';
-        // Checkbox
-        html += '<td class="c-chk"><input type="checkbox" class="chk" data-card="' + cardId + '" data-item="' + itemIdx + '" data-gidx="' + gIdx + '" data-itemname="' + (item.name || 'Item').replace(/"/g, '&quot;') + '" data-gname="' + (g.name || 'STD').replace(/"/g, '&quot;') + '" data-qty="' + gQty + '" onchange="updateSerieSelection()"></td>';
+        // Checkbox - disabled if already distributed to inventory
+        if (isDistributed) {
+          html += '<td class="c-chk" title="Déjà envoyé en inventaire"><span style="color:#14b8a6;font-size:10px;">📦</span></td>';
+        } else {
+          html += '<td class="c-chk"><input type="checkbox" class="chk" data-card="' + cardId + '" data-item="' + itemIdx + '" data-gidx="' + gIdx + '" data-itemname="' + (item.name || 'Item').replace(/"/g, '&quot;') + '" data-gname="' + (g.name || 'STD').replace(/"/g, '&quot;') + '" data-qty="' + gQty + '" onchange="updateSerieSelection()"></td>';
+        }
         // Grandeur + Quantité ensemble
         html += '<td class="c-item"><div class="pills-row">';
         html += '<span class="pill-g-small" onclick="openSerieGrandeurMenu(\'' + cardId + '\', ' + itemIdx + ', ' + gIdx + ', event)">' + (g.name || 'STD') + '</span>';
@@ -8924,9 +8934,10 @@ function renderSerieCouture(cardId, items) {
         const isSent = g.couture?.sentToInsp || false;
         const isHabille = g.couture?.habille || false;
         const noteClass = g.couture?.note ? 'has-note' : '';
+        const isDistributed = g.couture?.distributed || false;
         
         // Classe de ligne
-        const rowCls = (gStatus === 'enstock' || gStatus === 'complete' || isSent) ? ' row-complete' : (isHabille || (gFait > 0 && gFait < gQty)) ? ' row-partial' : '';
+        const rowCls = (gStatus === 'enstock' || gStatus === 'complete' || isSent) ? ' row-complete' : (isHabille || (gFait > 0 && gFait < gQty)) ? ' row-partial' : isDistributed ? ' row-distributed' : '';
         
         // Status: À faire (0) → Partiel (entre 1 et max-1) → Complet (max) / Stock
         let statusBtnClass = 'afaire', statusBtnText = 'À faire';
@@ -8940,7 +8951,12 @@ function renderSerieCouture(cardId, items) {
         else if (g.couture?.habille) { sendBtnClass = 'inspected'; sendBtnText = 'Habillé ✓'; }
         
         html += '<tr class="grandeur-row' + rowCls + '">';
-        html += '<td class="c-chk"><input type="checkbox" class="chk" data-card="' + cardId + '" data-item="' + itemIdx + '" data-gidx="' + gIdx + '" data-itemname="' + (item.name || 'Item').replace(/"/g, '&quot;') + '" data-gname="' + (g.name || 'STD').replace(/"/g, '&quot;') + '" data-qty="' + gQty + '" onchange="updateSerieSelection()"></td>';
+        // Checkbox - disabled if already distributed to inventory
+        if (isDistributed) {
+          html += '<td class="c-chk" title="Déjà envoyé en inventaire"><span style="color:#a855f7;font-size:10px;">📦</span></td>';
+        } else {
+          html += '<td class="c-chk"><input type="checkbox" class="chk" data-card="' + cardId + '" data-item="' + itemIdx + '" data-gidx="' + gIdx + '" data-itemname="' + (item.name || 'Item').replace(/"/g, '&quot;') + '" data-gname="' + (g.name || 'STD').replace(/"/g, '&quot;') + '" data-qty="' + gQty + '" onchange="updateSerieSelection()"></td>';
+        }
         // Grandeur + Quantité ensemble
         html += '<td class="c-item"><div class="pills-row">';
         html += '<span class="pill-g-small couture">' + (g.name || 'STD') + '</span>';
@@ -10884,6 +10900,7 @@ function createSerieInventory() {
   }
   
   let createdCount = 0;
+  let skippedCount = 0;
   const clientMap = { 'vermeiren':'vermeiren', 'hme':'hme', 'c1south':'c1south', 'cubro':'cubro', 'france':'france', 'inventaire':'inventaire' };
   
   checkboxes.forEach(cb => {
@@ -10893,6 +10910,12 @@ function createSerieInventory() {
     if (!item) return;
     const g = item.grandeurs && item.grandeurs[gIdx];
     if (!g) return;
+    
+    // Skip if already distributed
+    if (g.atelier && g.atelier.distributed) {
+      skippedCount++;
+      return;
+    }
     
     const itemName = item.name || cb.dataset.itemname || 'Item';
     const grandeurName = g.name || cb.dataset.gname || 'STD';
@@ -10925,7 +10948,10 @@ function createSerieInventory() {
       if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
         firebaseDb.ref('inventaire_v4/bassin/atelier/' + invId).set(invItem)
           .then(() => console.log('📦 Inventaire Atelier: Écrit dans Firebase:', invId))
-          .catch(e => console.error('❌ Erreur Firebase Inventaire Atelier:', e));
+          .catch(e => {
+            console.error('❌ Erreur Firebase Inventaire Atelier:', e);
+            showToast('⚠️ Erreur sync inventaire: ' + e.message, 'error');
+          });
       }
       
       // Aussi dans le local pour compatibilité Série+
@@ -10935,12 +10961,15 @@ function createSerieInventory() {
     }
   });
   
+  // Sauvegarder Série+ (avec flags distributed) dans Firebase aussi
   saveSerieDataToLocalStorage();
   saveInventaireDataToLocalStorage();
   renderInventaireCubes();
   renderSerie3Cols(currentSerieId);
   
-  showToast('✅ ' + createdCount + ' job(s) envoyé(s) dans le bassin Atelier!', 'success');
+  let msg = '✅ ' + createdCount + ' job(s) envoyé(s) dans le bassin Atelier!';
+  if (skippedCount > 0) msg += ' (' + skippedCount + ' déjà envoyé(s))';
+  showToast(msg, 'success');
   
   // Décocher toutes les checkboxes
   checkboxes.forEach(cb => { cb.checked = false; });
@@ -10978,6 +11007,7 @@ function createSerieInventoryCouture() {
   }
 
   let createdCount = 0;
+  let skippedCount = 0;
   const clientMap = { 'vermeiren':'vermeiren', 'hme':'hme', 'c1south':'c1south', 'cubro':'cubro', 'france':'france', 'inventaire':'inventaire' };
 
   checkboxes.forEach(cb => {
@@ -10987,6 +11017,12 @@ function createSerieInventoryCouture() {
     if (!item) return;
     const g = item.grandeurs && item.grandeurs[gIdx];
     if (!g) return;
+
+    // Skip if already distributed
+    if (g.couture && g.couture.distributed) {
+      skippedCount++;
+      return;
+    }
 
     const itemName = item.name || cb.dataset.itemname || 'Item';
     const grandeurName = g.name || cb.dataset.gname || 'STD';
@@ -11016,7 +11052,10 @@ function createSerieInventoryCouture() {
       if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
         firebaseDb.ref('inventaire_v4/bassin/couture/' + invId).set(invItem)
           .then(() => console.log('🧵 Inventaire Couture: Écrit dans Firebase:', invId))
-          .catch(e => console.error('❌ Erreur Firebase Inventaire Couture:', e));
+          .catch(e => {
+            console.error('❌ Erreur Firebase Inventaire Couture:', e);
+            showToast('⚠️ Erreur sync inventaire: ' + e.message, 'error');
+          });
       }
 
       // Aussi dans le local pour compatibilité Série+
@@ -11039,7 +11078,9 @@ function createSerieInventoryCouture() {
   renderInventaireCubes();
   renderSerie3Cols(currentSerieId);
 
-  showToast('✅ ' + createdCount + ' job(s) envoyé(s) dans le bassin Couture!', 'success');
+  let msg = '✅ ' + createdCount + ' job(s) envoyé(s) dans le bassin Couture!';
+  if (skippedCount > 0) msg += ' (' + skippedCount + ' déjà envoyé(s))';
+  showToast(msg, 'success');
 
   // Décocher toutes les checkboxes Couture
   checkboxes.forEach(cb => { cb.checked = false; });

@@ -468,8 +468,10 @@ function loadData(){
   db.ref('inventaire_v4/bassin/couture').on('value',s=>{bassinCouture=s.val()||{};renderBassin();updateCounts();});
   db.ref('inventaire_v4/fabrique/atelier').on('value',s=>{fabriqueAtelier=s.val()||{};renderFabrique();updateCounts();});
   db.ref('inventaire_v4/fabrique/couture').on('value',s=>{fabriqueCouture=s.val()||{};renderFabrique();updateCounts();});
-  // Listen to Inspection for auto-detection
-  db.ref('inspection').on('value',s=>{inspectionData=s.val()||{};autoCheckInspection();});
+  // Listen to Inspection for auto-detection (path = 'inspectionData' matches Inspection module)
+  db.ref('inspectionData').on('value',s=>{inspectionData=s.val()||{};autoCheckInspection();});
+  // Also listen to serieCommandes for inspection status changes → auto move to fabriqué
+  db.ref('serieCommandes').on('value',s=>{window._serieCards=s.val()||{};autoCheckSerieInspected();});
 }
 function saveBassin(sec){db.ref('inventaire_v4/bassin/'+sec).set(sec==='atelier'?bassinAtelier:bassinCouture);}
 function saveFabrique(sec){db.ref('inventaire_v4/fabrique/'+sec).set(sec==='atelier'?fabriqueAtelier:fabriqueCouture);}
@@ -555,10 +557,26 @@ function moveToFabrique(id){
   var fd=currentTab==='atelier'?fabriqueAtelier:fabriqueCouture;
   var item=bd[id];if(!item){showToast('Item introuvable','error');return;}
   var fid='fab_'+Date.now();
-  fd[fid]={commande:item.commande,client:item.client,nom:item.nom,grandeur:item.grandeur,quantite:item.quantite,dateAdded:item.dateAdded,completedDate:new Date().toISOString(),completedBy:currentUser?currentUser.email:'unknown',autoInspection:false,originalId:id};
+  fd[fid]={commande:item.commande,client:item.client,nom:item.nom,grandeur:item.grandeur,quantite:item.quantite,dateAdded:item.dateAdded,completedDate:new Date().toISOString(),completedBy:currentUser?currentUser.email:'unknown',autoInspection:false,originalId:id,linkedCmd:item.linkedCmd||null,linkedItemIdx:item.linkedItemIdx!=null?item.linkedItemIdx:null,linkedGrandeurIdx:item.linkedGrandeurIdx!=null?item.linkedGrandeurIdx:null};
   delete bd[id];
   renderBassin();renderFabrique();updateCounts();
   saveBassin(currentTab);saveFabrique(currentTab);
+  // Reverse sync: if from Série+, update the card's inspection/completion status
+  if(item.fromSerie&&item.linkedCmd&&db){
+    var sec=currentTab;
+    var dept=sec==='atelier'?'atelier':'couture';
+    var field=dept==='atelier'?'atelier':'couture';
+    var gPath='serieCommandes/'+item.linkedCmd+'/items/'+item.linkedItemIdx+'/grandeurs/'+item.linkedGrandeurIdx+'/'+field;
+    var upd={};
+    if(dept==='atelier'){
+      upd={inspected:true,sentToCouture:true,qtyFait:item.quantite||1,completedBy:currentUser?currentUser.email:'inventaire',completedAt:new Date().toISOString()};
+    }else{
+      upd={status:'pret',qtyFait:item.quantite||1,completedBy:currentUser?currentUser.email:'inventaire',completedAt:new Date().toISOString()};
+    }
+    db.ref(gPath).update(upd).then(function(){
+      console.log('[INV→SERIE] Updated '+gPath);
+    }).catch(function(e){console.error('[INV→SERIE] Error:',e);});
+  }
   showToast('✅ '+(item.nom||'#'+item.commande)+' — Fabriqué!','teal');
 }
 
@@ -635,6 +653,54 @@ function isInspected(commande){
     }
   }
   return false;
+}
+
+/* ═══ AUTO-CHECK: Série+ inspection status → move bassin to fabriqué ═══ */
+function autoCheckSerieInspected(){
+  var cards=window._serieCards||{};
+  if(!Object.keys(cards).length)return;
+  var m=0;
+  m+=checkSerieInspectedForSection('atelier',cards);
+  m+=checkSerieInspectedForSection('couture',cards);
+  if(m>0){
+    showToast('🔄 '+m+' item(s) inspecté(s) déplacé(s) vers Fabriqué','teal');
+    renderBassin();renderFabrique();updateCounts();
+  }
+}
+
+function checkSerieInspectedForSection(sec,cards){
+  var bd=sec==='atelier'?bassinAtelier:bassinCouture;
+  var fd=sec==='atelier'?fabriqueAtelier:fabriqueCouture;
+  var moved=0;
+  var toDelete=[];
+  for(var id in bd){
+    var item=bd[id];
+    if(!item.fromSerie||!item.linkedCmd)continue;
+    var card=cards[item.linkedCmd];
+    if(!card||!card.items)continue;
+    var cItem=card.items[item.linkedItemIdx];
+    if(!cItem||!cItem.grandeurs)continue;
+    var g=cItem.grandeurs[item.linkedGrandeurIdx];
+    if(!g)continue;
+    var isComplete=false;
+    if(sec==='atelier'){
+      isComplete=g.atelier&&g.atelier.inspected;
+    }else{
+      isComplete=g.couture&&(g.couture.status==='pret'||g.couture.status==='expedie'||g.couture.status==='complet');
+    }
+    if(isComplete){
+      var fid='fab_serie_'+Date.now()+'_'+Math.random().toString(36).substr(2,4);
+      fd[fid]={commande:item.commande,client:item.client,nom:item.nom,grandeur:item.grandeur,quantite:item.quantite,dateAdded:item.dateAdded,completedDate:new Date().toISOString(),completedBy:'auto-serie-sync',autoInspection:true,originalId:id,linkedCmd:item.linkedCmd,linkedItemIdx:item.linkedItemIdx,linkedGrandeurIdx:item.linkedGrandeurIdx};
+      toDelete.push(id);
+      moved++;
+    }
+  }
+  toDelete.forEach(function(id){delete bd[id];});
+  if(moved>0){
+    db.ref('inventaire_v4/bassin/'+sec).set(bd);
+    db.ref('inventaire_v4/fabrique/'+sec).set(fd);
+  }
+  return moved;
 }
 
 function checkAllInspection(){
