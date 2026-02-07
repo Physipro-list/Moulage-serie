@@ -486,6 +486,8 @@
     let isRunning = false;
     let listenerRef = null;
     let totalPhotosReceived = 0;
+    var PHYSIPRO_NAME_MAP={'atelieratp@physipro.com':'Daniel','valerie18@videotron.ca':'Valérie','simdut@physipro.com':'Cassie','sroy@physipro.com':'Stéphanie','peterbass76@gmail.com':'Pierre','cncatp@physipro.com':'Sina'};
+    function getDisplayName(email){if(!email)return'--';var e=email.toLowerCase();if(PHYSIPRO_NAME_MAP[e])return PHYSIPRO_NAME_MAP[e];return email.split('@')[0].replace(/[._-]/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});}
     var currentUserEmail = '';
     
     // FILE D'ATTENTE - Traitement séquentiel automatique
@@ -504,9 +506,12 @@
     function initLogoMenu(currentMod){
   var grid=document.getElementById('navModalGrid');if(!grid)return;
   var email='';
-  if(typeof currentUser!=='undefined'&&currentUser)email=currentUser.email||currentUser;
+  if(typeof currentUserEmail!=='undefined'&&currentUserEmail)email=currentUserEmail;
+  else if(typeof currentUser!=='undefined'&&currentUser)email=currentUser.email||currentUser;
   else if(typeof fbUser!=='undefined'&&fbUser)email=fbUser.email||fbUser;
   if(typeof email!=='string'){try{email=email.email||'';}catch(e){email='';}}
+  // Final fallback: localStorage
+  if(!email){try{email=localStorage.getItem('physipro_last_email')||'';}catch(e){}}
   var access=getHubAccess(email);
   grid.innerHTML='';
   var order=['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','photos','archives'];
@@ -621,12 +626,13 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       firebase.auth().onAuthStateChanged(function(user){
         if(user){
           currentUserEmail=user.email||'';
-          var nameEl=document.getElementById('currentUserName');
-          if(nameEl) nameEl.textContent=user.email.split('@')[0].replace(/[._-]/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
-          initLogoMenu('photos');
         } else {
-          initLogoMenu('photos');
+          // Fallback: get email from localStorage (set by other modules with login)
+          currentUserEmail=localStorage.getItem('physipro_last_email')||'';
         }
+        var nameEl=document.getElementById('currentUserName');
+        if(nameEl && currentUserEmail) nameEl.textContent=getDisplayName(currentUserEmail);
+        initLogoMenu('photos');
       });
       
       try {

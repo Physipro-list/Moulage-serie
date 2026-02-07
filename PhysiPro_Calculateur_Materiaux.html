@@ -1174,7 +1174,7 @@ body {
         <div class="form-section">
           <div class="form-row">
             <label>Item</label>
-            <select id="itemSelect" onchange="updateGrandeurs()"></select>
+            <select id="itemSelect" onchange="updateGrandeurs();previewMaterials()"></select>
           </div>
           <div class="form-row" id="typeRow">
             <label>Type</label>
@@ -1186,11 +1186,11 @@ body {
           </div>
           <div class="form-row" id="grandeurRow" style="display:none;">
             <label>Grandeur</label>
-            <select id="grandeurSelect"></select>
+            <select id="grandeurSelect" onchange="previewMaterials()"></select>
           </div>
           <div class="form-row">
             <label>Quantité</label>
-            <input type="number" id="qtyInput" class="qty-input" value="1" min="1" onfocus="this.select()">
+            <input type="number" id="qtyInput" class="qty-input" value="1" min="1" onfocus="this.select()" oninput="previewMaterials()">
           </div>
         </div>
         
@@ -1201,15 +1201,17 @@ body {
         </label>
         
         <!-- BOUTON AJOUTER -->
-        <button class="btn-add" onclick="addToOrder()">➕ Ajouter à la commande</button>
+        <button class="btn-add" onclick="addToOrder()">✅ Confirmer à la commande</button>
         
       </div>
       
       <!-- RIGHT SIDE - ORDER LIST -->
       <div class="materials-side">
         <div class="materials-section">
+          <!-- AUTO PREVIEW -->
+          <div id="materialPreview" style="border-bottom:2px solid rgba(251,191,36,0.3);margin-bottom:8px;padding-bottom:8px;"></div>
           <div class="materials-header">
-            <span class="materials-title">📋 Liste de commande</span>
+            <span class="materials-title">📋 Commande confirmée</span>
             <button class="btn-clear-list" onclick="clearOrder()">🗑️ Vider</button>
           </div>
           <div class="materials-scroll" id="orderListContainer">
@@ -1898,12 +1900,64 @@ function updateGrandeurs() {
   }
   
   calculate();
+  previewMaterials();
 }
 
 function toggleCouture() {
   const cb = document.getElementById('coutureCheck');
   cb.checked = !cb.checked;
   calculate();
+  previewMaterials();
+}
+
+// ========== PRÉVISUALISATION MATÉRIAUX ==========
+function previewMaterials() {
+  const container = document.getElementById('materialPreview');
+  if (!container) return;
+  
+  const itemName = document.getElementById('itemSelect').value;
+  const qty = parseInt(document.getElementById('qtyInput').value) || 1;
+  const includeCouture = document.getElementById('coutureCheck').checked;
+  
+  const recette = getRecetteForItem(itemName);
+  
+  if (!recette || recette.length === 0) {
+    container.innerHTML = '<div style="color:#64748b;font-size:11px;padding:8px;text-align:center;">Sélectionnez un item pour voir les matériaux</div>';
+    return;
+  }
+  
+  const materials = recette.map(m => ({
+    ...m,
+    totalQty: Math.round((m.qty || 1) * qty * 100) / 100
+  }));
+  
+  const atelierMats = materials.filter(m => m.dept === 'Atelier' || !m.dept);
+  const coutureMats = materials.filter(m => m.dept === 'Couture');
+  
+  let html = '<div style="font-size:11px;font-weight:700;color:#fbbf24;padding:4px 8px;">🔍 ' + itemName + ' × ' + qty + '</div>';
+  html += '<table class="mini-table" style="width:100%">';
+  html += '<tr style="font-size:9px;color:#64748b;"><td></td><td></td><td style="text-align:right">Req.</td><td style="text-align:right">Stock</td></tr>';
+  
+  if (atelierMats.length > 0) {
+    html += '<tr class="mini-section-row atelier"><td colspan="4">🏭 Atelier</td></tr>';
+    atelierMats.forEach(m => {
+      const stock = stockData[m.code] || '-';
+      const stockClass = getStockClass(stock, m.totalQty);
+      html += '<tr><td class="code-cell">' + m.code + '</td><td>' + m.materiau + '</td><td class="qty-cell">' + m.totalQty + '</td><td class="stock-cell ' + stockClass + '">' + stock + '</td></tr>';
+    });
+  }
+  
+  if (includeCouture && coutureMats.length > 0) {
+    html += '<tr class="mini-section-row couture"><td colspan="4">✂️ Couture</td></tr>';
+    coutureMats.forEach(m => {
+      const stock = stockData[m.code] || '-';
+      const stockClass = getStockClass(stock, m.totalQty);
+      html += '<tr><td class="code-cell">' + m.code + '</td><td>' + m.materiau + '</td><td class="qty-cell">' + m.totalQty + '</td><td class="stock-cell ' + stockClass + '">' + stock + '</td></tr>';
+    });
+  }
+  
+  html += '</table>';
+  container.innerHTML = html;
 }
 
 // ========== LISTE DE COMMANDE ==========
@@ -2123,6 +2177,7 @@ function loadCustomRecettes() {
   db.ref('customRecettes').on('value', snap => {
     customRecettes = snap.val() || {};
     console.log('Recettes chargées:', Object.keys(customRecettes).length);
+    previewMaterials();
   });
   
   // Charger les quantités en stock
@@ -2133,6 +2188,7 @@ function loadCustomRecettes() {
     if (orderItems.length > 0) {
       renderOrderList();
     }
+    previewMaterials();
   });
 }
 
