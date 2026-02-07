@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PhysiPro — Archives</title>
+<link rel="manifest" href="manifest_archives.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a1628">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+/* ═══ BASE ═══ */
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{--bg:#0a1628;--card:#0f1e35;--border:#1e3a5f;--blue:#3b82f6;--gold:#fbbf24;--green:#22c55e;--red:#ef4444;--text:#e2e8f0;--muted:#64748b;--panel:rgba(15,30,53,0.95);}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100vh;overflow-x:hidden;}
+
+/* ═══ TOP BAR ═══ */
+.topbar{position:fixed;top:0;left:0;right:0;height:44px;background:linear-gradient(to bottom,#04152c 0%,#1a3a5c 50%,#4a8ef5 100%);display:flex;align-items:center;padding:0 12px;z-index:1000;box-shadow:0 2px 8px rgba(0,0,0,0.4);}
+.topbar-logo{width:32px;height:32px;cursor:pointer;border-radius:50%;transition:transform 0.2s;}
+.topbar-logo:hover{transform:scale(1.1);}
+.topbar-title{flex:1;text-align:center;font-size:14px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.4);}
+.topbar-user{font-size:10px;color:#93c5fd;text-align:right;}
+
+/* ═══ LOGO MENU (shared with all modules) ═══ */
+.logo-menu a{display:flex;align-items:center;gap:8px;padding:8px 12px;color:var(--text);text-decoration:none;font-size:12px;font-weight:600;border-radius:6px;transition:background 0.15s;}
+.logo-menu a:hover{background:rgba(59,130,246,0.2);}
+.logo-menu a.active{background:rgba(59,130,246,0.3);color:var(--gold);}
+.logo-menu a .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+/* ═══ MAIN CONTAINER ═══ */
+.main{padding:52px 12px 20px;max-width:1200px;margin:0 auto;}
+
+/* ═══ TABS ═══ */
+.tabs{display:flex;gap:4px;margin-bottom:16px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab-btn{padding:8px 16px;background:var(--card);border:1px solid var(--border);border-radius:8px 8px 0 0;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all 0.2s;position:relative;}
+.tab-btn:hover{color:var(--text);border-color:#3b82f6;}
+.tab-btn.active{background:linear-gradient(to bottom,#1a3a5c,#0f1e35);color:#fff;border-color:#3b82f6;border-bottom-color:transparent;}
+.tab-btn .tab-count{position:absolute;top:-4px;right:-4px;background:var(--gold);color:#000;font-size:8px;font-weight:800;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;}
+
+/* ═══ CONTROLS BAR ═══ */
+.controls{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
+.controls select{padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;font-weight:600;}
+.controls input[type="search"]{flex:1;min-width:150px;padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;outline:none;}
+.controls input[type="search"]:focus{border-color:var(--blue);}
+.controls .btn{padding:6px 12px;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.2s;}
+.controls .btn-blue{background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;}
+.controls .btn-blue:hover{filter:brightness(1.15);}
+.controls .btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted);}
+.controls .btn-outline:hover{border-color:var(--blue);color:var(--text);}
+
+/* ═══ STATS BAR ═══ */
+.stats-bar{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;flex:1;min-width:120px;text-align:center;}
+.stat-value{font-size:22px;font-weight:800;color:var(--blue);}
+.stat-label{font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:600;margin-top:2px;}
+
+/* ═══ TABLE ═══ */
+.archive-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.archive-table th{background:linear-gradient(to bottom,#04152c,#1a3a5c);color:#93c5fd;font-size:10px;font-weight:700;padding:8px 6px;text-align:left;border-bottom:2px solid var(--border);position:sticky;top:0;z-index:5;}
+.archive-table td{padding:6px;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.04);color:var(--text);}
+.archive-table tr:hover td{background:rgba(59,130,246,0.05);}
+.archive-table .date-row td{background:rgba(251,191,36,0.08);font-weight:700;color:var(--gold);font-size:10px;}
+.archive-table .err-cell{color:var(--red);font-weight:700;}
+
+/* ═══ CARD LIST (for Quest/PSM) ═══ */
+.archive-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
+.archive-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;transition:all 0.2s;position:relative;}
+.archive-card:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:0 4px 12px rgba(59,130,246,0.2);}
+.archive-card-module{position:absolute;top:8px;right:8px;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;}
+.archive-card-module.quest{background:var(--gold);color:#000;}
+.archive-card-module.psm{background:var(--red);color:#fff;}
+.archive-card-title{font-size:14px;font-weight:700;color:#fff;margin-bottom:4px;}
+.archive-card-subtitle{font-size:11px;color:var(--muted);margin-bottom:8px;}
+.archive-card-meta{display:flex;flex-wrap:wrap;gap:6px;}
+.archive-card-tag{font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(59,130,246,0.15);color:#93c5fd;}
+
+/* ═══ DETAIL MODAL ═══ */
+.detail-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:5000;display:none;align-items:center;justify-content:center;padding:20px;}
+.detail-overlay.show{display:flex;}
+.detail-panel{background:var(--bg);border:2px solid var(--border);border-radius:14px;max-width:700px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.6);}
+.detail-header{background:linear-gradient(to bottom,#04152c,#1a3a5c);padding:16px;display:flex;align-items:center;justify-content:space-between;border-radius:12px 12px 0 0;position:sticky;top:0;z-index:5;}
+.detail-header h2{font-size:16px;color:#fff;margin:0;}
+.detail-close{background:rgba(255,255,255,0.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.detail-close:hover{background:var(--red);}
+.detail-body{padding:16px;}
+
+/* ═══ EMPTY STATE ═══ */
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted);}
+.empty-state .icon{font-size:48px;margin-bottom:12px;opacity:0.5;}
+.empty-state p{font-size:13px;line-height:1.6;}
+
+/* ═══ TOAST ═══ */
+.toast-container{position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;}
+.toast{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:600;color:#fff;animation:slideIn 0.3s;box-shadow:0 4px 12px rgba(0,0,0,0.3);}
+.toast.success{background:#22c55e;}
+.toast.error{background:#ef4444;}
+.toast.info{background:#3b82f6;}
+@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* ═══ LOGIN ═══ */
+.login-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:10000;display:flex;align-items:center;justify-content:center;}
+.login-overlay.hidden{display:none;}
+.login-box{background:var(--card);border:2px solid var(--border);border-radius:16px;padding:30px;width:90%;max-width:320px;text-align:center;}
+.login-box h2{color:#fff;margin-bottom:16px;font-size:18px;}
+.login-box input{width:100%;padding:10px;margin-bottom:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;}
+.login-box button{width:100%;padding:10px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;}
+
+/* ═══ RESPONSIVE ═══ */
+@media(max-width:600px){
+  .stats-bar{gap:6px;}
+  .stat-card{min-width:80px;padding:8px;}
+  .stat-value{font-size:18px;}
+  .archive-cards{grid-template-columns:1fr;}
+  .controls{flex-direction:column;}
+  .controls input[type="search"]{min-width:100%;}
+}
+
+/* ═══ SCROLLBAR ═══ */
+::-webkit-scrollbar{width:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(59,130,246,0.3);border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:rgba(59,130,246,0.5);}
+/* ═══ LOGO NAVIGATION MODAL ═══ */
+.nav-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:99990;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);animation:navFadeIn .2s ease;}
+.nav-modal-overlay.visible{display:flex;}
+.nav-modal{background:linear-gradient(160deg,#04152c 0%,#0f2847 50%,#1a3a5c 100%);border:2px solid rgba(74,142,245,0.3);border-radius:20px;padding:24px 20px 20px;max-width:520px;width:100%;box-shadow:0 24px 80px rgba(0,0,0,0.7),0 0 60px rgba(59,130,246,0.08);animation:navScaleIn .25s cubic-bezier(.34,1.56,.64,1);}
+.nav-modal-header{text-align:center;margin-bottom:16px;}
+.nav-modal-title{font-size:16px;font-weight:700;color:#fff;letter-spacing:.3px;}
+.nav-modal-subtitle{font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;}
+.nav-modal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.nav-modal-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 6px 10px;border-radius:12px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.03);cursor:pointer;text-decoration:none;transition:all .2s;position:relative;}
+.nav-modal-item:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.3);}
+.nav-modal-item.current{border-color:rgba(74,142,245,0.4);background:rgba(74,142,245,0.1);}
+.nav-modal-item.current::after{content:'actuel';position:absolute;top:4px;right:4px;font-size:7px;font-weight:700;color:#3b82f6;text-transform:uppercase;letter-spacing:.5px;}
+.nav-modal-icon{font-size:26px;line-height:1;}
+.nav-modal-label{font-size:11px;font-weight:600;color:#fff;text-align:center;line-height:1.2;}
+.nav-modal-close{position:absolute;top:10px;right:14px;background:none;border:none;color:rgba(255,255,255,0.4);font-size:20px;cursor:pointer;padding:4px;transition:color .2s;}
+.nav-modal-close:hover{color:#fff;}
+/* ═══ TEST PANEL ═══ */
+.test-panel{max-width:700px;margin:0 auto;}
+.test-section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px;}
+.test-section h3{font-size:14px;margin-bottom:4px;}
+.test-section .test-desc{font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;}
+.test-section .test-steps{font-size:11px;color:rgba(255,255,255,0.5);margin-top:10px;line-height:1.8;border-top:1px solid var(--border);padding-top:10px;}
+.test-section .test-steps strong{color:var(--gold);}
+.test-btn{padding:8px 18px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.2s;margin-right:8px;margin-bottom:6px;}
+.test-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.3);}
+.test-btn-green{background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;}
+.test-btn-red{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;}
+.test-btn-blue{background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;}
+.test-btn-gold{background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;}
+.test-status{display:inline-block;font-size:11px;margin-left:8px;color:var(--green);}
+.test-warning{background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:12px;margin-bottom:14px;font-size:11px;color:#fbbf24;line-height:1.5;}
+
+@keyframes navFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes navScaleIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}
+@media(max-width:500px){.nav-modal-grid{grid-template-columns:repeat(3,1fr);gap:8px;}.nav-modal{padding:18px 14px 14px;}}
+@media(max-width:360px){.nav-modal-grid{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>🗄️ PhysiPro Archives</h2>
+    <form onsubmit="doLogin(event)">
+      <input type="email" id="loginEmail" placeholder="Courriel" required>
+      <input type="password" id="loginPassword" placeholder="Mot de passe" required>
+      <button type="submit" id="loginBtn">Connexion</button>
+    </form>
+  </div>
+</div>
+<script>if(localStorage.getItem('physipro_last_email')){document.write('<style>.login-overlay{display:none !important;}</style>');}</script>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <img class="topbar-logo" id="logoBtn" src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="Logo">
+  <div class="topbar-title">🗄️ Archives PhysiPro</div>
+  <div class="topbar-user" id="currentUserName">—</div>
+</div>
+
+<!-- LOGO MENU -->
+
+<!-- MAIN -->
+<div class="main">
+  <!-- TABS -->
+  <div class="tabs" id="tabsBar">
+    <button class="tab-btn active" data-tab="inspection" onclick="switchTab('inspection')">🔍 Inspection</button>
+    <button class="tab-btn" data-tab="couture" onclick="switchTab('couture')">🧵 Couture</button>
+    <button class="tab-btn" data-tab="questionnement" onclick="switchTab('questionnement')">📋 Questionnement</button>
+    <button class="tab-btn" data-tab="psm" onclick="switchTab('psm')">🔧 PSM</button>
+    <button class="tab-btn" data-tab="logs" onclick="switchTab('logs')">📊 Logs</button>
+    <button class="tab-btn" data-tab="test" onclick="switchTab('test')" style="margin-left:auto;border-color:rgba(251,191,36,0.3);color:#fbbf24;">🧪 Test</button>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card"><div class="stat-value" id="statTotal">—</div><div class="stat-label">Total Archives</div></div>
+    <div class="stat-card"><div class="stat-value" id="statMonths">—</div><div class="stat-label">Mois Archivés</div></div>
+    <div class="stat-card"><div class="stat-value" id="statLast">—</div><div class="stat-label">Dernier Archivage</div></div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls" id="controlsBar">
+    <select id="monthSelect" onchange="loadTabData()"></select>
+    <input type="search" id="searchInput" placeholder="🔍 Rechercher..." oninput="filterResults()">
+    <button class="btn btn-blue" onclick="exportCurrentCSV()">📊 CSV</button>
+    <button class="btn btn-outline" onclick="refreshData()">🔄</button>
+  </div>
+
+  <!-- CONTENT -->
+  <div id="contentArea">
+    <div class="empty-state">
+      <div class="icon">🗄️</div>
+      <p>Chargement des archives...</p>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="detail-overlay" id="detailOverlay" onclick="if(event.target===this)closeDetail()">
+  <div class="detail-panel">
+    <div class="detail-header">
+      <h2 id="detailTitle">Détails</h2>
+      <button class="detail-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ═══ FIREBASE CONFIG ═══
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCk7bqVnx08Kz1fVq1W24AuW854KY9jPno",
+  authDomain: "liste-des-moulages-physipro.firebaseapp.com",
+  databaseURL: "https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",
+  projectId: "liste-des-moulages-physipro"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+var db = firebase.database();
+var currentUser = null;
+var currentTab = 'inspection';
+var archiveCache = {};
+var logsCache = [];
+
+// ═══ AUTH ═══
+firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){});
+firebase.auth().onAuthStateChanged(function(user) {
+  if (user) {
+    currentUser = user;
+    document.getElementById('loginOverlay').classList.add('hidden');
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('currentUserName').textContent = user.email.split('@')[0];
+    localStorage.setItem('physipro_last_email', user.email);
+    initLogoMenu('archives');
+    loadAllArchives();
+  } else {
+    localStorage.removeItem('physipro_last_email');
+    document.getElementById('loginOverlay').style.display = '';
+    document.getElementById('loginOverlay').classList.remove('hidden');
+  }
+});
+
+function doLogin(e) {
+  if (e) e.preventDefault();
+  var email = document.getElementById('loginEmail').value.trim();
+  var pw = document.getElementById('loginPassword').value;
+  document.getElementById('loginBtn').textContent = '⏳...';
+  firebase.auth().signInWithEmailAndPassword(email, pw).catch(function(err) {
+    alert('❌ ' + err.message);
+    document.getElementById('loginBtn').textContent = 'Connexion';
+  });
+}
+
+// ═══ LOGO MENU ═══
+var NAV_MODULES={moulage:{icon:'🏭',label:'Moulage',file:'Physipro_moulage.html',color:'#3b82f6'},jobs:{icon:'❓',label:'Questionnement',file:'PhysiPro_Questionnement.html',color:'#f59e0b'},inspection:{icon:'☑️',label:'Inspection',file:'PhysiPro_Inspection.html',color:'#22c55e'},serie:{icon:'📋',label:'Série+',file:'PhysiPro_Serie_.html',color:'#f97316'},psm:{icon:'🔧',label:'PSM',file:'PhysiPro_PSM.html',color:'#ef4444'},entrepot:{icon:'📦',label:'Entrepôt',file:'PhysiPro_Entrepot.html',color:'#8b5cf6'},inventaire:{icon:'📊',label:'Inventaire',file:'PhysiPro_Inventaire.html',color:'#a855f7'},calcmat:{icon:'🧮',label:'Calc. Matériaux',file:'PhysiPro_Calculateur_Materiaux.html',color:'#14b8a6'},calctemps:{icon:'⏱️',label:'Calc. Temps',file:'PhysiPro_Calculateur_Temps.html',color:'#0ea5e9'},photos:{icon:'📷',label:'Photos',file:'PhysiPro_Photo_Recepteur.html',color:'#06b6d4'},archives:{icon:'🗄️',label:'Archives',file:'PhysiPro_Archives.html',color:'#6366f1'}};
+var HUB_ACCESS={'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','photos','archives'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','photos','archives'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','archives'],'c3JveUBwaHlzaXByby5jb20=':['moulage','jobs','inspection','serie','psm','inventaire','archives'],'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['moulage','jobs'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['moulage','jobs'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['moulage','jobs'],'bWFnYXNpbmF0cDFAcGh5c2lwcm8uY29t':['entrepot','calcmat'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['entrepot','inventaire','calcmat'],'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':['entrepot','calcmat'],'c2VydmljZTFAcGh5c2lwcm8uY29t':['moulage','jobs'],'c2VydmljZTNAcGh5c2lwcm8uY29t':['moulage','jobs'],'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':['moulage','jobs','archives'],'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':['moulage','jobs','archives'],'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':['moulage','jobs','serie'],'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':['moulage','calcmat','calctemps'],'cmhAcGh5c2lwcm8uY29t':['moulage','jobs','archives'],'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':[],'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':[],'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':[]};
+function getHubAccess(email){if(!email)return[];try{return HUB_ACCESS[btoa(email)]||[];}catch(e){return[];}}
+function initLogoMenu(currentMod){
+  var grid=document.getElementById('navModalGrid');if(!grid)return;
+  var email='';
+  if(typeof currentUser!=='undefined'&&currentUser)email=currentUser.email||currentUser;
+  else if(typeof fbUser!=='undefined'&&fbUser)email=fbUser.email||fbUser;
+  if(typeof email!=='string'){try{email=email.email||'';}catch(e){email='';}}
+  var access=getHubAccess(email);
+  grid.innerHTML='';
+  var order=['moulage','jobs','inspection','serie','psm','entrepot','inventaire','calcmat','calctemps','photos','archives'];
+  order.forEach(function(mod){
+    if(access.indexOf(mod)===-1)return;
+    var m=NAV_MODULES[mod];if(!m)return;
+    var a=document.createElement('a');
+    a.className='nav-modal-item'+(mod===currentMod?' current':'');
+    a.href=m.file;
+    a.innerHTML='<span class="nav-modal-icon">'+m.icon+'</span><span class="nav-modal-label" style="color:'+m.color+'">'+m.label+'</span>';
+    grid.appendChild(a);
+  });
+  var logo=document.querySelector('.topbar-logo')||document.getElementById('logoBtn');
+  if(logo){
+    logo.style.cursor='pointer';
+    logo.onclick=function(e){e.preventDefault();e.stopPropagation();openNavModal();};
+  }
+}
+function openNavModal(){document.getElementById('navModalOverlay').classList.add('visible');}
+function closeNavModal(){document.getElementById('navModalOverlay').classList.remove('visible');}
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=document.getElementById('navModalOverlay');if(m&&m.classList.contains('visible')){closeNavModal();e.stopPropagation();}}});
+
+// ═══ INIT MONTHS ═══
+function initMonths() {
+  var now = new Date();
+  var sel = document.getElementById('monthSelect');
+  var months = [];
+  // Go back 24 months
+  for (var i = 0; i < 24; i++) {
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    var names = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    var label = names[d.getMonth() + 1] + ' ' + d.getFullYear();
+    months.push({ key: key, label: label });
+  }
+  sel.innerHTML = '<option value="all">📅 Tous les mois</option>' + months.map(function(m) {
+    return '<option value="' + m.key + '">' + m.label + '</option>';
+  }).join('');
+}
+
+// ═══ LOAD ALL ARCHIVES ═══
+function loadAllArchives() {
+  initMonths();
+  showToast('🔄 Chargement...', 'info');
+  db.ref('archives').once('value').then(function(snap) {
+    archiveCache = snap.val() || {};
+    loadLogs();
+  }).catch(function(e) {
+    console.error('Archive load error:', e);
+    showToast('❌ Erreur chargement', 'error');
+  });
+}
+
+function loadLogs() {
+  db.ref('archiveLogs').once('value').then(function(snap) {
+    var data = snap.val() || {};
+    logsCache = Object.keys(data).map(function(k) { return Object.assign({ id: k }, data[k]); });
+    logsCache.sort(function(a, b) { return (b.archivedAt || '').localeCompare(a.archivedAt || ''); });
+    updateStats();
+    renderTab();
+    showToast('✅ Archives chargées', 'success');
+  }).catch(function(e) {
+    console.error('Logs load error:', e);
+    updateStats();
+    renderTab();
+  });
+}
+
+function refreshData() {
+  archiveCache = {};
+  logsCache = [];
+  loadAllArchives();
+}
+
+// ═══ STATS ═══
+function updateStats() {
+  var total = 0;
+  var months = {};
+  ['inspection', 'couture', 'questionnements', 'psm', 'serie', 'inventaire'].forEach(function(mod) {
+    var modData = archiveCache[mod] || {};
+    Object.keys(modData).forEach(function(month) {
+      months[month] = true;
+      var mData = modData[month];
+      if (Array.isArray(mData)) {
+        total += mData.filter(function(r) { return r && r.type === 'entry'; }).length;
+      } else if (typeof mData === 'object') {
+        total += Object.keys(mData).length;
+      }
+    });
+  });
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statMonths').textContent = Object.keys(months).length;
+  var lastLog = logsCache[0];
+  document.getElementById('statLast').textContent = lastLog ? new Date(lastLog.archivedAt).toLocaleDateString('fr-CA') : '—';
+
+  // Update tab counts
+  updateTabCounts();
+}
+
+function updateTabCounts() {
+  var tabs = { inspection: 0, couture: 0, questionnement: 0, psm: 0 };
+  ['inspection', 'couture'].forEach(function(dept) {
+    var modData = archiveCache[dept] || {};
+    Object.keys(modData).forEach(function(month) {
+      if (Array.isArray(modData[month])) {
+        tabs[dept] += modData[month].filter(function(r) { return r && r.type === 'entry'; }).length;
+      }
+    });
+  });
+  var questData = archiveCache.questionnements || {};
+  Object.keys(questData).forEach(function(m) { tabs.questionnement += Object.keys(questData[m] || {}).length; });
+  var psmData = archiveCache.psm || {};
+  Object.keys(psmData).forEach(function(m) { tabs.psm += Object.keys(psmData[m] || {}).length; });
+
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    var tab = btn.getAttribute('data-tab');
+    var existing = btn.querySelector('.tab-count');
+    if (existing) existing.remove();
+    if (tabs[tab] && tabs[tab] > 0) {
+      var badge = document.createElement('span');
+      badge.className = 'tab-count';
+      badge.textContent = tabs[tab];
+      btn.appendChild(badge);
+    }
+  });
+}
+
+// ═══ TAB SWITCHING ═══
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelector('.tab-btn[data-tab="' + tab + '"]').classList.add('active');
+  renderTab();
+}
+
+function loadTabData() { renderTab(); }
+
+// ═══ RENDER TAB ═══
+function renderTab() {
+  var area = document.getElementById('contentArea');
+  var month = document.getElementById('monthSelect').value;
+  var search = (document.getElementById('searchInput').value || '').toLowerCase();
+
+  if (currentTab === 'inspection' || currentTab === 'couture') {
+    renderInspectionTab(area, currentTab, month, search);
+  } else if (currentTab === 'questionnement') {
+    renderCardTab(area, 'questionnements', 'quest', month, search);
+  } else if (currentTab === 'psm') {
+    renderCardTab(area, 'psm', 'psm', month, search);
+  } else if (currentTab === 'logs') {
+    renderLogsTab(area, search);
+  } else if (currentTab === 'test') {
+    renderTestPanel(area);
+  }
+}
+
+function filterResults() { renderTab(); }
+
+// ═══ INSPECTION / COUTURE TABLE ═══
+function renderInspectionTab(area, dept, month, search) {
+  var modData = archiveCache[dept] || {};
+  var months = month === 'all' ? Object.keys(modData).sort().reverse() : (modData[month] ? [month] : []);
+  if (months.length === 0) {
+    area.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>Aucune archive ' + dept + ' trouvée' + (month !== 'all' ? ' pour ce mois' : '') + '.</p></div>';
+    return;
+  }
+
+  var isInsp = dept === 'inspection';
+  var html = '<div style="overflow-x:auto;"><table class="archive-table"><thead><tr>';
+  html += '<th>Bon</th><th>Nom</th><th>Qté</th><th>Item</th><th>Client</th>';
+  html += isInsp ? '<th>Inspecteur</th><th>Erreur</th><th>Raison</th>' : '<th>Couturière</th><th>Statut</th>';
+  html += '<th>Notes</th></tr></thead><tbody>';
+
+  var totalEntries = 0;
+  months.forEach(function(m) {
+    var rows = modData[m] || [];
+    if (!Array.isArray(rows)) return;
+    var entries = rows.filter(function(r) {
+      if (!r || r.type !== 'entry') return false;
+      if (!search) return true;
+      var str = [r.bon, r.nom, r.item, r.client, r.inspecteur, r.errorReason, r.description].join(' ').toLowerCase();
+      return str.indexOf(search) >= 0;
+    });
+    if (entries.length === 0) return;
+    html += '<tr class="date-row"><td colspan="' + (isInsp ? 9 : 8) + '">📅 ' + formatMonthLabel(m) + ' (' + entries.length + ' entrées)</td></tr>';
+    entries.forEach(function(r) {
+      totalEntries++;
+      html += '<tr>';
+      html += '<td><strong>' + esc(r.bon) + '</strong></td>';
+      html += '<td>' + esc(r.nom) + '</td>';
+      html += '<td>' + (r.qty || 1) + '</td>';
+      html += '<td>' + esc(r.item) + '</td>';
+      html += '<td>' + esc(r.client) + '</td>';
+      html += '<td>' + esc(r.inspecteur) + '</td>';
+      if (isInsp) {
+        html += '<td' + (r.hasError ? ' class="err-cell"' : '') + '>' + (r.hasError ? '⚠️ Oui' : '—') + '</td>';
+        html += '<td' + (r.errorReason ? ' class="err-cell"' : '') + '>' + esc(r.errorReason || '') + '</td>';
+      } else {
+        html += '<td>' + esc(r.coutureStatus || 'recu') + '</td>';
+      }
+      html += '<td>' + esc(r.description || '') + '</td>';
+      html += '</tr>';
+    });
+  });
+  html += '</tbody></table></div>';
+  if (totalEntries === 0) {
+    area.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><p>Aucun résultat pour "' + esc(search) + '"</p></div>';
+  } else {
+    area.innerHTML = html;
+  }
+}
+
+// ═══ CARD TAB (Questionnement / PSM) ═══
+function renderCardTab(area, archiveKey, type, month, search) {
+  var modData = archiveCache[archiveKey] || {};
+  var months = month === 'all' ? Object.keys(modData).sort().reverse() : (modData[month] ? [month] : []);
+  if (months.length === 0) {
+    area.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>Aucune archive ' + (type === 'quest' ? 'questionnement' : 'PSM') + ' trouvée.</p></div>';
+    return;
+  }
+
+  var cards = [];
+  months.forEach(function(m) {
+    var mData = modData[m] || {};
+    Object.keys(mData).forEach(function(id) {
+      var card = mData[id];
+      card._archiveMonth = m;
+      card._archiveId = id;
+      card._archiveType = type;
+      // Search filter
+      if (search) {
+        var str = [card.order, card.client, card.name, card.assignee, card.numeroPO, card.archiveFilename].join(' ').toLowerCase();
+        if (str.indexOf(search) < 0) return;
+      }
+      cards.push(card);
+    });
+  });
+
+  if (cards.length === 0) {
+    area.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><p>Aucun résultat' + (search ? ' pour "' + esc(search) + '"' : '') + '</p></div>';
+    return;
+  }
+
+  // Sort by archivedAt desc
+  cards.sort(function(a, b) { return (b.archivedAt || '').localeCompare(a.archivedAt || ''); });
+
+  var html = '<div class="archive-cards">';
+  cards.forEach(function(card, idx) {
+    var isQuest = type === 'quest';
+    var title = isQuest ? ('#' + (card.order || '?') + ' — ' + (card.client || 'Sans client')) : ((card.name || 'Sans nom') + ' — ' + (card.order || ''));
+    var subtitle = isQuest ? ('Assigné: ' + (card.assignee || '—') + ' | PO: ' + (card.numeroPO || '—')) : ('Région: ' + (card.region || '—').toUpperCase());
+    var archDate = card.archivedAt ? new Date(card.archivedAt).toLocaleDateString('fr-CA') : '?';
+    var msgCount = isQuest ? ((card.messages || []).length + ' msg') : '';
+    html += '<div class="archive-card" onclick="openArchiveDetail(\'' + type + '\',\'' + card._archiveMonth + '\',\'' + card._archiveId + '\')">';
+    html += '<div class="archive-card-module ' + type + '">' + (isQuest ? 'QUEST' : 'PSM') + '</div>';
+    html += '<div class="archive-card-title">' + esc(title) + '</div>';
+    html += '<div class="archive-card-subtitle">' + esc(subtitle) + '</div>';
+    html += '<div class="archive-card-meta">';
+    html += '<span class="archive-card-tag">📅 ' + archDate + '</span>';
+    if (msgCount) html += '<span class="archive-card-tag">💬 ' + msgCount + '</span>';
+    if (card.archiveFilename) html += '<span class="archive-card-tag">📄 ' + esc(card.archiveFilename) + '</span>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+// ═══ LOGS TAB ═══
+function renderLogsTab(area, search) {
+  if (logsCache.length === 0) {
+    area.innerHTML = '<div class="empty-state"><div class="icon">📊</div><p>Aucun log d\'archivage trouvé.</p></div>';
+    return;
+  }
+  var filtered = search ? logsCache.filter(function(l) {
+    return JSON.stringify(l).toLowerCase().indexOf(search) >= 0;
+  }) : logsCache;
+
+  var html = '<div style="overflow-x:auto;"><table class="archive-table"><thead><tr>';
+  html += '<th>Date</th><th>Module</th><th>Détails</th><th>Par</th>';
+  html += '</tr></thead><tbody>';
+  filtered.forEach(function(log) {
+    var details = '';
+    if (log.months) details = log.months.join(', ') + ' (' + (log.entryCount || 0) + ' entrées)';
+    else if (log.order) details = '#' + log.order + ' ' + (log.client || log.name || '');
+    else if (log.filename) details = log.filename;
+    html += '<tr>';
+    html += '<td>' + (log.archivedAt ? new Date(log.archivedAt).toLocaleString('fr-CA') : '?') + '</td>';
+    html += '<td><strong>' + esc(log.module || '?') + '</strong></td>';
+    html += '<td>' + esc(details) + '</td>';
+    html += '<td>' + esc((log.archivedBy || '').split('@')[0]) + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  area.innerHTML = html;
+}
+
+// ═══ DETAIL MODAL ═══
+function openArchiveDetail(type, month, id) {
+  var archiveKey = type === 'quest' ? 'questionnements' : 'psm';
+  var card = (archiveCache[archiveKey] || {})[month];
+  if (!card || !card[id]) { showToast('Archive introuvable', 'error'); return; }
+  card = card[id];
+
+  var overlay = document.getElementById('detailOverlay');
+  var title = document.getElementById('detailTitle');
+  var body = document.getElementById('detailBody');
+
+  if (type === 'quest') {
+    title.textContent = '📋 #' + (card.order || '?') + ' — ' + (card.client || '');
+    var html = '<div style="margin-bottom:16px;">';
+    html += field('N° Commande', card.order);
+    html += field('Client', card.client);
+    html += field('Assigné', card.assignee);
+    html += field('N° PO', card.numeroPO);
+    html += field('Représentant', card.representant);
+    html += field('Date Reçue', card.dateRecue);
+    html += field('Date Livraison', card.dateLivraison);
+    html += field('Archivé le', card.archivedAt ? new Date(card.archivedAt).toLocaleString('fr-CA') : '?');
+    if (card.archiveFilename) html += field('Fichier HTML', card.archiveFilename);
+    html += '</div>';
+    // Messages
+    if (card.messages && card.messages.length > 0) {
+      html += '<h3 style="color:var(--gold);font-size:13px;margin-bottom:8px;">💬 Messages (' + card.messages.length + ')</h3>';
+      card.messages.forEach(function(m) {
+        var bgMap = { problem: '#4a1010', pinned: '#4a3810', reply: '#0a2540' };
+        var bg = bgMap[m.type] || '#1e3a5f';
+        html += '<div style="background:' + bg + ';border-radius:6px;padding:8px;margin-bottom:6px;font-size:11px;">';
+        html += '<div style="display:flex;justify-content:space-between;"><strong style="color:#93c5fd;">' + esc(m.author || '') + '</strong><span style="color:#475569;font-size:9px;">' + esc(m.date || '') + '</span></div>';
+        html += '<div style="color:var(--text);margin-top:4px;">' + esc(m.text || '').replace(/\n/g, '<br>') + '</div>';
+        if (m.image === '[image archived in HTML]' || (m.images && m.images[0] === '[image archived in HTML]')) {
+          html += '<div style="color:var(--muted);font-size:9px;margin-top:4px;">📷 Image disponible dans le fichier HTML archive</div>';
+        }
+        html += '</div>';
+      });
+    }
+    body.innerHTML = html;
+  } else {
+    title.textContent = '🔧 ' + (card.name || '?') + ' — ' + (card.order || '');
+    var html = '<div style="margin-bottom:16px;">';
+    html += field('Nom', card.name);
+    html += field('Commande', card.order);
+    html += field('Région', (card.region || '').toUpperCase());
+    html += field('Archivé le', card.archivedAt ? new Date(card.archivedAt).toLocaleString('fr-CA') : '?');
+    if (card.archiveFilename) html += field('Fichier HTML', card.archiveFilename);
+    html += '</div>';
+    ['atelier', 'couture', 'metal'].forEach(function(dept) {
+      var d = card[dept];
+      if (!d) return;
+      var status = d.complete ? '✅ Complété' : '⏳ En cours';
+      html += '<div style="background:rgba(30,58,95,0.4);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">';
+      html += '<div style="font-size:13px;font-weight:700;color:#fff;text-transform:capitalize;margin-bottom:6px;">' + dept + ' — ' + status + '</div>';
+      if (d.evalBy) html += '<div style="font-size:10px;color:var(--muted);">Évalué par: ' + esc(d.evalBy) + '</div>';
+      if (d.temps) html += '<div style="font-size:10px;color:var(--muted);">Temps: ' + esc(d.temps) + '</div>';
+      if (d.question) html += '<div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:6px;margin-top:6px;font-size:11px;"><strong style="color:var(--gold);font-size:9px;">Question:</strong><br>' + esc(d.question).replace(/\n/g, '<br>') + '</div>';
+      if (d.notes) html += '<div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:6px;margin-top:4px;font-size:11px;"><strong style="color:var(--green);font-size:9px;">Notes:</strong><br>' + esc(d.notes).replace(/\n/g, '<br>') + '</div>';
+      html += '</div>';
+    });
+    body.innerHTML = html;
+  }
+  overlay.classList.add('show');
+}
+
+function field(label, value) {
+  return '<div style="display:flex;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04);"><div style="width:130px;font-size:10px;font-weight:600;color:#93c5fd;">' + label + '</div><div style="flex:1;font-size:11px;color:#fff;">' + esc(value || '—') + '</div></div>';
+}
+
+function closeDetail() {
+  document.getElementById('detailOverlay').classList.remove('show');
+}
+
+// ═══ EXPORT CSV ═══
+function exportCurrentCSV() {
+  if (currentTab === 'inspection' || currentTab === 'couture') {
+    exportInspCSV(currentTab);
+  } else if (currentTab === 'questionnement' || currentTab === 'psm') {
+    exportCardCSV(currentTab === 'questionnement' ? 'questionnements' : 'psm');
+  } else {
+    showToast('Export non disponible pour cet onglet', 'info');
+  }
+}
+
+function exportInspCSV(dept) {
+  var modData = archiveCache[dept] || {};
+  var isInsp = dept === 'inspection';
+  var lines = [isInsp ? 'Mois,Bon,Nom,Qté,Item,Client,Inspecteur,Erreur,Raison,Notes' : 'Mois,Bon,Nom,Qté,Item,Client,Couturière,Statut,Notes'];
+  Object.keys(modData).sort().forEach(function(m) {
+    (modData[m] || []).forEach(function(r) {
+      if (!r || r.type !== 'entry') return;
+      if (isInsp) {
+        lines.push([m, csvC(r.bon), csvC(r.nom), r.qty || 1, csvC(r.item), csvC(r.client), csvC(r.inspecteur), r.hasError ? 'Oui' : 'Non', csvC(r.errorReason), csvC(r.description)].join(','));
+      } else {
+        lines.push([m, csvC(r.bon), csvC(r.nom), r.qty || 1, csvC(r.item), csvC(r.client), csvC(r.inspecteur), csvC(r.coutureStatus), csvC(r.description)].join(','));
+      }
+    });
+  });
+  downloadCSV('archives_' + dept + '.csv', lines.join('\n'));
+}
+
+function exportCardCSV(archiveKey) {
+  var modData = archiveCache[archiveKey] || {};
+  var lines = [archiveKey === 'questionnements' ? 'Mois,ID,Commande,Client,Assigné,PO,Archivé,Fichier' : 'Mois,ID,Nom,Commande,Région,Archivé,Fichier'];
+  Object.keys(modData).sort().forEach(function(m) {
+    var mData = modData[m] || {};
+    Object.keys(mData).forEach(function(id) {
+      var c = mData[id];
+      if (archiveKey === 'questionnements') {
+        lines.push([m, id, csvC(c.order), csvC(c.client), csvC(c.assignee), csvC(c.numeroPO), csvC(c.archivedAt), csvC(c.archiveFilename)].join(','));
+      } else {
+        lines.push([m, id, csvC(c.name), csvC(c.order), csvC(c.region), csvC(c.archivedAt), csvC(c.archiveFilename)].join(','));
+      }
+    });
+  });
+  downloadCSV('archives_' + archiveKey + '.csv', lines.join('\n'));
+}
+
+function csvC(v) {
+  var s = String(v == null ? '' : v);
+  if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function downloadCSV(filename, content) {
+  var blob = new Blob(['\ufeff' + content], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  showToast('📊 CSV exporté', 'success');
+}
+
+// ═══ UTILS ═══
+function esc(s) { return s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : ''; }
+function formatMonthLabel(key) {
+  var parts = key.split('-');
+  var names = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+  return names[parseInt(parts[1])] + ' ' + parts[0];
+}
+function showToast(msg, type) {
+  var c = document.getElementById('toastContainer');
+  var t = document.createElement('div');
+  t.className = 'toast ' + (type || 'info');
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(function() { t.remove(); }, 3000);
+}
+
+// ESC key closes detail
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeDetail();
+});
+
+// ═══ TEST PANEL ═══
+function renderTestPanel(area) {
+  var html = '<div class="test-panel">';
+  html += '<div class="test-warning">⚠️ <strong>Mode Test</strong> — Ces boutons injectent des données fictives dans Firebase pour vérifier le système d\'archivage. Utilisez "🧹 Nettoyer" après vos tests.</div>';
+
+  // Section 1: Inspection / Couture auto-archive
+  html += '<div class="test-section">';
+  html += '<h3>☑️ Test Inspection / 🧵 Couture (auto-archive)</h3>';
+  html += '<div class="test-desc">Injecte des entrées fictives datées de <strong>3 mois passés</strong> dans Firebase. Au prochain chargement de la page Inspection, l\'auto-archive les déplacera automatiquement vers les archives.</div>';
+  html += '<button class="test-btn test-btn-green" onclick="injectTestInspection()">➕ Injecter Inspection</button>';
+  html += '<button class="test-btn test-btn-green" onclick="injectTestCouture()">➕ Injecter Couture</button>';
+  html += '<span class="test-status" id="statusInsp"></span>';
+  html += '<div class="test-steps">';
+  html += '<strong>Comment tester :</strong><br>';
+  html += '1. Cliquer "Injecter" ci-dessus<br>';
+  html += '2. Ouvrir la page <strong>Inspection</strong><br>';
+  html += '3. L\'auto-archive se déclenche → toast "📦 X mois archivé(s)"<br>';
+  html += '4. Revenir ici → onglet Inspection / Couture → voir les données archivées<br>';
+  html += '5. Onglet Logs → voir l\'entrée de log</div>';
+  html += '</div>';
+
+  // Section 2: Questionnement archive-on-delete
+  html += '<div class="test-section">';
+  html += '<h3>❓ Test Questionnement (archive à la suppression)</h3>';
+  html += '<div class="test-desc">Crée un job fictif "TEST-ARCHIVE" avec des messages dans Questionnement. Quand vous le supprimez, un fichier HTML est téléchargé et les métadonnées sont sauvées dans les archives.</div>';
+  html += '<button class="test-btn test-btn-gold" onclick="injectTestQuestionnement()">➕ Créer Job Test</button>';
+  html += '<span class="test-status" id="statusQuest"></span>';
+  html += '<div class="test-steps">';
+  html += '<strong>Comment tester :</strong><br>';
+  html += '1. Cliquer "Créer Job Test" ci-dessus<br>';
+  html += '2. Ouvrir la page <strong>Questionnement</strong><br>';
+  html += '3. Trouver le job "🧪 TEST-ARCHIVE / Client Test"<br>';
+  html += '4. Ouvrir la fiche → cliquer <strong>Supprimer</strong><br>';
+  html += '5. Confirmer → un fichier HTML se télécharge automatiquement<br>';
+  html += '6. Revenir ici → onglet Questionnement → voir la carte archivée<br>';
+  html += '7. Ouvrir le fichier HTML téléchargé → vérifier le contenu</div>';
+  html += '</div>';
+
+  // Section 3: PSM archive-on-delete
+  html += '<div class="test-section">';
+  html += '<h3>🔧 Test PSM (archive à la suppression)</h3>';
+  html += '<div class="test-desc">Crée une carte PSM fictive "TEST-PSM" avec des données dans les 3 départements. Quand vous la supprimez, un fichier HTML est téléchargé.</div>';
+  html += '<button class="test-btn test-btn-blue" onclick="injectTestPSM()">➕ Créer Carte PSM Test</button>';
+  html += '<span class="test-status" id="statusPSM"></span>';
+  html += '<div class="test-steps">';
+  html += '<strong>Comment tester :</strong><br>';
+  html += '1. Cliquer "Créer Carte PSM Test" ci-dessus<br>';
+  html += '2. Ouvrir la page <strong>PSM</strong><br>';
+  html += '3. Trouver "🧪 Test Archive / 99999"<br>';
+  html += '4. Ouvrir le détail → cliquer <strong>Supprimer</strong><br>';
+  html += '5. Confirmer → un fichier HTML se télécharge automatiquement<br>';
+  html += '6. Revenir ici → onglet PSM → voir la carte archivée</div>';
+  html += '</div>';
+
+  // Section 4: Cleanup
+  html += '<div class="test-section" style="border-color:rgba(239,68,68,0.3);">';
+  html += '<h3>🧹 Nettoyage</h3>';
+  html += '<div class="test-desc">Supprime les données de test injectées (inspection, couture, questionnement, PSM) ainsi que les archives de test. Ne touche pas aux vraies données.</div>';
+  html += '<button class="test-btn test-btn-red" onclick="cleanupTestData()">🧹 Nettoyer toutes les données test</button>';
+  html += '<span class="test-status" id="statusClean"></span>';
+  html += '</div>';
+
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+// ═══ TEST: Inject old inspection data ═══
+function injectTestInspection() {
+  var now = new Date();
+  var oldMonth = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+  var monthKey = oldMonth.getFullYear() + '-' + String(oldMonth.getMonth() + 1).padStart(2, '0');
+
+  var testEntries = [];
+  // Add month header
+  testEntries.push({ type: 'month', month: monthKey });
+  // Add test entries
+  for (var i = 1; i <= 3; i++) {
+    testEntries.push({
+      type: 'entry',
+      bon: 'TEST-' + (1000 + i),
+      nom: 'Patient Test ' + i,
+      item: 'Prothèse tibiale #' + i,
+      qty: 1,
+      client: 'Clinique Test',
+      inspecteur: 'Inspecteur Auto',
+      hasError: i === 2,
+      errorReason: i === 2 ? 'Alignement à corriger' : '',
+      description: '🧪 Donnée de test — sera archivée automatiquement',
+      date: monthKey + '-' + String(10 + i).padStart(2, '0'),
+      _isTest: true
+    });
+  }
+
+  // Write to inspectionData/{monthKey}
+  db.ref('inspectionData/' + monthKey).set(testEntries).then(function() {
+    document.getElementById('statusInsp').textContent = '✅ 3 entrées injectées dans ' + monthKey;
+    showToast('✅ Inspection test: ' + monthKey, 'success');
+  }).catch(function(e) {
+    document.getElementById('statusInsp').textContent = '❌ Erreur: ' + e.message;
+    showToast('❌ Erreur injection', 'error');
+  });
+}
+
+// ═══ TEST: Inject old couture data ═══
+function injectTestCouture() {
+  var now = new Date();
+  var oldMonth = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+  var monthKey = oldMonth.getFullYear() + '-' + String(oldMonth.getMonth() + 1).padStart(2, '0');
+
+  var testEntries = [];
+  testEntries.push({ type: 'month', month: monthKey });
+  for (var i = 1; i <= 2; i++) {
+    testEntries.push({
+      type: 'entry',
+      bon: 'COUT-' + (2000 + i),
+      nom: 'Patient Couture ' + i,
+      item: 'Housse sur mesure #' + i,
+      qty: 1,
+      client: 'Clinique Couture',
+      inspecteur: 'Couturière Auto',
+      coutureStatus: i === 1 ? 'termine' : 'en_cours',
+      description: '🧪 Donnée de test couture',
+      date: monthKey + '-' + String(15 + i).padStart(2, '0'),
+      _isTest: true
+    });
+  }
+
+  db.ref('coutureData/' + monthKey).set(testEntries).then(function() {
+    document.getElementById('statusInsp').textContent = '✅ Couture: 2 entrées dans ' + monthKey;
+    showToast('✅ Couture test: ' + monthKey, 'success');
+  }).catch(function(e) {
+    document.getElementById('statusInsp').textContent = '❌ Erreur: ' + e.message;
+    showToast('❌ Erreur injection', 'error');
+  });
+}
+
+// ═══ TEST: Inject questionnement job ═══
+function injectTestQuestionnement() {
+  var jobId = 'test_archive_' + Date.now();
+  var testJob = {
+    order: 'TEST-ARCHIVE',
+    client: 'Client Test',
+    assignee: 'Daniel Atelier',
+    numeroPO: 'PO-99999',
+    representant: 'Rep Test',
+    dateRecue: new Date().toISOString().split('T')[0],
+    dateLivraison: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+    createdBy: currentUser ? currentUser.email : 'test@physipro.com',
+    createdAt: new Date().toLocaleString('fr-CA'),
+    status: 'active',
+    messages: [
+      {
+        id: 'msg1',
+        type: 'discussion',
+        text: '🧪 Ceci est un message de test pour vérifier l\'archivage.',
+        user: currentUser ? currentUser.email : 'test@physipro.com',
+        timestamp: new Date().toISOString(),
+        userName: 'Testeur'
+      },
+      {
+        id: 'msg2',
+        type: 'question',
+        text: '🔴 Question de test: Est-ce que l\'archive HTML se génère correctement?',
+        user: currentUser ? currentUser.email : 'test@physipro.com',
+        timestamp: new Date(Date.now() + 60000).toISOString(),
+        userName: 'Testeur'
+      },
+      {
+        id: 'msg3',
+        type: 'reponse',
+        text: '✅ Réponse de test: Oui, tout fonctionne!',
+        user: 'simdut@physipro.com',
+        timestamp: new Date(Date.now() + 120000).toISOString(),
+        userName: 'Simdut'
+      }
+    ],
+    _isTest: true
+  };
+
+  db.ref('jobs/' + jobId).set(testJob).then(function() {
+    document.getElementById('statusQuest').textContent = '✅ Job "TEST-ARCHIVE" créé (id: ' + jobId.slice(-8) + ')';
+    showToast('✅ Job test créé dans Questionnement', 'success');
+  }).catch(function(e) {
+    document.getElementById('statusQuest').textContent = '❌ Erreur: ' + e.message;
+    showToast('❌ Erreur création job', 'error');
+  });
+}
+
+// ═══ TEST: Inject PSM card ═══
+function injectTestPSM() {
+  // Read current psmData to add test card
+  db.ref('psmData').once('value').then(function(snap) {
+    var psmData = snap.val() || {};
+    var testId = 'test_psm_' + Date.now();
+
+    psmData[testId] = {
+      name: '🧪 Test Archive',
+      order: '99999',
+      region: 'Test',
+      createdAt: new Date().toLocaleString('fr-CA'),
+      createdBy: currentUser ? currentUser.email : 'test@physipro.com',
+      atelier: {
+        status: 'complete',
+        type: 'psm',
+        evaluator: 'Daniel Test',
+        temps: '45 min',
+        question: 'Question test atelier: <b>alignement ok?</b>',
+        questionHtml: 'Question test atelier: <b>alignement ok?</b>',
+        notes: 'Notes atelier de test',
+        notesHtml: 'Notes atelier de test',
+        materials: ['Mousse EVA', 'Plastazote 3mm', 'Colle contact']
+      },
+      couture: {
+        status: 'complete',
+        type: 'prix_majore',
+        evaluator: 'Couturière Test',
+        temps: '30 min',
+        question: 'Question couture test',
+        questionHtml: 'Question couture test',
+        notes: 'Notes couture de test',
+        notesHtml: 'Notes couture de test',
+        materials: ['Tissu lycra', 'Fil nylon']
+      },
+      metal: {
+        status: 'en_cours',
+        type: 'psm',
+        evaluator: 'Métallier Test',
+        temps: '60 min',
+        question: 'Question métal test',
+        questionHtml: 'Question métal test',
+        notes: '',
+        notesHtml: '',
+        materials: ['Aluminium 6061', 'Rivets']
+      },
+      _isTest: true
+    };
+
+    return db.ref('psmData').set(psmData);
+  }).then(function() {
+    document.getElementById('statusPSM').textContent = '✅ Carte PSM "Test Archive / 99999" créée';
+    showToast('✅ Carte PSM test créée', 'success');
+  }).catch(function(e) {
+    document.getElementById('statusPSM').textContent = '❌ Erreur: ' + e.message;
+    showToast('❌ Erreur création PSM', 'error');
+  });
+}
+
+// ═══ TEST: Cleanup ═══
+function cleanupTestData() {
+  if (!confirm('🧹 Supprimer toutes les données de test?\n\n• Entrées test Inspection/Couture (mois -3)\n• Job test Questionnement\n• Carte PSM test\n• Archives de test générées\n\nLes vraies données ne seront PAS touchées.')) return;
+
+  var now = new Date();
+  var oldMonth = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+  var monthKey = oldMonth.getFullYear() + '-' + String(oldMonth.getMonth() + 1).padStart(2, '0');
+
+  var updates = {};
+  // Remove test inspection/couture data
+  updates['inspectionData/' + monthKey] = null;
+  updates['coutureData/' + monthKey] = null;
+  // Remove test archives
+  updates['archives/inspection/' + monthKey] = null;
+  updates['archives/couture/' + monthKey] = null;
+
+  // Find and remove test jobs
+  db.ref('jobs').once('value').then(function(snap) {
+    var jobs = snap.val() || {};
+    Object.keys(jobs).forEach(function(k) {
+      if (k.indexOf('test_archive_') === 0 || (jobs[k] && jobs[k]._isTest)) {
+        updates['jobs/' + k] = null;
+      }
+    });
+
+    // Find and remove test PSM cards
+    return db.ref('psmData').once('value');
+  }).then(function(snap) {
+    var psm = snap.val() || {};
+    var cleanPsm = {};
+    var hasChanges = false;
+    Object.keys(psm).forEach(function(k) {
+      if (k.indexOf('test_psm_') === 0 || (psm[k] && psm[k]._isTest)) {
+        hasChanges = true; // skip this entry
+      } else {
+        cleanPsm[k] = psm[k];
+      }
+    });
+    if (hasChanges) updates['psmData'] = cleanPsm;
+
+    // Remove test archive entries in questionnements and psm archives
+    var archQ = archiveCache.questionnements || {};
+    Object.keys(archQ).forEach(function(m) {
+      var entries = archQ[m] || {};
+      Object.keys(entries).forEach(function(id) {
+        if (id.indexOf('test_archive_') === 0 || (entries[id] && entries[id]._isTest)) {
+          updates['archives/questionnements/' + m + '/' + id] = null;
+        }
+      });
+    });
+    var archP = archiveCache.psm || {};
+    Object.keys(archP).forEach(function(m) {
+      var entries = archP[m] || {};
+      Object.keys(entries).forEach(function(id) {
+        if (id.indexOf('test_psm_') === 0 || (entries[id] && entries[id]._isTest)) {
+          updates['archives/psm/' + m + '/' + id] = null;
+        }
+      });
+    });
+
+    // Remove test archive logs
+    logsCache.forEach(function(log) {
+      if (log.id && (log.id.indexOf('test') >= 0 || (log.order && log.order === 'TEST-ARCHIVE') || (log.entryCount && log._isTest))) {
+        updates['archiveLogs/' + log.id] = null;
+      }
+    });
+
+    return db.ref().update(updates);
+  }).then(function() {
+    document.getElementById('statusClean').textContent = '✅ Données test nettoyées';
+    showToast('🧹 Nettoyage terminé', 'success');
+    refreshData();
+  }).catch(function(e) {
+    document.getElementById('statusClean').textContent = '❌ Erreur: ' + e.message;
+    showToast('❌ Erreur nettoyage', 'error');
+  });
+}
+</script>
+<div class="nav-modal-overlay" id="navModalOverlay" onclick="if(event.target===this)closeNavModal()">
+  <div class="nav-modal" style="position:relative;">
+    <button class="nav-modal-close" onclick="closeNavModal()">&times;</button>
+    <div class="nav-modal-header">
+      <div class="nav-modal-title">📍 Navigation PhysiPro</div>
+      <div class="nav-modal-subtitle">Sélectionnez un module</div>
+    </div>
+    <div class="nav-modal-grid" id="navModalGrid"></div>
+  </div>
+</div>
+</body>
+</html>
