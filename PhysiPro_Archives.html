@@ -18,20 +18,23 @@
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100vh;overflow-x:hidden;}
 
 /* ═══ TOP BAR ═══ */
-.topbar{position:fixed;top:0;left:0;right:0;height:44px;background:linear-gradient(to bottom,#04152c 0%,#1a3a5c 50%,#4a8ef5 100%);display:flex;align-items:center;padding:0 12px;z-index:1000;box-shadow:0 2px 8px rgba(0,0,0,0.4);}
-.topbar-logo{width:32px;height:32px;cursor:pointer;border-radius:50%;transition:transform 0.2s;}
-.topbar-logo:hover{transform:scale(1.1);}
-.topbar-title{flex:1;text-align:center;font-size:14px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.4);}
-.topbar-user{font-size:10px;color:#93c5fd;text-align:right;}
-
-/* ═══ LOGO MENU (shared with all modules) ═══ */
-.logo-menu a{display:flex;align-items:center;gap:8px;padding:8px 12px;color:var(--text);text-decoration:none;font-size:12px;font-weight:600;border-radius:6px;transition:background 0.15s;}
-.logo-menu a:hover{background:rgba(59,130,246,0.2);}
-.logo-menu a.active{background:rgba(59,130,246,0.3);color:var(--gold);}
-.logo-menu a .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.topbar{width:100%;min-height:75px;padding:4px 20px 6px 20px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);box-shadow:inset 0 1px 2px rgba(255,255,255,0.16),0 2px 6px rgba(0,0,0,0.45);position:relative;flex-shrink:0;}
+.tb-left{display:flex;align-items:center;z-index:2;}
+.logo-flip-container{position:relative;cursor:pointer;z-index:99995;}
+.logo-main{display:flex;flex-direction:column;align-items:center;}
+.logo-top-fixed img{height:40px;width:auto;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));}
+.logo-bottom-text{font-size:15px;font-weight:600;color:#fff;text-shadow:1px 1px 3px rgba(0,0,0,.6);margin-top:-4px;}
+.tb-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1;pointer-events:none;}
+.top-title{font-size:28px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#fdfdfd;text-shadow:0 2px 3px rgba(0,0,0,0.85);white-space:nowrap;}
+.tb-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;z-index:2;}
+.tb-buttons-row{display:flex;align-items:center;gap:6px;}
+.user-status{display:flex;align-items:center;gap:5px;background:rgba(0,0,0,.2);padding:3px 10px;border-radius:999px;}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 4px #22c55e;}
+.user-name{font-size:11px;color:rgba(255,255,255,.85);}
+@media(max-width:900px){.top-title{font-size:18px;letter-spacing:0.04em;}.topbar{min-height:60px;padding:4px 12px;}.logo-top-fixed img{height:32px;}.logo-bottom-text{font-size:12px;}}
 
 /* ═══ MAIN CONTAINER ═══ */
-.main{padding:52px 12px 20px;max-width:1200px;margin:0 auto;}
+.main{padding:20px 12px;max-width:1200px;margin:0 auto;}
 
 /* ═══ TABS ═══ */
 .tabs{display:flex;gap:4px;margin-bottom:16px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;}
@@ -178,11 +181,22 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-ap
 <script>if(localStorage.getItem('physipro_last_email')){document.write('<style>.login-overlay{display:none !important;}</style>');}</script>
 
 <!-- TOP BAR -->
-<div class="topbar">
-  <img class="topbar-logo" id="logoBtn" src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="Logo">
-  <div class="topbar-title">🗄️ Archives PhysiPro</div>
-  <div class="topbar-user" id="currentUserName">—</div>
-</div>
+<header class="topbar" id="mainTopbar">
+  <div class="tb-left">
+    <div class="logo-flip-container" id="logoFlipContainer">
+      <div class="logo-main">
+        <div class="logo-top-fixed"><img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro"></div>
+        <div class="logo-bottom-text">Archives</div>
+      </div>
+    </div>
+  </div>
+  <div class="tb-center"><span class="top-title">🗄️ Archives PhysiPro</span></div>
+  <div class="tb-right">
+    <div class="tb-buttons-row">
+      <div class="user-status"><span class="status-dot" id="statusDot"></span><span class="user-name" id="currentUserName">--</span></div>
+    </div>
+  </div>
+</header>
 
 <!-- LOGO MENU -->
 
@@ -258,7 +272,7 @@ firebase.auth().onAuthStateChanged(function(user) {
     currentUser = user;
     document.getElementById('loginOverlay').classList.add('hidden');
     document.getElementById('loginOverlay').style.display = 'none';
-    document.getElementById('currentUserName').textContent = user.email.split('@')[0];
+    document.getElementById('currentUserName').textContent = user.email.split('@')[0].replace(/[._-]/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
     localStorage.setItem('physipro_last_email', user.email);
     initLogoMenu('archives');
     loadAllArchives();
@@ -302,7 +316,7 @@ function initLogoMenu(currentMod){
     a.innerHTML='<span class="nav-modal-icon">'+m.icon+'</span><span class="nav-modal-label" style="color:'+m.color+'">'+m.label+'</span>';
     grid.appendChild(a);
   });
-  var logo=document.querySelector('.topbar-logo')||document.getElementById('logoBtn');
+  var logo=document.getElementById('logoFlipContainer')||document.querySelector('.topbar-logo');
   if(logo){
     logo.style.cursor='pointer';
     logo.onclick=function(e){e.preventDefault();e.stopPropagation();openNavModal();};
