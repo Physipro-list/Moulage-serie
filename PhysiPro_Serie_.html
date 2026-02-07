@@ -80,11 +80,11 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
 
 /* ===== LOGO-FLIP NAVIGATION ===== */
 /* === LOGO NAV MENU === */
-.logo-flip-container{position:relative;cursor:pointer;z-index:2;}
+.logo-flip-container{position:relative;cursor:pointer;z-index:99995;}
 .logo-main{display:flex;flex-direction:column;align-items:center;}
 .logo-top-fixed img{height:40px;width:auto;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));}
 .logo-bottom-text{font-size:15px;font-weight:600;color:#fff;text-shadow:1px 1px 3px rgba(0,0,0,.6);margin-top:-4px;}
-.logo-menu{position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(to bottom,#04152c 0%,#1a4a8a 50%,#2a6bc9 100%);padding:6px 20px;opacity:0;visibility:hidden;transition:all .25s ease;z-index:99990;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px 10px;box-shadow:0 4px 20px rgba(0,0,0,.6);}
+.logo-menu{position:absolute;top:0;left:130px;right:0;bottom:0;background:linear-gradient(to bottom,#04152c 0%,#1a4a8a 50%,#2a6bc9 100%);padding:6px 20px;opacity:0;visibility:hidden;transition:all .25s ease;z-index:99990;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:4px 10px;box-shadow:0 4px 20px rgba(0,0,0,.6);}
 .logo-menu.visible{opacity:1;visibility:visible;}
 
 .logo-menu-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:4px 8px;font-family:'Segoe UI',sans-serif;color:#fff;cursor:pointer;transition:all .2s;border-radius:6px;background:transparent;border:2px solid transparent;min-width:70px;height:58px;text-decoration:none;position:relative;}
@@ -5944,7 +5944,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
 <!-- INSTANT LOGIN BYPASS -->
 <script>
 if(localStorage.getItem('physipro_last_email')){
-  document.write('<style>.login-overlay{display:none !important;}</style>');
+  document.write('<style id="preauth-hide">.login-overlay{display:none !important;}</style>');
 }
 </script>
 
@@ -6370,30 +6370,50 @@ function doLogin(event) {
       case 'auth/wrong-password': msg = 'Mot de passe incorrect.'; break;
       case 'auth/too-many-requests': msg = 'Trop de tentatives. Réessayez plus tard.'; break;
       case 'auth/invalid-email': msg = 'Adresse email invalide.'; break;
+      case 'auth/invalid-credential': msg = 'Email ou mot de passe incorrect.'; break;
+      case 'auth/network-request-failed': msg = 'Erreur de connexion réseau.'; break;
+      case 'auth/user-disabled': msg = 'Ce compte a été désactivé.'; break;
       default: msg = error.message;
     }
     errorEl.textContent = msg;
     loginBtn.disabled = false;
     loginBtn.textContent = 'Se connecter';
   });
-}catch(err){
-    document.getElementById('loginError').textContent=err.code==='auth/invalid-credential'?'Email ou mot de passe incorrect.':'Erreur: '+err.message;
-    btn.disabled=false;btn.textContent='Se connecter';
-  }
 }
 
 firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(e){console.log('Persist:',e);});
     auth.onAuthStateChanged(function(user){
   var overlay=document.getElementById('loginOverlay');
   if(user){
+    var ps=document.getElementById('preauth-hide');if(ps)ps.remove();
     currentUser = { email: user.email, name: getPhysiproDisplayName(user.email) };
     overlay.classList.add('hidden');
     overlay.style.display='none';
     document.getElementById('currentUserName').textContent = currentUser.name;
     localStorage.setItem('physipro_last_email', user.email);
     initLogoMenu('serie');
+    // Force reload data from Firebase after auth
+    setTimeout(function(){
+      if(typeof loadSerieDataFromLocalStorage === 'function'){
+        loadSerieDataFromLocalStorage();
+      }
+      if(typeof loadInventaireDataFromLocalStorage === 'function'){
+        loadInventaireDataFromLocalStorage();
+      }
+      // Safety re-render all cards
+      if(typeof serieCardsData !== 'undefined'){
+        Object.keys(serieCardsData).forEach(function(cardId){
+          if(typeof updateSerieCardDisplay === 'function') updateSerieCardDisplay(cardId);
+        });
+        if(typeof updateSerieCounters === 'function') updateSerieCounters();
+      }
+      console.log('[INIT] Post-auth data reload completed');
+    }, 1500);
   }else{
+    var savedEmail=localStorage.getItem('physipro_last_email');
     localStorage.removeItem('physipro_last_email');
+    var ps2=document.getElementById('preauth-hide');if(ps2)ps2.remove();
+    if(savedEmail){var em=document.getElementById('loginEmail');if(em&&!em.value)em.value=savedEmail;}
     overlay.style.display='';
     overlay.classList.remove('hidden');
   }
@@ -10400,12 +10420,7 @@ function openAddSerieCommandeModal() {
         <div style="display: flex; flex-direction: column; gap: 4px;">
           <label style="color: white; font-size: 11px; font-weight: 600;">Client <button type="button" style="background:none;border:none;cursor:pointer;font-size:12px;color:#94a3b8;" onclick="showSerieClientsModal()">⚙️</button></label>
           <select id="newCmdClient" style="padding: 8px; border-radius: 6px; border: 1px solid #3b82f6; font-size: 12px;">
-            <option value="Vermeiren">Vermeiren</option>
-            <option value="HME">HME</option>
-            <option value="C1SOUTH">C1SOUTH</option>
-            <option value="Cubro">Cubro</option>
-            <option value="France">France</option>
-            <option value="Inventaire">Inventaire</option>
+            ${(typeof SERIE_CLIENTS_LIST !== 'undefined' ? SERIE_CLIENTS_LIST : ['Vermeiren','HME','C1SOUTH','Cubro','France','Inventaire']).map(c => '<option value="' + c + '">' + c + '</option>').join('')}
           </select>
         </div>
         <div style="display: flex; flex-direction: column; gap: 4px;">
