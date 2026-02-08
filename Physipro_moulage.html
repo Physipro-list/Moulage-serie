@@ -1964,13 +1964,23 @@
       
       /* ===== HEADER MOBILE ===== */
       .mobile-header { 
-        display: flex; align-items: center; justify-content: space-between; 
-        padding: 12px 16px; 
+        display: flex; align-items: center;
+        padding: 10px 12px; 
         background: linear-gradient(to bottom, #04152c 0%, #3b6eb5 100%);
         box-shadow: 0 2px 10px rgba(0,0,0,0.5);
         position: relative; z-index: 100;
       }
+      .mobile-header-back {
+        width: 36px; height: 36px; border-radius: 50%;
+        background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
+        color: #fff; font-size: 18px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+      }
+      .mobile-header-back:active { background: rgba(255,255,255,0.3); transform: scale(0.93); }
+      .mobile-header-center { flex: 1; display: flex; justify-content: center; }
       .mobile-logo { height: 40px; }
+      .mobile-header-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
       .mobile-header-title { font-size: 18px; font-weight: 800; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
       .mobile-refresh-btn { 
         width: 40px; height: 40px; border-radius: 50%; 
@@ -3201,6 +3211,7 @@
       📷 Application Photo
       <span class="mobile-home-badge" id="photoRequestsBadge">0</span>
     </button>
+    <button class="mobile-home-refresh" id="mobileHomeRefreshBtn" onclick="mobileHomeRefresh()" style="margin-top:16px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.3);color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">🔄</button>
   </div>
   
   <!-- ===== PAGE ENVOYER PHOTO ===== -->
@@ -3233,12 +3244,17 @@
   <div class="mobile-app" id="mobileApp">
     <!-- Header Mobile -->
     <div class="mobile-header">
-      <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" class="mobile-logo" alt="PhysiPro">
-      <button class="mobile-notif-btn" id="mobileNotifBtn" onclick="toggleNotifPopup()">
-        <span class="mobile-notif-icon">🔔</span>
-        <span class="mobile-notif-badge" id="mobileNotifBadge"></span>
-      </button>
-      <button class="mobile-refresh-btn" id="mobileRefreshBtn" onclick="mobileRefresh()">🔄</button>
+      <button class="mobile-header-back" onclick="backToMobileHome()" title="Retour au menu">←</button>
+      <div class="mobile-header-center">
+        <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" class="mobile-logo" alt="PhysiPro">
+      </div>
+      <div class="mobile-header-right">
+        <button class="mobile-notif-btn" id="mobileNotifBtn" onclick="toggleNotifPopup()">
+          <span class="mobile-notif-icon">🔔</span>
+          <span class="mobile-notif-badge" id="mobileNotifBadge"></span>
+        </button>
+        <button class="mobile-refresh-btn" id="mobileRefreshBtn" onclick="mobileRefresh()">🔄</button>
+      </div>
     </div>
     
     <!-- Barre de recherche -->
@@ -9209,7 +9225,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           const btn = document.getElementById('moulageInlinePhotoBtn_' + inlineIdx);
           if (btn) { btn.classList.add('waiting'); btn.innerHTML = '⏳'; }
         }
-        listenMoulagePhotoResponse(moulagePhotoRequestId);
+        listenMoulagePhotoResponse(moulagePhotoRequestId, currentCardId);
         setTimeout(() => { if (moulagePhotoRequestId === reqRef.key) cancelMoulagePhotoRequest(); }, 300000);
       }).catch(err => {
         showToast('❌ Erreur: ' + err.message, 'error');
@@ -9218,21 +9234,24 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     }
     window.requestMoulagePhoto = requestMoulagePhoto;
     
-    function listenMoulagePhotoResponse(requestId) {
+    function listenMoulagePhotoResponse(requestId, capturedCardId) {
       if (moulagePhotoListener) moulagePhotoListener();
       let moulagePhotoReceivedCount = 0;
+      const targetCardId = capturedCardId; // Capturer le cardId au moment de la demande
+      console.log('📷 Listener started for request:', requestId, 'card:', targetCardId);
+      
       const ref = firebaseDb.ref('photoResponses/' + requestId);
       const handler = ref.on('child_added', (snap) => {
         const response = snap.val();
         if (!response || !response.data) return;
         moulagePhotoReceivedCount++;
+        console.log('📷 Photo', moulagePhotoReceivedCount, 'received for card:', targetCardId);
         
-        // Auto-create a message with the photo in the card's chat
-        const cardId = currentCardId;
-        if (cardId && cardsData[cardId]) {
-          if (!cardsData[cardId].messages) cardsData[cardId].messages = [];
+        // Utiliser le cardId capturé, pas currentCardId (qui peut changer)
+        if (targetCardId && cardsData[targetCardId]) {
+          if (!cardsData[targetCardId].messages) cardsData[targetCardId].messages = [];
           const authorName = response.sentByName || 'Mobile';
-          cardsData[cardId].messages.push({
+          cardsData[targetCardId].messages.push({
             id: 'msg_' + Date.now() + '_photo' + moulagePhotoReceivedCount,
             type: 'normal',
             author: authorName,
@@ -9242,17 +9261,26 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             image: response.data,
             sentTo: []
           });
-          cardsData[cardId].localModifiedAt = Date.now();
-          renderMessages(cardId);
-          saveCardToFirebase(cardId, cardsData[cardId]);
-          scrollChatToBottom();
+          cardsData[targetCardId].localModifiedAt = Date.now();
+          
+          // Protéger contre le sync Firebase qui écraserait nos changements
+          isLocalOperation = true;
+          saveCardToFirebase(targetCardId, cardsData[targetCardId]);
+          setTimeout(() => { isLocalOperation = false; }, 2000);
+          
+          // Rafraîchir le chat seulement si la fiche de cette carte est ouverte
+          if (currentCardId === targetCardId) {
+            renderMessages(targetCardId);
+            scrollChatToBottom();
+          }
+        } else {
+          console.warn('📷 Card not found for photo:', targetCardId);
         }
         
         showToast('📸 Photo ' + moulagePhotoReceivedCount + ' reçue du mobile!', 'success');
-        // NE PAS cleanup — rester à l'écoute pour d'autres photos
       });
       
-      // Écouter aussi quand la demande est marquée "fulfilled" (mobile a cliqué Terminé)
+      // Écouter quand la demande est marquée "fulfilled" (mobile a cliqué Terminé)
       const reqRef = firebaseDb.ref('photoRequests/' + requestId);
       const statusHandler = reqRef.on('value', (snap) => {
         const req = snap.val();
@@ -15824,14 +15852,12 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     // ═══════════════════════════════════════════════════════════
     function goToMoulageFromHome() {
       document.getElementById('mobileHomeScreen').classList.remove('active');
-      document.getElementById('mobileFloatHome').style.display = 'flex';
     }
     window.goToMoulageFromHome = goToMoulageFromHome;
     
     function goToSendPhotoFromHome() {
       document.getElementById('mobileHomeScreen').classList.remove('active');
       document.getElementById('mobileSendPhotoPage').classList.add('active');
-      document.getElementById('mobileFloatHome').style.display = 'flex';
     }
     window.goToSendPhotoFromHome = goToSendPhotoFromHome;
     
@@ -15844,10 +15870,17 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       if(photosPage) photosPage.classList.remove('active');
       var archiveOverlay = document.getElementById('photoArchiveOverlay');
       if(archiveOverlay) archiveOverlay.classList.remove('active');
-      document.getElementById('mobileFloatHome').style.display = 'none';
       document.getElementById('mobileHomeScreen').classList.add('active');
     }
     window.backToMobileHome = backToMobileHome;
+    
+    // Refresh depuis l'écran d'accueil
+    function mobileHomeRefresh() {
+      var btn = document.getElementById('mobileHomeRefreshBtn');
+      if (btn) { btn.style.animation = 'spin 1s linear infinite'; }
+      location.reload();
+    }
+    window.mobileHomeRefresh = mobileHomeRefresh;
     
     // === ÉCOUTER LES DEMANDES DE PHOTO ===
     let activePhotoRequests = {};
