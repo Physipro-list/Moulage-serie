@@ -76,6 +76,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-ap
 .archive-card-module{position:absolute;top:8px;right:8px;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;}
 .archive-card-module.quest{background:var(--gold);color:#000;}
 .archive-card-module.psm{background:var(--red);color:#fff;}
+.archive-card-delete{position:absolute;top:8px;left:8px;width:22px;height:22px;border-radius:50%;background:rgba(107,114,128,0.6);border:1px solid rgba(255,255,255,0.2);color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2;transition:all 0.2s;}
+.archive-card-delete:hover{background:rgba(239,68,68,0.9);border-color:rgba(239,68,68,1);transform:scale(1.15);}
 .archive-card-title{font-size:14px;font-weight:700;color:#fff;margin-bottom:4px;}
 .archive-card-subtitle{font-size:11px;color:var(--muted);margin-bottom:8px;}
 .archive-card-meta{display:flex;flex-wrap:wrap;gap:6px;}
@@ -562,6 +564,7 @@ function renderCardTab(area, archiveKey, type, month, search) {
     var archDate = card.archivedAt ? new Date(card.archivedAt).toLocaleDateString('fr-CA') : '?';
     var msgCount = isQuest ? ((card.messages || []).length + ' msg') : '';
     html += '<div class="archive-card" onclick="openArchiveDetail(\'' + type + '\',\'' + card._archiveMonth + '\',\'' + card._archiveId + '\')">';
+    html += '<button class="archive-card-delete" onclick="event.stopPropagation();deleteArchiveCard(\'' + archiveKey + '\',\'' + card._archiveMonth + '\',\'' + card._archiveId + '\',this)" title="Supprimer">✕</button>';
     html += '<div class="archive-card-module ' + type + '">' + (isQuest ? 'QUEST' : 'PSM') + '</div>';
     html += '<div class="archive-card-title">' + esc(title) + '</div>';
     html += '<div class="archive-card-subtitle">' + esc(subtitle) + '</div>';
@@ -605,6 +608,37 @@ function renderLogsTab(area, search) {
 }
 
 // ═══ DETAIL MODAL ═══
+// ═══ DELETE ARCHIVE CARD ═══
+function deleteArchiveCard(archiveKey, month, id, btnEl) {
+  if (!confirm('🗑️ Supprimer cette archive ?\n\nCette action est irréversible.')) return;
+  // Remove from Firebase
+  db.ref('archives/' + archiveKey + '/' + month + '/' + id).remove().then(function() {
+    // Remove from local cache
+    if (archiveCache[archiveKey] && archiveCache[archiveKey][month]) {
+      delete archiveCache[archiveKey][month][id];
+      // Clean up empty month
+      if (Object.keys(archiveCache[archiveKey][month]).length === 0) {
+        delete archiveCache[archiveKey][month];
+      }
+    }
+    // Animate card removal
+    var card = btnEl.closest('.archive-card');
+    if (card) {
+      card.style.transition = 'opacity 0.3s, transform 0.3s';
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.9)';
+      setTimeout(function() { card.remove(); updateStats(); }, 300);
+    } else {
+      renderTab();
+      updateStats();
+    }
+    showToast('🗑️ Archive supprimée', 'info');
+  }).catch(function(e) {
+    console.error('Delete error:', e);
+    showToast('❌ Erreur suppression', 'error');
+  });
+}
+
 function openArchiveDetail(type, month, id) {
   var archiveKey = type === 'quest' ? 'questionnements' : 'psm';
   var card = (archiveCache[archiveKey] || {})[month];

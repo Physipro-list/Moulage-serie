@@ -1268,7 +1268,10 @@
     .inline-compose-btn:hover { filter: brightness(1.1); }
     .inline-compose-image { display: none; padding: 8px; border-top: 1px dashed rgba(0,0,0,0.1); position: relative; }
     .inline-compose-image.has-image { display: block; }
-    .inline-compose-image img { max-width: 100%; max-height: 60px; border-radius: 4px; display: block; }
+    .inline-compose-image .compose-images-row { display: flex; gap: 4px; overflow-x: auto; }
+    .inline-compose-image .compose-images-row .compose-thumb img { height: 50px; border-radius: 4px; }
+    .inline-compose-image .compose-images-row .compose-thumb .thumb-remove { width: 14px; height: 14px; font-size: 8px; }
+    .inline-compose-image img.single-preview { max-width: 100%; max-height: 60px; border-radius: 4px; display: block; }
     .inline-compose-image-remove { position: absolute; top: 12px; right: 12px; background: #ef4444; border: none; border-radius: 50%; width: 18px; height: 18px; color: white; cursor: pointer; font-size: 10px; display: flex; align-items: center; justify-content: center; }
 
     /* === MESSAGES RÉGULIERS === */
@@ -1307,8 +1310,15 @@
     .chat-compose-textarea { width: 100%; min-height: 80px; padding: 8px 10px; border: none; background: transparent; color: #1e293b; font-size: 12px; font-family: inherit; resize: vertical; outline: none; }
     .chat-compose-image-zone { display: none; padding: 8px; border-top: 1px dashed rgba(0,0,0,0.1); position: relative; }
     .chat-compose-image-zone.has-image { display: block; }
-    .chat-compose-image-zone img { max-width: 100%; max-height: 80px; border-radius: 4px; display: block; }
+    .compose-images-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+    .compose-images-row .compose-thumb { position: relative; flex-shrink: 0; }
+    .compose-images-row .compose-thumb img { height: 70px; border-radius: 4px; display: block; cursor: pointer; border: 2px solid transparent; }
+    .compose-images-row .compose-thumb img:hover { border-color: #3b82f6; }
+    .compose-images-row .compose-thumb .thumb-remove { position: absolute; top: -4px; right: -4px; background: #ef4444; border: 1px solid #fff; border-radius: 50%; width: 16px; height: 16px; color: white; cursor: pointer; font-size: 9px; display: flex; align-items: center; justify-content: center; }
     .chat-compose-image-remove { position: absolute; top: 12px; right: 12px; background: #ef4444; border: none; border-radius: 50%; width: 20px; height: 20px; color: white; cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+    .msg-images-gallery { display: flex; gap: 4px; overflow-x: auto; margin-top: 5px; padding-bottom: 4px; }
+    .msg-images-gallery img { height: 80px; border-radius: 4px; cursor: pointer; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
+    .msg-images-gallery img:hover { border-color: #3b82f6; }
     .chat-compose-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
     .chat-compose-hint { font-size: 9px; color: #94a3b8; }
     .chat-compose-btn { padding: 6px 14px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; border: none; }
@@ -3539,7 +3549,7 @@
           <div class="chat-compose-author">Valérie</div>
           <div class="chat-compose-content-wrapper">
             <textarea class="chat-compose-textarea" id="composeTextarea" placeholder="Écrivez ici... (Ctrl+V pour image)" onpaste="handlePaste(event)"></textarea>
-            <div class="chat-compose-image-zone" id="composeImageZone"><img src="" id="composeImg"><button class="chat-compose-image-remove" onclick="removeImage()">✕</button></div>
+            <div class="chat-compose-image-zone" id="composeImageZone"><div class="compose-images-row" id="composeImagesRow"></div><button class="chat-compose-image-remove" onclick="removeAllComposeImages()">✕</button></div>
           </div>
           <div class="chat-compose-footer"><span class="chat-compose-hint">Ctrl+V = image</span><button class="photo-request-btn" id="moulageComposePhotoBtn" onclick="requestMoulagePhoto('compose')" title="Demander photo via Application Photo mobile">📱 Application Photo</button><button class="chat-compose-btn send" onclick="sendMessage()">➤ Envoyer</button></div>
         </div>
@@ -4222,6 +4232,7 @@
     let currentCardId = null;
     let currentComposeType = 'problem';
     let currentComposeImage = null;
+    let currentComposeImages = []; // Multi-photo from Application Photo
     
     // Mode association
     let associationMode = false;
@@ -8727,7 +8738,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           <div class="msg-type">❓ Question</div>
           <div class="msg-author">${escapeHtml(question.author)} • ${question.date}</div>
           <div class="msg-content">${escapeHtml(question.content)}</div>
-          ${question.image ? `<img class="msg-image" src="${question.image}" onclick="openLightbox(this.src)">` : ''}
+          ${renderMsgImagesHtml(question)}
           ${!hasReplies && !isResolved ? `<div class="thread-reply-zone"><button class="thread-reply-btn" onclick="openInlineCompose(${question._index})">💬 Répondre</button></div>` : ''}
         </div>
       `;
@@ -8743,7 +8754,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             <div class="msg-type">💬 Discussion</div>
             <div class="msg-author">${escapeHtml(r.author)} • ${r.date}</div>
             <div class="msg-content">${escapeHtml(r.content)}</div>
-            ${r.image ? `<img class="msg-image" src="${r.image}" onclick="openLightbox(this.src)">` : ''}
+            ${renderMsgImagesHtml(r)}
             ${isLast && !isResolved ? `<div class="thread-reply-zone"><button class="thread-reply-btn" onclick="openInlineCompose(${question._index})">💬 Répondre</button></div>` : ''}
           </div>
         `;
@@ -8760,8 +8771,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             <div class="inline-compose-content-wrapper">
               <textarea class="inline-compose-textarea" id="inlineText_${question._index}" placeholder="Écrivez votre message..." onpaste="handleInlinePaste(event, ${question._index})"></textarea>
               <div class="inline-compose-image" id="inlineImageZone_${question._index}">
-                <img id="inlineImagePreview_${question._index}" src="" alt="">
-                <button class="inline-compose-image-remove" onclick="removeInlineImage(${question._index})">✕</button>
+                <div class="compose-images-row" id="inlineImagesRow_${question._index}"></div>
+                <button class="inline-compose-image-remove" onclick="removeAllInlineImages(${question._index})">✕</button>
               </div>
             </div>
             <div class="inline-compose-footer">
@@ -8778,6 +8789,23 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     }
     
     // Créer un message régulier (Discussion, Épinglé)
+    // Helper: render images for a message (supports single image + images array)
+    function renderMsgImagesHtml(m) {
+      const imgs = [];
+      if (m.images && Array.isArray(m.images) && m.images.length > 0) {
+        m.images.forEach(src => { if (src) imgs.push(src); });
+      } else if (m.image) {
+        imgs.push(m.image);
+      }
+      if (imgs.length === 0) return '';
+      if (imgs.length === 1) {
+        return '<img class="msg-image" src="' + imgs[0] + '" style="max-width:100%;max-height:100px;margin-top:5px;border-radius:4px;cursor:pointer;" onclick="openLightbox(this.src)">';
+      }
+      return '<div class="msg-images-gallery">' + imgs.map(src => 
+        '<img src="' + src + '" onclick="openLightbox(this.src)">'
+      ).join('') + '</div>';
+    }
+    
     function createRegularMessageHtml(m) {
       const typeLabels = {
         problem: '❓ Question',
@@ -8807,14 +8835,14 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           <div class="chat-msg-type" style="color:${typeColors[m.type] || '#64748b'}">${typeLabels[m.type] || '💬 Message'}</div>
           <div class="chat-msg-author">${escapeHtml(m.author)} • ${m.date}</div>
           <div class="chat-msg-content">${escapeHtml(m.content)}</div>
-          ${m.image ? `<img src="${m.image}" style="max-width:100%;max-height:100px;margin-top:5px;border-radius:4px;cursor:pointer;" onclick="openLightbox(this.src)">` : ''}
+          ${renderMsgImagesHtml(m)}
         </div>
       `;
     }
     
     // Ouvrir la zone de composition pour répondre à une question
     // === SYSTÈME DE COMPOSITION INLINE ===
-    let inlineComposeImages = {}; // Stocker les images par questionIndex
+    let inlineComposeImages = {}; // Stocker les images par questionIndex (arrays)
     
     function openInlineCompose(questionIndex) {
       // Fermer toutes les autres zones inline
@@ -8837,7 +8865,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     function closeInlineCompose(questionIndex) {
       const zone = document.getElementById(`inlineCompose_${questionIndex}`);
       if (zone) zone.classList.remove('active');
-      inlineComposeImages[questionIndex] = null;
+      inlineComposeImages[questionIndex] = [];
     }
     window.closeInlineCompose = closeInlineCompose;
     
@@ -8848,11 +8876,9 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           const reader = new FileReader();
           reader.onload = async (ev) => {
             const compressed = await compressImage(ev.target.result);
-            inlineComposeImages[questionIndex] = compressed;
-            const preview = document.getElementById(`inlineImagePreview_${questionIndex}`);
-            const zone = document.getElementById(`inlineImageZone_${questionIndex}`);
-            if (preview) preview.src = compressed;
-            if (zone) zone.classList.add('has-image');
+            if (!inlineComposeImages[questionIndex]) inlineComposeImages[questionIndex] = [];
+            inlineComposeImages[questionIndex].push(compressed);
+            renderInlineImagePreviews(questionIndex);
           };
           reader.readAsDataURL(item.getAsFile());
           break;
@@ -8861,19 +8887,38 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     }
     window.handleInlinePaste = handleInlinePaste;
     
-    function removeInlineImage(questionIndex) {
-      inlineComposeImages[questionIndex] = null;
-      const zone = document.getElementById(`inlineImageZone_${questionIndex}`);
-      if (zone) zone.classList.remove('has-image');
+    function renderInlineImagePreviews(questionIndex) {
+      const zone = document.getElementById('inlineImageZone_' + questionIndex);
+      const row = document.getElementById('inlineImagesRow_' + questionIndex);
+      const imgs = inlineComposeImages[questionIndex] || [];
+      if (!zone || !row) return;
+      zone.classList.toggle('has-image', imgs.length > 0);
+      row.innerHTML = imgs.map((src, i) => 
+        '<div class="compose-thumb"><img src="' + src + '"><button class="thumb-remove" onclick="removeInlineImageAt(' + questionIndex + ',' + i + ')">✕</button></div>'
+      ).join('');
     }
-    window.removeInlineImage = removeInlineImage;
+    window.renderInlineImagePreviews = renderInlineImagePreviews;
+    
+    function removeInlineImageAt(questionIndex, imgIndex) {
+      if (inlineComposeImages[questionIndex]) {
+        inlineComposeImages[questionIndex].splice(imgIndex, 1);
+      }
+      renderInlineImagePreviews(questionIndex);
+    }
+    window.removeInlineImageAt = removeInlineImageAt;
+    
+    function removeAllInlineImages(questionIndex) {
+      inlineComposeImages[questionIndex] = [];
+      renderInlineImagePreviews(questionIndex);
+    }
+    window.removeAllInlineImages = removeAllInlineImages;
     
     function sendInlineReply(questionIndex) {
       const textarea = document.getElementById(`inlineText_${questionIndex}`);
       const content = textarea?.value?.trim();
-      const image = inlineComposeImages[questionIndex];
+      const imagesArr = inlineComposeImages[questionIndex] || [];
       
-      if (!content && !image) {
+      if (!content && imagesArr.length === 0) {
         showToast('⚠️ Écrivez un message', 'warning');
         return;
       }
@@ -8902,8 +8947,9 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         author: authorName,
         authorEmail: authorEmail,
         date: new Date().toISOString().split('T')[0],
-        content: content || '(Image)',
-        image: image || '',
+        content: content || (imagesArr.length > 0 ? '📷 ' + imagesArr.length + ' photo(s)' : ''),
+        image: imagesArr.length === 1 ? imagesArr[0] : '',
+        images: imagesArr.length > 1 ? imagesArr : undefined,
         parentQuestionIndex: questionIndex,
         sentTo: []
       };
@@ -8919,7 +8965,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       });
       
       // Reset
-      inlineComposeImages[questionIndex] = null;
+      inlineComposeImages[questionIndex] = [];
       
       // ENVOI AUTOMATIQUE aux participants du thread (sauf soi-même)
       const destinataires = threadParticipants.filter(p => p.email !== authorEmail);
@@ -9237,44 +9283,27 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     function listenMoulagePhotoResponse(requestId, capturedCardId) {
       if (moulagePhotoListener) moulagePhotoListener();
       let moulagePhotoReceivedCount = 0;
-      const targetCardId = capturedCardId; // Capturer le cardId au moment de la demande
-      console.log('📷 Listener started for request:', requestId, 'card:', targetCardId);
+      const targetCardId = capturedCardId;
+      const targetType = moulagePhotoTarget; // 'compose' or 'inline'
+      const targetInlineIdx = moulagePhotoInlineIdx;
+      console.log('📷 Listener started for request:', requestId, 'card:', targetCardId, 'target:', targetType);
       
       const ref = firebaseDb.ref('photoResponses/' + requestId);
       const handler = ref.on('child_added', (snap) => {
         const response = snap.val();
         if (!response || !response.data) return;
         moulagePhotoReceivedCount++;
-        console.log('📷 Photo', moulagePhotoReceivedCount, 'received for card:', targetCardId);
+        console.log('📷 Photo', moulagePhotoReceivedCount, 'received, target:', targetType);
         
-        // Utiliser le cardId capturé, pas currentCardId (qui peut changer)
-        if (targetCardId && cardsData[targetCardId]) {
-          if (!cardsData[targetCardId].messages) cardsData[targetCardId].messages = [];
-          const authorName = response.sentByName || 'Mobile';
-          cardsData[targetCardId].messages.push({
-            id: 'msg_' + Date.now() + '_photo' + moulagePhotoReceivedCount,
-            type: 'normal',
-            author: authorName,
-            authorEmail: response.sentBy || '',
-            date: new Date().toISOString().split('T')[0],
-            content: '📷 Photo ' + moulagePhotoReceivedCount + ' (Application Photo)',
-            image: response.data,
-            sentTo: []
-          });
-          cardsData[targetCardId].localModifiedAt = Date.now();
-          
-          // Protéger contre le sync Firebase qui écraserait nos changements
-          isLocalOperation = true;
-          saveCardToFirebase(targetCardId, cardsData[targetCardId]);
-          setTimeout(() => { isLocalOperation = false; }, 2000);
-          
-          // Rafraîchir le chat seulement si la fiche de cette carte est ouverte
-          if (currentCardId === targetCardId) {
-            renderMessages(targetCardId);
-            scrollChatToBottom();
-          }
-        } else {
-          console.warn('📷 Card not found for photo:', targetCardId);
+        if (targetType === 'compose') {
+          // Ajouter dans la zone de compose (pas créer de message séparé)
+          currentComposeImages.push(response.data);
+          renderComposeImagePreviews();
+        } else if (targetType === 'inline' && targetInlineIdx != null) {
+          // Ajouter dans la zone inline du thread
+          if (!inlineComposeImages[targetInlineIdx]) inlineComposeImages[targetInlineIdx] = [];
+          inlineComposeImages[targetInlineIdx].push(response.data);
+          renderInlineImagePreviews(targetInlineIdx);
         }
         
         showToast('📸 Photo ' + moulagePhotoReceivedCount + ' reçue du mobile!', 'success');
@@ -9286,7 +9315,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         const req = snap.val();
         if (!req || req.status === 'fulfilled') {
           if (moulagePhotoReceivedCount > 0) {
-            showToast('✅ ' + moulagePhotoReceivedCount + ' photo(s) reçue(s) au total', 'success');
+            showToast('✅ ' + moulagePhotoReceivedCount + ' photo(s) prête(s) à envoyer', 'success');
           }
           reqRef.off('value', statusHandler);
           cleanupMoulagePhotoRequest();
@@ -9359,9 +9388,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           reader.onload = async (ev) => {
             // Compresser l'image
             const compressed = await compressImage(ev.target.result);
-            currentComposeImage = compressed;
-            document.getElementById('composeImg').src = compressed;
-            document.getElementById('composeImageZone').classList.add('has-image');
+            currentComposeImages.push(compressed);
+            renderComposeImagePreviews();
             
             const originalSize = ev.target.result.length;
             const compressedSize = compressed.length;
@@ -9376,8 +9404,32 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     }
     window.handlePaste = handlePaste;
     
-    function removeImage() { currentComposeImage = null; document.getElementById('composeImg').src = ''; document.getElementById('composeImageZone').classList.remove('has-image'); }
+    function removeImage() { currentComposeImage = null; currentComposeImages = []; renderComposeImagePreviews(); }
     window.removeImage = removeImage;
+    
+    function removeAllComposeImages() { currentComposeImage = null; currentComposeImages = []; renderComposeImagePreviews(); }
+    window.removeAllComposeImages = removeAllComposeImages;
+    
+    function removeComposeImageAt(idx) {
+      currentComposeImages.splice(idx, 1);
+      if (idx === 0 && currentComposeImage) currentComposeImage = null;
+      renderComposeImagePreviews();
+    }
+    window.removeComposeImageAt = removeComposeImageAt;
+    
+    function renderComposeImagePreviews() {
+      const zone = document.getElementById('composeImageZone');
+      const row = document.getElementById('composeImagesRow');
+      if (!zone || !row) return;
+      // Merge single + multi
+      const allImgs = [...currentComposeImages];
+      if (currentComposeImage && !allImgs.includes(currentComposeImage)) allImgs.unshift(currentComposeImage);
+      zone.classList.toggle('has-image', allImgs.length > 0);
+      row.innerHTML = allImgs.map((src, i) => 
+        '<div class="compose-thumb"><img src="' + src + '" onclick="openLightbox(this.src)"><button class="thumb-remove" onclick="removeComposeImageAt(' + i + ')">✕</button></div>'
+      ).join('');
+    }
+    window.renderComposeImagePreviews = renderComposeImagePreviews;
     
     // sendMessage - pour les nouveaux messages (Question, Discussion, Épinglé)
     function sendMessage() {
@@ -9387,7 +9439,12 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       }
       if (!currentCardId) return;
       const content = document.getElementById('composeTextarea').value.trim();
-      if (!content && !currentComposeImage) return;
+      // Merge single paste image + multi-photo images
+      const allImages = [...currentComposeImages];
+      if (currentComposeImage && !allImages.includes(currentComposeImage)) {
+        allImages.unshift(currentComposeImage);
+      }
+      if (!content && allImages.length === 0) return;
       if (!cardsData[currentCardId].messages) cardsData[currentCardId].messages = [];
       
       const authorName = getCurrentUserName();
@@ -9401,8 +9458,9 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         author: authorName,
         authorEmail: authorEmail,
         date: new Date().toISOString().split('T')[0],
-        content, 
-        image: currentComposeImage || '',
+        content: content || (allImages.length > 0 ? '📷 ' + allImages.length + ' photo(s)' : ''), 
+        image: allImages.length === 1 ? allImages[0] : (allImages.length > 0 ? allImages[0] : ''),
+        images: allImages.length > 1 ? allImages : undefined,
         sentTo: [],
         // Pour les questions, on stockera les participants du thread après sélection
         threadParticipants: currentComposeType === 'problem' ? [{ name: authorName, email: authorEmail }] : null
@@ -9417,7 +9475,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         cardId: currentCardId,
         cardName: card.name,
         messageType: newMessage.type,
-        hasImage: !!currentComposeImage,
+        hasImage: allImages.length > 0,
         contentPreview: content.substring(0, 50) + (content.length > 50 ? '...' : '')
       });
       
