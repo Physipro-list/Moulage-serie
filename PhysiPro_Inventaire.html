@@ -131,13 +131,20 @@ body{margin:0;padding:0;font-family:'Segoe UI',system-ui,-apple-system,sans-seri
 .inv-card{width:155px;height:90px;border:2px solid #000;border-radius:6px;cursor:default;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(0,0,0,0.4);transition:transform .15s,box-shadow .15s;position:relative;overflow:hidden;flex-shrink:0;}
 .inv-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.5);}
 .inv-card.bassin-card{background:linear-gradient(to bottom,#1e3a5f,#3b82f6);}
-.inv-card.fabrique-card{background:linear-gradient(to bottom,#0d4a44,#0f766e);}
+.inv-card.fabrique-card{background:linear-gradient(to bottom,#4b5563,#374151) !important;}
 .inv-card.client-vermeiren{background:linear-gradient(to bottom,#4ade80,#166534);}
 .inv-card.client-hme{background:linear-gradient(to bottom,#E8B97A,#704414);}
 .inv-card.client-c1south{background:linear-gradient(to bottom,#9ca3af,#581c87);}
 .inv-card.client-cubro{background:linear-gradient(to bottom,#67e8f9,#0e7490);}
 .inv-card.client-france{background:linear-gradient(to bottom,#facc15,#854d0e);}
+.inv-card.fabrique-card.client-vermeiren,.inv-card.fabrique-card.client-hme,.inv-card.fabrique-card.client-c1south,.inv-card.fabrique-card.client-cubro,.inv-card.fabrique-card.client-france{background:linear-gradient(to bottom,#4b5563,#374151) !important;}
 .inv-card.scan-highlight{animation:scanPulse 1.5s ease-in-out 3;border-color:var(--gold-light)!important;box-shadow:0 0 15px rgba(251,191,36,0.6)!important;}
+/* Drag & Drop */
+.inv-card[draggable="true"]{cursor:grab;}
+.inv-card[draggable="true"]:active{cursor:grabbing;}
+.inv-card.dragging{opacity:0.4;transform:scale(0.95);}
+.panel-body.drag-over{background:rgba(59,130,246,0.15) !important;border:2px dashed rgba(59,130,246,0.5);border-radius:4px;}
+.card-fait-badge{font-size:7px;font-weight:800;background:rgba(255,255,255,0.25);color:#fff;padding:1px 5px;border-radius:2px;text-transform:uppercase;letter-spacing:0.5px;}
 @keyframes scanPulse{0%,100%{box-shadow:0 0 5px rgba(251,191,36,0.3);}50%{box-shadow:0 0 20px rgba(251,191,36,0.8);}}
 .card-header{display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:rgba(0,0,0,0.4);border-bottom:1px solid rgba(0,0,0,0.3);}
 .card-order{font-size:10px;font-weight:800;color:#fff;text-shadow:1px 1px 1px rgba(0,0,0,0.8);}
@@ -560,7 +567,7 @@ function renderBassin(){
 function buildBassinCard(id,item){
   var cl=getClientLabel(item.client);
   var cc=item.client?' client-'+item.client:'';
-  return '<div class="inv-card bassin-card'+cc+'" id="card_'+id+'" data-commande="'+(item.commande||'')+'" data-nom="'+(item.nom||'')+'" oncontextmenu="event.preventDefault();showCtxMenu(event,\''+id+'\',\'bassin\')"><div class="card-header"><span class="card-order">#'+(item.commande||'---')+'</span><span class="card-client-badge">'+cl+'</span></div><div class="card-body"><div class="card-name">'+(item.nom||'Sans nom')+'</div><div class="card-info-row"><span class="card-grandeur">'+(item.grandeur||'-')+'</span><div class="card-qty-container"><span class="card-qty-label">QTÉ</span><span class="card-qty">'+(item.quantite||1)+'</span></div></div></div><div class="card-footer"><button class="card-btn-complete" onclick="event.stopPropagation();moveToFabrique(\''+id+'\')">✓ FABRIQUÉ</button><button class="card-btn-delete" onclick="event.stopPropagation();deleteItem(\''+id+'\',\'bassin\')" title="Supprimer">🗑️</button></div></div>';
+  return '<div class="inv-card bassin-card'+cc+'" id="card_'+id+'" draggable="true" ondragstart="onCardDragStart(event,\''+id+'\',\'bassin\')" ondragend="onCardDragEnd(event)" data-commande="'+(item.commande||'')+'" data-nom="'+(item.nom||'')+'" oncontextmenu="event.preventDefault();showCtxMenu(event,\''+id+'\',\'bassin\')"><div class="card-header"><span class="card-order">#'+(item.commande||'---')+'</span><span class="card-client-badge">'+cl+'</span></div><div class="card-body"><div class="card-name">'+(item.nom||'Sans nom')+'</div><div class="card-info-row"><span class="card-grandeur">'+(item.grandeur||'-')+'</span><div class="card-qty-container"><span class="card-qty-label">QTÉ</span><span class="card-qty">'+(item.quantite||1)+'</span></div></div></div><div class="card-footer"><button class="card-btn-complete" onclick="event.stopPropagation();moveToFabrique(\''+id+'\')">→ Fabriqué</button><button class="card-btn-delete" onclick="event.stopPropagation();deleteItem(\''+id+'\',\'bassin\')" title="Supprimer">🗑️</button></div></div>';
 }
 
 /* ═══ RENDER FABRIQUÉ ═══ */
@@ -586,11 +593,9 @@ function renderFabrique(){
 function buildFabriqueCard(id,item){
   var cl=getClientLabel(item.client);
   var cc=item.client?' client-'+item.client:'';
-  var d=item.completedDate?new Date(item.completedDate).toLocaleDateString('fr-CA'):'—';
-  var t=item.completedDate?new Date(item.completedDate).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}):'';
-  var auto=item.autoInspection;
-  return '<div class="inv-card fabrique-card'+cc+'" id="card_'+id+'" data-commande="'+(item.commande||'')+'" data-nom="'+(item.nom||'')+'" oncontextmenu="event.preventDefault();showCtxMenu(event,\''+id+'\',\'fabrique\')"><div class="card-header"><span class="card-order">#'+(item.commande||'---')+'</span><span class="card-client-badge">'+cl+'</span></div><div class="card-body"><div class="card-name">'+(item.nom||'Sans nom')+'</div><div class="card-info-row"><span class="card-grandeur">'+(item.grandeur||'-')+'</span><div class="card-qty-container"><span class="card-qty-label">QTÉ</span><span class="card-qty">'+(item.quantite||1)+'</span></div></div></div><div class="card-footer-info"><span class="card-date">'+d+' '+t+'</span><span class="card-badge'+(auto?' auto':'')+'">'+( auto?'🔄 AUTO':'✅ FAIT')+'</span><button class="card-restore-btn" onclick="event.stopPropagation();restoreToBassin(\''+id+'\')" title="Remettre au bassin">↩️</button><button class="card-btn-delete" onclick="event.stopPropagation();deleteItem(\''+id+'\',\'fabrique\')" title="Supprimer">🗑️</button></div></div>';
+  return '<div class="inv-card fabrique-card'+cc+'" id="card_'+id+'" draggable="true" ondragstart="onCardDragStart(event,\''+id+'\',\'fabrique\')" ondragend="onCardDragEnd(event)" data-commande="'+(item.commande||'')+'" data-nom="'+(item.nom||'')+'" oncontextmenu="event.preventDefault();showCtxMenu(event,\''+id+'\',\'fabrique\')"><div class="card-header"><span class="card-order">#'+(item.commande||'---')+'</span><span class="card-fait-badge">✓ Fait</span><span class="card-client-badge">'+cl+'</span></div><div class="card-body"><div class="card-name">'+(item.nom||'Sans nom')+'</div><div class="card-info-row"><span class="card-grandeur">'+(item.grandeur||'-')+'</span><div class="card-qty-container"><span class="card-qty-label">QTÉ</span><span class="card-qty">'+(item.quantite||1)+'</span></div></div></div><div class="card-footer"><button class="card-btn-complete" onclick="event.stopPropagation();restoreToBassin(\''+id+'\')" style="background:linear-gradient(to bottom,#6b7280,#4b5563);">↩️ Bassin</button><button class="card-btn-delete" onclick="event.stopPropagation();deleteItem(\''+id+'\',\'fabrique\')" title="Supprimer">🗑️</button></div></div>';
 }
+
 
 /* ═══ ACTIONS ═══ */
 function moveToFabrique(id){
@@ -657,6 +662,39 @@ function deleteItem(id,zone){
   if(zone==='bassin')saveBassin(currentTab);else saveFabrique(currentTab);
   showToast('Item supprimé','info');
 }
+
+/* ═══ DRAG & DROP ═══ */
+var dragData={id:null,zone:null};
+function onCardDragStart(e,id,zone){
+  dragData={id:id,zone:zone};
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',id);
+  setTimeout(function(){e.target.classList.add('dragging');},0);
+}
+function onCardDragEnd(e){
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.panel-body').forEach(function(p){p.classList.remove('drag-over');});
+}
+function initDragDrop(){
+  var bassinGrid=document.getElementById('bassinGrid');
+  var fabriqueGrid=document.getElementById('fabriqueGrid');
+  [bassinGrid,fabriqueGrid].forEach(function(panel){
+    if(!panel)return;
+    panel.addEventListener('dragover',function(e){e.preventDefault();e.dataTransfer.dropEffect='move';panel.classList.add('drag-over');});
+    panel.addEventListener('dragleave',function(e){if(!panel.contains(e.relatedTarget))panel.classList.remove('drag-over');});
+    panel.addEventListener('drop',function(e){
+      e.preventDefault();panel.classList.remove('drag-over');
+      if(!dragData.id)return;
+      var targetZone=panel.id==='fabriqueGrid'?'fabrique':'bassin';
+      if(dragData.zone===targetZone)return;
+      if(dragData.zone==='bassin'&&targetZone==='fabrique'){moveToFabrique(dragData.id);}
+      else if(dragData.zone==='fabrique'&&targetZone==='bassin'){restoreToBassin(dragData.id);}
+      dragData={id:null,zone:null};
+    });
+  });
+}
+// Init drag drop quand DOM ready
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initDragDrop);}else{setTimeout(initDragDrop,500);}
 
 /* ═══ INSPECTION AUTO-DETECTION ═══ */
 function autoCheckInspection(){

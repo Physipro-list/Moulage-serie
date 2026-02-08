@@ -257,9 +257,9 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
 .serie-collapsable-section {
   display: flex;
   flex-direction: column;
-  min-width: 85px;
-  width: 105px;
-  max-width: 140px;
+  min-width: 96px;
+  width: 120px;
+  max-width: 160px;
   background: linear-gradient(to bottom, #04152c 0%, #1e3a5f 100%);
   border-right: 3px solid #04152c;
   overflow: hidden;
@@ -445,13 +445,13 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
 
 /* Collapsable scaling - carte compacte */
 .serie-collapsable-cards .mcard-client-big {
-  font-size: 10px;
+  font-size: 11px;
 }
 .serie-collapsable-cards .mcard-order-big {
-  font-size: 8px;
+  font-size: 9px;
 }
 .serie-collapsable-cards .mcard-header-simple {
-  padding: 2px 4px 1px 4px;
+  padding: 5px 5px 4px 5px;
 }
 
 /* Hide old elements in new cards */
@@ -1515,24 +1515,6 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
   background: linear-gradient(to bottom, #ef4444, #dc2626);
 }
 
-/* Bouton supprimer commande dans la fiche */
-.serie-btn-delete-cmd {
-  background: linear-gradient(to bottom, #6b7280, #4b5563);
-  border: 1px solid rgba(255,255,255,0.2);
-  color: white;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 6px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  text-shadow: 1px 1px 0 #000;
-  margin-top: 4px;
-  width: 100%;
-}
-.serie-btn-delete-cmd:hover {
-  background: linear-gradient(to bottom, #ef4444, #dc2626);
-}
-
 /* Base de la colonne Info */
 .serie-col-info-footer {
   height: 18px;
@@ -1660,7 +1642,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
   padding: 10px 15px;
   border-top: 1px solid rgba(255,255,255,0.1);
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
 }
 
 .serie-card-info-btn-ok {
@@ -1676,6 +1658,21 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
 
 .serie-card-info-btn-ok:hover {
   background: linear-gradient(to bottom, #16a34a, #15803d);
+}
+
+.serie-card-info-btn-delete {
+  padding: 8px 14px;
+  background: linear-gradient(to bottom, #6b7280, #4b5563);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 5px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  text-shadow: 1px 1px 0 #000;
+}
+.serie-card-info-btn-delete:hover {
+  background: linear-gradient(to bottom, #ef4444, #dc2626);
 }
 
 /* Calendrier dans le modal Série+ */
@@ -6112,7 +6109,6 @@ if(localStorage.getItem('physipro_last_email')){
                   <div class="cmd-date-pill" id="serieFieldDateLiv" onclick="openSerieDatePicker('dateLivraison', this)">aaaa-mm-jj</div>
                 </div>
                 <button class="serie-btn-json" onclick="openSerieJsonModal()">📥 Import JSON</button>
-                <button class="serie-btn-delete-cmd" onclick="confirmDeleteCurrentSerieCard()">🗑️ Supprimer commande</button>
               </div>
             </div>
             
@@ -8447,39 +8443,24 @@ function deleteSerieCard(cardId) {
 }
 window.deleteSerieCard = deleteSerieCard;
 
-// Supprimer la commande actuellement ouverte dans la fiche
-function confirmDeleteCurrentSerieCard() {
-  if (!currentSerieId) {
-    showToast('⚠️ Aucune commande sélectionnée', 'error');
-    return;
-  }
-  var data = serieCardsData[currentSerieId];
-  var label = (data ? (data.client || '') + ' #' + (data.order || '') : currentSerieId);
+// Supprimer depuis le modal Fiche
+function confirmDeleteFromModal(cardId) {
+  var data = serieCardsData[cardId];
+  var label = (data ? (data.client || '') + ' #' + (data.order || '') : cardId);
   if (confirm('🗑️ Supprimer la commande ' + label + ' ?\n\nCette action est irréversible.')) {
-    deleteSerieCard(currentSerieId);
+    closeSerieCardInfoModal();
+    deleteSerieCard(cardId);
     currentSerieId = null;
-    // Re-render les cartes
     if (typeof renderSerieCollapsableCards === 'function') renderSerieCollapsableCards();
     if (typeof renderSerieCardsList === 'function') renderSerieCardsList();
-    // Reset la fiche (vider les 3 colonnes)
-    var atelierBody = document.getElementById('serieDeptAtelierBody');
-    var coutureBody = document.getElementById('serieDeptCoutureBody');
-    var inspBody = document.getElementById('serieDeptInspectionBody');
-    if (atelierBody) atelierBody.innerHTML = '<div class="empty-msg">Sélectionnez une commande</div>';
-    if (coutureBody) coutureBody.innerHTML = '<div class="empty-msg">Sélectionnez une commande</div>';
-    if (inspBody) inspBody.innerHTML = '<div class="empty-msg">Sélectionnez une commande</div>';
-    // Reset info fields
-    ['serieFieldClient','serieFieldOrder','serieFieldPO','serieFieldSoumission'].forEach(function(id) {
+    // Reset les 3 colonnes dept
+    ['serieDeptAtelierBody','serieDeptCoutureBody','serieDeptInspectionBody'].forEach(function(id) {
       var el = document.getElementById(id);
-      if (el) { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = ''; }
-    });
-    ['serieFieldDateRecue','serieFieldDateLiv'].forEach(function(id) {
-      var el = document.getElementById(id);
-      if (el) el.textContent = 'aaaa-mm-jj';
+      if (el) el.innerHTML = '<div class="empty-msg">Sélectionnez une commande</div>';
     });
   }
 }
-window.confirmDeleteCurrentSerieCard = confirmDeleteCurrentSerieCard;
+window.confirmDeleteFromModal = confirmDeleteFromModal;
 
 // Copier le prompt ChatGPT
 function copyJsonPrompt() {
@@ -8648,6 +8629,7 @@ function openSerieCardInfoModal(cardId) {
         <button class="serie-modal-json-btn" onclick="insererJSON(); closeSerieCardInfoModal();">📦 Insérer JSON</button>
       </div>
       <div class="serie-card-info-footer">
+        <button class="serie-card-info-btn-delete" onclick="confirmDeleteFromModal('${cardId}')">🗑️ Supprimer</button>
         <button class="serie-card-info-btn-ok" onclick="closeSerieCardInfoModal()">OK</button>
       </div>
     </div>
@@ -12500,7 +12482,6 @@ window.addEventListener('beforeunload', function() { serieCreateBackup(); });
    ================================================================ */
 </script>
 
-<!-- Navigation Modal — DANS LE VRAI DOM -->
 <div class="nav-modal-overlay" id="navModalOverlay" onclick="if(event.target===this)closeNavModal()">
   <div class="nav-modal" style="position:relative;">
     <button class="nav-modal-close" onclick="closeNavModal()">&times;</button>
