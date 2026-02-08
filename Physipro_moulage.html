@@ -3198,7 +3198,7 @@
     <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" class="mobile-home-logo" alt="PhysiPro">
     <button class="mobile-home-btn moulage-btn" onclick="goToMoulageFromHome()">🏭 Moulage</button>
     <button class="mobile-home-btn photo-btn" onclick="goToSendPhotoFromHome()">
-      📷 Envoyer Photo
+      📷 Application Photo
       <span class="mobile-home-badge" id="photoRequestsBadge">0</span>
     </button>
   </div>
@@ -3207,7 +3207,7 @@
   <div class="mobile-send-photo-page" id="mobileSendPhotoPage">
     <div class="send-photo-header">
       <button class="send-photo-back" onclick="backToMobileHome()">← Retour</button>
-      <span class="send-photo-title">📷 Demandes de photos</span>
+      <span class="send-photo-title">📷 Application Photo — Demandes</span>
     </div>
     <div class="send-photo-list" id="sendPhotoList">
       <div class="send-photo-empty">Aucune demande en attente</div>
@@ -3219,10 +3219,11 @@
     <video id="sendPhotoCameraVideo" autoplay playsinline></video>
     <img class="send-photo-camera-preview" id="sendPhotoCameraPreview" src="">
     <canvas id="sendPhotoCameraCanvas" style="display:none"></canvas>
+    <div class="send-photo-camera-counter" id="sendPhotoCounter" style="display:none;position:absolute;top:12px;right:12px;background:rgba(139,92,246,0.9);color:#fff;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;z-index:10;">📷 0 envoyée(s)</div>
     <div class="send-photo-camera-actions">
-      <button class="send-photo-camera-btn cancel" onclick="closeSendPhotoCamera()">✕ Annuler</button>
+      <button class="send-photo-camera-btn cancel" onclick="finishSendPhotos()">✅ Terminé</button>
       <button class="send-photo-camera-btn capture" id="sendPhotoCaptureBtn" onclick="capturePhoto()">📷 Prendre</button>
-      <button class="send-photo-camera-btn send" id="sendPhotoSendBtn" onclick="sendCapturedPhoto()" style="display:none">✅ Envoyer</button>
+      <button class="send-photo-camera-btn send" id="sendPhotoSendBtn" onclick="sendCapturedPhoto()" style="display:none">➤ Envoyer</button>
     </div>
   </div>
   
@@ -3524,7 +3525,7 @@
             <textarea class="chat-compose-textarea" id="composeTextarea" placeholder="Écrivez ici... (Ctrl+V pour image)" onpaste="handlePaste(event)"></textarea>
             <div class="chat-compose-image-zone" id="composeImageZone"><img src="" id="composeImg"><button class="chat-compose-image-remove" onclick="removeImage()">✕</button></div>
           </div>
-          <div class="chat-compose-footer"><span class="chat-compose-hint">Ctrl+V = image</span><button class="photo-request-btn" id="moulageComposePhotoBtn" onclick="requestMoulagePhoto('compose')" title="Prendre photo avec téléphone">📱 Prendre photo avec téléphone</button><button class="chat-compose-btn send" onclick="sendMessage()">➤ Envoyer</button></div>
+          <div class="chat-compose-footer"><span class="chat-compose-hint">Ctrl+V = image</span><button class="photo-request-btn" id="moulageComposePhotoBtn" onclick="requestMoulagePhoto('compose')" title="Demander photo via Application Photo mobile">📱 Application Photo</button><button class="chat-compose-btn send" onclick="sendMessage()">➤ Envoyer</button></div>
         </div>
         <div class="chat-buttons-row">
           <button class="chat-add-btn question" onclick="openCompose('problem')"><span class="icon">❓</span><span class="label">Question</span></button>
@@ -8749,7 +8750,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             </div>
             <div class="inline-compose-footer">
               <span class="inline-compose-hint">📎 Ctrl+V pour image</span>
-              <button class="inline-photo-request-btn" id="moulageInlinePhotoBtn_${question._index}" onclick="requestMoulagePhoto('inline',${question._index})" title="Prendre photo avec téléphone">📱 Prendre photo avec téléphone</button>
+              <button class="inline-photo-request-btn" id="moulageInlinePhotoBtn_${question._index}" onclick="requestMoulagePhoto('inline',${question._index})" title="Demander photo via Application Photo mobile">📱 Application Photo</button>
               <button class="inline-compose-btn" onclick="sendInlineReply(${question._index})">Envoyer</button>
             </div>
           </div>
@@ -9219,25 +9220,55 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     
     function listenMoulagePhotoResponse(requestId) {
       if (moulagePhotoListener) moulagePhotoListener();
+      let moulagePhotoReceivedCount = 0;
       const ref = firebaseDb.ref('photoResponses/' + requestId);
       const handler = ref.on('child_added', (snap) => {
         const response = snap.val();
         if (!response || !response.data) return;
-        if (moulagePhotoTarget === 'compose') {
-          currentComposeImage = response.data;
-          document.getElementById('composeImg').src = response.data;
-          document.getElementById('composeImageZone').classList.add('has-image');
-        } else if (moulagePhotoTarget === 'inline' && moulagePhotoInlineIdx != null) {
-          inlineComposeImages[moulagePhotoInlineIdx] = response.data;
-          const preview = document.getElementById('inlineImagePreview_' + moulagePhotoInlineIdx);
-          const zone = document.getElementById('inlineImageZone_' + moulagePhotoInlineIdx);
-          if (preview) preview.src = response.data;
-          if (zone) zone.style.display = 'block';
+        moulagePhotoReceivedCount++;
+        
+        // Auto-create a message with the photo in the card's chat
+        const cardId = currentCardId;
+        if (cardId && cardsData[cardId]) {
+          if (!cardsData[cardId].messages) cardsData[cardId].messages = [];
+          const authorName = response.sentByName || 'Mobile';
+          cardsData[cardId].messages.push({
+            id: 'msg_' + Date.now() + '_photo' + moulagePhotoReceivedCount,
+            type: 'normal',
+            author: authorName,
+            authorEmail: response.sentBy || '',
+            date: new Date().toISOString().split('T')[0],
+            content: '📷 Photo ' + moulagePhotoReceivedCount + ' (Application Photo)',
+            image: response.data,
+            sentTo: []
+          });
+          cardsData[cardId].localModifiedAt = Date.now();
+          renderMessages(cardId);
+          saveCardToFirebase(cardId, cardsData[cardId]);
+          scrollChatToBottom();
         }
-        showToast('📸 Photo reçue du mobile!', 'success');
-        cleanupMoulagePhotoRequest();
+        
+        showToast('📸 Photo ' + moulagePhotoReceivedCount + ' reçue du mobile!', 'success');
+        // NE PAS cleanup — rester à l'écoute pour d'autres photos
       });
-      moulagePhotoListener = () => ref.off('child_added', handler);
+      
+      // Écouter aussi quand la demande est marquée "fulfilled" (mobile a cliqué Terminé)
+      const reqRef = firebaseDb.ref('photoRequests/' + requestId);
+      const statusHandler = reqRef.on('value', (snap) => {
+        const req = snap.val();
+        if (!req || req.status === 'fulfilled') {
+          if (moulagePhotoReceivedCount > 0) {
+            showToast('✅ ' + moulagePhotoReceivedCount + ' photo(s) reçue(s) au total', 'success');
+          }
+          reqRef.off('value', statusHandler);
+          cleanupMoulagePhotoRequest();
+        }
+      });
+      
+      moulagePhotoListener = () => { 
+        ref.off('child_added', handler); 
+        reqRef.off('value', statusHandler); 
+      };
     }
     
     function cancelMoulagePhotoRequest() {
@@ -9252,15 +9283,16 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     function cleanupMoulagePhotoRequest() {
       if (moulagePhotoRequestId) {
         const oldId = moulagePhotoRequestId;
+        // Attendre 2 minutes avant de supprimer (multi-photos peut prendre du temps)
         setTimeout(() => {
           firebaseDb.ref('photoRequests/' + oldId).remove();
           firebaseDb.ref('photoResponses/' + oldId).remove();
-        }, 30000);
+        }, 120000);
       }
       const compBtn = document.getElementById('moulageComposePhotoBtn');
-      if (compBtn) { compBtn.classList.remove('waiting'); compBtn.innerHTML = '📱 Prendre photo avec téléphone'; }
+      if (compBtn) { compBtn.classList.remove('waiting'); compBtn.innerHTML = '📱 Application Photo'; }
       document.querySelectorAll('.inline-photo-request-btn').forEach(btn => {
-        btn.classList.remove('waiting'); btn.innerHTML = '📱 Prendre photo avec téléphone';
+        btn.classList.remove('waiting'); btn.innerHTML = '📱 Application Photo';
       });
       if (moulagePhotoListener) { moulagePhotoListener(); moulagePhotoListener = null; }
       moulagePhotoRequestId = null; moulagePhotoTarget = null; moulagePhotoInlineIdx = null;
@@ -15904,15 +15936,20 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     let sendPhotoRequestId = null;
     let sendPhotoStream = null;
     let sendPhotoCapturedData = null;
+    let sendPhotoCount = 0;
     
     function openSendPhotoCamera(requestId) {
       sendPhotoRequestId = requestId;
       sendPhotoCapturedData = null;
+      sendPhotoCount = 0;
       
       document.getElementById('sendPhotoCamera').classList.add('active');
       document.getElementById('sendPhotoCameraPreview').classList.remove('has-photo');
       document.getElementById('sendPhotoCaptureBtn').style.display = '';
       document.getElementById('sendPhotoSendBtn').style.display = 'none';
+      
+      const counter = document.getElementById('sendPhotoCounter');
+      if (counter) { counter.style.display = 'none'; counter.textContent = '📷 0 envoyée(s)'; }
       
       const video = document.getElementById('sendPhotoCameraVideo');
       video.style.display = '';
@@ -15952,10 +15989,9 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       document.getElementById('sendPhotoCaptureBtn').style.display = 'none';
       document.getElementById('sendPhotoSendBtn').style.display = '';
       
-      // Stop camera
+      // Pause camera but don't stop (for retaking)
       if (sendPhotoStream) {
-        sendPhotoStream.getTracks().forEach(t => t.stop());
-        sendPhotoStream = null;
+        sendPhotoStream.getTracks().forEach(t => t.enabled = false);
       }
     }
     window.capturePhoto = capturePhoto;
@@ -15964,6 +16000,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       if (!sendPhotoRequestId || !sendPhotoCapturedData || !firebaseDb) return;
       
       const userName = getUserDisplayName(currentUser?.email || '');
+      const btn = document.getElementById('sendPhotoSendBtn');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
       
       firebaseDb.ref('photoResponses/' + sendPhotoRequestId).push({
         data: sendPhotoCapturedData,
@@ -15971,15 +16009,52 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         sentByName: userName,
         timestamp: Date.now()
       }).then(() => {
-        // Marquer la demande comme complétée
-        firebaseDb.ref('photoRequests/' + sendPhotoRequestId).update({ status: 'fulfilled' });
-        showToast('📸 Photo envoyée!', 'success');
-        closeSendPhotoCamera();
+        sendPhotoCount++;
+        showToast('📸 Photo ' + sendPhotoCount + ' envoyée!', 'success');
+        
+        // Update counter
+        const counter = document.getElementById('sendPhotoCounter');
+        if (counter) {
+          counter.style.display = 'block';
+          counter.textContent = '📷 ' + sendPhotoCount + ' envoyée(s)';
+        }
+        
+        // Reset to capture mode for another photo
+        sendPhotoCapturedData = null;
+        document.getElementById('sendPhotoCameraPreview').classList.remove('has-photo');
+        document.getElementById('sendPhotoCaptureBtn').style.display = '';
+        document.getElementById('sendPhotoSendBtn').style.display = 'none';
+        if (btn) { btn.disabled = false; btn.textContent = '➤ Envoyer'; }
+        
+        // Re-enable camera
+        const video = document.getElementById('sendPhotoCameraVideo');
+        video.style.display = '';
+        if (sendPhotoStream) {
+          sendPhotoStream.getTracks().forEach(t => t.enabled = true);
+        } else {
+          // Re-open camera if stream was lost
+          navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+            .then(stream => { sendPhotoStream = stream; video.srcObject = stream; })
+            .catch(() => {});
+        }
       }).catch(err => {
         showToast('❌ Erreur: ' + err.message, 'error');
+        if (btn) { btn.disabled = false; btn.textContent = '➤ Envoyer'; }
       });
     }
     window.sendCapturedPhoto = sendCapturedPhoto;
+    
+    // Terminer la session photo (marquer comme complété)
+    function finishSendPhotos() {
+      if (sendPhotoRequestId && firebaseDb) {
+        firebaseDb.ref('photoRequests/' + sendPhotoRequestId).update({ status: 'fulfilled' });
+      }
+      if (sendPhotoCount > 0) {
+        showToast('✅ ' + sendPhotoCount + ' photo(s) envoyée(s)', 'success');
+      }
+      closeSendPhotoCamera();
+    }
+    window.finishSendPhotos = finishSendPhotos;
     
     function closeSendPhotoCamera() {
       if (sendPhotoStream) {
@@ -15988,6 +16063,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       }
       sendPhotoCapturedData = null;
       sendPhotoRequestId = null;
+      sendPhotoCount = 0;
       document.getElementById('sendPhotoCamera').classList.remove('active');
     }
     window.closeSendPhotoCamera = closeSendPhotoCamera;
