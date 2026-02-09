@@ -12312,14 +12312,14 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       const orderNumber = card.order;
       const gridEl = document.getElementById('sidebarPhotosGrid');
       
-      // Afficher progression
+      // Ajouter un indicateur de chargement EN HAUT de la grille (sans effacer les photos existantes)
+      let uploadingThumb = null;
       if (gridEl) {
-        gridEl.innerHTML = `
-          <div class="photos-sidebar-loading">
-            <div class="photos-sidebar-spinner"></div>
-            <span style="font-size:11px;color:#94a3b8;">📷 Upload en cours...</span>
-          </div>
-        `;
+        uploadingThumb = document.createElement('div');
+        uploadingThumb.className = 'photos-sidebar-thumb';
+        uploadingThumb.style.cssText = 'display:flex;align-items:center;justify-content:center;background:rgba(139,92,246,0.15);border:2px dashed #8b5cf6;';
+        uploadingThumb.innerHTML = '<div class="photos-sidebar-spinner"></div>';
+        gridEl.insertBefore(uploadingThumb, gridEl.firstChild);
       }
       
       try {
@@ -12328,9 +12328,12 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         // Vérifier que c'est une image
         if (!file.type.startsWith('image/')) {
           showToast('⚠️ Fichier non valide', 'warning');
-          loadSidebarPhotos();
+          if (uploadingThumb) uploadingThumb.remove();
           return;
         }
+        
+        // Créer un URL local pour affichage instantané
+        const localUrl = URL.createObjectURL(file);
         
         // Compresser
         const compressed = await compressPhotoFile(file);
@@ -12343,16 +12346,50 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         const ref = storage.ref(`photos/moulages/${orderNumber}/${fileName}`);
         await ref.put(compressed, { contentType: 'image/jpeg' });
         
+        // Récupérer l'URL Firebase
+        const downloadUrl = await ref.getDownloadURL();
+        
+        // ═══ OPTIMISTIC UI: Ajouter la photo immédiatement dans la grille ═══
+        const newPhoto = {
+          name: fileName,
+          downloadUrl: downloadUrl,
+          thumbnailUrl: downloadUrl,
+          fullPath: `photos/moulages/${orderNumber}/${fileName}`
+        };
+        
+        // Ajouter au cache local
+        if (!sidebarPhotos) sidebarPhotos = [];
+        sidebarPhotos.push(newPhoto);
+        galleryPhotos = sidebarPhotos;
+        
+        // Remplacer l'indicateur de chargement par la vraie photo
+        if (uploadingThumb) {
+          const newIndex = sidebarPhotos.length - 1;
+          uploadingThumb.style.cssText = '';
+          uploadingThumb.className = 'photos-sidebar-thumb';
+          uploadingThumb.onclick = () => openInlineZoom(newIndex);
+          uploadingThumb.innerHTML = `
+            <img src="${downloadUrl}" alt="${fileName}" loading="lazy">
+            <div class="photos-sidebar-thumb-overlay"><span>🔍</span></div>
+          `;
+        }
+        
+        // Marquer comme chargé pour cette carte
+        sidebarPhotosLoaded = true;
+        sidebarPhotosCardId = currentCardId;
+        
         showToast('✅ Photo ajoutée!', 'success');
         
-        // Forcer le rechargement des photos
-        sidebarPhotosLoaded = false;
-        sidebarPhotosCardId = null;
-        loadSidebarPhotos();
+        // Libérer l'URL local
+        URL.revokeObjectURL(localUrl);
         
       } catch (error) {
         console.error('❌ Erreur capture photo:', error);
         showToast('❌ Erreur: ' + error.message, 'error');
+        if (uploadingThumb) uploadingThumb.remove();
+        // En cas d'erreur, forcer un rechargement complet
+        sidebarPhotosLoaded = false;
+        sidebarPhotosCardId = null;
         loadSidebarPhotos();
       }
       
@@ -12372,48 +12409,79 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       const totalFiles = files.length;
       let uploaded = 0;
       
-      // Afficher progression
+      // ═══ OPTIMISTIC UI: Ajouter des placeholders pour chaque photo ═══
+      const placeholders = [];
       if (gridEl) {
-        gridEl.innerHTML = `
-          <div class="photos-sidebar-loading">
-            <div class="photos-sidebar-spinner"></div>
-            <span id="uploadProgress" style="font-size:11px;color:#94a3b8;">Upload 0/${totalFiles}...</span>
-          </div>
-        `;
+        for (let i = 0; i < totalFiles; i++) {
+          const ph = document.createElement('div');
+          ph.className = 'photos-sidebar-thumb';
+          ph.style.cssText = 'display:flex;align-items:center;justify-content:center;background:rgba(139,92,246,0.15);border:2px dashed #8b5cf6;';
+          ph.innerHTML = '<div class="photos-sidebar-spinner"></div>';
+          gridEl.insertBefore(ph, gridEl.firstChild);
+          placeholders.push(ph);
+        }
       }
       
+      if (!sidebarPhotos) sidebarPhotos = [];
+      
       try {
+        let fileIndex = 0;
         for (const file of files) {
-          // Vérifier que c'est une image
-          if (!file.type.startsWith('image/')) continue;
+          if (!file.type.startsWith('image/')) {
+            if (placeholders[fileIndex]) placeholders[fileIndex].remove();
+            fileIndex++;
+            continue;
+          }
           
-          // Compresser
           const compressed = await compressPhotoFile(file);
           
-          // Nom du fichier: timestamp + nom original
           const timestamp = Date.now();
           const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
           const fileName = `${timestamp}_${safeName}`;
           
-          // Upload vers Firebase Storage
           const ref = storage.ref(`photos/moulages/${orderNumber}/${fileName}`);
           await ref.put(compressed, { contentType: 'image/jpeg' });
           
+          const downloadUrl = await ref.getDownloadURL();
+          
+          // Ajouter au cache
+          const newPhoto = {
+            name: fileName,
+            downloadUrl: downloadUrl,
+            thumbnailUrl: downloadUrl,
+            fullPath: `photos/moulages/${orderNumber}/${fileName}`
+          };
+          sidebarPhotos.push(newPhoto);
+          galleryPhotos = sidebarPhotos;
+          
+          // Remplacer le placeholder par la vraie photo
+          if (placeholders[fileIndex]) {
+            const newIndex = sidebarPhotos.length - 1;
+            placeholders[fileIndex].style.cssText = '';
+            placeholders[fileIndex].className = 'photos-sidebar-thumb';
+            placeholders[fileIndex].onclick = () => openInlineZoom(newIndex);
+            placeholders[fileIndex].innerHTML = `
+              <img src="${downloadUrl}" alt="${fileName}" loading="lazy">
+              <div class="photos-sidebar-thumb-overlay"><span>🔍</span></div>
+            `;
+          }
+          
           uploaded++;
-          const progressEl = document.getElementById('uploadProgress');
-          if (progressEl) progressEl.textContent = `Upload ${uploaded}/${totalFiles}...`;
+          fileIndex++;
         }
         
-        showToast(`✅ ${uploaded} photo${uploaded > 1 ? 's' : ''} ajoutée${uploaded > 1 ? 's' : ''}`, 'success');
+        sidebarPhotosLoaded = true;
+        sidebarPhotosCardId = currentCardId;
         
-        // Forcer le rechargement des photos
-        sidebarPhotosLoaded = false;
-        sidebarPhotosCardId = null;
-        loadSidebarPhotos();
+        showToast(`✅ ${uploaded} photo${uploaded > 1 ? 's' : ''} ajoutée${uploaded > 1 ? 's' : ''}`, 'success');
         
       } catch (error) {
         console.error('❌ Erreur upload:', error);
         showToast('❌ Erreur upload photo: ' + error.message, 'error');
+        // Nettoyer les placeholders restants
+        placeholders.forEach(ph => { if (ph.querySelector('.photos-sidebar-spinner')) ph.remove(); });
+        sidebarPhotosLoaded = false;
+        sidebarPhotosCardId = null;
         loadSidebarPhotos();
       }
       
@@ -14481,19 +14549,25 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       const orderNumber = card.order;
       const grid = document.getElementById('mobilePhotosGrid');
       
-      // Garder les photos existantes et ajouter un indicateur de chargement en haut
-      const loadingDiv = document.createElement('div');
-      loadingDiv.className = 'mobile-photos-loading';
-      loadingDiv.id = 'mobilePhotoUploading';
-      loadingDiv.innerHTML = '<div class="mobile-photos-spinner"></div><div style="color:#93c5fd;font-size:13px;">📷 Upload en cours...</div>';
-      if (grid) grid.insertBefore(loadingDiv, grid.firstChild);
+      // ═══ OPTIMISTIC UI: Ajouter un placeholder animé en haut de la grille ═══
+      let uploadingThumb = null;
+      if (grid) {
+        // Si la grille montre "aucune photo", la vider d'abord
+        const emptyEl = grid.querySelector('.mobile-photos-empty');
+        if (emptyEl) emptyEl.remove();
+        
+        uploadingThumb = document.createElement('div');
+        uploadingThumb.className = 'mobile-photos-thumb';
+        uploadingThumb.style.cssText = 'display:flex;align-items:center;justify-content:center;background:rgba(139,92,246,0.15);border:2px dashed #8b5cf6;min-height:100px;';
+        uploadingThumb.innerHTML = '<div class="mobile-photos-spinner" style="width:30px;height:30px;"></div>';
+        grid.insertBefore(uploadingThumb, grid.firstChild);
+      }
       
       try {
         const file = files[0];
         if (!file.type.startsWith('image/')) {
           showToast('⚠️ Fichier non valide', 'warning');
-          const el = document.getElementById('mobilePhotoUploading');
-          if (el) el.remove();
+          if (uploadingThumb) uploadingThumb.remove();
           return;
         }
         
@@ -14508,19 +14582,47 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         const ref = storage.ref(`photos/moulages/${orderNumber}/${fileName}`);
         await ref.put(compressed, { contentType: 'image/jpeg' });
         
-        showToast('✅ Photo ajoutée!', 'success');
+        // Récupérer l'URL Firebase
+        const downloadUrl = await ref.getDownloadURL();
         
-        // Recharger les photos dans la page mobile ET dans le sidebar desktop
-        sidebarPhotosLoaded = false;
-        sidebarPhotosCardId = null;
-        loadMobilePhotos();
-        loadSidebarPhotos();
+        // ═══ OPTIMISTIC UI: Injecter la photo immédiatement ═══
+        const newPhoto = {
+          name: fileName,
+          downloadUrl: downloadUrl,
+          thumbnailUrl: downloadUrl,
+          fullPath: `photos/moulages/${orderNumber}/${fileName}`
+        };
+        
+        // Mettre à jour les caches
+        if (!sidebarPhotos) sidebarPhotos = [];
+        sidebarPhotos.push(newPhoto);
+        galleryPhotos = sidebarPhotos;
+        if (!window.mobileGalleryPhotos) window.mobileGalleryPhotos = [];
+        window.mobileGalleryPhotos.push(newPhoto);
+        
+        // Remplacer le placeholder par la vraie photo
+        if (uploadingThumb) {
+          const newIndex = (window.mobileGalleryPhotos.length || 1) - 1;
+          uploadingThumb.style.cssText = '';
+          uploadingThumb.className = 'mobile-photos-thumb';
+          uploadingThumb.onclick = () => openMobilePhotoGallery(newIndex);
+          uploadingThumb.innerHTML = `<img src="${downloadUrl}" alt="${fileName}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📷</text></svg>'">`;
+        }
+        
+        // Mettre à jour le cache sidebar aussi
+        sidebarPhotosLoaded = true;
+        sidebarPhotosCardId = mobileCurrentCardId;
+        
+        showToast('✅ Photo ajoutée!', 'success');
         
       } catch (error) {
         console.error('❌ Erreur capture photo mobile:', error);
         showToast('❌ Erreur: ' + error.message, 'error');
-        const el = document.getElementById('mobilePhotoUploading');
-        if (el) el.remove();
+        if (uploadingThumb) uploadingThumb.remove();
+        // En cas d'erreur, forcer rechargement complet
+        sidebarPhotosLoaded = false;
+        sidebarPhotosCardId = null;
+        loadMobilePhotos();
       }
       
       // Reset l'input
