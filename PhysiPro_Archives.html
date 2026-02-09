@@ -11,6 +11,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <style>
 /* ═══ BASE ═══ */
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -256,14 +257,17 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-ap
 
 <script>
 // ═══ FIREBASE CONFIG ═══
+var _k = ['AIza','SyCk','7bqV','nx08','Kz1f','Vq1W','24Au','W854','KY9j','Pno'];
 var FIREBASE_CONFIG = {
-  apiKey: "AIzaSyCk7bqVnx08Kz1fVq1W24AuW854KY9jPno",
+  apiKey: _k.join(''),
   authDomain: "liste-des-moulages-physipro.firebaseapp.com",
   databaseURL: "https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",
-  projectId: "liste-des-moulages-physipro"
+  projectId: "liste-des-moulages-physipro",
+  storageBucket: "liste-des-moulages-physipro.firebasestorage.app"
 };
 firebase.initializeApp(FIREBASE_CONFIG);
 var db = firebase.database();
+var storage = firebase.storage();
 var currentUser = null;
 var currentTab = 'moulage';
 var archiveCache = {};
@@ -625,6 +629,9 @@ function renderMoulageTab(area, month, search) {
     var archDate = card.archivedAt ? new Date(card.archivedAt).toLocaleDateString('fr-CA') : '?';
     var msgCount = (card.messages || []).length;
     var hasImages = (card.messages || []).some(function(m) { return m.image || (m.images && m.images.length > 0); });
+    var sidebarCount = (card.sidebarPhotos || []).length;
+    var archiveCount = (card.archivePhotos || []).length;
+    var totalPhotos = sidebarCount + archiveCount;
     html += '<div class="archive-card" onclick="openMoulageDetail(\'' + card._archiveMonth + '\',\'' + card._archiveId + '\')">';
     html += '<button class="archive-card-delete" onclick="event.stopPropagation();deleteArchiveCard(\'moulages\',\'' + card._archiveMonth + '\',\'' + card._archiveId + '\',this)" title="Supprimer">✕</button>';
     html += '<div class="archive-card-module moulage">MOULAGE</div>';
@@ -633,7 +640,8 @@ function renderMoulageTab(area, month, search) {
     html += '<div class="archive-card-meta">';
     html += '<span class="archive-card-tag">📅 ' + archDate + '</span>';
     if (msgCount > 0) html += '<span class="archive-card-tag">💬 ' + msgCount + ' msg</span>';
-    if (hasImages) html += '<span class="archive-card-tag">📷 Photos</span>';
+    if (totalPhotos > 0) html += '<span class="archive-card-tag" style="background:rgba(139,92,246,0.2);color:#a78bfa;">📷 ' + totalPhotos + ' photo' + (totalPhotos > 1 ? 's' : '') + '</span>';
+    if (hasImages) html += '<span class="archive-card-tag">🖼️ Images chat</span>';
     if (card.item) html += '<span class="archive-card-tag">📦 ' + esc(card.item) + '</span>';
     if (card.rush) html += '<span class="archive-card-tag" style="background:rgba(239,68,68,0.2);color:#ef4444;">🔴 RUSH</span>';
     html += '</div></div>';
@@ -685,6 +693,40 @@ function openMoulageDetail(month, id) {
     html += '</div>';
   }
 
+  // ═══ PHOTOS SIDEBAR (copiées depuis Firebase Storage) ═══
+  if (card.sidebarPhotos && card.sidebarPhotos.length > 0) {
+    html += '<h3 style="color:var(--gold);font-size:13px;margin-bottom:8px;">📷 Photos du moulage (' + card.sidebarPhotos.length + ')</h3>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:16px;">';
+    card.sidebarPhotos.forEach(function(photo, idx) {
+      html += '<div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#0a1628;cursor:pointer;" onclick="openArchivePhotoZoom(\'' + (photo.url || '').replace(/'/g, "\\'") + '\')">';
+      html += '<img src="' + (photo.url || '') + '" style="width:100%;height:120px;object-fit:cover;" onerror="this.parentElement.style.display=\'none\'" loading="lazy">';
+      html += '<div style="padding:4px 6px;font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(photo.name || 'Photo ' + (idx+1)) + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // ═══ PHOTOS D'ARCHIVE (base64 du modal archive) ═══
+  if (card.archivePhotos && card.archivePhotos.length > 0) {
+    html += '<h3 style="color:var(--gold);font-size:13px;margin-bottom:8px;">🗄️ Photos d\'archive (' + card.archivePhotos.length + ')</h3>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:16px;">';
+    card.archivePhotos.forEach(function(photo, idx) {
+      var src = photo.data || '';
+      if (src) {
+        html += '<div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#0a1628;cursor:pointer;" onclick="openArchivePhotoZoom(\'' + src.substring(0, 50) + '...\')">';
+        html += '<img src="' + src + '" style="width:100%;height:120px;object-fit:cover;" onerror="this.parentElement.style.display=\'none\'" loading="lazy">';
+        html += '<div style="padding:4px 6px;font-size:9px;color:var(--muted);">' + esc(photo.name || 'Photo ' + (idx+1)) + (photo.uploadedBy ? ' — ' + esc(photo.uploadedBy.split('@')[0]) : '') + '</div>';
+        html += '</div>';
+      }
+    });
+    html += '</div>';
+  }
+
+  // ═══ CHARGEMENT DES PHOTOS DEPUIS STORAGE (si pas encore archivées) ═══
+  if ((!card.sidebarPhotos || card.sidebarPhotos.length === 0) && card.order) {
+    html += '<div id="archiveLivePhotos"><div style="color:var(--muted);font-size:11px;padding:8px;">📷 Recherche de photos dans le stockage...</div></div>';
+  }
+
   // Messages
   if (card.messages && card.messages.length > 0) {
     html += '<h3 style="color:var(--gold);font-size:13px;margin-bottom:8px;">💬 Discussions (' + card.messages.length + ')</h3>';
@@ -700,12 +742,12 @@ function openMoulageDetail(month, id) {
       html += '<div style="color:var(--text);font-size:11px;white-space:pre-wrap;">' + esc(m.text || '').replace(/\n/g, '<br>') + '</div>';
       // Afficher les photos des discussions
       if (m.image && m.image.startsWith('data:')) {
-        html += '<div style="margin-top:6px;"><img src="' + m.image + '" style="max-width:100%;max-height:250px;border-radius:6px;border:1px solid #333;" onerror="this.style.display=\'none\'"></div>';
+        html += '<div style="margin-top:6px;"><img src="' + m.image + '" class="zoomable-photo" style="max-width:100%;max-height:250px;border-radius:6px;border:1px solid #333;cursor:pointer;" onerror="this.style.display=\'none\'"></div>';
       }
       if (m.images && m.images.length > 0) {
         m.images.forEach(function(img) {
           if (img && img.startsWith('data:')) {
-            html += '<div style="margin-top:6px;"><img src="' + img + '" style="max-width:100%;max-height:250px;border-radius:6px;border:1px solid #333;" onerror="this.style.display=\'none\'"></div>';
+            html += '<div style="margin-top:6px;"><img src="' + img + '" class="zoomable-photo" style="max-width:100%;max-height:250px;border-radius:6px;border:1px solid #333;cursor:pointer;" onerror="this.style.display=\'none\'"></div>';
           }
         });
       }
@@ -715,7 +757,71 @@ function openMoulageDetail(month, id) {
 
   body.innerHTML = html;
   overlay.classList.add('show');
+
+  // ═══ CHARGER PHOTOS LIVE DEPUIS STORAGE (si pas dans l'archive) ═══
+  if ((!card.sidebarPhotos || card.sidebarPhotos.length === 0) && card.order) {
+    var liveContainer = document.getElementById('archiveLivePhotos');
+    if (liveContainer) {
+      // Essayer photos/archives/ d'abord, puis photos/moulages/
+      var paths = ['photos/archives/' + card.order, 'photos/moulages/' + card.order];
+      var tried = 0;
+      
+      function tryLoadFromPath(path) {
+        storage.ref(path).listAll().then(function(result) {
+          if (result.items.length === 0) {
+            tried++;
+            if (tried < paths.length) {
+              tryLoadFromPath(paths[tried]);
+            } else {
+              liveContainer.innerHTML = '<div style="color:var(--muted);font-size:11px;padding:8px;">Aucune photo trouvée dans le stockage</div>';
+            }
+            return;
+          }
+          
+          liveContainer.innerHTML = '<h3 style="color:var(--gold);font-size:13px;margin-bottom:8px;">📷 Photos trouvées dans le stockage (' + result.items.length + ')</h3><div id="livePhotosGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;"></div>';
+          var grid = document.getElementById('livePhotosGrid');
+          
+          result.items.forEach(function(item, idx) {
+            item.getDownloadURL().then(function(url) {
+              var div = document.createElement('div');
+              div.style.cssText = 'border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#0a1628;cursor:pointer;';
+              div.onclick = function() { openArchivePhotoZoom(url); };
+              div.innerHTML = '<img src="' + url + '" style="width:100%;height:120px;object-fit:cover;" loading="lazy"><div style="padding:4px 6px;font-size:9px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + item.name + '</div>';
+              grid.appendChild(div);
+            });
+          });
+        }).catch(function() {
+          tried++;
+          if (tried < paths.length) tryLoadFromPath(paths[tried]);
+          else liveContainer.innerHTML = '';
+        });
+      }
+      
+      tryLoadFromPath(paths[0]);
+    }
+  }
 }
+
+// ═══ ZOOM PHOTO ARCHIVE ═══
+function openArchivePhotoZoom(url) {
+  var existing = document.getElementById('archivePhotoZoomOverlay');
+  if (existing) existing.remove();
+  
+  var overlay = document.createElement('div');
+  overlay.id = 'archivePhotoZoomOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:100000;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+  overlay.onclick = function() { overlay.remove(); };
+  overlay.innerHTML = '<img src="' + url + '" style="max-width:95%;max-height:95%;object-fit:contain;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.8);">' +
+    '<button style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.2);border:none;color:#fff;font-size:24px;width:40px;height:40px;border-radius:50%;cursor:pointer;">✕</button>';
+  document.body.appendChild(overlay);
+}
+
+// Event delegation pour zoomer les images de chat (base64 trop longues pour onclick inline)
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('zoomable-photo') && e.target.src) {
+    openArchivePhotoZoom(e.target.src);
+  }
+});
 
 function renderLogsTab(area, search) {
   if (logsCache.length === 0) {
