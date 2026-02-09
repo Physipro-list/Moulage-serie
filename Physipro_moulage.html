@@ -8,6 +8,29 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
+    v1583 - RETOUR ONEDRIVE LECTURE SEULE + ARCHIVES FIREBASE
+    ═══════════════════════════════════════════════════════════════════
+    
+    🆕 MODIFICATIONS v1583:
+    
+    1. PERMISSIONS ONEDRIVE CORRIGÉES
+       → Enlevé Files.ReadWrite.All des scopes (causait refus d'accès)
+       → Photos sidebar fonctionnent avec Files.Read + Files.Read.All seulement
+       → Plus besoin de permissions d'écriture
+    
+    2. ARCHIVAGE ONEDRIVE RETIRÉ
+       → Bouton "Archiver OneDrive" enlevé
+       → Fonctions upload/écriture OneDrive supprimées
+       → Fini les problèmes de permissions écriture
+    
+    3. ARCHIVAGE FIREBASE À LA SUPPRESSION
+       → Quand on supprime une carte, la fiche est archivée dans Firebase
+       → Sauvegarde: infos fiche, discussions, photos des discussions
+       → Chemin: archives/moulages/{YYYY-MM}/{cardId}
+       → Log dans archiveLogs
+       → Visible dans la page Archives (onglet Moulage)
+    
+    ═══════════════════════════════════════════════════════════════════
     v1545 - SYSTÈME VERSION v3 + CORRECTIONS ONEDRIVE
     ═══════════════════════════════════════════════════════════════════
     
@@ -3504,7 +3527,6 @@
           </label>
           <button type="button" class="fiche-header-btn" onclick="openTrackingPopup()" title="Voir le tracking">📊 Tracking</button>
           <div style="flex: 1;"></div>
-          <button type="button" class="fiche-archive-btn" id="ficheArchiveBtn" onclick="archiveMoulage()">📦 Archiver OneDrive</button>
           <button type="button" class="fiche-delete-btn" onclick="deleteCurrentCard()">🗑️ Supprimer</button>
         </div>
         <div class="fiche-status-banner" id="ficheStatusBanner">
@@ -4164,7 +4186,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1582';
+    const APP_VERSION = '1583';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -8606,14 +8628,6 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       statusBanner.className = `fiche-status-banner ${isEnAttente ? 'en-attente' : ''}`;
       document.getElementById('ficheStatusText').textContent = currentCol?.name || 'Robot';
       
-      // Show archive button only for Expedition cards
-      const archBtn = document.getElementById('ficheArchiveBtn');
-      if (archBtn) {
-        archBtn.classList.toggle('visible', d.colonne === 'colExpedition');
-        archBtn.disabled = false;
-        archBtn.textContent = '📦 Archiver OneDrive';
-      }
-      
       // Rendu du tracking
       renderTracking(cardId);
       
@@ -9156,6 +9170,78 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       if (!pendingCardDeleteId) return;
       
       const cardIdToDelete = pendingCardDeleteId;
+      const card = cardsData[cardIdToDelete];
+      
+      // ═══ ARCHIVAGE FIREBASE AUTOMATIQUE ═══
+      // Archiver la fiche, les discussions et les photos des discussions
+      if (card) {
+        const monthKey = new Date().toISOString().substring(0, 7); // YYYY-MM
+        
+        // Préparer les messages en gardant les photos base64 des discussions
+        const archivedMessages = (card.messages || []).map(msg => {
+          const archMsg = {
+            type: msg.type || 'normal',
+            text: msg.text || '',
+            author: msg.author || msg.nom || '',
+            timestamp: msg.timestamp || '',
+            date: msg.date || ''
+          };
+          // Garder les photos des discussions (base64)
+          if (msg.image) archMsg.image = msg.image;
+          if (msg.images && msg.images.length > 0) archMsg.images = msg.images;
+          return archMsg;
+        });
+        
+        // Préparer le tracking
+        const archivedTracking = {};
+        if (card.tracking && typeof card.tracking === 'object') {
+          Object.keys(card.tracking).forEach(k => {
+            archivedTracking[k] = card.tracking[k];
+          });
+        }
+        
+        // Sauvegarder dans Firebase archives/moulages/{YYYY-MM}/{cardId}
+        const archiveData = {
+          name: card.name || '',
+          order: card.order || '',
+          client: card.client || '',
+          region: card.region || '',
+          intervenant: card.intervenant || '',
+          representante: card.representante || '',
+          po: card.po || '',
+          soumission: card.soumission || '',
+          item: card.item || '',
+          rush: card.rush || false,
+          colonne: card.colonne || '',
+          dateRecue: card.dateRecue || '',
+          dateLivraison: card.dateLivraison || '',
+          dateEssayage: card.dateEssayage || '',
+          dateExpedition: card.dateExpedition || '',
+          tracking: archivedTracking,
+          messages: archivedMessages,
+          createdAt: card.createdAt || '',
+          archivedAt: new Date().toISOString(),
+          archivedBy: currentUser ? currentUser.email : 'inconnu'
+        };
+        
+        // Sauvegarde asynchrone (ne bloque pas la suppression)
+        firebaseDb.ref('archives/moulages/' + monthKey + '/' + cardIdToDelete).set(archiveData)
+          .then(() => {
+            console.log('✅ Moulage archivé dans Firebase:', card.name, '#' + card.order);
+            // Logger dans archiveLogs
+            return firebaseDb.ref('archiveLogs').push().set({
+              module: 'moulage',
+              cardId: cardIdToDelete,
+              name: card.name || '',
+              order: card.order || '',
+              client: card.client || '',
+              messageCount: archivedMessages.length,
+              archivedAt: new Date().toISOString(),
+              archivedBy: currentUser ? currentUser.email : 'inconnu'
+            });
+          })
+          .catch(err => console.error('⚠️ Erreur archivage Firebase:', err));
+      }
       
       // Supprimer aussi les associations
       const groupId = cardAssociations[cardIdToDelete];
@@ -9190,7 +9276,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       pendingCardDeleteId = null;
       renderKanban();
       renderMobileCards();
-      showToast('🗑️ Moulage supprimé', 'info');
+      showToast('🗑️ Moulage supprimé (archivé)', 'info');
     }
     window.deleteCurrentCard = deleteCurrentCard;
     window.closeConfirmDelete = closeConfirmDelete;
@@ -11584,320 +11670,6 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       }
     }
 
-    // ===== SECTION 18E: ARCHIVAGE ONEDRIVE (MOULAGE) =====
-    
-    // Obtenir un token avec permissions d'écriture
-    async function getOneDriveWriteToken() {
-      if (!msalInstance) {
-        showToast('⚠️ OneDrive non disponible', 'error');
-        return null;
-      }
-      const accounts = msalInstance.getAllAccounts();
-      const writeScopes = { scopes: ['Files.ReadWrite.All'] };
-      
-      if (accounts.length === 0) {
-        try {
-          const resp = await msalInstance.loginPopup(writeScopes);
-          return resp.accessToken;
-        } catch (e) {
-          console.error('Login OneDrive échoué:', e);
-          showToast('❌ Connexion OneDrive échouée', 'error');
-          return null;
-        }
-      }
-      try {
-        const resp = await msalInstance.acquireTokenSilent({ ...writeScopes, account: accounts[0] });
-        return resp.accessToken;
-      } catch (e) {
-        try {
-          const resp = await msalInstance.loginPopup(writeScopes);
-          return resp.accessToken;
-        } catch (e2) {
-          console.error('Token OneDrive échoué:', e2);
-          showToast('❌ Erreur token OneDrive', 'error');
-          return null;
-        }
-      }
-    }
-    
-    // Créer un dossier sur OneDrive shared drive (récursif)
-    async function ensureOneDriveFolder(token, folderPath) {
-      const parts = folderPath.split('/').filter(Boolean);
-      let currentPath = '';
-      
-      for (const part of parts) {
-        const parentPath = currentPath || '/';
-        currentPath += '/' + part;
-        const encodedParent = parentPath === '/' ? 'root' : 'root:' + encodeURI(parentPath) + ':';
-        const url = `https://graph.microsoft.com/v1.0/drives/${SHARED_DRIVE_ID}/${encodedParent}/children`;
-        
-        // Vérifier si le dossier existe
-        try {
-          const checkUrl = `https://graph.microsoft.com/v1.0/drives/${SHARED_DRIVE_ID}/root:${encodeURI(currentPath)}`;
-          const checkResp = await fetch(checkUrl, { headers: { 'Authorization': 'Bearer ' + token } });
-          if (checkResp.ok) continue; // Dossier existe
-        } catch (e) { /* ignore */ }
-        
-        // Créer le dossier
-        try {
-          const createResp = await fetch(url, {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: part, folder: {}, '@microsoft.graph.conflictBehavior': 'replace' })
-          });
-          if (!createResp.ok && createResp.status !== 409) {
-            console.error('Erreur création dossier:', currentPath, await createResp.text());
-          }
-        } catch (e) {
-          console.error('Erreur réseau dossier:', e);
-        }
-      }
-      return currentPath;
-    }
-    
-    // Upload un fichier HTML vers OneDrive
-    async function uploadFileToOneDrive(token, folderPath, fileName, content) {
-      const filePath = folderPath + '/' + fileName;
-      const encodedPath = encodeURI(filePath);
-      const url = `https://graph.microsoft.com/v1.0/drives/${SHARED_DRIVE_ID}/root:${encodedPath}:/content`;
-      
-      const resp = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          'Authorization': 'Bearer ' + token,
-          'Content-Type': 'text/html; charset=utf-8'
-        },
-        body: content
-      });
-      
-      if (!resp.ok) {
-        const errText = await resp.text();
-        throw new Error('Upload échoué (' + resp.status + '): ' + errText);
-      }
-      return await resp.json();
-    }
-    
-    // Générer le HTML d'archive pour un moulage
-    function generateMoulageArchiveHTML(cardId) {
-      const card = cardsData[cardId];
-      if (!card) return null;
-      
-      const now = new Date();
-      const archiveDate = now.toLocaleString('fr-CA');
-      const archivedBy = currentUser ? currentUser.email : 'inconnu';
-      
-      // Tracking timeline
-      let trackingHTML = '';
-      if (card.tracking && typeof card.tracking === 'object') {
-        TRACKING_DEPTS.forEach(dept => {
-          const ts = card.tracking[dept.id];
-          if (ts) {
-            const d = new Date(ts);
-            trackingHTML += '<tr><td>' + dept.name + '</td><td>' + d.toLocaleDateString('fr-CA') + '</td><td>' + d.toLocaleTimeString('fr-CA', {hour:'2-digit',minute:'2-digit'}) + '</td></tr>';
-          }
-        });
-      }
-      
-      // Messages
-      let msgsHTML = '';
-      const msgs = card.messages || [];
-      msgs.forEach((msg, idx) => {
-        const typeLabel = {problem:'❓ Question', solution:'✅ Réponse', normal:'💬 Discussion', pinned:'📌 Épinglé', note:'📝 Note'}[msg.type] || '💬';
-        const ts = msg.timestamp ? new Date(msg.timestamp).toLocaleString('fr-CA') : '';
-        const author = msg.author || msg.nom || '';
-        const imgTag = msg.image ? '<div style="margin-top:8px;"><img src="' + escapeHtml(msg.image) + '" style="max-width:100%;max-height:300px;border-radius:6px;border:1px solid #555;" onerror="this.style.display=\'none\'"></div>' : '';
-        
-        let borderColor = '#3b82f6';
-        if (msg.type === 'problem') borderColor = '#ef4444';
-        else if (msg.type === 'solution') borderColor = '#22c55e';
-        else if (msg.type === 'pinned') borderColor = '#f59e0b';
-        
-        msgsHTML += `
-          <div style="background:#1e293b;border-left:3px solid ${borderColor};border-radius:6px;padding:10px 12px;margin-bottom:8px;">
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-              <span style="font-weight:700;color:#93c5fd;font-size:11px;">${typeLabel} — ${escapeHtml(author)}</span>
-              <span style="font-size:10px;color:#6b7280;">${ts}</span>
-            </div>
-            <div style="color:#e2e8f0;font-size:12px;white-space:pre-wrap;">${escapeHtml(msg.text || '')}</div>
-            ${imgTag}
-          </div>`;
-      });
-      
-      // OneDrive photo folder link
-      const orderNum = card.order || '';
-      const benefName = (card.name || '').toUpperCase().trim();
-      const folderName = orderNum + ' - ' + benefName;
-      
-      return `<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Archive Moulage — ${escapeHtml(card.name)} #${escapeHtml(card.order)}</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0f1a; color: #e2e8f0; padding: 20px; }
-  .container { max-width: 900px; margin: 0 auto; }
-  .header { background: linear-gradient(135deg, #1e3a5f, #3b82f6); padding: 20px; border-radius: 12px; margin-bottom: 16px; }
-  .header h1 { font-size: 20px; margin-bottom: 4px; }
-  .header .sub { font-size: 12px; color: #93c5fd; }
-  .section { background: #111827; border: 1px solid #1f2937; border-radius: 10px; padding: 16px; margin-bottom: 12px; }
-  .section-title { font-size: 13px; font-weight: 700; color: #f59e0b; margin-bottom: 10px; border-bottom: 1px solid #1f2937; padding-bottom: 6px; }
-  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .field { display: flex; flex-direction: column; }
-  .field-label { font-size: 10px; color: #6b7280; text-transform: uppercase; font-weight: 600; }
-  .field-value { font-size: 13px; font-weight: 600; color: #fff; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 6px 10px; text-align: left; font-size: 11px; border-bottom: 1px solid #1f2937; }
-  th { color: #93c5fd; font-weight: 700; background: rgba(59,130,246,0.1); }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
-  .badge-expedition { background: #22c55e; color: #000; }
-  .footer { text-align: center; padding: 16px; color: #4b5563; font-size: 10px; margin-top: 20px; }
-  .photo-link { display: inline-block; background: linear-gradient(135deg, #3b82f6, #2563eb); padding: 8px 16px; border-radius: 8px; color: #fff; text-decoration: none; font-weight: 700; font-size: 12px; margin-top: 8px; }
-  .photo-link:hover { filter: brightness(1.2); }
-  @media print { body { background: #fff; color: #000; } .section { border-color: #ddd; background: #f9fafb; } }
-</style>
-</head>
-<body>
-<div class="container">
-  <div class="header">
-    <h1>🏭 PhysiPro — Archive Moulage</h1>
-    <div class="sub">Archivé le ${archiveDate} par ${escapeHtml(archivedBy)}</div>
-  </div>
-  
-  <div class="section">
-    <div class="section-title">👤 Informations</div>
-    <div class="field-grid">
-      <div class="field"><span class="field-label">Bénéficiaire</span><span class="field-value">${escapeHtml(card.name || '')}</span></div>
-      <div class="field"><span class="field-label">N° Commande</span><span class="field-value">${escapeHtml(card.order || '')}</span></div>
-      <div class="field"><span class="field-label">Client / Centre</span><span class="field-value">${escapeHtml(card.client || '')}</span></div>
-      <div class="field"><span class="field-label">Région</span><span class="field-value">${escapeHtml(card.region || '')}</span></div>
-      <div class="field"><span class="field-label">Intervenant</span><span class="field-value">${escapeHtml(card.intervenant || '')}</span></div>
-      <div class="field"><span class="field-label">Représentante</span><span class="field-value">${escapeHtml(card.representante || '')}</span></div>
-      <div class="field"><span class="field-label">N° PO</span><span class="field-value">${escapeHtml(card.po || '')}</span></div>
-      <div class="field"><span class="field-label">N° Soumission</span><span class="field-value">${escapeHtml(card.soumission || '')}</span></div>
-      <div class="field"><span class="field-label">Item</span><span class="field-value">${escapeHtml(card.item || '')}</span></div>
-      <div class="field"><span class="field-label">Rush</span><span class="field-value">${card.rush ? '🔴 OUI' : 'Non'}</span></div>
-      <div class="field"><span class="field-label">Expédié</span><span class="field-value">${escapeHtml(card.expedie || 'Oui')}</span></div>
-      <div class="field"><span class="field-label">Statut final</span><span class="field-value"><span class="badge badge-expedition">📦 Expédition</span></span></div>
-    </div>
-  </div>
-  
-  <div class="section">
-    <div class="section-title">📅 Dates</div>
-    <div class="field-grid">
-      <div class="field"><span class="field-label">Date reçue</span><span class="field-value">${escapeHtml(card.dateRecue || '—')}</span></div>
-      <div class="field"><span class="field-label">Date livraison</span><span class="field-value">${escapeHtml(card.dateLivraison || '—')}</span></div>
-      <div class="field"><span class="field-label">Fab-moulage</span><span class="field-value">${escapeHtml(card.dateEssayage || '—')}</span></div>
-      <div class="field"><span class="field-label">Date expédition</span><span class="field-value">${escapeHtml(card.dateExpedition || '—')}</span></div>
-    </div>
-  </div>
-  
-  ${trackingHTML ? `
-  <div class="section">
-    <div class="section-title">📊 Tracking Production</div>
-    <table>
-      <thead><tr><th>Département</th><th>Date</th><th>Heure</th></tr></thead>
-      <tbody>${trackingHTML}</tbody>
-    </table>
-  </div>` : ''}
-  
-  <div class="section">
-    <div class="section-title">📷 Photos</div>
-    <p style="color:#9ca3af;font-size:12px;margin-bottom:8px;">Les photos sont dans le dossier OneDrive partagé :</p>
-    <code style="display:block;background:#0a0f1a;padding:8px;border-radius:4px;font-size:11px;color:#93c5fd;margin-bottom:8px;">${escapeHtml(ONEDRIVE_PHOTOS_PATH)}/${escapeHtml(folderName)}</code>
-  </div>
-  
-  <div class="section">
-    <div class="section-title">💬 Messages & Notes (${msgs.length})</div>
-    ${msgsHTML || '<p style="color:#6b7280;font-size:12px;">Aucun message.</p>'}
-  </div>
-  
-  <div class="footer">
-    PhysiPro Inc. — Archive générée automatiquement<br>
-    ID carte: ${escapeHtml(cardId)} | Créée: ${card.createdAt ? new Date(card.createdAt).toLocaleString('fr-CA') : '?'}
-  </div>
-</div>
-</body>
-</html>`;
-    }
-    
-    // Fonction principale: Archiver un moulage
-    async function archiveMoulage() {
-      const cardId = currentCardId;
-      if (!cardId || !cardsData[cardId]) {
-        showToast('⚠️ Aucune carte sélectionnée', 'error');
-        return;
-      }
-      
-      const card = cardsData[cardId];
-      const label = (card.name || '') + ' #' + (card.order || '');
-      
-      if (!confirm('📦 Archiver le moulage ' + label + ' vers OneDrive ?\n\n• Le fichier HTML sera uploadé dans OneDrive\n• La carte sera supprimée de la production\n• Un log sera créé dans les archives')) {
-        return;
-      }
-      
-      const btn = document.getElementById('ficheArchiveBtn');
-      if (btn) { btn.disabled = true; btn.textContent = '⏳ Archivage...'; }
-      
-      try {
-        // 1. Obtenir le token OneDrive (avec permissions écriture)
-        showToast('🔑 Connexion OneDrive...', 'info');
-        const token = await getOneDriveWriteToken();
-        if (!token) throw new Error('Impossible d\'obtenir le token OneDrive');
-        
-        // 2. Générer le HTML d'archive
-        showToast('📄 Génération de l\'archive...', 'info');
-        const htmlContent = generateMoulageArchiveHTML(cardId);
-        if (!htmlContent) throw new Error('Erreur génération HTML');
-        
-        // 3. Créer le dossier mensuel
-        const monthKey = new Date().toISOString().substring(0, 7); // YYYY-MM
-        const archiveFolderPath = ONEDRIVE_ARCHIVE_PATH + '/' + monthKey;
-        showToast('📁 Création du dossier...', 'info');
-        await ensureOneDriveFolder(token, archiveFolderPath);
-        
-        // 4. Upload le fichier
-        const safeName = ((card.name || 'inconnu') + '_' + (card.order || cardId)).replace(/[^a-zA-Z0-9_\-àâäéèêëïîôùûüçÀÂÄÉÈÊËÏÎÔÙÛÜÇ ]/g, '_');
-        const fileName = safeName + '.html';
-        showToast('📤 Upload vers OneDrive...', 'info');
-        const result = await uploadFileToOneDrive(token, archiveFolderPath, fileName, htmlContent);
-        console.log('✅ Archive uploadée:', result);
-        
-        // 5. Logger dans Firebase
-        const logRef = firebaseDb.ref('archiveLogs').push();
-        await logRef.set({
-          module: 'moulage',
-          cardId: cardId,
-          name: card.name || '',
-          order: card.order || '',
-          client: card.client || '',
-          fileName: fileName,
-          folderPath: archiveFolderPath,
-          archivedAt: new Date().toISOString(),
-          archivedBy: currentUser ? currentUser.email : 'inconnu'
-        });
-        
-        // 6. Supprimer la carte de Firebase
-        await firebaseDb.ref('moulages/' + cardId).remove();
-        delete cardsData[cardId];
-        
-        // 7. Fermer la fiche et rafraîchir
-        document.getElementById('ficheOverlay').classList.add('hidden');
-        currentCardId = null;
-        renderKanban();
-        saveToLocalStorageQuiet();
-        
-        showToast('✅ ' + label + ' archivé dans OneDrive!', 'success');
-        
-      } catch (error) {
-        console.error('❌ Erreur archivage:', error);
-        showToast('❌ Erreur: ' + error.message, 'error');
-        if (btn) { btn.disabled = false; btn.textContent = '📦 Archiver OneDrive'; }
-      }
-    }
-    window.archiveMoulage = archiveMoulage;
-
     // ===== SECTION 19: AUTHENTIFICATION FIREBASE =====
     
     // Validation email
@@ -12387,9 +12159,6 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     // Chemin du dossier photos dans OneDrive
     const ONEDRIVE_PHOTOS_PATH = '/Photos moulage atelier client En attente';
     
-    // Chemin du dossier archives dans OneDrive
-    const ONEDRIVE_ARCHIVE_PATH = '/PhysiPro Archives/Moulages';
-    
     // DriveId du OneDrive partagé (poste atelieratp@physipro.com)
     // Tout le monde accède à CE drive, pas leur drive personnel
     const SHARED_DRIVE_ID = 'b!Xug9dO_pD0Kzgzmidiqvfy-H9aspqnxDmRwKgPDLetQEiULYtg5kSbg0XTIhUwTe';
@@ -12473,7 +12242,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       
       try {
         const loginRequest = {
-          scopes: ['Files.Read', 'Files.Read.All', 'Files.ReadWrite.All', 'User.Read']
+          scopes: ['Files.Read', 'Files.Read.All', 'User.Read']
         };
         
         // Essayer silencieusement d'abord
@@ -12540,7 +12309,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       
       try {
         const response = await msalInstance.acquireTokenSilent({
-          scopes: ['Files.Read', 'Files.Read.All', 'Files.ReadWrite.All'],
+          scopes: ['Files.Read', 'Files.Read.All'],
           account: accounts[0]
         });
         msalAccessToken = response.accessToken;

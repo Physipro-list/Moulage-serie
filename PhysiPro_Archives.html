@@ -76,6 +76,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-ap
 .archive-card-module{position:absolute;top:8px;right:8px;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;}
 .archive-card-module.quest{background:var(--gold);color:#000;}
 .archive-card-module.psm{background:var(--red);color:#fff;}
+.archive-card-module.moulage{background:var(--blue);color:#fff;}
 .archive-card-delete{position:absolute;top:8px;left:8px;width:22px;height:22px;border-radius:50%;background:rgba(107,114,128,0.6);border:1px solid rgba(255,255,255,0.2);color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2;transition:all 0.2s;}
 .archive-card-delete:hover{background:rgba(239,68,68,0.9);border-color:rgba(239,68,68,1);transform:scale(1.15);}
 .archive-card-title{font-size:14px;font-weight:700;color:#fff;margin-bottom:4px;}
@@ -206,7 +207,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-ap
 <div class="main">
   <!-- TABS -->
   <div class="tabs" id="tabsBar">
-    <button class="tab-btn active" data-tab="inspection" onclick="switchTab('inspection')">🔍 Inspection</button>
+    <button class="tab-btn active" data-tab="moulage" onclick="switchTab('moulage')">🏭 Moulage</button>
+    <button class="tab-btn" data-tab="inspection" onclick="switchTab('inspection')">🔍 Inspection</button>
     <button class="tab-btn" data-tab="couture" onclick="switchTab('couture')">🧵 Couture</button>
     <button class="tab-btn" data-tab="questionnement" onclick="switchTab('questionnement')">📋 Questionnement</button>
     <button class="tab-btn" data-tab="psm" onclick="switchTab('psm')">🔧 PSM</button>
@@ -263,7 +265,7 @@ var FIREBASE_CONFIG = {
 firebase.initializeApp(FIREBASE_CONFIG);
 var db = firebase.database();
 var currentUser = null;
-var currentTab = 'inspection';
+var currentTab = 'moulage';
 var archiveCache = {};
 var logsCache = [];
 
@@ -388,7 +390,7 @@ function refreshData() {
 function updateStats() {
   var total = 0;
   var months = {};
-  ['inspection', 'couture', 'questionnements', 'psm', 'serie', 'inventaire'].forEach(function(mod) {
+  ['inspection', 'couture', 'questionnements', 'psm', 'serie', 'inventaire', 'moulages'].forEach(function(mod) {
     var modData = archiveCache[mod] || {};
     Object.keys(modData).forEach(function(month) {
       months[month] = true;
@@ -410,7 +412,10 @@ function updateStats() {
 }
 
 function updateTabCounts() {
-  var tabs = { inspection: 0, couture: 0, questionnement: 0, psm: 0 };
+  var tabs = { moulage: 0, inspection: 0, couture: 0, questionnement: 0, psm: 0 };
+  // Moulage count
+  var moulData = archiveCache.moulages || {};
+  Object.keys(moulData).forEach(function(m) { tabs.moulage += Object.keys(moulData[m] || {}).length; });
   ['inspection', 'couture'].forEach(function(dept) {
     var modData = archiveCache[dept] || {};
     Object.keys(modData).forEach(function(month) {
@@ -453,7 +458,9 @@ function renderTab() {
   var month = document.getElementById('monthSelect').value;
   var search = (document.getElementById('searchInput').value || '').toLowerCase();
 
-  if (currentTab === 'inspection' || currentTab === 'couture') {
+  if (currentTab === 'moulage') {
+    renderMoulageTab(area, month, search);
+  } else if (currentTab === 'inspection' || currentTab === 'couture') {
     renderInspectionTab(area, currentTab, month, search);
   } else if (currentTab === 'questionnement') {
     renderCardTab(area, 'questionnements', 'quest', month, search);
@@ -579,6 +586,137 @@ function renderCardTab(area, archiveKey, type, month, search) {
 }
 
 // ═══ LOGS TAB ═══
+
+// ═══ MOULAGE TAB ═══
+function renderMoulageTab(area, month, search) {
+  var modData = archiveCache.moulages || {};
+  var months = month === 'all' ? Object.keys(modData).sort().reverse() : (modData[month] ? [month] : []);
+  if (months.length === 0) {
+    area.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>Aucune archive moulage trouvée' + (month !== 'all' ? ' pour ce mois' : '') + '.</p></div>';
+    return;
+  }
+
+  var cards = [];
+  months.forEach(function(m) {
+    var mData = modData[m] || {};
+    Object.keys(mData).forEach(function(id) {
+      var card = mData[id];
+      card._archiveMonth = m;
+      card._archiveId = id;
+      if (search) {
+        var str = [card.order, card.client, card.name, card.intervenant, card.representante, card.item, card.region].join(' ').toLowerCase();
+        if (str.indexOf(search) < 0) return;
+      }
+      cards.push(card);
+    });
+  });
+
+  if (cards.length === 0) {
+    area.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><p>Aucun résultat' + (search ? ' pour "' + esc(search) + '"' : '') + '</p></div>';
+    return;
+  }
+
+  cards.sort(function(a, b) { return (b.archivedAt || '').localeCompare(a.archivedAt || ''); });
+
+  var html = '<div class="archive-cards">';
+  cards.forEach(function(card) {
+    var title = (card.name || 'Sans nom') + ' — #' + (card.order || '?');
+    var subtitle = (card.client || '—') + ' | ' + (card.region || '').toUpperCase();
+    var archDate = card.archivedAt ? new Date(card.archivedAt).toLocaleDateString('fr-CA') : '?';
+    var msgCount = (card.messages || []).length;
+    var hasImages = (card.messages || []).some(function(m) { return m.image || (m.images && m.images.length > 0); });
+    html += '<div class="archive-card" onclick="openMoulageDetail(\'' + card._archiveMonth + '\',\'' + card._archiveId + '\')">';
+    html += '<button class="archive-card-delete" onclick="event.stopPropagation();deleteArchiveCard(\'moulages\',\'' + card._archiveMonth + '\',\'' + card._archiveId + '\',this)" title="Supprimer">✕</button>';
+    html += '<div class="archive-card-module moulage">MOULAGE</div>';
+    html += '<div class="archive-card-title">' + esc(title) + '</div>';
+    html += '<div class="archive-card-subtitle">' + esc(subtitle) + '</div>';
+    html += '<div class="archive-card-meta">';
+    html += '<span class="archive-card-tag">📅 ' + archDate + '</span>';
+    if (msgCount > 0) html += '<span class="archive-card-tag">💬 ' + msgCount + ' msg</span>';
+    if (hasImages) html += '<span class="archive-card-tag">📷 Photos</span>';
+    if (card.item) html += '<span class="archive-card-tag">📦 ' + esc(card.item) + '</span>';
+    if (card.rush) html += '<span class="archive-card-tag" style="background:rgba(239,68,68,0.2);color:#ef4444;">🔴 RUSH</span>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+function openMoulageDetail(month, id) {
+  var card = ((archiveCache.moulages || {})[month] || {})[id];
+  if (!card) { showToast('Archive introuvable', 'error'); return; }
+
+  var overlay = document.getElementById('detailOverlay');
+  var title = document.getElementById('detailTitle');
+  var body = document.getElementById('detailBody');
+
+  title.textContent = '🏭 ' + (card.name || '?') + ' — #' + (card.order || '');
+  var html = '<div style="margin-bottom:16px;">';
+  html += field('Bénéficiaire', card.name);
+  html += field('N° Commande', card.order);
+  html += field('Client / Centre', card.client);
+  html += field('Région', (card.region || '').toUpperCase());
+  html += field('Intervenant', card.intervenant);
+  html += field('Représentante', card.representante);
+  html += field('N° PO', card.po);
+  html += field('N° Soumission', card.soumission);
+  html += field('Item', card.item);
+  html += field('Rush', card.rush ? '🔴 OUI' : 'Non');
+  html += field('Date Reçue', card.dateRecue);
+  html += field('Date Livraison', card.dateLivraison);
+  html += field('Fab-moulage', card.dateEssayage);
+  html += field('Statut final', card.colonne || '—');
+  html += field('Archivé le', card.archivedAt ? new Date(card.archivedAt).toLocaleString('fr-CA') : '?');
+  html += field('Archivé par', card.archivedBy || '—');
+  html += '</div>';
+
+  // Tracking
+  if (card.tracking && typeof card.tracking === 'object' && Object.keys(card.tracking).length > 0) {
+    html += '<h3 style="color:var(--gold);font-size:13px;margin-bottom:8px;">📊 Tracking Production</h3>';
+    html += '<div style="background:rgba(30,58,95,0.4);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;">';
+    var trackDepts = {moulage:'Moulage',atelier:'Atelier',cnc:'CNC',laser:'Laser/Couture',magasin:'Magasin',inspection:'Inspection',assemblage:'Assemblage',expedition:'Expédition'};
+    Object.keys(card.tracking).forEach(function(k) {
+      var ts = card.tracking[k];
+      if (!ts) return;
+      var d = new Date(ts);
+      var label = trackDepts[k] || k;
+      html += '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:#93c5fd;font-weight:600;">' + label + '</span><span>' + d.toLocaleDateString('fr-CA') + ' ' + d.toLocaleTimeString('fr-CA', {hour:'2-digit',minute:'2-digit'}) + '</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // Messages
+  if (card.messages && card.messages.length > 0) {
+    html += '<h3 style="color:var(--gold);font-size:13px;margin-bottom:8px;">💬 Discussions (' + card.messages.length + ')</h3>';
+    card.messages.forEach(function(m) {
+      var borderColor = '#3b82f6';
+      if (m.type === 'problem') borderColor = '#ef4444';
+      else if (m.type === 'solution') borderColor = '#22c55e';
+      else if (m.type === 'pinned') borderColor = '#f59e0b';
+      var typeLabel = {problem:'❓ Question', solution:'✅ Réponse', normal:'💬 Discussion', pinned:'📌 Épinglé', note:'📝 Note'}[m.type] || '💬';
+      var ts = m.timestamp ? new Date(m.timestamp).toLocaleString('fr-CA') : (m.date || '');
+      html += '<div style="background:#1e293b;border-left:3px solid ' + borderColor + ';border-radius:6px;padding:8px 10px;margin-bottom:6px;">';
+      html += '<div style="display:flex;justify-content:space-between;margin-bottom:3px;"><strong style="color:#93c5fd;font-size:10px;">' + typeLabel + ' — ' + esc(m.author || '') + '</strong><span style="color:#475569;font-size:9px;">' + ts + '</span></div>';
+      html += '<div style="color:var(--text);font-size:11px;white-space:pre-wrap;">' + esc(m.text || '').replace(/\n/g, '<br>') + '</div>';
+      // Afficher les photos des discussions
+      if (m.image && m.image.startsWith('data:')) {
+        html += '<div style="margin-top:6px;"><img src="' + m.image + '" style="max-width:100%;max-height:250px;border-radius:6px;border:1px solid #333;" onerror="this.style.display=\'none\'"></div>';
+      }
+      if (m.images && m.images.length > 0) {
+        m.images.forEach(function(img) {
+          if (img && img.startsWith('data:')) {
+            html += '<div style="margin-top:6px;"><img src="' + img + '" style="max-width:100%;max-height:250px;border-radius:6px;border:1px solid #333;" onerror="this.style.display=\'none\'"></div>';
+          }
+        });
+      }
+      html += '</div>';
+    });
+  }
+
+  body.innerHTML = html;
+  overlay.classList.add('show');
+}
+
 function renderLogsTab(area, search) {
   if (logsCache.length === 0) {
     area.innerHTML = '<div class="empty-state"><div class="icon">📊</div><p>Aucun log d\'archivage trouvé.</p></div>';
@@ -714,7 +852,9 @@ function closeDetail() {
 
 // ═══ EXPORT CSV ═══
 function exportCurrentCSV() {
-  if (currentTab === 'inspection' || currentTab === 'couture') {
+  if (currentTab === 'moulage') {
+    exportMoulageCSV();
+  } else if (currentTab === 'inspection' || currentTab === 'couture') {
     exportInspCSV(currentTab);
   } else if (currentTab === 'questionnement' || currentTab === 'psm') {
     exportCardCSV(currentTab === 'questionnement' ? 'questionnements' : 'psm');
@@ -755,6 +895,19 @@ function exportCardCSV(archiveKey) {
     });
   });
   downloadCSV('archives_' + archiveKey + '.csv', lines.join('\n'));
+}
+
+function exportMoulageCSV() {
+  var modData = archiveCache.moulages || {};
+  var lines = ['Mois,ID,Nom,Commande,Client,Région,Intervenant,Item,Rush,DateReçue,DateLivraison,Messages,Archivé,Par'];
+  Object.keys(modData).sort().forEach(function(m) {
+    var mData = modData[m] || {};
+    Object.keys(mData).forEach(function(id) {
+      var c = mData[id];
+      lines.push([m, id, csvC(c.name), csvC(c.order), csvC(c.client), csvC(c.region), csvC(c.intervenant), csvC(c.item), c.rush ? 'OUI' : 'Non', csvC(c.dateRecue), csvC(c.dateLivraison), (c.messages || []).length, csvC(c.archivedAt), csvC(c.archivedBy)].join(','));
+    });
+  });
+  downloadCSV('archives_moulages.csv', lines.join('\n'));
 }
 
 function csvC(v) {
