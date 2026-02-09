@@ -7443,123 +7443,7 @@ function initSerieCardData(cardId) {
   return serieCardsData[cardId];
 }
 
-// Créer des données de TEST pour les 5 cartes série
-function initSerieTestData() {
-  console.log('🧪 Création de 4 cartes démo Série+...');
-  
-  const demoData = {
-    'demo-001': {
-      client: 'Vermeiren',
-      order: 'DEMO-001',
-      numeroPO: 'PO-V-001',
-      dateRecue: '2025-02-01',
-      dateLivraison: '2025-03-01',
-      items: [
-        {
-          name: 'Premium',
-          grandeurs: [
-            { name: '14×16', qty: 10, atelier: {}, couture: {}, inspection: {} },
-            { name: '16×16', qty: 8, atelier: {}, couture: {}, inspection: {} },
-            { name: '16×18', qty: 6, atelier: {}, couture: {}, inspection: {} },
-            { name: '18×18', qty: 5, atelier: {}, couture: {}, inspection: {} }
-          ]
-        },
-        {
-          name: 'Ultra',
-          grandeurs: [
-            { name: '16×16', qty: 12, atelier: {}, couture: {}, inspection: {} },
-            { name: '18×18', qty: 4, atelier: {}, couture: {}, inspection: {} }
-          ]
-        }
-      ]
-    },
-    'demo-002': {
-      client: 'HME',
-      order: 'DEMO-002',
-      numeroPO: 'PO-HME-002',
-      dateRecue: '2025-02-03',
-      dateLivraison: '2025-03-10',
-      items: [
-        {
-          name: 'PZ Siliko',
-          grandeurs: [
-            { name: 'S', qty: 15, atelier: {}, couture: {}, inspection: {} },
-            { name: 'M', qty: 20, atelier: {}, couture: {}, inspection: {} },
-            { name: 'L', qty: 10, atelier: {}, couture: {}, inspection: {} }
-          ]
-        }
-      ]
-    },
-    'demo-003': {
-      client: 'C1SOUTH',
-      order: 'DEMO-003',
-      numeroPO: 'PO-C1S-003',
-      dateRecue: '2025-02-04',
-      dateLivraison: '2025-03-15',
-      items: [
-        {
-          name: 'HP2',
-          grandeurs: [
-            { name: '14×16', qty: 8, atelier: {}, couture: {}, inspection: {} },
-            { name: '16×18', qty: 6, atelier: {}, couture: {}, inspection: {} }
-          ]
-        },
-        {
-          name: 'Cinch',
-          grandeurs: [
-            { name: 'M', qty: 10, atelier: {}, couture: {}, inspection: {} },
-            { name: 'L', qty: 5, atelier: {}, couture: {}, inspection: {} }
-          ]
-        }
-      ]
-    },
-    'demo-004': {
-      client: 'Cubro',
-      order: 'DEMO-004',
-      numeroPO: 'PO-CUB-004',
-      dateRecue: '2025-02-05',
-      dateLivraison: '2025-02-28',
-      items: [
-        {
-          name: 'Resolve',
-          grandeurs: [
-            { name: '16×16', qty: 12, atelier: {}, couture: {}, inspection: {} },
-            { name: '18×18', qty: 8, atelier: {}, couture: {}, inspection: {} },
-            { name: '20×18', qty: 6, atelier: {}, couture: {}, inspection: {} }
-          ]
-        }
-      ]
-    }
-  };
-
-  // Ajouter chaque carte démo
-  Object.keys(demoData).forEach(id => {
-    serieCardsData[id] = demoData[id];
-    
-    const d = demoData[id];
-    const clientClass = 'client-' + d.client.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const cardHtml = `
-      <div class="mcard ${clientClass}" draggable="true" data-id="${id}" onclick="selectSerieCard('${id}', true)">
-        <div class="mcard-header-simple">
-          <div class="mcard-client-big">${d.client}</div>
-          <div class="mcard-order-row">
-            <span class="mcard-order-big">${d.order}</span>
-            <button class="mcard-fiche-btn-corner" onclick="event.stopPropagation(); openSerieCardInfoModal('${id}')">Fiche</button>
-            <button class="mcard-delete-btn-corner" onclick="event.stopPropagation(); confirmDeleteSerieCard('${id}')">✕</button>
-          </div>
-        </div>
-      </div>
-    `;
-    
-    let cardsList = document.getElementById('serieCollapsableCards');
-    if (!cardsList) cardsList = document.getElementById('serieCardsList');
-    if (cardsList) cardsList.insertAdjacentHTML('beforeend', cardHtml);
-  });
-
-  saveSerieDataToLocalStorage();
-  updateSerieCounters();
-  console.log('✅ 4 cartes démo créées');
-}
+// [SUPPRIMÉ] Cartes démo retirées — Firebase est la source de vérité
 
 // === 24.1b FONCTION UTILITAIRE ===
 function escapeHtml(str) {
@@ -7570,14 +7454,27 @@ function escapeHtml(str) {
 // === 24.2 SAUVEGARDE/CHARGEMENT LOCALSTORAGE ===
 function saveSerieDataToLocalStorage() {
   try {
+    // Purger les cartes démo avant sauvegarde
+    Object.keys(serieCardsData).forEach(id => {
+      if (id.startsWith('demo-')) {
+        delete serieCardsData[id];
+        const dc = document.querySelector('.mcard[data-id="' + id + '"]');
+        if (dc) dc.remove();
+      }
+    });
+    
     localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
     console.log('💾 Série+: Données sauvegardées', Object.keys(serieCardsData).length, 'commandes');
     
-    // Sauvegarder aussi dans Firebase si disponible
+    // Firebase sync — JAMAIS écrire un objet vide (ça efface tout!)
     if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
-      firebaseDb.ref('serieCommandes').set(serieCardsData)
-        .then(() => console.log('☁️ Série+ synced to Firebase'))
-        .catch(e => console.error('Erreur Firebase Série+:', e));
+      if (Object.keys(serieCardsData).length > 0) {
+        firebaseDb.ref('serieCommandes').set(serieCardsData)
+          .then(() => console.log('☁️ Série+ synced to Firebase (' + Object.keys(serieCardsData).length + ' cartes)'))
+          .catch(e => console.error('Erreur Firebase Série+:', e));
+      } else {
+        console.log('⚠️ Skip Firebase sync — aucune carte');
+      }
     }
   } catch (e) {
     console.error('Erreur sauvegarde Série+:', e);
@@ -7609,29 +7506,61 @@ function loadSerieDataFromLocalStorage() {
     console.error('Erreur chargement Série+:', e);
   }
   
-  // Ajouter listener Firebase si disponible
+  // Firebase = SOURCE DE VÉRITÉ pour les cartes Série+
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
     firebaseDb.ref('serieCommandes').on('value', (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        Object.keys(data).forEach(cardId => {
-          serieCardsData[cardId] = data[cardId];
-          // v776: Recréer si manquante
-          const existingCard = document.querySelector(`.mcard[data-id="${cardId}"]`);
-          if (!existingCard) {
-            createSerieCardFromData(cardId, serieCardsData[cardId]);
-          }
-        });
-        console.log('☁️ Série+ chargé depuis Firebase:', Object.keys(serieCardsData).length, 'commandes');
-        
-        // Mettre à jour l'affichage
-        Object.keys(serieCardsData).forEach(cardId => {
-          updateSerieCardDisplay(cardId);
-        });
-        updateSerieCounters();
-        if (typeof renderTotalMateriauxView === 'function') {
-          renderTotalMateriauxView();
+      const fbData = snapshot.exists() ? snapshot.val() : {};
+      
+      // 1. Purger les cartes démo de Firebase
+      const demoKeys = Object.keys(fbData).filter(id => id.startsWith('demo-'));
+      if (demoKeys.length > 0) {
+        console.log('🧹 Purge ' + demoKeys.length + ' cartes démo de Firebase');
+        const purge = {};
+        demoKeys.forEach(k => { purge[k] = null; });
+        firebaseDb.ref('serieCommandes').update(purge);
+        demoKeys.forEach(k => { delete fbData[k]; });
+      }
+      
+      // 2. Supprimer du DOM les cartes disparues de Firebase
+      const oldIds = new Set(Object.keys(serieCardsData));
+      const newIds = new Set(Object.keys(fbData));
+      oldIds.forEach(oldId => {
+        if (!newIds.has(oldId)) {
+          const stale = document.querySelector('.mcard[data-id="' + oldId + '"]') || 
+                       document.querySelector('.mcard[data-card-id="' + oldId + '"]');
+          if (stale) stale.remove();
         }
+      });
+      
+      // 3. REMPLACER les données locales avec Firebase
+      serieCardsData = {};
+      Object.keys(fbData).forEach(cid => {
+        if (!cid.startsWith('demo-')) serieCardsData[cid] = fbData[cid];
+      });
+      
+      // 4. Créer les cartes manquantes dans le DOM
+      Object.keys(serieCardsData).forEach(cid => {
+        const exists = document.querySelector('.mcard[data-id="' + cid + '"]') || 
+                      document.querySelector('.mcard[data-card-id="' + cid + '"]');
+        if (!exists) createSerieCardFromData(cid, serieCardsData[cid]);
+      });
+      
+      console.log('☁️ Firebase → Série+:', Object.keys(serieCardsData).length, 'commandes');
+      
+      // 5. Sauvegarder en local SANS ré-écrire Firebase (évite boucle)
+      try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
+      
+      // 6. Rafraîchir l'affichage
+      Object.keys(serieCardsData).forEach(cid => { updateSerieCardDisplay(cid); });
+      updateSerieCounters();
+      if (typeof renderTotalMateriauxView === 'function') renderTotalMateriauxView();
+      
+      // 7. Auto-sélectionner première carte si besoin
+      if (!currentSerieId || !serieCardsData[currentSerieId]) {
+        const first = document.querySelector('#serieCollapsableCards .mcard, #serieCardsList .mcard');
+        if (first && first.dataset.id) selectSerieCard(first.dataset.id, false);
+      } else {
+        renderSerie3Cols(currentSerieId);
       }
     });
   }
@@ -8931,7 +8860,7 @@ function renderSerieAtelier(cardId, items) {
         else if (g.atelier?.inspected) { sendBtnClass = 'inspected'; sendBtnText = 'Inspecté'; }
         
         html += '<tr class="grandeur-row' + rowCls + '" data-item="' + itemIdx + '" data-gidx="' + gIdx + '">';
-        // Checkbox — masquer si déjà envoyé en inventaire
+        // Checkbox — masquer si envoyé en inventaire
         if (g.atelier?.sentToInventaire) {
           html += '<td class="c-chk"><span style="font-size:7px;color:#4ade80;font-weight:800;letter-spacing:-0.3px;">✓INV</span></td>';
         } else {
@@ -9021,7 +8950,7 @@ function renderSerieCouture(cardId, items) {
         else if (g.couture?.habille) { sendBtnClass = 'inspected'; sendBtnText = 'Habillé ✓'; }
         
         html += '<tr class="grandeur-row' + rowCls + '">';
-        // Checkbox — masquer si déjà envoyé en inventaire
+        // Checkbox — masquer si envoyé en inventaire
         if (g.couture?.sentToInventaire) {
           html += '<td class="c-chk"><span style="font-size:7px;color:#a78bfa;font-weight:800;letter-spacing:-0.3px;">✓INV</span></td>';
         } else {
@@ -9600,7 +9529,6 @@ function toggleSeriePrepared(cardId) {
 // Exposer les fonctions
 window.addPrepPillsToSerieCards = addPrepPillsToSerieCards;
 window.toggleSeriePrepared = toggleSeriePrepared;
-window.initSerieTestData = initSerieTestData;
 
 // === 24.7 AFFICHAGE DU DÉLAI ===
 function updateSerieDelaiDisplay(cardId) {
@@ -10192,13 +10120,11 @@ function updateSerieQtyFait(cardId, itemIdx, gIdx, dept, value) {
   let qtyFait = parseInt(value) || 0;
   const qtyTotal = parseInt(g.qty) || 0;
 
-  // Limiter à la quantité max
   if (qtyFait > qtyTotal) qtyFait = qtyTotal;
   if (qtyFait < 0) qtyFait = 0;
 
   g[dept].qtyFait = qtyFait;
 
-  // Mettre à jour le statut automatiquement
   if (qtyFait >= qtyTotal && qtyTotal > 0) {
     g[dept].status = 'done';
   } else if (qtyFait > 0) {
@@ -10214,7 +10140,7 @@ function updateSerieQtyFait(cardId, itemIdx, gIdx, dept, value) {
     firebaseDb.ref(fbPath + '/status').set(g[dept].status);
   }
 
-  // INSPECTION AUTO-CASCADE: quand inspection complète, auto-compléter Inventaire
+  // INSPECTION AUTO-CASCADE: compléter Inventaire automatiquement
   if (dept === 'inspection' && qtyFait >= qtyTotal && qtyTotal > 0) {
     autoCompleteInventaireFromInspection(cardId, itemIdx, gIdx);
   }
@@ -10996,12 +10922,10 @@ function createSerieInventory() {
     const grandeurName = g.name || cb.dataset.gname || 'STD';
     const qty = parseInt(g.qty) || parseInt(cb.dataset.qty) || 1;
     
-    // Marquer comme distribué + envoyé en inventaire dans Série+
+    // Marquer comme distribué dans Série+
     if (!g.atelier) g.atelier = {};
     g.atelier.distributed = true;
     g.atelier.sentToInventaire = true;
-    
-    // Persister le flag dans Firebase
     if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
       firebaseDb.ref('serieCommandes/' + currentSerieId + '/items/' + itemIdx + '/grandeurs/' + gIdx + '/atelier/sentToInventaire').set(true);
     }
@@ -11127,12 +11051,10 @@ function createSerieInventoryCouture() {
       inventaireDataCouture[invId] = invItem;
       inventaireData[invId] = { ...invItem, rang: 'main', type: 'couture' };
       
-      // Marquer distribué + envoyé en inventaire dans Couture
+      // Marquer distribué dans Couture
       if (!g.couture) g.couture = { note: '', qtyFait: 0, coutureStatus: 'afaire' };
       g.couture.distributed = true;
       g.couture.sentToInventaire = true;
-      
-      // Persister le flag dans Firebase
       if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
         firebaseDb.ref('serieCommandes/' + currentSerieId + '/items/' + itemIdx + '/grandeurs/' + gIdx + '/couture/sentToInventaire').set(true);
       }
@@ -11156,30 +11078,23 @@ function createSerieInventoryCouture() {
   updateSerieSelection();
 }
 
-// ═══ AUTO-CASCADE: Inspection → Inventaire + Série+ ═══
-// Quand une grandeur est complétée en inspection, auto-compléter dans Inventaire
+// ═══ AUTO-CASCADE: Inspection → Inventaire ═══
 function autoCompleteInventaireFromInspection(cardId, itemIdx, gIdx) {
   if (typeof firebaseDb === 'undefined' || !firebaseDb || !isFirebaseEnabled) return;
-  
   ['atelier', 'couture'].forEach(function(dept) {
-    firebaseDb.ref('inventaire_v4/bassin/' + dept).once('value', function(snapshot) {
-      var bassinData = snapshot.val() || {};
-      Object.keys(bassinData).forEach(function(invId) {
-        var item = bassinData[invId];
-        if (item.fromSerie && item.linkedCmd === cardId && 
-            item.linkedItemIdx === itemIdx && item.linkedGrandeurIdx === gIdx) {
-          var fabId = 'fab_insp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-          var fabItem = {
-            commande: item.commande, client: item.client, nom: item.nom,
-            grandeur: item.grandeur, quantite: item.quantite, dateAdded: item.dateAdded,
-            completedDate: new Date().toISOString(), completedBy: 'auto-inspection',
-            autoInspection: true, fromSerie: true, linkedCmd: item.linkedCmd,
-            linkedItemIdx: item.linkedItemIdx, linkedGrandeurIdx: item.linkedGrandeurIdx,
-            originalId: invId
-          };
-          firebaseDb.ref('inventaire_v4/fabrique/' + dept + '/' + fabId).set(fabItem);
+    firebaseDb.ref('inventaire_v4/bassin/' + dept).once('value', function(snap) {
+      var bd = snap.val() || {};
+      Object.keys(bd).forEach(function(invId) {
+        var it = bd[invId];
+        if (it.fromSerie && it.linkedCmd === cardId && it.linkedItemIdx === itemIdx && it.linkedGrandeurIdx === gIdx) {
+          var fid = 'fab_insp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+          var fi = { commande:it.commande, client:it.client, nom:it.nom, grandeur:it.grandeur, quantite:it.quantite,
+            dateAdded:it.dateAdded, completedDate:new Date().toISOString(), completedBy:'auto-inspection',
+            autoInspection:true, fromSerie:true, linkedCmd:it.linkedCmd,
+            linkedItemIdx:it.linkedItemIdx, linkedGrandeurIdx:it.linkedGrandeurIdx, originalId:invId };
+          firebaseDb.ref('inventaire_v4/fabrique/' + dept + '/' + fid).set(fi);
           firebaseDb.ref('inventaire_v4/bassin/' + dept + '/' + invId).remove();
-          console.log('[INSPECTION→INV] Auto-complété ' + dept + ': ' + item.nom + ' ' + item.grandeur);
+          console.log('[INSPECTION→INV] Auto-complété ' + dept + ': ' + it.nom + ' ' + it.grandeur);
         }
       });
     });
@@ -12382,18 +12297,11 @@ document.addEventListener('DOMContentLoaded', function() {
     loadInventaireDataFromLocalStorage(); // Charger inventaire
     initExistingSerieCards();
     
-    // v2: Toujours créer les cartes démo si aucune carte n'est affichée
-    const hasRealData = Object.keys(serieCardsData).some(id => 
-      !id.startsWith('test-') && !id.startsWith('demo-') && !id.startsWith('cmd-')
-    );
-    if (!hasRealData && Object.keys(serieCardsData).length === 0) {
-      console.log('🧪 Aucune donnée trouvée, création des 4 cartes démo...');
-      initSerieTestData();
-    } else if (Object.keys(serieCardsData).length === 0) {
-      console.log('🧪 Données vides, création des 4 cartes démo...');
-      initSerieTestData();
+    // Firebase = source de vérité. Aucune carte démo.
+    if (Object.keys(serieCardsData).length === 0) {
+      console.log('📂 Série+: En attente de Firebase...');
     } else {
-      console.log('📂 Données existantes trouvées:', Object.keys(serieCardsData).length, 'commandes');
+      console.log('📂 Données existantes:', Object.keys(serieCardsData).length, 'commandes');
     }
     
     // Rafraîchir l'affichage
