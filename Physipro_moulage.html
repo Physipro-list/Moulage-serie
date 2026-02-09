@@ -8,6 +8,27 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
+    v1587 - BOUTON CAMERA MOBILE + NAV MOBILE MOULAGE ONLY
+    ═══════════════════════════════════════════════════════════════════
+    
+    🆕 MODIFICATIONS v1587:
+    
+    1. BOUTON 📷 DANS LE HEADER PHOTOS MOBILE
+       → Bouton vert camera dans la page Photos mobile
+       → Ouvre directement l'appareil photo arrière
+       → L'inspectrice prend la photo → elle apparaît immédiatement
+       → Upload Firebase Storage automatique avec compression
+    
+    2. BOUTON CAMERA DANS ZONE VIDE MOBILE
+       → Quand aucune photo, bouton vert "📷 Prendre une photo"
+       → Même fonctionnement que le bouton du header
+    
+    3. NAVIGATION MOBILE = MOULAGE SEULEMENT
+       → Le menu nav (logo) montre uniquement Moulage sur téléphone
+       → Pas d'accès aux autres modules depuis le mobile
+       → L'écran d'accueil reste: 🏭 Moulage + 📷 Application Photo
+    
+    ═══════════════════════════════════════════════════════════════════
     v1586 - BOUTON APPAREIL PHOTO DANS SIDEBAR PHOTOS
     ═══════════════════════════════════════════════════════════════════
     
@@ -2623,6 +2644,13 @@
         background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%);
         box-shadow: 0 2px 10px rgba(0,0,0,0.5);
       }
+      .mobile-photos-camera-btn {
+        width: 36px; height: 36px; background: linear-gradient(135deg, #22c55e, #16a34a);
+        color: #fff; border: 2px solid rgba(255,255,255,0.4); border-radius: 50%;
+        font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 2px 8px rgba(34,197,94,0.4); transition: all 0.2s;
+      }
+      .mobile-photos-camera-btn:active { transform: scale(0.9); background: #16a34a; }
       .mobile-photos-title {
         flex: 1; font-size: 15px; font-weight: 700; color: #fff;
       }
@@ -3357,6 +3385,8 @@
     <div class="mobile-photos-header">
       <button class="mobile-back-btn" onclick="goToMobileFiche()">→</button>
       <span class="mobile-photos-title">📷 Photos</span>
+      <button class="mobile-photos-camera-btn" onclick="captureMobilePhoto()" title="Prendre une photo">📷</button>
+      <input type="file" id="mobilePhotoCaptureInput" accept="image/*" capture="environment" style="display:none" onchange="handleMobilePhotoCapture(this.files)">
     </div>
     <div class="mobile-photos-folder" id="mobilePhotosFolder">-</div>
     <div class="mobile-photos-grid" id="mobilePhotosGrid">
@@ -4218,7 +4248,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1586';
+    const APP_VERSION = '1587';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -14427,6 +14457,78 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     }
     window.goToMobilePhotos = goToMobilePhotos;
     
+    // ═══ Capture photo directe depuis la page Photos mobile ═══
+    function captureMobilePhoto() {
+      if (!mobileCurrentCardId) {
+        showToast('⚠️ Ouvrez une fiche d\'abord', 'warning');
+        return;
+      }
+      const card = cardsData[mobileCurrentCardId];
+      if (!card || !card.order) {
+        showToast('⚠️ Numéro de commande manquant', 'warning');
+        return;
+      }
+      document.getElementById('mobilePhotoCaptureInput').click();
+    }
+    window.captureMobilePhoto = captureMobilePhoto;
+    
+    // ═══ Gérer la photo capturée depuis mobile ═══
+    async function handleMobilePhotoCapture(files) {
+      if (!files || files.length === 0) return;
+      
+      const card = cardsData[mobileCurrentCardId];
+      if (!card || !card.order) return;
+      
+      const orderNumber = card.order;
+      const grid = document.getElementById('mobilePhotosGrid');
+      
+      // Garder les photos existantes et ajouter un indicateur de chargement en haut
+      const loadingDiv = document.createElement('div');
+      loadingDiv.className = 'mobile-photos-loading';
+      loadingDiv.id = 'mobilePhotoUploading';
+      loadingDiv.innerHTML = '<div class="mobile-photos-spinner"></div><div style="color:#93c5fd;font-size:13px;">📷 Upload en cours...</div>';
+      if (grid) grid.insertBefore(loadingDiv, grid.firstChild);
+      
+      try {
+        const file = files[0];
+        if (!file.type.startsWith('image/')) {
+          showToast('⚠️ Fichier non valide', 'warning');
+          const el = document.getElementById('mobilePhotoUploading');
+          if (el) el.remove();
+          return;
+        }
+        
+        // Compresser
+        const compressed = await compressPhotoFile(file);
+        
+        // Nom du fichier
+        const timestamp = Date.now();
+        const fileName = `${timestamp}_moulage_photo.jpg`;
+        
+        // Upload vers Firebase Storage
+        const ref = storage.ref(`photos/moulages/${orderNumber}/${fileName}`);
+        await ref.put(compressed, { contentType: 'image/jpeg' });
+        
+        showToast('✅ Photo ajoutée!', 'success');
+        
+        // Recharger les photos dans la page mobile ET dans le sidebar desktop
+        sidebarPhotosLoaded = false;
+        sidebarPhotosCardId = null;
+        loadMobilePhotos();
+        loadSidebarPhotos();
+        
+      } catch (error) {
+        console.error('❌ Erreur capture photo mobile:', error);
+        showToast('❌ Erreur: ' + error.message, 'error');
+        const el = document.getElementById('mobilePhotoUploading');
+        if (el) el.remove();
+      }
+      
+      // Reset l'input
+      document.getElementById('mobilePhotoCaptureInput').value = '';
+    }
+    window.handleMobilePhotoCapture = handleMobilePhotoCapture;
+    
     // Charger les photos Firebase Storage pour mobile (v1585)
     async function loadMobilePhotos() {
       const card = cardsData[mobileCurrentCardId];
@@ -14465,6 +14567,9 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             <div class="mobile-photos-empty">
               <div class="mobile-photos-empty-icon">📷</div>
               <div>Aucune photo pour<br><strong>${orderNumber}</strong></div>
+              <button onclick="captureMobilePhoto()" style="margin-top:15px;padding:12px 20px;font-size:14px;background:linear-gradient(135deg,#22c55e,#16a34a);color:white;border:none;border-radius:10px;cursor:pointer;box-shadow:0 3px 10px rgba(34,197,94,0.4);">
+                📷 Prendre une photo
+              </button>
             </div>
           `;
           return;
