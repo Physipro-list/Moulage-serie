@@ -8,20 +8,22 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
-    v1583 - RETOUR ONEDRIVE LECTURE SEULE + ARCHIVES FIREBASE
+    v1584 - RETOUR ONEDRIVE LECTURE SEULE + ARCHIVES FIREBASE + FIX CACHE
     ═══════════════════════════════════════════════════════════════════
     
-    🆕 MODIFICATIONS v1583:
+    🆕 MODIFICATIONS v1584:
     
-    1. PERMISSIONS ONEDRIVE CORRIGÉES
-       → Enlevé Files.ReadWrite.All des scopes (causait refus d'accès)
-       → Photos sidebar fonctionnent avec Files.Read + Files.Read.All seulement
-       → Plus besoin de permissions d'écriture
+    1. PERMISSIONS ONEDRIVE CORRIGÉES - RETOUR À L'ORIGINAL
+       → Scopes EXACTEMENT comme quand ça marchait: Files.Read, Files.Read.All, User.Read
+       → Enlevé Files.ReadWrite.All (causait "Approbation admin requise")
+       → Enlevé Sites.Read.All (idem)
+       → Nettoyage automatique du cache MSAL au premier chargement
+         (supprime les anciennes sessions avec les mauvais scopes)
     
     2. ARCHIVAGE ONEDRIVE RETIRÉ
        → Bouton "Archiver OneDrive" enlevé
        → Fonctions upload/écriture OneDrive supprimées
-       → Fini les problèmes de permissions écriture
+       → Plus besoin de permissions d'écriture
     
     3. ARCHIVAGE FIREBASE À LA SUPPRESSION
        → Quand on supprime une carte, la fiche est archivée dans Firebase
@@ -4186,7 +4188,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1583';
+    const APP_VERSION = '1584';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -12173,6 +12175,29 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     // Initialiser MSAL
     function initMSAL() {
       try {
+        // ═══ NETTOYAGE CACHE MSAL v1583 ═══
+        // Forcer un reset une seule fois pour éliminer les anciens scopes 
+        // (Files.ReadWrite.All, Sites.Read.All) qui causaient "Admin consent required"
+        const MSAL_CACHE_VERSION = 'msal_clean_v1583';
+        if (!localStorage.getItem(MSAL_CACHE_VERSION)) {
+          console.log('🧹 Nettoyage cache MSAL (migration v1583)...');
+          // Supprimer toutes les entrées MSAL du localStorage
+          const keysToRemove = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('msal.') || key.startsWith('msal-') || key === 'onedriveAccessToken' || key.indexOf('.login.windows.net') > -1)) {
+              keysToRemove.push(key);
+            }
+          }
+          keysToRemove.forEach(key => {
+            localStorage.removeItem(key);
+            console.log('  🗑️ Supprimé:', key);
+          });
+          // Marquer comme nettoyé
+          localStorage.setItem(MSAL_CACHE_VERSION, 'done');
+          console.log('✅ Cache MSAL nettoyé (' + keysToRemove.length + ' entrées supprimées)');
+        }
+        
         if (typeof msal !== 'undefined') {
           msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
           console.log('✅ MSAL initialisé');
