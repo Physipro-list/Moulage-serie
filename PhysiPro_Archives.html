@@ -693,43 +693,41 @@ function openMoulageDetail(month, id) {
     html += '</div>';
   }
 
-  // ═══ PHOTOS SIDEBAR (copiées depuis Firebase Storage) ═══
+  // ═══ SECTION: TOUTES LES PHOTOS DU MOULAGE ═══
+  var allMoulagePhotos = [];
+  // Photos sidebar (Firebase Storage)
   if (card.sidebarPhotos && card.sidebarPhotos.length > 0) {
-    html += '<h3 style="color:var(--gold);font-size:13px;margin-bottom:8px;">📷 Photos du moulage (' + card.sidebarPhotos.length + ')</h3>';
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:16px;">';
-    card.sidebarPhotos.forEach(function(photo, idx) {
-      html += '<div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#0a1628;cursor:pointer;" onclick="openArchivePhotoZoom(\'' + (photo.url || '').replace(/'/g, "\\'") + '\')">';
-      html += '<img src="' + (photo.url || '') + '" style="width:100%;height:120px;object-fit:cover;" onerror="this.parentElement.style.display=\'none\'" loading="lazy">';
-      html += '<div style="padding:4px 6px;font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(photo.name || 'Photo ' + (idx+1)) + '</div>';
-      html += '</div>';
-    });
-    html += '</div>';
+    card.sidebarPhotos.forEach(function(p) { allMoulagePhotos.push({ type: 'sidebar', url: p.url, name: p.name }); });
+  }
+  // Photos d'archive (modal)
+  if (card.archivePhotos && card.archivePhotos.length > 0) {
+    card.archivePhotos.forEach(function(p) { if (p.data) allMoulagePhotos.push({ type: 'archive', url: p.data, name: p.name, by: p.uploadedBy }); });
   }
 
-  // ═══ PHOTOS D'ARCHIVE (base64 du modal archive) ═══
-  if (card.archivePhotos && card.archivePhotos.length > 0) {
-    html += '<h3 style="color:var(--gold);font-size:13px;margin-bottom:8px;">🗄️ Photos d\'archive (' + card.archivePhotos.length + ')</h3>';
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:16px;">';
-    card.archivePhotos.forEach(function(photo, idx) {
-      var src = photo.data || '';
-      if (src) {
-        html += '<div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#0a1628;cursor:pointer;" onclick="openArchivePhotoZoom(\'' + src.substring(0, 50) + '...\')">';
-        html += '<img src="' + src + '" style="width:100%;height:120px;object-fit:cover;" onerror="this.parentElement.style.display=\'none\'" loading="lazy">';
-        html += '<div style="padding:4px 6px;font-size:9px;color:var(--muted);">' + esc(photo.name || 'Photo ' + (idx+1)) + (photo.uploadedBy ? ' — ' + esc(photo.uploadedBy.split('@')[0]) : '') + '</div>';
-        html += '</div>';
-      }
+  if (allMoulagePhotos.length > 0) {
+    html += '<div style="background:rgba(30,58,95,0.3);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:16px;">';
+    html += '<h3 style="color:var(--gold);font-size:13px;margin-bottom:10px;">📷 Photos du moulage (' + allMoulagePhotos.length + ')</h3>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;">';
+    allMoulagePhotos.forEach(function(photo, idx) {
+      html += '<div class="zoomable-photo-card" style="border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#0a1628;cursor:pointer;">';
+      html += '<img src="' + photo.url + '" class="zoomable-photo" style="width:100%;height:120px;object-fit:cover;display:block;" onerror="this.parentElement.style.display=\'none\'" loading="lazy">';
+      html += '<div style="padding:4px 6px;font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">';
+      html += esc(photo.name || 'Photo ' + (idx+1));
+      if (photo.by) html += ' — ' + esc(photo.by.split('@')[0]);
+      html += '</div></div>';
     });
-    html += '</div>';
+    html += '</div></div>';
   }
 
   // ═══ CHARGEMENT DES PHOTOS DEPUIS STORAGE (si pas encore archivées) ═══
   if ((!card.sidebarPhotos || card.sidebarPhotos.length === 0) && card.order) {
-    html += '<div id="archiveLivePhotos"><div style="color:var(--muted);font-size:11px;padding:8px;">📷 Recherche de photos dans le stockage...</div></div>';
+    html += '<div id="archiveLivePhotos" style="margin-bottom:16px;"><div style="color:var(--muted);font-size:11px;padding:8px;">📷 Recherche de photos dans le stockage...</div></div>';
   }
 
-  // Messages
+  // ═══ SECTION: DISCUSSIONS AVEC LEURS PHOTOS ═══
   if (card.messages && card.messages.length > 0) {
-    html += '<h3 style="color:var(--gold);font-size:13px;margin-bottom:8px;">💬 Discussions (' + card.messages.length + ')</h3>';
+    html += '<div style="background:rgba(30,58,95,0.3);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:16px;">';
+    html += '<h3 style="color:var(--gold);font-size:13px;margin-bottom:10px;">💬 Discussions (' + card.messages.length + ')</h3>';
     card.messages.forEach(function(m) {
       var borderColor = '#3b82f6';
       if (m.type === 'problem') borderColor = '#ef4444';
@@ -737,22 +735,33 @@ function openMoulageDetail(month, id) {
       else if (m.type === 'pinned') borderColor = '#f59e0b';
       var typeLabel = {problem:'❓ Question', solution:'✅ Réponse', normal:'💬 Discussion', pinned:'📌 Épinglé', note:'📝 Note'}[m.type] || '💬';
       var ts = m.timestamp ? new Date(m.timestamp).toLocaleString('fr-CA') : (m.date || '');
+      
       html += '<div style="background:#1e293b;border-left:3px solid ' + borderColor + ';border-radius:6px;padding:8px 10px;margin-bottom:6px;">';
       html += '<div style="display:flex;justify-content:space-between;margin-bottom:3px;"><strong style="color:#93c5fd;font-size:10px;">' + typeLabel + ' — ' + esc(m.author || '') + '</strong><span style="color:#475569;font-size:9px;">' + ts + '</span></div>';
-      html += '<div style="color:var(--text);font-size:11px;white-space:pre-wrap;">' + esc(m.text || '').replace(/\n/g, '<br>') + '</div>';
-      // Afficher les photos des discussions
-      if (m.image && m.image.startsWith('data:')) {
-        html += '<div style="margin-top:6px;"><img src="' + m.image + '" class="zoomable-photo" style="max-width:100%;max-height:250px;border-radius:6px;border:1px solid #333;cursor:pointer;" onerror="this.style.display=\'none\'"></div>';
+      
+      // Texte du message
+      if (m.text) {
+        html += '<div style="color:var(--text);font-size:11px;white-space:pre-wrap;margin-bottom:4px;">' + esc(m.text).replace(/\n/g, '<br>') + '</div>';
       }
+      
+      // Photos intégrées dans le message
+      var msgPhotos = [];
+      if (m.image && m.image.startsWith('data:')) msgPhotos.push(m.image);
       if (m.images && m.images.length > 0) {
-        m.images.forEach(function(img) {
-          if (img && img.startsWith('data:')) {
-            html += '<div style="margin-top:6px;"><img src="' + img + '" class="zoomable-photo" style="max-width:100%;max-height:250px;border-radius:6px;border:1px solid #333;cursor:pointer;" onerror="this.style.display=\'none\'"></div>';
-          }
-        });
+        m.images.forEach(function(img) { if (img && img.startsWith('data:')) msgPhotos.push(img); });
       }
+      
+      if (msgPhotos.length > 0) {
+        html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">';
+        msgPhotos.forEach(function(src) {
+          html += '<img src="' + src + '" class="zoomable-photo" style="max-width:100%;max-height:220px;border-radius:6px;border:1px solid #333;cursor:pointer;" onerror="this.style.display=\'none\'">';
+        });
+        html += '</div>';
+      }
+      
       html += '</div>';
     });
+    html += '</div>';
   }
 
   body.innerHTML = html;
