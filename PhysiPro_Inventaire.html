@@ -96,12 +96,15 @@ body{margin:0;padding:0;font-family:'Segoe UI',system-ui,-apple-system,sans-seri
 .logo-top-fixed img{height:40px;width:auto;filter:brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,.3));}
 .logo-bottom-text{font-size:15px;font-weight:600;color:#fff;text-shadow:1px 1px 3px rgba(0,0,0,.6);margin-top:-4px;}
 /* ═══ TAB BAR ═══ */
-.tab-bar{display:flex;align-items:stretch;height:38px;background:transparent;flex-shrink:0;padding:0;gap:0;}
-.tab-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:0;font-size:13px;font-weight:700;color:rgba(255,255,255,0.6);cursor:pointer;padding:0 18px;transition:all .2s;border-bottom:3px solid transparent;background:rgba(255,255,255,0.03);}
-.tab-btn:hover{color:#fff;background:rgba(255,255,255,0.06);}
-.tab-btn.atelier.active{color:#fff;background:linear-gradient(180deg,rgba(37,99,235,0.25) 0%,rgba(37,99,235,0.08) 100%);border-bottom:3px solid #3b82f6;}
-.tab-btn.couture.active{color:#fff;background:linear-gradient(180deg,rgba(139,92,246,0.25) 0%,rgba(139,92,246,0.08) 100%);border-bottom:3px solid #8b5cf6;}
-.tab-count{background:rgba(255,255,255,0.25);padding:1px 7px;border-radius:10px;font-size:9px;font-weight:800;}
+.tab-bar{display:none;}
+.dept-btn-row{display:flex;gap:8px;padding:8px 10px;background:linear-gradient(to bottom,rgba(15,23,42,0.95),rgba(15,23,42,0.7));}
+.dept-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 20px;border:2px solid rgba(255,255,255,0.12);border-radius:12px;font-size:16px;font-weight:800;color:rgba(255,255,255,0.45);cursor:pointer;transition:all .25s;background:rgba(255,255,255,0.03);text-transform:uppercase;letter-spacing:1px;}
+.dept-btn:hover{color:#fff;background:rgba(255,255,255,0.07);transform:translateY(-1px);}
+.dept-btn.atelier.active{color:#fff;background:linear-gradient(135deg,rgba(37,99,235,0.4),rgba(37,99,235,0.12));border-color:#3b82f6;box-shadow:0 4px 20px rgba(59,130,246,0.3),inset 0 1px 0 rgba(255,255,255,0.1);}
+.dept-btn.couture.active{color:#fff;background:linear-gradient(135deg,rgba(139,92,246,0.4),rgba(139,92,246,0.12));border-color:#8b5cf6;box-shadow:0 4px 20px rgba(139,92,246,0.3),inset 0 1px 0 rgba(255,255,255,0.1);}
+.dept-btn .dept-count{background:rgba(255,255,255,0.2);padding:2px 10px;border-radius:12px;font-size:11px;font-weight:800;}
+.dept-btn.atelier.active .dept-count{background:rgba(59,130,246,0.5);}
+.dept-btn.couture.active .dept-count{background:rgba(139,92,246,0.5);}
 .tab-spacer{flex:1;}
 .tab-btn-add{height:28px;display:flex;align-items:center;gap:4px;padding:0 14px;background:linear-gradient(to bottom,#22c55e,#16a34a);color:#fff;border:2px solid #000;border-radius:14px;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;}
 .tab-btn-add:hover{background:linear-gradient(to bottom,#4ade80,#22c55e);}
@@ -228,6 +231,8 @@ body{margin:0;padding:0;font-family:'Segoe UI',system-ui,-apple-system,sans-seri
   .topbar{min-height:60px;padding:4px 10px;}
   .top-title{font-size:18px;}
   .panel-header-search{width:120px;}
+  .dept-btn{padding:10px 12px;font-size:14px;}
+  .dept-btn-row{padding:6px 8px;gap:6px;}
 }
 /* ═══ LOGO NAVIGATION MODAL ═══ */
 .nav-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:99990;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);animation:navFadeIn .2s ease;}
@@ -307,9 +312,9 @@ if(localStorage.getItem('physipro_last_email')){
 
 <div class="main-split">
   <div class="panel-left">
-    <div class="tab-bar" style="margin:0;border-radius:0;">
-      <button class="tab-btn atelier active" id="tabAtelier" onclick="switchTab('atelier')">🔧 Atelier <span class="tab-count" id="countAtelier">0</span></button>
-      <button class="tab-btn couture" id="tabCouture" onclick="switchTab('couture')">🧵 Couture <span class="tab-count" id="countCouture">0</span></button>
+    <div class="dept-btn-row">
+      <button class="dept-btn atelier active" id="tabAtelier" onclick="switchTab('atelier')">🔧 Atelier <span class="dept-count" id="countAtelier">0</span></button>
+      <button class="dept-btn couture" id="tabCouture" onclick="switchTab('couture')">🧵 Couture <span class="dept-count" id="countCouture">0</span></button>
     </div>
     <div class="panel-header bassin">
       <span class="panel-header-title">📦 Bassin — En attente</span>
@@ -606,7 +611,7 @@ function moveToFabrique(id){
   delete bd[id];
   renderBassin();renderFabrique();updateCounts();
   saveBassin(currentTab);saveFabrique(currentTab);
-  // Reverse sync: update serieCommandes to mark inspected
+  // Reverse sync: update serieCommandes — mark complete + set qtyFait
   if(item.fromSerie&&item.linkedCmd){
     var atelierPath='items/'+item.linkedItemIdx+'/grandeurs/'+item.linkedGrandeurIdx+'/atelier';
     var couturePath='items/'+item.linkedItemIdx+'/grandeurs/'+item.linkedGrandeurIdx+'/couture';
@@ -615,12 +620,17 @@ function moveToFabrique(id){
       updates[atelierPath+'/inspected']=true;
       updates[atelierPath+'/inspectedBy']=currentUser?currentUser.email:'inventaire-manual';
       updates[atelierPath+'/inspectedAt']=new Date().toISOString();
+      updates[atelierPath+'/qtyFait']=parseInt(item.quantite)||0;
+      updates[atelierPath+'/status']='done';
+      updates[atelierPath+'/fabrique']=true;
     }else{
-      updates[couturePath+'/status']='pret';
+      updates[couturePath+'/status']='done';
       updates[couturePath+'/inspected']=true;
+      updates[couturePath+'/qtyFait']=parseInt(item.quantite)||0;
+      updates[couturePath+'/fabrique']=true;
     }
     db.ref('serieCommandes/'+item.linkedCmd).update(updates)
-      .then(function(){console.log('[INV→SERIE] Synced fabriqué to serieCommandes');})
+      .then(function(){console.log('[INV→SERIE] Synced fabriqué+qtyFait to serieCommandes');})
       .catch(function(e){console.error('[INV→SERIE] Sync error:',e);});
   }
   showToast('✅ '+(item.nom||'#'+item.commande)+' — Fabriqué!','teal');
@@ -636,14 +646,20 @@ function restoreToBassin(id){
   delete fd[id];
   renderBassin();renderFabrique();updateCounts();
   saveBassin(currentTab);saveFabrique(currentTab);
-  // Reverse sync: un-mark inspected in serieCommandes
+  // Reverse sync: un-mark + reset qtyFait in serieCommandes
   if(item.fromSerie&&item.linkedCmd){
     var updates={};
+    var basePath='items/'+item.linkedItemIdx+'/grandeurs/'+item.linkedGrandeurIdx;
     if(currentTab==='atelier'){
-      updates['items/'+item.linkedItemIdx+'/grandeurs/'+item.linkedGrandeurIdx+'/atelier/inspected']=false;
+      updates[basePath+'/atelier/inspected']=false;
+      updates[basePath+'/atelier/qtyFait']=0;
+      updates[basePath+'/atelier/status']='todo';
+      updates[basePath+'/atelier/fabrique']=false;
     }else{
-      updates['items/'+item.linkedItemIdx+'/grandeurs/'+item.linkedGrandeurIdx+'/couture/status']='partiel';
-      updates['items/'+item.linkedItemIdx+'/grandeurs/'+item.linkedGrandeurIdx+'/couture/inspected']=false;
+      updates[basePath+'/couture/status']='partiel';
+      updates[basePath+'/couture/inspected']=false;
+      updates[basePath+'/couture/qtyFait']=0;
+      updates[basePath+'/couture/fabrique']=false;
     }
     db.ref('serieCommandes/'+item.linkedCmd).update(updates).catch(function(e){console.error('[INV→SERIE] Restore sync error:',e);});
   }

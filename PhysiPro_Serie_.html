@@ -8931,8 +8931,12 @@ function renderSerieAtelier(cardId, items) {
         else if (g.atelier?.inspected) { sendBtnClass = 'inspected'; sendBtnText = 'Inspecté'; }
         
         html += '<tr class="grandeur-row' + rowCls + '" data-item="' + itemIdx + '" data-gidx="' + gIdx + '">';
-        // Checkbox
-        html += '<td class="c-chk"><input type="checkbox" class="chk" data-card="' + cardId + '" data-item="' + itemIdx + '" data-gidx="' + gIdx + '" data-itemname="' + (item.name || 'Item').replace(/"/g, '&quot;') + '" data-gname="' + (g.name || 'STD').replace(/"/g, '&quot;') + '" data-qty="' + gQty + '" onchange="updateSerieSelection()"></td>';
+        // Checkbox — masquer si déjà envoyé en inventaire
+        if (g.atelier?.sentToInventaire) {
+          html += '<td class="c-chk"><span style="font-size:7px;color:#4ade80;font-weight:800;letter-spacing:-0.3px;">✓INV</span></td>';
+        } else {
+          html += '<td class="c-chk"><input type="checkbox" class="chk" data-card="' + cardId + '" data-item="' + itemIdx + '" data-gidx="' + gIdx + '" data-itemname="' + (item.name || 'Item').replace(/"/g, '&quot;') + '" data-gname="' + (g.name || 'STD').replace(/"/g, '&quot;') + '" data-qty="' + gQty + '" onchange="updateSerieSelection()"></td>';
+        }
         // Grandeur + Quantité ensemble
         html += '<td class="c-item"><div class="pills-row">';
         html += '<span class="pill-g-small" onclick="openSerieGrandeurMenu(\'' + cardId + '\', ' + itemIdx + ', ' + gIdx + ', event)">' + (g.name || 'STD') + '</span>';
@@ -9017,7 +9021,12 @@ function renderSerieCouture(cardId, items) {
         else if (g.couture?.habille) { sendBtnClass = 'inspected'; sendBtnText = 'Habillé ✓'; }
         
         html += '<tr class="grandeur-row' + rowCls + '">';
-        html += '<td class="c-chk"><input type="checkbox" class="chk" data-card="' + cardId + '" data-item="' + itemIdx + '" data-gidx="' + gIdx + '" data-itemname="' + (item.name || 'Item').replace(/"/g, '&quot;') + '" data-gname="' + (g.name || 'STD').replace(/"/g, '&quot;') + '" data-qty="' + gQty + '" onchange="updateSerieSelection()"></td>';
+        // Checkbox — masquer si déjà envoyé en inventaire
+        if (g.couture?.sentToInventaire) {
+          html += '<td class="c-chk"><span style="font-size:7px;color:#a78bfa;font-weight:800;letter-spacing:-0.3px;">✓INV</span></td>';
+        } else {
+          html += '<td class="c-chk"><input type="checkbox" class="chk" data-card="' + cardId + '" data-item="' + itemIdx + '" data-gidx="' + gIdx + '" data-itemname="' + (item.name || 'Item').replace(/"/g, '&quot;') + '" data-gname="' + (g.name || 'STD').replace(/"/g, '&quot;') + '" data-qty="' + gQty + '" onchange="updateSerieSelection()"></td>';
+        }
         // Grandeur + Quantité ensemble
         html += '<td class="c-item"><div class="pills-row">';
         html += '<span class="pill-g-small couture">' + (g.name || 'STD') + '</span>';
@@ -10198,6 +10207,18 @@ function updateSerieQtyFait(cardId, itemIdx, gIdx, dept, value) {
     g[dept].status = 'todo';
   }
 
+  // Firebase sync du qtyFait
+  if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
+    var fbPath = 'serieCommandes/' + cardId + '/items/' + itemIdx + '/grandeurs/' + gIdx + '/' + dept;
+    firebaseDb.ref(fbPath + '/qtyFait').set(qtyFait);
+    firebaseDb.ref(fbPath + '/status').set(g[dept].status);
+  }
+
+  // INSPECTION AUTO-CASCADE: quand inspection complète, auto-compléter Inventaire
+  if (dept === 'inspection' && qtyFait >= qtyTotal && qtyTotal > 0) {
+    autoCompleteInventaireFromInspection(cardId, itemIdx, gIdx);
+  }
+
   saveSerieDataToLocalStorage();
   renderSerie3Cols(cardId);
   updateSerieCardDisplay(cardId);
@@ -10975,9 +10996,15 @@ function createSerieInventory() {
     const grandeurName = g.name || cb.dataset.gname || 'STD';
     const qty = parseInt(g.qty) || parseInt(cb.dataset.qty) || 1;
     
-    // Marquer comme distribué dans Série+
+    // Marquer comme distribué + envoyé en inventaire dans Série+
     if (!g.atelier) g.atelier = {};
     g.atelier.distributed = true;
+    g.atelier.sentToInventaire = true;
+    
+    // Persister le flag dans Firebase
+    if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
+      firebaseDb.ref('serieCommandes/' + currentSerieId + '/items/' + itemIdx + '/grandeurs/' + gIdx + '/atelier/sentToInventaire').set(true);
+    }
     
     if (qty > 0) {
       const clientRaw = (data.client || '').toLowerCase();
@@ -11100,9 +11127,15 @@ function createSerieInventoryCouture() {
       inventaireDataCouture[invId] = invItem;
       inventaireData[invId] = { ...invItem, rang: 'main', type: 'couture' };
       
-      // Marquer distribué dans Couture
+      // Marquer distribué + envoyé en inventaire dans Couture
       if (!g.couture) g.couture = { note: '', qtyFait: 0, coutureStatus: 'afaire' };
       g.couture.distributed = true;
+      g.couture.sentToInventaire = true;
+      
+      // Persister le flag dans Firebase
+      if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
+        firebaseDb.ref('serieCommandes/' + currentSerieId + '/items/' + itemIdx + '/grandeurs/' + gIdx + '/couture/sentToInventaire').set(true);
+      }
       
       createdCount++;
     }
@@ -11122,6 +11155,37 @@ function createSerieInventoryCouture() {
   checkboxes.forEach(cb => { cb.checked = false; });
   updateSerieSelection();
 }
+
+// ═══ AUTO-CASCADE: Inspection → Inventaire + Série+ ═══
+// Quand une grandeur est complétée en inspection, auto-compléter dans Inventaire
+function autoCompleteInventaireFromInspection(cardId, itemIdx, gIdx) {
+  if (typeof firebaseDb === 'undefined' || !firebaseDb || !isFirebaseEnabled) return;
+  
+  ['atelier', 'couture'].forEach(function(dept) {
+    firebaseDb.ref('inventaire_v4/bassin/' + dept).once('value', function(snapshot) {
+      var bassinData = snapshot.val() || {};
+      Object.keys(bassinData).forEach(function(invId) {
+        var item = bassinData[invId];
+        if (item.fromSerie && item.linkedCmd === cardId && 
+            item.linkedItemIdx === itemIdx && item.linkedGrandeurIdx === gIdx) {
+          var fabId = 'fab_insp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+          var fabItem = {
+            commande: item.commande, client: item.client, nom: item.nom,
+            grandeur: item.grandeur, quantite: item.quantite, dateAdded: item.dateAdded,
+            completedDate: new Date().toISOString(), completedBy: 'auto-inspection',
+            autoInspection: true, fromSerie: true, linkedCmd: item.linkedCmd,
+            linkedItemIdx: item.linkedItemIdx, linkedGrandeurIdx: item.linkedGrandeurIdx,
+            originalId: invId
+          };
+          firebaseDb.ref('inventaire_v4/fabrique/' + dept + '/' + fabId).set(fabItem);
+          firebaseDb.ref('inventaire_v4/bassin/' + dept + '/' + invId).remove();
+          console.log('[INSPECTION→INV] Auto-complété ' + dept + ': ' + item.nom + ' ' + item.grandeur);
+        }
+      });
+    });
+  });
+}
+window.autoCompleteInventaireFromInspection = autoCompleteInventaireFromInspection;
 
 // Sauvegarder les données inventaire
 function saveInventaireDataToLocalStorage() {
