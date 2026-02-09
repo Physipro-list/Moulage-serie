@@ -8,6 +8,27 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
+    v1586 - BOUTON APPAREIL PHOTO DANS SIDEBAR PHOTOS
+    ═══════════════════════════════════════════════════════════════════
+    
+    🆕 MODIFICATIONS v1586:
+    
+    1. BOUTON 📷 REMPLACE LE BOUTON "+"
+       → Bouton vert dans le header Photos
+       → Ouvre directement l'appareil photo sur mobile
+       → Valérie peut prendre des photos instantanément
+    
+    2. UPLOAD DIRECT VERS FIREBASE
+       → Les photos capturées vont directement dans Firebase Storage
+       → Structure: photos/moulages/{numCommande}/{timestamp}_moulage_photo.jpg
+       → Compression automatique avant upload
+       → Photos apparaissent IMMÉDIATEMENT dans la colonne gauche
+    
+    3. ZONE VIDE AVEC BOUTON CAMÉRA
+       → Quand il n'y a pas de photos, bouton vert "📷 Prendre une photo"
+       → Même fonctionnement que le bouton du header
+    
+    ═══════════════════════════════════════════════════════════════════
     v1585 - MIGRATION PHOTOS: ONEDRIVE → FIREBASE STORAGE
     ═══════════════════════════════════════════════════════════════════
     
@@ -74,7 +95,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1527</title>
+  <title>PhysiPro Moulages v1586</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -651,6 +672,8 @@
     .photos-header-title { font-size: 13px; font-weight: 700; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
     .photos-upload-btn { position: absolute; right: 8px; width: 26px; height: 26px; background: rgba(255,255,255,0.2); color: #fff; border: 1.5px solid rgba(255,255,255,0.4); border-radius: 50%; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; line-height: 1; }
     .photos-upload-btn:hover { background: rgba(59,130,246,0.8); border-color: #fff; transform: scale(1.1); }
+    .photos-camera-btn { position: absolute; right: 8px; width: 26px; height: 26px; background: rgba(34,197,94,0.4); color: #fff; border: 1.5px solid rgba(34,197,94,0.8); border-radius: 50%; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; line-height: 1; }
+    .photos-camera-btn:hover { background: rgba(34,197,94,0.8); border-color: #fff; transform: scale(1.1); box-shadow: 0 0 10px rgba(34,197,94,0.5); }
     .photos-header { position: relative; }
     .photos-header-folder { font-size: 10px; color: #93c5fd; text-align: center; word-break: break-all; padding: 6px; background: rgba(0,0,0,0.3); }
     
@@ -3512,8 +3535,8 @@
       <div class="fiche-photos-zone" id="fichePhotosZone">
         <div class="photos-header">
           <span class="photos-header-title">📷 Photos</span>
-          <button class="photos-upload-btn" onclick="uploadSidebarPhotos()" title="Ajouter des photos">＋</button>
-          <input type="file" id="photoUploadInput" multiple accept="image/*" style="display:none" onchange="handlePhotoUpload(this.files)">
+          <button class="photos-camera-btn" onclick="captureSidebarPhoto()" title="Prendre une photo">📷</button>
+          <input type="file" id="photoCaptureInput" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoCapture(this.files)">
         </div>
         <div class="photos-header-folder" id="sidebarPhotosFolder">-</div>
         <div class="photos-grid" id="sidebarPhotosGrid">
@@ -4194,7 +4217,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1585';
+    const APP_VERSION = '1586';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -12233,6 +12256,81 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     }
     window.uploadSidebarPhotos = uploadSidebarPhotos;
     
+    // ═══ Capture de photo avec l'appareil photo (📷 bouton) ═══
+    function captureSidebarPhoto() {
+      if (!currentCardId) {
+        showToast('⚠️ Ouvrez une fiche d\'abord', 'warning');
+        return;
+      }
+      const card = cardsData[currentCardId];
+      if (!card || !card.order) {
+        showToast('⚠️ Numéro de commande manquant', 'warning');
+        return;
+      }
+      // Déclencher l'input capture (ouvre l'appareil photo sur mobile)
+      document.getElementById('photoCaptureInput').click();
+    }
+    window.captureSidebarPhoto = captureSidebarPhoto;
+    
+    // ═══ Gérer la photo capturée avec l'appareil ═══
+    async function handlePhotoCapture(files) {
+      if (!files || files.length === 0) return;
+      
+      const card = cardsData[currentCardId];
+      if (!card || !card.order) return;
+      
+      const orderNumber = card.order;
+      const gridEl = document.getElementById('sidebarPhotosGrid');
+      
+      // Afficher progression
+      if (gridEl) {
+        gridEl.innerHTML = `
+          <div class="photos-sidebar-loading">
+            <div class="photos-sidebar-spinner"></div>
+            <span style="font-size:11px;color:#94a3b8;">📷 Upload en cours...</span>
+          </div>
+        `;
+      }
+      
+      try {
+        const file = files[0]; // Une seule photo à la fois avec capture
+        
+        // Vérifier que c'est une image
+        if (!file.type.startsWith('image/')) {
+          showToast('⚠️ Fichier non valide', 'warning');
+          loadSidebarPhotos();
+          return;
+        }
+        
+        // Compresser
+        const compressed = await compressPhotoFile(file);
+        
+        // Nom du fichier: timestamp + "moulage_photo"
+        const timestamp = Date.now();
+        const fileName = `${timestamp}_moulage_photo.jpg`;
+        
+        // Upload vers Firebase Storage
+        const ref = storage.ref(`photos/moulages/${orderNumber}/${fileName}`);
+        await ref.put(compressed, { contentType: 'image/jpeg' });
+        
+        showToast('✅ Photo ajoutée!', 'success');
+        
+        // Forcer le rechargement des photos
+        sidebarPhotosLoaded = false;
+        sidebarPhotosCardId = null;
+        loadSidebarPhotos();
+        
+      } catch (error) {
+        console.error('❌ Erreur capture photo:', error);
+        showToast('❌ Erreur: ' + error.message, 'error');
+        loadSidebarPhotos();
+      }
+      
+      // Reset l'input capture
+      document.getElementById('photoCaptureInput').value = '';
+    }
+    window.handlePhotoCapture = handlePhotoCapture;
+    
     async function handlePhotoUpload(files) {
       if (!files || files.length === 0) return;
       
@@ -12498,8 +12596,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           <div class="photos-sidebar-empty">
             <div class="photos-sidebar-empty-icon">📷</div>
             <div class="photos-sidebar-empty-text">Aucune photo<br>pour "${orderNumber}"</div>
-            <button onclick="uploadSidebarPhotos()" style="margin-top:10px;padding:8px 14px;font-size:11px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:white;border:none;border-radius:8px;cursor:pointer;">
-              ＋ Ajouter des photos
+            <button onclick="captureSidebarPhoto()" style="margin-top:10px;padding:8px 14px;font-size:11px;background:linear-gradient(135deg,#22c55e,#16a34a);color:white;border:none;border-radius:8px;cursor:pointer;">
+              📷 Prendre une photo
             </button>
           </div>
         `;
