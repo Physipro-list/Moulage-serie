@@ -189,13 +189,12 @@ body.col-resizing *{cursor:col-resize!important;}
 .g-partiel-lbl:hover{background:rgba(251,191,36,.12);}
 .g-partiel-lbl.active{background:rgba(251,191,36,.2);border-color:var(--gold-light);}
 .g-partiel-lbl input{width:13px;height:13px;accent-color:var(--gold-light);cursor:pointer;}
-.g-partiel-qty{width:44px;padding:3px 4px;font-size:12px;font-weight:700;text-align:center;background:#0f172a;border:1px solid var(--gold);border-radius:4px;color:var(--gold-light);display:none;-moz-appearance:textfield;}
+.g-partiel-qty{width:32px;padding:3px 2px;font-size:13px;font-weight:700;text-align:center;background:#0f172a;border:1px solid var(--gold);border-radius:4px;color:var(--gold-light);-moz-appearance:textfield;}
 .g-partiel-qty::-webkit-outer-spin-button,.g-partiel-qty::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
-.g-partiel-qty.show{display:inline-block;}
-.g-partiel-frac{display:none;align-items:center;gap:0;font-weight:700;font-size:12px;}
+.g-partiel-frac{display:none;align-items:center;gap:1px;font-weight:700;font-size:13px;}
 .g-partiel-frac.show{display:inline-flex;}
 .g-partiel-frac .frac-sep{color:var(--gold-light);margin:0 1px;}
-.g-partiel-frac .frac-total{color:var(--gold-light);opacity:.8;}
+.g-partiel-frac .frac-total{color:var(--gold-light);opacity:.7;font-size:13px;}
 .g-note-btn{padding:3px 8px;font-size:9px;font-weight:700;border-radius:4px;border:1px solid rgba(255,255,255,.2);cursor:pointer;background:#475569;color:white;text-align:center;white-space:nowrap;transition:all .15s;}
 .g-note-btn:hover{background:#64748b;}
 .g-note-btn.has-note{background:#f59e0b;color:#000;border-color:#d97706;}
@@ -1236,14 +1235,15 @@ function editDateSep(evt,d,i){var md=gmd(d);var row=md.rows[i];if(!row||row.type
 /* ═══ SÉRIE+ ═══ */
 function getSerieCards(){try{return JSON.parse(localStorage.getItem(SK))||{};}catch(e){return {};}}
 function findSerie(num){var cards=getSerieCards();var n=String(num).trim();for(var id in cards)if(cards[id].order===n||cards[id].numeroPO===n)return{cardId:id,card:cards[id]};return null;}
-function getUnfinished(card,dept){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){if(dept==='inspection'){var done=(g.atelier&&g.atelier.inspected)||false;var inInv=(g.atelier&&g.atelier.sentToInventaire)||false;if(!done)pend.push({gi:gi,name:g.name,qty:g.qty,inInventaire:inInv});}else{var done2=(g.couture&&g.couture.inspected)||false;var inInv2=(g.couture&&g.couture.sentToInventaire)||false;if(!done2)pend.push({gi:gi,name:g.name,qty:g.qty,inInventaire:inInv2});}});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
+function getUnfinished(card,dept){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){if(dept==='inspection'){var done=(g.atelier&&g.atelier.inspected)||false;var inInv=(g.atelier&&g.atelier.sentToInventaire)||false;var qf=parseInt(g.atelier&&g.atelier.qtyFait)||0;if(!done)pend.push({gi:gi,name:g.name,qty:g.qty,qtyFait:qf,inInventaire:inInv});}else{var done2=(g.couture&&g.couture.inspected)||false;var inInv2=(g.couture&&g.couture.sentToInventaire)||false;var qf2=parseInt(g.couture&&g.couture.qtyFait)||0;if(!done2)pend.push({gi:gi,name:g.name,qty:g.qty,qtyFait:qf2,inInventaire:inInv2});}});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
 function scanBon(dept){var id=dept==='inspection'?'insp-bon':'cout-bon';var bon=document.getElementById(id).value.trim();if(!bon){showToast('#?','error');return;}var m=findSerie(bon);if(m)openSerieModal(bon,m,dept);else openManualModal(bon,dept);document.getElementById(id).value='';document.getElementById(id).focus();}
 function openSerieModal(bon,match,dept){var cid=match.cardId,card=match.card,items=getUnfinished(card,dept);var h='<div class="serie-match-info"><div class="label">🔗 Série+</div><div class="value">'+esc(card.client||'')+' — '+esc(card.order||bon)+'</div></div>';if(!items.length){h+='<p style="color:var(--success);font-weight:700;">✅ Complété!</p>';}else{h+='<div class="item-choice">';items.forEach(function(item,idx){h+='<button class="item-btn" onclick="selSI('+idx+')" data-idx="'+idx+'">'+esc(item.name)+' ('+item.pending.length+')</button>';});h+='</div><div id="grandeurArea"></div><div style="display:none;text-align:right;margin-top:10px;" id="confirmArea"><button class="btn btn-add" onclick="confirmSI()">✅ Confirmer</button></div>';}window._ctx={bon:bon,cid:cid,card:card,items:items,dept:dept,si:null,cg:[]};document.getElementById('modalTitle').textContent=(dept==='inspection'?'☑️':'🧵')+' Série+';document.getElementById('modalBody').innerHTML=h;document.getElementById('modalOverlay').classList.add('show');}
 function selSI(idx){var ctx=window._ctx;ctx.si=idx;ctx.cg=[];ctx.cqty={};ctx.cnotes={};ctx.cpartiel={};document.querySelectorAll('.item-btn').forEach(function(b){b.classList.remove('selected');});document.querySelector('.item-btn[data-idx="'+idx+'"]').classList.add('selected');var item=ctx.items[idx];
-// Load existing notes from serie card
 var cards=getSerieCards();var card=cards[ctx.cid];
-var h='<div class="grandeur-list">';item.pending.forEach(function(g,pi){var q=parseInt(g.qty)||0;ctx.cqty[pi]=q;
-// Get existing note from serie+
+var h='<div class="grandeur-list">';item.pending.forEach(function(g,pi){var q=parseInt(g.qty)||0;var qf=parseInt(g.qtyFait)||0;
+var isAlreadyPartiel=(qf>0&&qf<q);
+// Pre-set context for already-partial
+if(isAlreadyPartiel){ctx.cg.push(pi);ctx.cqty[pi]=qf;ctx.cpartiel[pi]=true;}else{ctx.cqty[pi]=q;}
 var existingNote='';
 var gData=card.items[item.ii].grandeurs[g.gi];
 if(ctx.dept==='inspection'&&gData.atelier&&gData.atelier.note)existingNote=gData.atelier.note;
@@ -1251,20 +1251,25 @@ else if(ctx.dept==='couture'&&gData.couture&&gData.couture.note)existingNote=gDa
 ctx.cnotes[pi]=existingNote;
 var invBadge=g.inInventaire?'<span style="font-size:10px;font-weight:700;color:#3b82f6;background:rgba(59,130,246,.15);padding:2px 8px;border-radius:4px;white-space:nowrap;">📦 En inventaire</span>':'';
 var noteHasClass=existingNote?'has-note':'';
-h+='<div class="grandeur-row" id="grow_'+pi+'" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;margin:3px 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px;cursor:pointer;" onclick="toggleGrandeur('+pi+')">';
-h+='<input type="checkbox" id="gchk_'+pi+'" style="width:16px;height:16px;accent-color:#22c55e;cursor:pointer;flex-shrink:0;" onclick="event.stopPropagation();toggleGrandeur('+pi+')">';
+// Row classes based on pre-existing state
+var rowClass=isAlreadyPartiel?'grandeur-row g-partiel-row':'grandeur-row';
+var extraDisplay=isAlreadyPartiel?'flex':'none';
+var partielChk=isAlreadyPartiel?'checked':'';
+var partielLblClass=isAlreadyPartiel?'g-partiel-lbl active':'g-partiel-lbl';
+var fracShowClass=isAlreadyPartiel?'g-partiel-frac show':'g-partiel-frac';
+var chkChecked=isAlreadyPartiel?' checked':'';
+h+='<div class="'+rowClass+'" id="grow_'+pi+'" style="border:1px solid '+(isAlreadyPartiel?'#fbbf24':'var(--border)')+';border-radius:4px;padding:5px 8px;margin:3px 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px;cursor:pointer;" onclick="toggleGrandeur('+pi+')">';
+h+='<input type="checkbox" id="gchk_'+pi+'"'+chkChecked+' style="width:16px;height:16px;accent-color:#22c55e;cursor:pointer;flex-shrink:0;" onclick="event.stopPropagation();toggleGrandeur('+pi+')">';
 h+='<span class="g-name" style="font-weight:700;">'+esc(g.name)+'</span>';
-h+='<span style="color:var(--text-muted);font-size:10px;">qty: '+q+'</span>';
+h+='<span style="color:var(--text-muted);font-size:10px;">qty: '+q+(isAlreadyPartiel?' <span style="color:#fbbf24;font-weight:700;">(fait: '+qf+')</span>':'')+'</span>';
 h+='<span style="flex:1;"></span>';
 h+=invBadge;
-// Partiel + Note controls (inline, right side)
-h+='<div class="g-extra-row" id="gextra_'+pi+'" onclick="event.stopPropagation()" style="display:none;padding:0;gap:4px;">';
-h+='<label class="g-partiel-lbl" id="gplbl_'+pi+'"><input type="checkbox" id="gpartiel_'+pi+'" onchange="togglePartiel('+pi+','+q+')"> Partiel</label>';
-h+='<div class="g-partiel-frac" id="gpfrac_'+pi+'"><input type="number" class="g-partiel-qty show" id="gpqty_'+pi+'" min="1" max="'+(q-1)+'" value="1" onclick="event.stopPropagation()" onchange="updatePartielQty('+pi+','+q+')"><span class="frac-sep">/</span><span class="frac-total">'+q+'</span></div>';
+h+='<div class="g-extra-row" id="gextra_'+pi+'" onclick="event.stopPropagation()" style="display:'+extraDisplay+';padding:0;gap:4px;">';
+h+='<label class="'+partielLblClass+'" id="gplbl_'+pi+'"><input type="checkbox" id="gpartiel_'+pi+'" '+partielChk+' onchange="togglePartiel('+pi+','+q+')"> Partiel</label>';
+h+='<div class="'+fracShowClass+'" id="gpfrac_'+pi+'"><input type="text" inputmode="numeric" class="g-partiel-qty" id="gpqty_'+pi+'" value="'+(isAlreadyPartiel?qf:1)+'" onclick="event.stopPropagation()" onfocus="this.select()" onblur="updatePartielQty('+pi+','+q+')" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="frac-sep">/</span><span class="frac-total">'+q+'</span></div>';
 h+='<button class="g-note-btn '+noteHasClass+'" id="gnotebtn_'+pi+'" onclick="event.stopPropagation();toggleGNoteArea('+pi+')">Note</button>';
 h+='</div>';
 h+='</div>';
-// Note textarea (separate div below the row)
 h+='<div class="g-note-area" id="gnotearea_'+pi+'" onclick="event.stopPropagation()">';
 h+='<textarea id="gnotetxt_'+pi+'" placeholder="Note pour '+esc(g.name)+'..." onchange="updateGNote('+pi+')">'+esc(existingNote)+'</textarea>';
 h+='</div>';
@@ -1273,7 +1278,7 @@ function toggleGrandeur(pi){var ctx=window._ctx;var chk=document.getElementById(
 var pc=document.getElementById('gpartiel_'+pi);if(pc){pc.checked=false;}var pfrac=document.getElementById('gpfrac_'+pi);if(pfrac)pfrac.classList.remove('show');var lbl=document.getElementById('gplbl_'+pi);if(lbl)lbl.classList.remove('active');delete ctx.cpartiel[pi];// Restore full qty
 var item=ctx.items[ctx.si];ctx.cqty[pi]=parseInt(item.pending[pi].qty)||0;}else{ctx.cg.push(pi);chk.checked=true;row.classList.add('g-complet-row');row.style.background='';row.style.borderColor='';if(extra)extra.style.display='flex';}}
 function togglePartiel(pi,total){var ctx=window._ctx;var pc=document.getElementById('gpartiel_'+pi);var pq=document.getElementById('gpqty_'+pi);var pfrac=document.getElementById('gpfrac_'+pi);var lbl=document.getElementById('gplbl_'+pi);var row=document.getElementById('grow_'+pi);if(pc.checked){lbl.classList.add('active');pfrac.classList.add('show');pq.value=Math.max(1,Math.floor(total/2));ctx.cpartiel[pi]=true;ctx.cqty[pi]=parseInt(pq.value);row.classList.remove('g-complet-row');row.classList.add('g-partiel-row');pq.focus();pq.select();}else{lbl.classList.remove('active');pfrac.classList.remove('show');ctx.cpartiel[pi]=false;ctx.cqty[pi]=total;row.classList.remove('g-partiel-row');row.classList.add('g-complet-row');}}
-function updatePartielQty(pi,total){var ctx=window._ctx;var pq=document.getElementById('gpqty_'+pi);var v=Math.min(Math.max(1,parseInt(pq.value)||1),total-1);pq.value=v;ctx.cqty[pi]=v;}
+function updatePartielQty(pi,total){var ctx=window._ctx;var pq=document.getElementById('gpqty_'+pi);var v=parseInt(pq.value)||1;v=Math.min(Math.max(1,v),total-1);pq.value=v;ctx.cqty[pi]=v;}
 function toggleGNoteArea(pi){var area=document.getElementById('gnotearea_'+pi);if(!area)return;var isOpen=area.classList.contains('show');area.classList.toggle('show');if(!isOpen){var ta=document.getElementById('gnotetxt_'+pi);if(ta){ta.focus();}}}
 function updateGNote(pi){var ctx=window._ctx;var ta=document.getElementById('gnotetxt_'+pi);var btn=document.getElementById('gnotebtn_'+pi);if(!ta||!ctx)return;ctx.cnotes[pi]=ta.value.trim();if(ctx.cnotes[pi]){btn.classList.add('has-note');}else{btn.classList.remove('has-note');}}
 function setGComplet(pi,total){var ctx=window._ctx;var chk=document.getElementById('gchk_'+pi);var inp=document.getElementById('gqty_'+pi);var btn=document.getElementById('gbtn_'+pi);var stat=document.getElementById('gstat_'+pi);var row=document.getElementById('grow_'+pi);inp.value=total;chk.checked=true;btn.classList.add('active');row.classList.add('checked');stat.className='g-status-label done';stat.textContent=total+'/'+total;ctx.cqty[pi]=total;if(ctx.cg.indexOf(pi)<0)ctx.cg.push(pi);}
