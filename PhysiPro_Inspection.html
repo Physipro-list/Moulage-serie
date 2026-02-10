@@ -378,7 +378,7 @@ body.col-resizing *{cursor:col-resize!important;}
 <!-- INSPECTION -->
 <div class="content active" id="tab-inspection">
   <div class="entry-bar">
-    <label>📋 #</label><input type="text" id="insp-bon" placeholder="# bon + Entrée" onkeydown="if(event.key==='Enter')scanBon('inspection')"><span class="zoom-btn" onclick="doRefresh('inspection')" title="Rafraîchir">🔄</span>
+    <label>📋 #</label><input type="text" id="insp-bon" placeholder="# bon + Entrée" oninput="onBonInput('inspection')" onkeydown="if(event.key==='Enter')scanBon('inspection')"><span class="zoom-btn" onclick="doRefresh('inspection')" title="Rafraîchir">🔄</span>
     <div class="divider"></div>
     <span class="zoom-btn" onclick="zoomTable(-1)" title="Réduire texte">▼</span><span class="zoom-btn" onclick="zoomTable(1)" title="Agrandir texte">▲</span>
     <button class="btn-sep" onclick="addDateSep('inspection')">📅 Séparation</button>
@@ -393,7 +393,7 @@ body.col-resizing *{cursor:col-resize!important;}
 <!-- COUTURE -->
 <div class="content" id="tab-couture">
   <div class="entry-bar">
-    <label>🧵 #</label><input type="text" id="cout-bon" placeholder="# bon + Entrée" onkeydown="if(event.key==='Enter')scanBon('couture')"><span class="zoom-btn" onclick="doRefresh('couture')" title="Rafraîchir">🔄</span>
+    <label>🧵 #</label><input type="text" id="cout-bon" placeholder="# bon + Entrée" oninput="onBonInput('couture')" onkeydown="if(event.key==='Enter')scanBon('couture')"><span class="zoom-btn" onclick="doRefresh('couture')" title="Rafraîchir">🔄</span>
     <div class="divider"></div>
     <span class="zoom-btn" onclick="zoomTable(-1)" title="Réduire texte">▼</span><span class="zoom-btn" onclick="zoomTable(1)" title="Agrandir texte">▲</span>
     <button class="btn-sep" onclick="addDateSep('couture')">📅 Séparation</button>
@@ -997,6 +997,14 @@ var currentZoom=11;
 function zoomTable(dir){currentZoom=Math.max(8,Math.min(18,currentZoom+dir));document.documentElement.style.setProperty('--tbl-zoom',currentZoom+'px');}
 function addDateSep(dept){var md=gmd(dept);var rows=md.rows;rows.push({id:'date-'+Date.now(),type:'date',dateLabel:todayStr()});md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('📅 Séparation ajoutée','success');}
 function onSearchInput(){var t=document.querySelector('.content.active');if(t){var n=t.id.replace('tab-','');if(n==='inspection'||n==='couture')renderTable(n);}}
+function onBonInput(dept){
+  var id=dept==='inspection'?'insp-bon':'cout-bon';
+  var val=document.getElementById(id).value.trim();
+  // Copy to global search to filter table live
+  var gs=document.getElementById('global-search');
+  if(gs)gs.value=val;
+  onSearchInput();
+}
 function doRefresh(dept){
   renderTable(dept);
   if(fbDb&&fbUser){
@@ -1250,7 +1258,24 @@ function editDateSep(evt,d,i){var md=gmd(d);var row=md.rows[i];if(!row||row.type
 function getSerieCards(){try{return JSON.parse(localStorage.getItem(SK))||{};}catch(e){return {};}}
 function findSerie(num){var cards=getSerieCards();var n=String(num).trim();for(var id in cards)if(cards[id].order===n||cards[id].numeroPO===n)return{cardId:id,card:cards[id]};return null;}
 function getUnfinished(card,dept){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){if(dept==='inspection'){var done=(g.atelier&&g.atelier.inspected)||false;var inInv=(g.atelier&&g.atelier.sentToInventaire)||false;var qf=parseInt(g.atelier&&g.atelier.qtyFait)||0;if(!done)pend.push({gi:gi,name:g.name,qty:g.qty,qtyFait:qf,inInventaire:inInv});}else{var done2=(g.couture&&g.couture.inspected)||false;var inInv2=(g.couture&&g.couture.sentToInventaire)||false;var qf2=parseInt(g.couture&&g.couture.qtyFait)||0;if(!done2)pend.push({gi:gi,name:g.name,qty:g.qty,qtyFait:qf2,inInventaire:inInv2});}});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
-function scanBon(dept){var id=dept==='inspection'?'insp-bon':'cout-bon';var bon=document.getElementById(id).value.trim();if(!bon){showToast('#?','error');return;}var m=findSerie(bon);if(m)openSerieModal(bon,m,dept);else openManualModal(bon,dept);document.getElementById(id).value='';document.getElementById(id).focus();}
+function scanBon(dept){var id=dept==='inspection'?'insp-bon':'cout-bon';var bon=document.getElementById(id).value.trim();if(!bon){showToast('#?','error');return;}
+// Try local first
+var m=findSerie(bon);
+if(m){document.getElementById(id).value='';document.getElementById(id).focus();openSerieModal(bon,m,dept);return;}
+// Not found locally — try Firebase directly before falling back to manual
+if(fbDb){
+  fbDb.ref('serieCommandes').once('value').then(function(snap){
+    var fbCards=snap.val()||{};
+    // Update localStorage with fresh data
+    safeLSSet(SK,JSON.stringify(fbCards));
+    // Try again
+    var n=String(bon).trim();
+    var found=null;
+    for(var cid in fbCards){if(fbCards[cid].order===n||fbCards[cid].numeroPO===n){found={cardId:cid,card:fbCards[cid]};break;}}
+    document.getElementById(id).value='';document.getElementById(id).focus();
+    if(found){openSerieModal(bon,found,dept);}else{openManualModal(bon,dept);}
+  }).catch(function(){document.getElementById(id).value='';document.getElementById(id).focus();openManualModal(bon,dept);});
+}else{document.getElementById(id).value='';document.getElementById(id).focus();openManualModal(bon,dept);}}
 function openSerieModal(bon,match,dept){var cid=match.cardId,card=match.card,items=getUnfinished(card,dept);var h='<div class="serie-match-info"><div class="label">🔗 Série+</div><div class="value">'+esc(card.client||'')+' — '+esc(card.order||bon)+'</div></div>';if(!items.length){h+='<p style="color:var(--success);font-weight:700;">✅ Complété!</p>';}else{h+='<div class="item-choice">';items.forEach(function(item,idx){h+='<button class="item-btn" onclick="selSI('+idx+')" data-idx="'+idx+'">'+esc(item.name)+' ('+item.pending.length+')</button>';});h+='</div><div id="grandeurArea"></div><div style="display:none;text-align:right;margin-top:10px;" id="confirmArea"><button class="btn btn-add" onclick="confirmSI()">✅ Confirmer</button></div>';}window._ctx={bon:bon,cid:cid,card:card,items:items,dept:dept,si:null,cg:[]};document.getElementById('modalTitle').textContent=(dept==='inspection'?'☑️':'🧵')+' Série+';document.getElementById('modalBody').innerHTML=h;document.getElementById('modalOverlay').classList.add('show');}
 function selSI(idx){var ctx=window._ctx;ctx.si=idx;ctx.cg=[];ctx.cqty={};ctx.cnotes={};ctx.cpartiel={};document.querySelectorAll('.item-btn').forEach(function(b){b.classList.remove('selected');});document.querySelector('.item-btn[data-idx="'+idx+'"]').classList.add('selected');var item=ctx.items[idx];
 var cards=getSerieCards();var card=cards[ctx.cid];
@@ -1414,7 +1439,7 @@ function initMonths(){var now=new Date(),ms=[];for(var i=12;i>=-3;i--){var d=new
 function switchTab(tab){document.querySelectorAll('.content').forEach(function(c){c.classList.remove('active');});document.querySelectorAll('.tab').forEach(function(t){t.className='tab';});document.getElementById('tab-'+tab).classList.add('active');document.querySelectorAll('.tab[data-tab="'+tab+'"]').forEach(function(el){if(tab==='inspection')el.classList.add('active-insp');else if(tab==='couture')el.classList.add('active-cout');else if(tab==='stats')el.classList.add('active-stats');});if(tab==='stats')renderStats();else renderTable(tab);}
 function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/`/g,'&#96;'):'';}
 function safeLSSet(k,v){try{localStorage.setItem(k,v);return true;}catch(e){console.error('❌ localStorage quota:',k,e.message);showToast('⚠️ Stockage plein','error');return false;}}
-function closeModal(){document.getElementById('modalOverlay').classList.remove('show');window._ctx=null;}
+function closeModal(){document.getElementById('modalOverlay').classList.remove('show');window._ctx=null;var gs=document.getElementById('global-search');if(gs&&gs.value){gs.value='';onSearchInput();}}
 function showToast(m,t){var c=document.getElementById('toastContainer');var toasts=c.querySelectorAll('.toast');if(toasts.length>=5)toasts[0].remove();var e=document.createElement('div');e.className='toast '+(t||'info');e.textContent=m;c.appendChild(e);setTimeout(function(){e.remove();},2500);}
 function csvCell(v){var s=String(v==null?'':v);if(s.indexOf(',')>=0||s.indexOf('"')>=0||s.indexOf('\n')>=0||s.indexOf('\r')>=0)return'"'+s.replace(/"/g,'""')+'"';return s;}
 function exportCSV(){var tab=document.querySelector('.content.active').id.replace('tab-','');if(tab==='stats'||tab==='resume'){showToast('Inspection/Couture','info');return;}var md=gmd(tab);var entries=(md.rows||[]).filter(function(r){return r.type==='entry';});if(!entries.length){showToast('Vide','info');return;}var isI=tab==='inspection';var hdrs=isI?['Bon','Nom','Job','Qté Sér./Inv.','Item','Client','Inspecteur','Erreur','Raison','Notes']:['Bon','Nom','Job','Qté Sér./Inv.','Item','Client','Couturière','Statut','Notes'];var lines=[hdrs.join(',')];entries.forEach(function(e){var q=parseInt(e.qty)||1;if(isI)lines.push([csvCell(e.bon),csvCell(e.nom),'1',q>1?q:'',csvCell(e.item),csvCell(e.client),csvCell(e.inspecteur),e.hasError?'Oui':'Non',csvCell(e.errorReason||''),csvCell(e.description||'')].join(','));else lines.push([csvCell(e.bon),csvCell(e.nom),'1',q>1?q:'',csvCell(e.item),csvCell(e.client),csvCell(e.inspecteur),csvCell(e.coutureStatus||'recu'),csvCell(e.description||'')].join(','));});var blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='physipro_'+tab+'_'+gmk()+'.csv';a.click();URL.revokeObjectURL(url);showToast('📊','success');}
