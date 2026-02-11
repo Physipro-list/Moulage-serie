@@ -618,6 +618,17 @@ function resolveInspName(email){
 
 function startFirebaseSync(){
   initApp(); // Always init first so tables are visible
+  // FIX: Load shared deleted IDs FIRST before any merge
+  fbDb.ref(FB_DELETED_PATH).once('value').then(function(snap){
+    _deletedIdsCache=snap.val()||{};
+    // Merge into local
+    var local={};try{local=JSON.parse(localStorage.getItem(DELETED_IDS_KEY))||{};}catch(e){}
+    for(var k in _deletedIdsCache){if(!local[k])local[k]=_deletedIdsCache[k];}
+    localStorage.setItem(DELETED_IDS_KEY,JSON.stringify(local));
+    console.log('[FB] Loaded '+Object.keys(_deletedIdsCache).length+' shared deleted IDs');
+  }).catch(function(e){console.error('[FB] Deleted IDs load error:',e);}).then(function(){
+  // Start listening for deleted IDs in real-time
+  listenDeletedIds();
   // Load serie cards from Firebase (shared path with Serie+)
   fbDb.ref('serieCommandes').once('value').then(function(snap){
     var fbCards=snap.val();
@@ -778,10 +789,83 @@ function listenSerieCards(){
 var _merging={};
 var _recentDelete={};
 var DELETED_IDS_KEY='physipro_deleted_ids';
-function getDeletedIds(){try{return JSON.parse(localStorage.getItem(DELETED_IDS_KEY))||{};}catch(e){return {};}}
-function markIdDeleted(id){var d=getDeletedIds();d[id]=Date.now();localStorage.setItem(DELETED_IDS_KEY,JSON.stringify(d));}
+var FB_DELETED_PATH='inspectionDeletedIds';
+var _deletedIdsCache={};
+
+function getDeletedIds(){
+  // Merge local + cached Firebase deleted IDs
+  var local={};
+  try{local=JSON.parse(localStorage.getItem(DELETED_IDS_KEY))||{};}catch(e){}
+  var merged={};
+  for(var k in local)merged[k]=local[k];
+  for(var k2 in _deletedIdsCache)merged[k2]=_deletedIdsCache[k2];
+  return merged;
+}
+function markIdDeleted(id){
+  // Save locally
+  var d={};try{d=JSON.parse(localStorage.getItem(DELETED_IDS_KEY))||{};}catch(e){}
+  d[id]=Date.now();
+  localStorage.setItem(DELETED_IDS_KEY,JSON.stringify(d));
+  _deletedIdsCache[id]=d[id];
+  // Push to Firebase so ALL devices know this ID is deleted
+  if(fbDb&&fbUser){
+    fbDb.ref(FB_DELETED_PATH+'/'+id.replace(/[.#$\/\[\]]/g,'_')).set(d[id]).catch(function(e){
+      console.error('[DEL] Failed to push deleted ID to Firebase:',e);
+    });
+  }
+}
 function isIdDeleted(id){return !!getDeletedIds()[id];}
-function cleanOldDeletedIds(){var d=getDeletedIds();var cutoff=Date.now()-90*24*60*60*1000;var changed=false;for(var k in d){if(d[k]<cutoff){delete d[k];changed=true;}}if(changed)localStorage.setItem(DELETED_IDS_KEY,JSON.stringify(d));}
+function cleanOldDeletedIds(){
+  var cutoff=Date.now()-90*24*60*60*1000;
+  // Clean local
+  var d={};try{d=JSON.parse(localStorage.getItem(DELETED_IDS_KEY))||{};}catch(e){}
+  var changed=false;
+  for(var k in d){if(d[k]<cutoff){delete d[k];changed=true;}}
+  if(changed)localStorage.setItem(DELETED_IDS_KEY,JSON.stringify(d));
+  // Clean Firebase deleted IDs older than 90 days
+  if(fbDb&&fbUser){
+    for(var k2 in _deletedIdsCache){
+      if(_deletedIdsCache[k2]<cutoff){
+        fbDb.ref(FB_DELETED_PATH+'/'+k2.replace(/[.#$\/\[\]]/g,'_')).remove().catch(function(){});
+        delete _deletedIdsCache[k2];
+      }
+    }
+  }
+}
+function listenDeletedIds(){
+  if(!fbDb)return;
+  fbDb.ref(FB_DELETED_PATH).on('value',function(snap){
+    var fbDel=snap.val()||{};
+    _deletedIdsCache=fbDel;
+    // Also merge into local so offline works
+    var local={};try{local=JSON.parse(localStorage.getItem(DELETED_IDS_KEY))||{};}catch(e){}
+    var changed=false;
+    for(var k in fbDel){if(!local[k]){local[k]=fbDel[k];changed=true;}}
+    if(changed){
+      localStorage.setItem(DELETED_IDS_KEY,JSON.stringify(local));
+      // Re-filter local data to remove any resurrected entries
+      ['inspection','couture'].forEach(function(dept){
+        var lk=dept==='inspection'?IK:CK;
+        try{
+          var data=JSON.parse(localStorage.getItem(lk))||{};
+          var cleaned=false;
+          Object.keys(data).forEach(function(month){
+            var before=data[month].length;
+            data[month]=data[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
+            if(data[month].length<before)cleaned=true;
+          });
+          if(cleaned){
+            safeLSSet(lk,JSON.stringify(data));
+            renderTable(dept);
+          }
+        }catch(e){}
+      });
+    }
+  });
+}
+function stopListenDeletedIds(){
+  if(fbDb)fbDb.ref(FB_DELETED_PATH).off('value');
+}
 function listenFB(dept){
   var path=FB_PATHS[dept];
   if(fbListeners[dept])fbDb.ref(path).off('value',fbListeners[dept]);
@@ -820,6 +904,7 @@ function listenFB(dept){
       setTimeout(function(){_merging[dept]=false;},2000);
     }
   });
+  }); // End of deleted IDs .then() chain
 }
 function stopFirebaseSync(){
   Object.keys(fbListeners).forEach(function(k){
@@ -827,6 +912,7 @@ function stopFirebaseSync(){
     delete fbListeners[k];
   });
   if(_serieListener){fbDb.ref('serieCommandes').off('value',_serieListener);_serieListener=null;}
+  stopListenDeletedIds();
   initApp();
 }
 var _retryCount={};
@@ -1105,7 +1191,7 @@ var INSP_COLS=[
   {id:'item',label:'Item',w:'120px',gear:'items|Items'},
   {id:'client',label:'Client',w:'100px',gear:'clients|Clients'},
   {id:'insp',label:'Insp.',w:'90px',gear:'inspecteurs|Inspecteurs'},
-  {id:'err',label:'Err',w:'36px'},
+  {id:'err',label:'Err',w:'36px',gear:'erreurs|Erreurs'},
   {id:'raison',label:'Raison',w:'150px',gear:'erreurs|Raisons'},
   {id:'actions',label:'',w:'20px',fixed:true}
 ];
@@ -1276,7 +1362,7 @@ function cellHTML(dept,colId,row,idx,count,hasErr){
     case 'qty':var q=parseInt(row.qty)||1;return'<span class="cell-qty cell-editable" onclick="editQty(\''+dept+'\','+idx+',this)" style="cursor:pointer;min-width:24px;display:inline-block;">'+(q>1?q:'—')+'</span>';
     case 'item':
       var itemVal=row.item||'';
-      if(itemVal.indexOf('\n')>=0||itemVal.match(/\s+\d+\/\d+$/m)||itemVal.match(/\s+\d+x$/m)||itemVal.match(/\s+x\d+$/m)){
+      if(itemVal.indexOf('\n')>=0||itemVal.match(/\s+\d+\/\d+$/m)||itemVal.match(/\s+\d+x$/m)||itemVal.match(/\s+x\d+$/m)||itemVal.match(/^~/m)){
         if(window._showSerieDetail===false){
           return'<span style="font-weight:600;color:#60a5fa;font-size:inherit;white-space:nowrap;">Commande série</span>';
         }
@@ -1409,7 +1495,10 @@ md.data[md.month]=md.rows;saveD(d,md.data);showToast('📅 Date modifiée','succ
 function getSerieCards(){try{return JSON.parse(localStorage.getItem(SK))||{};}catch(e){return {};}}
 function findSerie(num){var cards=getSerieCards();var n=String(num).trim();for(var id in cards)if(cards[id].order===n||cards[id].numeroPO===n)return{cardId:id,card:cards[id]};return null;}
 function getUnfinished(card,dept){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){if(dept==='inspection'){var done=(g.atelier&&g.atelier.inspected)||false;var inInv=(g.atelier&&g.atelier.sentToInventaire)||false;var qf=parseInt(g.atelier&&g.atelier.qtyFait)||0;var isP=(g.atelier&&g.atelier.partiel)||false;var tQ=parseInt(g.qty)||0;if(!done){var rem=isP?(tQ-qf):tQ;pend.push({gi:gi,name:g.name,qty:tQ,qtyFait:qf,remaining:rem,inInventaire:inInv,wasPartial:isP});}}else{var done2=(g.couture&&g.couture.inspected)||false;var inInv2=(g.couture&&g.couture.sentToInventaire)||false;var qf2=parseInt(g.couture&&g.couture.qtyFait)||0;var isP2=(g.couture&&g.couture.partiel)||false;var tQ2=parseInt(g.qty)||0;if(!done2){var rem2=isP2?(tQ2-qf2):tQ2;pend.push({gi:gi,name:g.name,qty:tQ2,qtyFait:qf2,remaining:rem2,inInventaire:inInv2,wasPartial:isP2});}}});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
-function rowHasPartial(row){if(!row||!row.item)return false;return/\d+\/\d+$/m.test(row.item);}
+function rowHasPartial(row){if(!row||!row.item)return false;
+  // Detect partial: either "~" prefix lines OR fraction "3/5" format
+  return /\d+\/\d+$/m.test(row.item)||/^~/m.test(row.item);
+}
 function reopenSerieModal(dept,idx){
   var md=gmd(dept);var row=md.rows[idx];if(!row)return;var bon=(row.bon||'').trim();if(!bon)return;
   window._reopenRowIdx=idx;window._reopenDept=dept;
@@ -1460,7 +1549,15 @@ var freshCards=getSerieCards();var card=freshCards[cid]||match.card;
 var items=getUnfinished(card,dept);var h='<div class="serie-match-info"><div class="label">🔗 Série+</div><div class="value">'+esc(card.client||'')+' — '+esc(card.order||bon)+'</div></div>';if(!items.length){h+='<p style="color:var(--success);font-weight:700;">✅ Tout complété!</p>';}else{h+='<div class="item-choice">';items.forEach(function(item,idx){var pc=item.pending.filter(function(g){return g.wasPartial;}).length;var pt=pc>0?' <span style="background:rgba(251,191,36,.3);color:#fbbf24;font-size:8px;padding:1px 4px;border-radius:3px;font-weight:700;">⚠️'+pc+'</span>':'';h+='<button class="item-btn" onclick="selSI('+idx+')" data-idx="'+idx+'" style="'+(pc>0?'border-color:#fbbf24;background:rgba(251,191,36,.08);':'')+'">'+esc(item.name)+' ('+item.pending.length+')'+pt+'</button>';});h+='</div><div id="grandeurArea"></div><div style="display:none;text-align:right;margin-top:10px;" id="confirmArea"><button class="btn btn-add" onclick="confirmSI()">✅ Confirmer</button></div>';}window._ctx={bon:bon,cid:cid,card:card,items:items,dept:dept,si:null,cg:[],sourceRowIdx:window._reopenRowIdx!=null?window._reopenRowIdx:null,sourceDept:window._reopenDept||null};window._reopenRowIdx=null;window._reopenDept=null;document.getElementById('modalTitle').textContent=(dept==='inspection'?'☑️':'🧵')+' Série+';document.getElementById('modalBody').innerHTML=h;document.getElementById('modalOverlay').classList.add('show');}
 function selSI(idx){var ctx=window._ctx;ctx.si=idx;ctx.cg=[];ctx.cqty={};ctx.cnotes={};ctx.cpartiel={};document.querySelectorAll('.item-btn').forEach(function(b){b.classList.remove('selected');});document.querySelector('.item-btn[data-idx="'+idx+'"]').classList.add('selected');var item=ctx.items[idx];
 var cards=getSerieCards();var card=cards[ctx.cid]||ctx.card;
-var h='<div class="grandeur-list">';item.pending.forEach(function(g,pi){var q=parseInt(g.qty)||0;var qf=parseInt(g.qtyFait)||0;
+var h='<div class="grandeur-list">';
+// Master checkbox to select/deselect all
+h+='<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:4px;cursor:pointer;" onclick="toggleAllGrandeurs()">';
+h+='<input type="checkbox" id="gchk_master" style="width:18px;height:18px;accent-color:#22c55e;cursor:pointer;" onclick="event.stopPropagation();toggleAllGrandeurs()">';
+h+='<span style="font-weight:700;color:var(--success);font-size:11px;">✅ Tout cocher / décocher</span>';
+h+='<span style="flex:1;"></span>';
+h+='<span style="font-size:9px;color:var(--text-muted);">'+item.pending.length+' grandeur'+(item.pending.length>1?'s':'')+'</span>';
+h+='</div>';
+item.pending.forEach(function(g,pi){var q=parseInt(g.qty)||0;var qf=parseInt(g.qtyFait)||0;
 var isAP=g.wasPartial;var remaining=g.remaining||q;
 if(isAP){ctx.cg.push(pi);ctx.cqty[pi]=remaining;ctx.cpartiel[pi]=false;}else{ctx.cqty[pi]=q;}
 var existingNote='';
@@ -1490,9 +1587,32 @@ h+='<button class="g-note-btn '+noteHasClass+'" id="gnotebtn_'+pi+'" onclick="ev
 h+='</div></div>';
 h+='<div class="g-note-area" id="gnotearea_'+pi+'" onclick="event.stopPropagation()"><textarea id="gnotetxt_'+pi+'" placeholder="Note..." onchange="updateGNote('+pi+')">'+esc(existingNote)+'</textarea></div>';
 });h+='</div>';document.getElementById('grandeurArea').innerHTML=h;document.getElementById('confirmArea').style.display='block';}
+function toggleAllGrandeurs(){
+  var ctx=window._ctx;if(!ctx||ctx.si===null)return;
+  var item=ctx.items[ctx.si];
+  var master=document.getElementById('gchk_master');
+  // Determine: if all are checked → uncheck all, otherwise check all
+  var allChecked=item.pending.every(function(g,pi){return ctx.cg.indexOf(pi)>=0;});
+  var targetState=!allChecked;
+  item.pending.forEach(function(g,pi){
+    var isIn=ctx.cg.indexOf(pi)>=0;
+    if(targetState&&!isIn){
+      // Check this grandeur
+      toggleGrandeur(pi);
+    }else if(!targetState&&isIn){
+      // Uncheck this grandeur
+      toggleGrandeur(pi);
+    }
+  });
+  if(master)master.checked=targetState;
+}
 function toggleGrandeur(pi){var ctx=window._ctx;var chk=document.getElementById('gchk_'+pi);var row=document.getElementById('grow_'+pi);var extra=document.getElementById('gextra_'+pi);if(!chk||!ctx)return;var idx=ctx.cg.indexOf(pi);if(idx>=0){ctx.cg.splice(idx,1);chk.checked=false;row.classList.remove('g-complet-row','g-partiel-row');row.style.background='';row.style.borderColor='var(--border)';if(extra)extra.style.display='none';// Reset partiel
 var pc=document.getElementById('gpartiel_'+pi);if(pc){pc.checked=false;}var pfrac=document.getElementById('gpfrac_'+pi);if(pfrac)pfrac.classList.remove('show');var lbl=document.getElementById('gplbl_'+pi);if(lbl)lbl.classList.remove('active');delete ctx.cpartiel[pi];// Restore full qty
-var item=ctx.items[ctx.si];ctx.cqty[pi]=parseInt(item.pending[pi].qty)||0;}else{ctx.cg.push(pi);chk.checked=true;row.classList.add('g-complet-row');row.style.background='';row.style.borderColor='';if(extra)extra.style.display='flex';}}
+var item=ctx.items[ctx.si];ctx.cqty[pi]=parseInt(item.pending[pi].qty)||0;}else{ctx.cg.push(pi);chk.checked=true;row.classList.add('g-complet-row');row.style.background='';row.style.borderColor='';if(extra)extra.style.display='flex';}
+  // Update master checkbox state
+  var master=document.getElementById('gchk_master');
+  if(master&&ctx.si!==null){var allOn=ctx.items[ctx.si].pending.every(function(g,pi2){return ctx.cg.indexOf(pi2)>=0;});master.checked=allOn;}
+}
 function togglePartiel(pi,total){var ctx=window._ctx;var pc=document.getElementById('gpartiel_'+pi);var pq=document.getElementById('gpqty_'+pi);var pfrac=document.getElementById('gpfrac_'+pi);var lbl=document.getElementById('gplbl_'+pi);var row=document.getElementById('grow_'+pi);if(pc.checked){lbl.classList.add('active');pfrac.classList.add('show');pq.value=Math.max(1,Math.floor(total/2));ctx.cpartiel[pi]=true;ctx.cqty[pi]=parseInt(pq.value);row.classList.remove('g-complet-row');row.classList.add('g-partiel-row');pq.focus();pq.select();}else{lbl.classList.remove('active');pfrac.classList.remove('show');ctx.cpartiel[pi]=false;ctx.cqty[pi]=total;row.classList.remove('g-partiel-row');row.classList.add('g-complet-row');}}
 function updatePartielQty(pi,total){var ctx=window._ctx;var pq=document.getElementById('gpqty_'+pi);var v=parseInt(pq.value)||1;v=Math.min(Math.max(1,v),total-1);pq.value=v;ctx.cqty[pi]=v;}
 function updatePQR(pi,max){var ctx=window._ctx;var pq=document.getElementById('gpqty_'+pi);var v=parseInt(pq.value)||1;v=Math.min(Math.max(1,v),max);pq.value=v;ctx.cqty[pi]=v;}
@@ -1509,7 +1629,8 @@ function confirmSI(){var ctx=window._ctx;if(!ctx||ctx.si===null||!ctx.cg.length)
 ctx.cg.forEach(function(pi){var ta=document.getElementById('gnotetxt_'+pi);if(ta)ctx.cnotes[pi]=ta.value.trim();});
 var item=ctx.items[ctx.si];var cards=getSerieCards();var card=cards[ctx.cid];if(!card){showToast('⚠️ Carte série introuvable','error');return;}var tq=0;var fbUpdates={};var completedGrandeurs=[];var itemLines=[];ctx.cg.forEach(function(pi){var gI=item.pending[pi];var userQty=parseInt(ctx.cqty[pi])||0;if(userQty<=0)return;var totalQty=parseInt(gI.qty)||0;var prevQf=parseInt(gI.qtyFait)||0;var wasP=gI.wasPartial||false;if(!card.items[item.ii]||!card.items[item.ii].grandeurs[gI.gi])return;var g=card.items[item.ii].grandeurs[gI.gi];var isNewP=ctx.cpartiel[pi]||false;var noteText=ctx.cnotes[pi]||'';
 var newFait=wasP?(prevQf+userQty):userQty;
-var isComplete=(newFait>=totalQty);
+// FIX: If user explicitly chose "Partiel", force partial even if qty seems complete
+var isComplete=isNewP?false:(newFait>=totalQty);
 if(ctx.dept==='inspection'){g.atelier=g.atelier||{};g.atelier.qtyFait=newFait;if(noteText)g.atelier.note=noteText;
 if(isComplete){g.atelier.inspected=true;g.atelier.sentToCouture=true;g.atelier.partiel=false;completedGrandeurs.push({ii:item.ii,gi:gI.gi});}
 else{g.atelier.inspected=false;g.atelier.sentToCouture=false;g.atelier.partiel=true;}
