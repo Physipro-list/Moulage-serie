@@ -10,6 +10,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 
 <style>
 *, *::before, *::after { box-sizing: border-box; }
@@ -159,7 +160,16 @@ body {
 }
 
 .cards-col-title { font-size: 14px; font-weight: 800; }
-.cards-col-count { background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.cards-col-count { background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 10px; font-size: 11px; transition: all 0.3s; }
+.cards-col-count.overflow-pulse {
+  background: #ef4444;
+  color: #fff;
+  animation: countPulse 1.2s infinite;
+}
+@keyframes countPulse {
+  0%, 100% { background: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+  50% { background: #f59e0b; box-shadow: 0 0 8px 3px rgba(245,158,11,0.4); }
+}
 
 .cards-col-add {
   padding: 4px 10px;
@@ -195,10 +205,10 @@ body {
 
 /* PSM CARD */
 .psm-card {
-  background: linear-gradient(to bottom, #374151, #1f2937);
-  border: 2px solid rgba(255,255,255,0.1);
+  background: linear-gradient(to bottom, #04152c, #1a3a6b);
+  border: 2px solid rgba(74,142,245,0.2);
   border-radius: 10px;
-  padding: 8px 10px 0 10px;
+  padding: 6px 10px 0 10px;
   margin-bottom: 5px;
   cursor: pointer;
   transition: all 0.2s;
@@ -215,37 +225,235 @@ body {
 
 .psm-card-top-row {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: center;
   margin-bottom: 2px;
 }
-.psm-card-info {
-  flex: 1;
-  min-width: 0;
-}
-.psm-card-name { font-size: 13px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
-.psm-card-order { font-size: 11px; color: #fbbf24; font-weight: 600; }
-
-.psm-card-actions {
+.psm-card-name { font-size: 13px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; text-align: center; width: 100%; }
+.psm-card-order-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 4px;
-  flex-shrink: 0;
+  width: 100%;
 }
+.psm-card-order { font-size: 11px; color: #fbbf24; font-weight: 600; flex: 1; text-align: center; }
 
 .psm-card-fiche-btn {
-  padding: 2px 6px;
-  background: rgba(59,130,246,0.25);
-  border: 1px solid rgba(59,130,246,0.4);
-  border-radius: 5px;
+  padding: 1px 5px;
+  background: rgba(59,130,246,0.2);
+  border: 1px solid rgba(59,130,246,0.3);
+  border-radius: 4px;
   color: #93c5fd;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .psm-card-fiche-btn:hover { background: rgba(59,130,246,0.5); color: #fff; }
+
+.psm-card-send-btn {
+  padding: 1px 5px;
+  background: rgba(34,197,94,0.2);
+  border: 1px solid rgba(34,197,94,0.3);
+  border-radius: 4px;
+  color: #86efac;
+  font-size: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.psm-card-send-btn:hover { background: rgba(34,197,94,0.5); color: #fff; }
+.psm-card-send-btn.sent {
+  background: rgba(245,158,11,0.3);
+  border-color: rgba(245,158,11,0.5);
+  color: #fbbf24;
+  animation: sendPulse 1.2s infinite;
+}
+@keyframes sendPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0.4); }
+  50% { box-shadow: 0 0 6px 2px rgba(251,191,36,0.3); }
+}
+
+/* Bell notification in topbar */
+.tb-bell-btn {
+  position: relative;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 2px 6px;
+  transition: all 0.2s;
+}
+.tb-bell-btn:hover { transform: scale(1.15); }
+.tb-bell-badge {
+  position: absolute;
+  top: -2px; right: -2px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.tb-bell-badge.has-notif {
+  display: flex;
+  animation: bellPulse 1s infinite;
+}
+@keyframes bellPulse {
+  0%, 100% { background: #ef4444; transform: scale(1); }
+  50% { background: #f59e0b; transform: scale(1.2); }
+}
+
+/* Send popup - destinataires */
+.send-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 99990;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.send-popup {
+  background: #1e293b;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
+  padding: 16px;
+  width: 280px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+}
+.send-popup-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 4px;
+}
+.send-popup-sub {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-bottom: 12px;
+}
+.send-popup-dest {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.send-dest-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.05);
+  border: 2px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.send-dest-btn:hover { background: rgba(255,255,255,0.1); }
+.send-dest-btn.selected {
+  background: rgba(34,197,94,0.15);
+  border-color: #22c55e;
+  color: #4ade80;
+}
+.send-dest-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 2px solid rgba(255,255,255,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.send-dest-btn.selected .send-dest-check {
+  background: #22c55e;
+  border-color: #22c55e;
+  color: #fff;
+}
+.send-popup-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.send-popup-cancel {
+  padding: 6px 14px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+}
+.send-popup-cancel:hover { background: rgba(255,255,255,0.2); color: #fff; }
+.send-popup-confirm {
+  padding: 6px 14px;
+  background: linear-gradient(to bottom, #22c55e, #16a34a);
+  border: 1px solid #22c55e;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.send-popup-confirm:hover { background: linear-gradient(to bottom, #4ade80, #22c55e); }
+
+/* Notification dropdown */
+.notif-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 320px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #1e293b;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  display: none;
+  z-index: 9999;
+}
+.notif-dropdown.open { display: block; }
+.notif-dropdown-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.notif-dropdown-title { font-size: 12px; font-weight: 700; color: #fff; }
+.notif-clear-btn {
+  background: none; border: none; color: #94a3b8; font-size: 10px; cursor: pointer;
+}
+.notif-clear-btn:hover { color: #ef4444; }
+.notif-item {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.notif-item:hover { background: rgba(255,255,255,0.05); }
+.notif-item.unread { background: rgba(59,130,246,0.1); border-left: 3px solid #3b82f6; }
+.notif-item-title { font-size: 11px; font-weight: 700; color: #fff; }
+.notif-item-body { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+.notif-item-time { font-size: 9px; color: #64748b; margin-top: 2px; }
+.notif-empty { padding: 20px; text-align: center; color: #64748b; font-size: 11px; }
 
 /* DEVIS BUTTON - big centered */
 .psm-card-devis-btn {
@@ -405,6 +613,73 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+}
+
+/* Floating controls - no header, just small buttons */
+.devis-floating-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 25;
+  display: flex;
+  gap: 6px;
+}
+.devis-float-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,0,0,0.3);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+.devis-float-close {
+  background: rgba(180,30,30,0.9);
+  color: #fff;
+}
+.devis-float-close:hover { background: #dc2626; transform: scale(1.1); }
+.devis-float-magnify {
+  background: rgba(30,30,60,0.9);
+  color: #fbbf24;
+  font-size: 16px;
+}
+.devis-float-magnify:hover { background: rgba(40,40,80,1); transform: scale(1.1); }
+.devis-float-magnify.active {
+  background: #1d4ed8;
+  color: #fff;
+  border-color: #60a5fa;
+  box-shadow: 0 0 10px rgba(59,130,246,0.6);
+}
+
+/* Magnifier lens overlay */
+.devis-magnifier {
+  position: absolute;
+  width: 400px;
+  height: 300px;
+  border: 3px solid #fbbf24;
+  border-radius: 8px;
+  overflow: hidden;
+  pointer-events: none;
+  display: none;
+  z-index: 20;
+  box-shadow: 0 0 20px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(251,191,36,0.3);
+}
+.devis-magnifier canvas {
+  width: 100%;
+  height: 100%;
+}
+/* Invisible overlay that captures mouse events when magnifier is active */
+.devis-mag-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 15;
+  cursor: crosshair;
+  display: none;
 }
 
 /* Smooth transitions for push layout */
@@ -414,27 +689,25 @@ body {
 
 /* When devis viewer is open: push everything right */
 body.devis-open .topbar {
-  margin-left: 68vw;
-  width: 32vw;
-  min-height: 50px;
-  padding: 4px 10px 4px 10px;
-}
-body.devis-open .topbar .tb-left {
-  transform: scale(0.8);
-  transform-origin: left center;
-}
-body.devis-open .topbar .top-title {
-  font-size: 14px;
+  display: none;
 }
 body.devis-open .main-container {
-  margin-left: 68vw;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 68vw;
   width: 32vw;
+  margin: 0;
+  padding: 0;
+  z-index: 10;
 }
 body.devis-open .cards-col {
   display: none;
 }
 body.devis-open .details-zone {
-  min-width: 0;
+  border-radius: 0;
+  border: none;
 }
 
 /* FICHE OVERLAY - small left panel over cards */
@@ -762,9 +1035,9 @@ body.devis-open .details-zone {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 14px;
+  padding: 4px 10px;
   background: linear-gradient(to bottom, #1e40af, #2563eb);
-  border-bottom: 3px solid #60a5fa;
+  border-bottom: 2px solid #60a5fa;
   flex-shrink: 0;
   transition: all 0.3s ease;
 }
@@ -783,10 +1056,10 @@ body.devis-open .details-zone {
   gap: 8px;
 }
 .dept-header-icon {
-  font-size: 20px;
+  font-size: 15px;
 }
 .dept-header-title {
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 900;
   letter-spacing: 0.1em;
   color: #fff;
@@ -798,22 +1071,50 @@ body.devis-open .details-zone {
   gap: 6px;
 }
 .dept-switch-btn {
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: 2px solid rgba(255,255,255,0.3);
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.3);
   background: rgba(255,255,255,0.1);
   color: #fff;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
-  backdrop-filter: blur(4px);
 }
 .dept-switch-btn:hover {
   background: rgba(255,255,255,0.25);
   border-color: rgba(255,255,255,0.5);
   transform: translateY(-1px);
 }
+.dept-switch-btn.switch-complete { 
+  border-color: rgba(75,85,99,0.6);
+  background: rgba(55,65,81,0.5);
+  color: #9ca3af;
+  font-weight: 800;
+  padding: 3px 10px;
+}
+.dept-switch-btn.switch-complete:hover { background: rgba(75,85,99,0.5); border-color: #6b7280; color: #fff; }
+.dept-switch-btn.switch-complete.done {
+  background: linear-gradient(to bottom, #22c55e, #16a34a);
+  border-color: #22c55e;
+  color: #fff;
+}
+
+/* Print button (yellow) in form-header */
+.psm-print-btn-sm {
+  margin-left: auto;
+  padding: 3px 10px;
+  background: linear-gradient(to bottom, #eab308, #ca8a04);
+  border: 1px solid #facc15;
+  border-radius: 4px;
+  color: #000;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.psm-print-btn-sm:hover { background: linear-gradient(to bottom, #facc15, #eab308); transform: translateY(-1px); }
 .dept-switch-btn.switch-couture { border-color: rgba(192,132,252,0.5); }
 .dept-switch-btn.switch-couture:hover { background: rgba(139,92,246,0.3); border-color: #c084fc; }
 .dept-switch-btn.switch-metal { border-color: rgba(251,191,36,0.5); }
@@ -846,10 +1147,10 @@ body.devis-open .details-zone {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px 12px;
+  padding: 6px 10px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
   min-height: 0;
   scrollbar-width: thin;
   scrollbar-color: #2d3f58 transparent;
@@ -888,44 +1189,44 @@ body.devis-open .details-zone {
 .dept-footer-right .mat-total-label { color: #94a3b8; margin-right: 6px; font-weight: 600; }
 .dept-footer-right .mat-total-value { color: #fbbf24; font-weight: 800; }
 
-/* Form main - full width */
+/* Form main - takes all available space, pushes matériaux to bottom */
 .dept-form-main {
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex-shrink: 0;
+  flex: 1;
 }
 
 .dept-form-main::-webkit-scrollbar { width: 4px; }
 .dept-form-main::-webkit-scrollbar-track { background: transparent; }
 .dept-form-main::-webkit-scrollbar-thumb { background: #2d3f58; border-radius: 4px; }
 
-/* Materials section - full width below */
+/* Materials section - anchored at bottom, grows upward */
 .dept-form-side {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   background: linear-gradient(to bottom, #2d3748, #1a2332);
   border: 1px solid #4a5568;
-  border-radius: 8px;
-  padding: 10px;
+  border-radius: 6px;
+  padding: 6px 8px;
   flex-shrink: 0;
-  max-height: 200px;
   overflow-y: auto;
   min-height: 0;
+  margin-top: auto;
 }
 
 /* PSM FORM ELEMENTS */
 .psm-form-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 7px 10px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  padding: 4px 8px;
   background: #1a2740;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid #2d3f58;
   flex-shrink: 0;
 }
@@ -933,14 +1234,14 @@ body.devis-open .details-zone {
 .psm-type-toggle {
   display: flex;
   gap: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
   border: 2px solid #3d5474;
 }
 
 .psm-type-btn {
-  padding: 6px 16px;
-  font-size: 12px;
+  padding: 4px 10px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   border: none;
@@ -957,9 +1258,7 @@ body.devis-open .details-zone {
 .psm-type-btn:first-child { border-right: 1px solid #3d5474; }
 
 .psm-eval-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: none;
 }
 
 .psm-eval-group label {
@@ -970,37 +1269,37 @@ body.devis-open .details-zone {
 }
 
 .psm-eval-select {
-  padding: 6px 10px;
+  padding: 4px 8px;
   border: 1px solid #2d3f58;
-  border-radius: 6px;
+  border-radius: 4px;
   background: #0d1b2e;
   color: #fff;
-  font-size: 12px;
-  min-width: 160px;
+  font-size: 11px;
+  min-width: 120px;
 }
 .psm-eval-select option { background: #1e3a5f; color: #fff; }
 
 .psm-temps-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .psm-temps-group label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: #94a3b8;
   white-space: nowrap;
 }
 
 .psm-temps-input {
-  padding: 6px 10px;
+  padding: 4px 8px;
   border: 1px solid #2d3f58;
-  border-radius: 6px;
+  border-radius: 4px;
   background: #0d1b2e;
   color: #fff;
-  font-size: 12px;
-  width: 100px;
+  font-size: 11px;
+  width: 70px;
 }
 
 /* LARGE TEXT FIELDS */
@@ -1039,7 +1338,7 @@ body.devis-open .details-zone {
 
 .psm-textarea-lg {
   width: 100%;
-  min-height: 80px;
+  min-height: 60px;
   padding: 6px 10px;
   border: 1px solid #2d3f58;
   border-radius: 6px;
@@ -1048,10 +1347,11 @@ body.devis-open .details-zone {
   font-size: 12px;
   line-height: 1.4;
   font-family: 'Segoe UI', system-ui, sans-serif;
-  overflow-y: hidden;
+  overflow-y: auto;
   overflow-x: hidden;
   white-space: pre-wrap;
   word-wrap: break-word;
+  flex: 1;
 }
 .psm-textarea-lg:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 6px #1e3a6e; }
 .psm-textarea-lg:empty::before {
@@ -1163,6 +1463,102 @@ body.devis-open .details-zone {
 .devis-dropzone-icon { font-size: 28px; margin-bottom: 4px; }
 .devis-dropzone-text { font-size: 12px; font-weight: 700; color: #93c5fd; }
 .devis-dropzone-hint { font-size: 10px; color: #64748b; margin-top: 2px; }
+
+/* DEVIS MODE UPLOAD */
+.devis-mode-upload {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* DEVIS MODE VIEWER - shows file directly, full panel */
+.devis-mode-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.devis-viewer-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: #0a0f1a;
+  min-height: 0;
+  padding: 0;
+}
+.devis-viewer-content img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.devis-viewer-content iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+/* PDF wrapper - simple clean display */
+.devis-pdf-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+.devis-pdf-wrap iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+.devis-viewer-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: rgba(0,0,0,0.5);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  min-height: 0;
+}
+.devis-viewer-thumb {
+  width: 36px;
+  height: 36px;
+  border: 2px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.devis-viewer-thumb.active {
+  border-color: #fbbf24;
+  box-shadow: 0 0 6px rgba(251,191,36,0.5);
+}
+.devis-viewer-thumb:hover { border-color: #60a5fa; }
+.devis-viewer-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.devis-viewer-thumb-delete {
+  width: 24px;
+  height: 36px;
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 4px;
+  background: rgba(239,68,68,0.15);
+  color: #ef4444;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.devis-viewer-thumb-delete:hover { background: rgba(239,68,68,0.4); color: #fff; }
 .psm-question-checkbox-label {
   display: inline-flex;
   align-items: center;
@@ -1235,25 +1631,63 @@ body.devis-open .details-zone {
   border-color: #22c55e;
 }
 
+/* Small complete button in form header */
+.psm-complete-btn-sm {
+  margin-left: auto;
+  padding: 3px 10px;
+  background: linear-gradient(to bottom, #374151, #1f2937);
+  border: 2px solid #4b5563;
+  border-radius: 4px;
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.psm-complete-btn-sm:hover { border-color: #6b7280; color: #fff; }
+.psm-complete-btn-sm.done {
+  background: linear-gradient(to bottom, #22c55e, #16a34a);
+  border-color: #22c55e;
+  color: #fff;
+}
+
 /* MATÉRIAUX SECTION */
 .mat-section-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   color: #fff;
   display: flex;
   align-items: center;
   gap: 5px;
-  padding-bottom: 6px;
-  border-bottom: 2px solid #3d4f63;
-  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #3d4f63;
+  margin-bottom: 4px;
+}
+
+/* Small question toggle in matériaux header */
+.mat-question-toggle {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.mat-question-toggle input[type="checkbox"] { display: none; }
+.mat-question-toggle span {
+  font-size: 11px;
+  opacity: 0.3;
+  transition: all 0.15s;
+}
+.mat-question-toggle input:checked + span {
+  opacity: 1;
+  filter: drop-shadow(0 0 3px rgba(251,191,36,0.6));
 }
 
 .mat-section-title .mat-add-btn-sm {
   margin-left: auto;
-  padding: 3px 8px;
+  padding: 2px 6px;
   background: linear-gradient(to bottom, #22c55e, #16a34a);
   border: none;
-  border-radius: 4px;
+  border-radius: 3px;
   color: #fff;
   font-size: 10px;
   font-weight: 700;
@@ -1655,6 +2089,16 @@ body.devis-open .details-zone {
   <div class="tb-center"><span class="top-title">PSM</span></div>
   <div class="tb-right">
     <div class="tb-buttons-row">
+      <div style="position:relative;">
+        <button class="tb-bell-btn" id="bellBtn" onclick="toggleNotifDropdown()">🔔<span class="tb-bell-badge" id="bellBadge">0</span></button>
+        <div class="notif-dropdown" id="notifDropdown">
+          <div class="notif-dropdown-header">
+            <span class="notif-dropdown-title">🔔 Notifications</span>
+            <button class="notif-clear-btn" onclick="clearAllNotifs()">Tout effacer</button>
+          </div>
+          <div id="notifList"><div class="notif-empty">Aucune notification</div></div>
+        </div>
+      </div>
       <div class="user-status"><span class="status-dot" id="statusDot"></span><span class="user-name" id="currentUserDisplay">--</span></div>
     </div>
     <div class="tb-search-row">
@@ -1704,6 +2148,7 @@ body.devis-open .details-zone {
           <span class="tab-check" id="tabCheckMetal" style="display:none;">✓</span>
         </div>
         <div class="dept-header-switches" id="deptHeaderSwitches">
+          <button class="dept-switch-btn switch-complete" id="btnCompleteAtelier" onclick="toggleComplete('atelier')">✓</button>
           <button class="dept-switch-btn switch-couture" id="switchBtnCouture" onclick="switchTab('couture')">🧵 Couture</button>
           <button class="dept-switch-btn switch-metal" id="switchBtnMetal" onclick="switchTab('metal')">🔩 Métal</button>
         </div>
@@ -1742,48 +2187,30 @@ body.devis-open .details-zone {
                   <label>⏱️ Temps:</label>
                   <input type="text" class="psm-temps-input" id="tempsAtelier" placeholder="45 min">
                 </div>
+                <button class="psm-print-btn-sm" onclick="openPrintModal()">🖨️ Imprimer</button>
               </div>
               
-              <div class="psm-field-block psm-field-block-notes">
-                <div class="psm-field-label-row">
-                  <span class="psm-field-label">📝 Notes</span>
-                  <button class="psm-photo-btn" id="photoBtnNotesAtelier" onclick="requestPsmPhoto('atelier','notes')">📷</button>
-                </div>
-                <div class="psm-textarea-lg" contenteditable="true" id="notesAtelier" data-placeholder="Notes supplémentaires..." onblur="saveCurrentCard()"></div>
-              </div>
-              
-              <div class="psm-question-toggle">
-                <label class="psm-question-checkbox-label">
-                  <input type="checkbox" id="questionToggleAtelier" onchange="toggleQuestionSection('atelier')">
-                  <span class="psm-question-check-mark">✓</span>
-                  <span>Cocher pour questionnement</span>
-                </label>
+              <div class="psm-field-block psm-field-block-notes" style="flex:1;">
+                <div class="psm-textarea-lg" contenteditable="true" id="notesAtelier" data-placeholder="Notes..." onblur="saveCurrentCard()"></div>
               </div>
               
               <div class="psm-field-block psm-field-block-question psm-question-section hidden" id="questionSectionAtelier">
                 <div class="psm-field-label-row">
-                  <span class="psm-field-label">❓ Questions / Questionnements</span>
-                  <button class="psm-photo-btn" id="photoBtnQuestionAtelier" onclick="requestPsmPhoto('atelier','question')">📷</button>
+                  <span class="psm-field-label" style="font-size:11px;">❓ Questionnements</span>
                 </div>
                 <div class="psm-textarea-lg" contenteditable="true" id="questionAtelier" data-placeholder="Questions et questionnements..." onblur="saveCurrentCard()"></div>
               </div>
             </div>
             
             <div class="dept-form-side">
-              <div class="mat-section-title">🔧 Matériaux <button class="mat-add-btn-sm" onclick="addMaterial('atelier')">➕ Ajouter</button></div>
+              <div class="mat-section-title">🔧 Matériaux
+                <label class="mat-question-toggle" onclick="event.stopPropagation()"><input type="checkbox" id="questionToggleAtelier" onchange="toggleQuestionSection('atelier')"><span>❓</span></label>
+                <button class="mat-add-btn-sm" onclick="addMaterial('atelier')">➕</button>
+              </div>
               <div class="mat-list" id="matListAtelier"></div>
             </div>
           </div>
           
-          <div class="dept-panel-footer">
-            <div class="dept-footer-left">
-              <button class="psm-complete-btn-lg" id="btnCompleteAtelier" onclick="toggleComplete('atelier')">✓ Marquer Complet</button>
-            </div>
-            <div class="dept-footer-right">
-              <span class="mat-total-label">Total matériaux:</span>
-              <span class="mat-total-value" id="matTotalAtelier">0</span>
-            </div>
-          </div>
         </div>
         
         <!-- ═══ COUTURE PANEL ═══ -->
@@ -1816,48 +2243,30 @@ body.devis-open .details-zone {
                   <label>⏱️ Temps:</label>
                   <input type="text" class="psm-temps-input" id="tempsCouture" placeholder="30 min">
                 </div>
+                <button class="psm-print-btn-sm" onclick="openPrintModal()">🖨️ Imprimer</button>
               </div>
               
-              <div class="psm-field-block psm-field-block-notes">
-                <div class="psm-field-label-row">
-                  <span class="psm-field-label">📝 Notes</span>
-                  <button class="psm-photo-btn" id="photoBtnNotesCouture" onclick="requestPsmPhoto('couture','notes')">📷</button>
-                </div>
-                <div class="psm-textarea-lg" contenteditable="true" id="notesCouture" data-placeholder="Notes supplémentaires..." onblur="saveCurrentCard()"></div>
-              </div>
-              
-              <div class="psm-question-toggle">
-                <label class="psm-question-checkbox-label">
-                  <input type="checkbox" id="questionToggleCouture" onchange="toggleQuestionSection('couture')">
-                  <span class="psm-question-check-mark">✓</span>
-                  <span>Cocher pour questionnement</span>
-                </label>
+              <div class="psm-field-block psm-field-block-notes" style="flex:1;">
+                <div class="psm-textarea-lg" contenteditable="true" id="notesCouture" data-placeholder="Notes..." onblur="saveCurrentCard()"></div>
               </div>
               
               <div class="psm-field-block psm-field-block-question psm-question-section hidden" id="questionSectionCouture">
                 <div class="psm-field-label-row">
-                  <span class="psm-field-label">❓ Questions / Questionnements</span>
-                  <button class="psm-photo-btn" id="photoBtnQuestionCouture" onclick="requestPsmPhoto('couture','question')">📷</button>
+                  <span class="psm-field-label" style="font-size:11px;">❓ Questionnements</span>
                 </div>
                 <div class="psm-textarea-lg" contenteditable="true" id="questionCouture" data-placeholder="Questions et questionnements..." onblur="saveCurrentCard()"></div>
               </div>
             </div>
             
             <div class="dept-form-side">
-              <div class="mat-section-title">🔧 Matériaux <button class="mat-add-btn-sm" onclick="addMaterial('couture')">➕ Ajouter</button></div>
+              <div class="mat-section-title">🔧 Matériaux
+                <label class="mat-question-toggle" onclick="event.stopPropagation()"><input type="checkbox" id="questionToggleCouture" onchange="toggleQuestionSection('couture')"><span>❓</span></label>
+                <button class="mat-add-btn-sm" onclick="addMaterial('couture')">➕</button>
+              </div>
               <div class="mat-list" id="matListCouture"></div>
             </div>
           </div>
           
-          <div class="dept-panel-footer">
-            <div class="dept-footer-left">
-              <button class="psm-complete-btn-lg" id="btnCompleteCouture" onclick="toggleComplete('couture')">✓ Marquer Complet</button>
-            </div>
-            <div class="dept-footer-right">
-              <span class="mat-total-label">Total matériaux:</span>
-              <span class="mat-total-value" id="matTotalCouture">0</span>
-            </div>
-          </div>
         </div>
         
         <!-- ═══ MÉTAL PANEL ═══ -->
@@ -1890,48 +2299,30 @@ body.devis-open .details-zone {
                   <label>⏱️ Temps:</label>
                   <input type="text" class="psm-temps-input" id="tempsMetal" placeholder="20 min">
                 </div>
+                <button class="psm-print-btn-sm" onclick="openPrintModal()">🖨️ Imprimer</button>
               </div>
               
-              <div class="psm-field-block psm-field-block-notes">
-                <div class="psm-field-label-row">
-                  <span class="psm-field-label">📝 Notes</span>
-                  <button class="psm-photo-btn" id="photoBtnNotesMetal" onclick="requestPsmPhoto('metal','notes')">📷</button>
-                </div>
-                <div class="psm-textarea-lg" contenteditable="true" id="notesMetal" data-placeholder="Notes supplémentaires..." onblur="saveCurrentCard()"></div>
-              </div>
-              
-              <div class="psm-question-toggle">
-                <label class="psm-question-checkbox-label">
-                  <input type="checkbox" id="questionToggleMetal" onchange="toggleQuestionSection('metal')">
-                  <span class="psm-question-check-mark">✓</span>
-                  <span>Cocher pour questionnement</span>
-                </label>
+              <div class="psm-field-block psm-field-block-notes" style="flex:1;">
+                <div class="psm-textarea-lg" contenteditable="true" id="notesMetal" data-placeholder="Notes..." onblur="saveCurrentCard()"></div>
               </div>
               
               <div class="psm-field-block psm-field-block-question psm-question-section hidden" id="questionSectionMetal">
                 <div class="psm-field-label-row">
-                  <span class="psm-field-label">❓ Questions / Questionnements</span>
-                  <button class="psm-photo-btn" id="photoBtnQuestionMetal" onclick="requestPsmPhoto('metal','question')">📷</button>
+                  <span class="psm-field-label" style="font-size:11px;">❓ Questionnements</span>
                 </div>
                 <div class="psm-textarea-lg" contenteditable="true" id="questionMetal" data-placeholder="Questions et questionnements..." onblur="saveCurrentCard()"></div>
               </div>
             </div>
             
             <div class="dept-form-side">
-              <div class="mat-section-title">🔧 Matériaux <button class="mat-add-btn-sm" onclick="addMaterial('metal')">➕ Ajouter</button></div>
+              <div class="mat-section-title">🔧 Matériaux
+                <label class="mat-question-toggle" onclick="event.stopPropagation()"><input type="checkbox" id="questionToggleMetal" onchange="toggleQuestionSection('metal')"><span>❓</span></label>
+                <button class="mat-add-btn-sm" onclick="addMaterial('metal')">➕</button>
+              </div>
               <div class="mat-list" id="matListMetal"></div>
             </div>
           </div>
           
-          <div class="dept-panel-footer">
-            <div class="dept-footer-left">
-              <button class="psm-complete-btn-lg" id="btnCompleteMetal" onclick="toggleComplete('metal')">✓ Marquer Complet</button>
-            </div>
-            <div class="dept-footer-right">
-              <span class="mat-total-label">Total matériaux:</span>
-              <span class="mat-total-value" id="matTotalMetal">0</span>
-            </div>
-          </div>
         </div>
         
       </div>
@@ -1942,28 +2333,29 @@ body.devis-open .details-zone {
 <!-- DEVIS VIEWER PANEL (68% left, pushes layout right) -->
 <div class="devis-overlay" id="devisOverlay">
   <div class="devis-overlay-panel">
-    <div class="devis-panel-header">
-      <span class="dph-name" id="dpName">Patient</span>
-      <span class="dph-order" id="dpOrder">#---</span>
-      <button class="dph-close" onclick="closeDevisOverlay()">✕</button>
+    <!-- Floating controls: magnify, fullscreen, close -->
+    <div class="devis-floating-controls">
+      <button class="devis-float-btn devis-float-magnify" id="btnMagnify" onclick="toggleMagnifier()" title="Loupe">🔍</button>
+      <button class="devis-float-btn devis-float-close" onclick="closeDevisOverlay()" title="Fermer">✕</button>
     </div>
-    <div class="devis-panel-body">
-      <div class="cd-devis-section">
-        <div class="cd-devis-title">
-          📋 Devis / Documents
-          <button class="cd-devis-add-btn" onclick="document.getElementById('devisFileInput').click()">📎 Ajouter image</button>
-        </div>
-        <input type="file" id="devisFileInput" accept="image/*,.pdf" multiple style="display:none" onchange="handleDevisFiles(this)">
-        
-        <!-- DRAG & DROP ZONE -->
-        <div class="devis-dropzone" id="devisDropzone">
-          <div class="devis-dropzone-icon">📂</div>
-          <div class="devis-dropzone-text">Glissez et déposez vos fichiers ici</div>
-          <div class="devis-dropzone-hint">ou cliquez sur "Ajouter image"</div>
-        </div>
-        
-        <div class="cd-devis-grid" id="cdDevisGrid"></div>
+    <!-- Magnifier lens + mouse capture overlay -->
+    <div class="devis-magnifier" id="devisMagnifier"><canvas id="devisMagCanvas"></canvas></div>
+    <div class="devis-mag-overlay" id="devisMagOverlay"></div>
+    <input type="file" id="devisFileInput" accept="image/*,.pdf" multiple style="display:none" onchange="handleDevisFiles(this)">
+    
+    <!-- MODE UPLOAD (shown when no images) -->
+    <div class="devis-mode-upload" id="devisModeUpload">
+      <div class="devis-dropzone" id="devisDropzone">
+        <div class="devis-dropzone-icon">📂</div>
+        <div class="devis-dropzone-text">Glissez et déposez vos fichiers ici</div>
+        <div class="devis-dropzone-hint">ou cliquez sur "📎 Ajouter"</div>
       </div>
+    </div>
+    
+    <!-- MODE VIEWER (shown when images exist - displays file directly) -->
+    <div class="devis-mode-viewer" id="devisModeViewer" style="display:none;">
+      <div class="devis-viewer-content" id="devisViewerContent"></div>
+      <div class="devis-viewer-nav" id="devisViewerNav"></div>
     </div>
   </div>
 </div>
@@ -2193,6 +2585,7 @@ const MATERIAUX = [
 document.addEventListener('DOMContentLoaded', function() {
   firebase.initializeApp(FIREBASE_CONFIG);
   db = firebase.database();
+  var storage = firebase.storage();
   
   firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(e){console.log('Persist:',e);});
   firebase.auth().onAuthStateChanged(user => {
@@ -2204,6 +2597,7 @@ document.addEventListener('DOMContentLoaded', function() {
       localStorage.setItem('physipro_last_email', user.email);
       initLogoMenu('psm');
       initPSM();
+      initNotifications();
     } else {
       localStorage.removeItem('physipro_last_email');
       document.getElementById('loginOverlay').style.display='';
@@ -2359,25 +2753,31 @@ function switchTab(dept) {
     headerIcon.textContent = '🔨';
     headerTitle.textContent = 'ATELIER';
     switchesContainer.innerHTML = `
+      <button class="dept-switch-btn switch-complete" id="btnCompleteAtelier" onclick="toggleComplete('atelier')">✓</button>
       <button class="dept-switch-btn switch-couture" onclick="switchTab('couture')">🧵 Couture</button>
       <button class="dept-switch-btn switch-metal" onclick="switchTab('metal')">🔩 Métal</button>
     `;
+    updateCompleteBtn('atelier');
   } else if (dept === 'couture') {
     headerBar.classList.add('mode-couture');
     headerIcon.textContent = '🧵';
     headerTitle.textContent = 'COUTURE';
     switchesContainer.innerHTML = `
+      <button class="dept-switch-btn switch-complete" id="btnCompleteCouture" onclick="toggleComplete('couture')">✓</button>
       <button class="dept-switch-btn switch-atelier" onclick="switchTab('atelier')">🔨 Atelier</button>
       <button class="dept-switch-btn switch-metal" onclick="switchTab('metal')">🔩 Métal</button>
     `;
+    updateCompleteBtn('couture');
   } else if (dept === 'metal') {
     headerBar.classList.add('mode-metal');
     headerIcon.textContent = '🔩';
     headerTitle.textContent = 'MÉTAL';
     switchesContainer.innerHTML = `
+      <button class="dept-switch-btn switch-complete" id="btnCompleteMetal" onclick="toggleComplete('metal')">✓</button>
       <button class="dept-switch-btn switch-atelier" onclick="switchTab('atelier')">🔨 Atelier</button>
       <button class="dept-switch-btn switch-couture" onclick="switchTab('couture')">🧵 Couture</button>
     `;
+    updateCompleteBtn('metal');
   }
 }
 
@@ -2578,21 +2978,24 @@ function renderCards() {
     const imgCount = hasDevisImages ? card.devisImages.length : 0;
     
     let devisBtn;
+    const isSent = card.psmSent;
+    const sendCls = isSent ? 'psm-card-send-btn sent' : 'psm-card-send-btn';
+    const sendLabel = isSent ? '📨' : '📤';
+    
     if (hasDevisImages) {
-      devisBtn = `<button type="button" class="psm-card-devis-btn has-images card-devis-drop" data-card-id="${id}" onclick="event.stopPropagation();openDevisViewer('${id}')">📄 Devis (${imgCount} fichier${imgCount > 1 ? 's' : ''})</button>`;
+      devisBtn = `<button type="button" class="psm-card-devis-btn has-images card-devis-drop" data-card-id="${id}" onclick="event.stopPropagation();openDevisViewer('${id}')">📄 Voir PDF</button>`;
     } else {
-      devisBtn = `<button type="button" class="psm-card-devis-btn card-devis-drop" data-card-id="${id}" onclick="event.stopPropagation();openDevisUpload('${id}')">📂 DEVIS — Ajouter</button>`;
+      devisBtn = `<div class="psm-card-devis-btn card-devis-drop" data-card-id="${id}">📂 Glisser un fichier ici</div>`;
     }
     
     return `
       <div class="psm-card ${region} ${selected}" data-card-id="${id}" onclick="selectCard('${id}')">
         <div class="psm-card-top-row">
-          <div class="psm-card-info">
-            <div class="psm-card-name">${escapeHtml(card.name || 'Patient')}</div>
-            <div class="psm-card-order">#${escapeHtml(card.order || '---')}</div>
-          </div>
-          <div class="psm-card-actions">
-            <button class="psm-card-fiche-btn" onclick="event.stopPropagation();openFicheOverlay('${id}')" title="Fiche complète">📋 Fiche</button>
+          <div class="psm-card-name">${escapeHtml(card.name || 'Patient')}</div>
+          <div class="psm-card-order-row">
+            <button class="psm-card-fiche-btn" onclick="event.stopPropagation();openFicheOverlay('${id}')" title="Fiche">📋 Fiche</button>
+            <span class="psm-card-order">#${escapeHtml(card.order || '---')}</span>
+            <button class="${sendCls}" onclick="event.stopPropagation();sendPsm('${id}')" title="Envoyer le PSM">${sendLabel}</button>
           </div>
         </div>
         ${devisBtn}
@@ -2600,7 +3003,19 @@ function renderCards() {
       </div>
     `;
   }).join('');
+  
+  // Check overflow after render
+  requestAnimationFrame(checkCardsOverflow);
 }
+
+function checkCardsOverflow() {
+  var container = document.getElementById('cardsList');
+  var countEl = document.getElementById('cardsCount');
+  if (!container || !countEl) return;
+  var hasOverflow = container.scrollHeight > container.clientHeight;
+  countEl.classList.toggle('overflow-pulse', hasOverflow);
+}
+window.addEventListener('resize', checkCardsOverflow);
 
 function buildDeptBarHtml(cardId, card) {
   const depts = [
@@ -2685,10 +3100,8 @@ function loadCard(id) {
       });
     }
     
-    // Complete button
-    const btn = document.getElementById('btnComplete' + capitalize(dept));
-    btn.classList.toggle('done', !!data.complete);
-    btn.textContent = data.complete ? '✓ Complété' : '✓ Marquer Complet';
+    // Complete button (now in header switches)
+    updateCompleteBtn(dept);
     
     // Tab check marks
     const tabCheck = document.getElementById('tabCheck' + capitalize(dept));
@@ -2835,15 +3248,13 @@ function toggleComplete(dept) {
   
   psmData[currentCardId][dept].complete = !psmData[currentCardId][dept].complete;
   
-  const btn = document.getElementById('btnComplete' + capitalize(dept));
+  updateCompleteBtn(dept);
+  
   const isComplete = psmData[currentCardId][dept].complete;
-  btn.classList.toggle('done', isComplete);
-  btn.textContent = isComplete ? '✓ Complété' : '✓ Marquer Complet';
   
   // Update tab check
   const tabCheck = document.getElementById('tabCheck' + capitalize(dept));
   tabCheck.classList.toggle('visible', isComplete);
-  // Update visibility in header
   if (dept === activeTab) {
     tabCheck.style.display = isComplete ? 'inline' : 'none';
   }
@@ -2853,8 +3264,270 @@ function toggleComplete(dept) {
   showToast(isComplete ? '✓ Marqué complet' : '✗ Marqué incomplet', 'info');
 }
 
+function updateCompleteBtn(dept) {
+  var btn = document.getElementById('btnComplete' + capitalize(dept));
+  if (!btn) return;
+  var isComplete = psmData[currentCardId] && psmData[currentCardId][dept] && psmData[currentCardId][dept].complete;
+  btn.classList.toggle('done', !!isComplete);
+  btn.textContent = isComplete ? '✓ Complété' : '✓';
+}
+
 function saveToFirebase() {
-  db.ref('psm').set(psmData).catch(function(e) { console.error('PSM save error:', e); });
+  // Check data size before saving
+  var dataStr = JSON.stringify(psmData);
+  var sizeMB = (dataStr.length / (1024 * 1024)).toFixed(2);
+  
+  if (sizeMB > 8) {
+    showToast('⚠️ ATTENTION: Base de données à ' + sizeMB + 'MB / 10MB max! Supprimez des anciennes cartes.', 'error');
+  } else if (sizeMB > 5) {
+    showToast('⚠️ Espace serveur: ' + sizeMB + 'MB utilisé', 'warning');
+  }
+  
+  db.ref('psm').set(psmData).catch(function(e) { 
+    console.error('PSM save error:', e);
+    if (e.message && e.message.indexOf('size') !== -1) {
+      showToast('❌ ERREUR: Données trop volumineuses! Supprimez des fichiers.', 'error');
+    }
+  });
+}
+
+// ═══ SEND PSM + NOTIFICATIONS ═══
+// PSM Send recipients
+var PSM_RECIPIENTS = [
+  { name: 'Daniel Charest', key: 'daniel_charest' },
+  { name: 'Stéphanie Roy', key: 'stephanie_roy' },
+  { name: 'Éric Poirier', key: 'eric_poirier' }
+];
+
+function sendPsm(cardId) {
+  if (!psmData[cardId]) return;
+  var card = psmData[cardId];
+  
+  if (card.psmSent) {
+    card.psmSent = false;
+    card.psmSentBy = null;
+    card.psmSentAt = null;
+    card.psmSentTo = null;
+    saveToFirebase();
+    renderCards();
+    showToast('📤 Envoi annulé', 'info');
+    return;
+  }
+  
+  // Open recipient picker popup
+  openSendPopup(cardId);
+}
+
+function openSendPopup(cardId) {
+  var card = psmData[cardId];
+  var existing = document.getElementById('sendPopupOverlay');
+  if (existing) existing.remove();
+  
+  var html = '<div class="send-popup-overlay" id="sendPopupOverlay" onclick="if(event.target===this)closeSendPopup()">' +
+    '<div class="send-popup">' +
+      '<div class="send-popup-title">📨 Envoyer le PSM</div>' +
+      '<div class="send-popup-sub">' + escapeHtml(card.name || 'Patient') + ' — #' + escapeHtml(card.order || '---') + '</div>' +
+      '<div class="send-popup-dest" id="sendPopupDest">';
+  
+  PSM_RECIPIENTS.forEach(function(r) {
+    html += '<div class="send-dest-btn" data-key="' + r.key + '" onclick="toggleSendDest(this)">' +
+      '<span class="send-dest-check"></span>' +
+      '<span>' + escapeHtml(r.name) + '</span>' +
+    '</div>';
+  });
+  
+  html += '</div>' +
+      '<div class="send-popup-actions">' +
+        '<button class="send-popup-cancel" onclick="closeSendPopup()">Annuler</button>' +
+        '<button class="send-popup-confirm" onclick="confirmSendPsm(\'' + cardId + '\')">📨 Envoyer</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function toggleSendDest(el) {
+  el.classList.toggle('selected');
+}
+
+function closeSendPopup() {
+  var overlay = document.getElementById('sendPopupOverlay');
+  if (overlay) overlay.remove();
+}
+
+function confirmSendPsm(cardId) {
+  var selected = document.querySelectorAll('#sendPopupDest .send-dest-btn.selected');
+  if (selected.length === 0) {
+    showToast('⚠️ Sélectionnez au moins un destinataire', 'warning');
+    return;
+  }
+  
+  var card = psmData[cardId];
+  var senderName = currentUser ? getPhysiproDisplayName(currentUser.email) : 'Inconnu';
+  var now = new Date();
+  var dateStr = now.toLocaleDateString('fr-CA') + ' ' + now.toLocaleTimeString('fr-CA', {hour:'2-digit', minute:'2-digit'});
+  
+  var recipients = [];
+  selected.forEach(function(el) {
+    var key = el.getAttribute('data-key');
+    var r = PSM_RECIPIENTS.find(function(x) { return x.key === key; });
+    if (r) recipients.push(r.name);
+  });
+  
+  card.psmSent = true;
+  card.psmSentBy = senderName;
+  card.psmSentAt = dateStr;
+  card.psmSentTo = recipients;
+  
+  // Create one notification per recipient
+  recipients.forEach(function(recipientName) {
+    var notifId = 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2,4);
+    var notif = {
+      id: notifId,
+      type: 'new_psm',
+      cardId: cardId,
+      title: '📋 Nouveau PSM à faire',
+      body: card.name + ' — #' + (card.order || '---') + '\nEnvoyé par ' + senderName + ' le ' + dateStr,
+      sentBy: currentUser ? currentUser.email : '',
+      sentTo: recipientName,
+      timestamp: Date.now(),
+      read: {}
+    };
+    db.ref('psmNotifications/' + notifId).set(notif);
+  });
+  
+  saveToFirebase();
+  renderCards();
+  closeSendPopup();
+  showToast('📨 PSM envoyé à ' + recipients.join(', '), 'success');
+}
+
+// Notification system
+var psmNotifications = {};
+
+function initNotifications() {
+  db.ref('psmNotifications').orderByChild('timestamp').limitToLast(50).on('value', function(snap) {
+    psmNotifications = snap.val() || {};
+    renderNotifications();
+  });
+}
+
+function renderNotifications() {
+  var list = document.getElementById('notifList');
+  var badge = document.getElementById('bellBadge');
+  if (!list || !badge) return;
+  
+  var myEmail = currentUser ? currentUser.email : '';
+  var myName = currentUser ? getPhysiproDisplayName(myEmail) : '';
+  var entries = Object.entries(psmNotifications).sort(function(a, b) {
+    return (b[1].timestamp || 0) - (a[1].timestamp || 0);
+  });
+  
+  // Show notifications where I am a recipient (by name match)
+  var relevant = entries.filter(function(e) {
+    var n = e[1];
+    // If sentTo is specified, show if my name matches the recipient
+    if (n.sentTo && myName) {
+      var sentToLower = n.sentTo.toLowerCase();
+      var myNameLower = myName.toLowerCase();
+      // Match full name or first name
+      return sentToLower === myNameLower ||
+             sentToLower.indexOf(myNameLower) !== -1 ||
+             myNameLower.indexOf(sentToLower.split(' ')[0]) !== -1;
+    }
+    // If no specific recipient, show to everyone except sender
+    if (n.sentBy === myEmail) return false;
+    return true;
+  });
+  
+  var emailKey = myEmail.replace(/\./g, '_');
+  var unreadCount = relevant.filter(function(e) {
+    return !e[1].read || !e[1].read[emailKey];
+  }).length;
+  
+  badge.textContent = unreadCount;
+  badge.classList.toggle('has-notif', unreadCount > 0);
+  
+  if (relevant.length === 0) {
+    list.innerHTML = '<div class="notif-empty">Aucune notification</div>';
+    return;
+  }
+  
+  list.innerHTML = relevant.map(function(entry) {
+    var n = entry[1];
+    var isUnread = !n.read || !n.read[emailKey];
+    var cls = isUnread ? 'notif-item unread' : 'notif-item';
+    var timeAgo = getTimeAgo(n.timestamp);
+    var destLine = n.sentTo ? 'Pour: ' + n.sentTo : '';
+    var bodyLines = (n.body || '').split('\n').map(function(l) { return '<div>' + escapeHtml(l) + '</div>'; }).join('');
+    if (destLine) bodyLines += '<div style="color:#4ade80;font-weight:600;">' + escapeHtml(destLine) + '</div>';
+    return '<div class="' + cls + '" onclick="openNotif(\'' + entry[0] + '\',\'' + (n.cardId || '') + '\')">' +
+      '<div class="notif-item-title">' + escapeHtml(n.title || '') + '</div>' +
+      '<div class="notif-item-body">' + bodyLines + '</div>' +
+      '<div class="notif-item-time">' + timeAgo + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function getTimeAgo(ts) {
+  if (!ts) return '';
+  var diff = Date.now() - ts;
+  var mins = Math.floor(diff / 60000);
+  if (mins < 1) return "À l'instant";
+  if (mins < 60) return 'il y a ' + mins + ' min';
+  var hours = Math.floor(mins / 60);
+  if (hours < 24) return 'il y a ' + hours + 'h';
+  var days = Math.floor(hours / 24);
+  return 'il y a ' + days + 'j';
+}
+
+function toggleNotifDropdown() {
+  var dd = document.getElementById('notifDropdown');
+  dd.classList.toggle('open');
+  
+  // Close when clicking outside
+  if (dd.classList.contains('open')) {
+    setTimeout(function() {
+      document.addEventListener('click', closeNotifOutside);
+    }, 10);
+  }
+}
+
+function closeNotifOutside(e) {
+  var dd = document.getElementById('notifDropdown');
+  var bell = document.getElementById('bellBtn');
+  if (!dd.contains(e.target) && !bell.contains(e.target)) {
+    dd.classList.remove('open');
+    document.removeEventListener('click', closeNotifOutside);
+  }
+}
+
+function openNotif(notifId, cardId) {
+  // Mark as read
+  var myEmail = currentUser ? currentUser.email.replace(/\./g, '_') : '';
+  if (myEmail) {
+    db.ref('psmNotifications/' + notifId + '/read/' + myEmail).set(true);
+  }
+  
+  // Select the card
+  if (cardId && psmData[cardId]) {
+    selectCard(cardId);
+  }
+  
+  document.getElementById('notifDropdown').classList.remove('open');
+}
+
+function clearAllNotifs() {
+  var myEmail = currentUser ? currentUser.email.replace(/\./g, '_') : '';
+  if (!myEmail) return;
+  
+  Object.keys(psmNotifications).forEach(function(key) {
+    db.ref('psmNotifications/' + key + '/read/' + myEmail).set(true);
+  });
+  
+  document.getElementById('notifDropdown').classList.remove('open');
+  showToast('✓ Notifications marquées comme lues', 'info');
 }
 
 // ═══ PRINT ═══
@@ -3535,11 +4208,11 @@ document.addEventListener('click', function(e) {
 // ═══ DEVIS OVERLAY ═══
 // Upload mode - small overlay for adding files
 // ═══ DEVIS VIEWER ═══
+var devisViewerIdx = 0; // current image index being viewed
+
 function openDevisViewer(id) {
   if (id) {
     currentCardId = id;
-    // Don't call selectCard - it re-renders cards and can cause issues
-    // Just ensure detailsContent is visible
     document.getElementById('noSelection').style.display = 'none';
     var dc = document.getElementById('detailsContent');
     if (dc) dc.classList.add('visible');
@@ -3547,16 +4220,102 @@ function openDevisViewer(id) {
     renderCards();
   }
   var card = psmData[currentCardId];
-  if (!card) { console.error('openDevisViewer: no card for', currentCardId); return; }
+  if (!card) return;
   
-  document.getElementById('dpName').textContent = card.name || 'Patient';
-  document.getElementById('dpOrder').textContent = '#' + (card.order || '---');
-  renderDevisImages();
+  var images = card.devisImages || [];
   
-  var overlay = document.getElementById('devisOverlay');
-  overlay.classList.add('visible');
+  if (images.length > 0) {
+    // MODE VIEWER: show file directly
+    document.getElementById('devisModeUpload').style.display = 'none';
+    document.getElementById('devisModeViewer').style.display = 'flex';
+    devisViewerIdx = 0;
+    renderDevisViewerContent(0);
+    renderDevisViewerNav();
+  } else {
+    // MODE UPLOAD: show dropzone
+    document.getElementById('devisModeUpload').style.display = 'flex';
+    document.getElementById('devisModeViewer').style.display = 'none';
+  }
+  
+  document.getElementById('devisOverlay').classList.add('visible');
   document.body.classList.add('devis-open');
   initDevisDropzone();
+  
+  // Auto fullscreen (like F11)
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(function(){});
+  }
+}
+
+// Render the main viewer content (one image at a time, full size)
+function renderDevisViewerContent(idx) {
+  var container = document.getElementById('devisViewerContent');
+  var images = (psmData[currentCardId] && psmData[currentCardId].devisImages) || [];
+  if (!images[idx]) { container.innerHTML = ''; return; }
+  
+  devisViewerIdx = idx;
+  var src = images[idx];
+  
+  // Check if it's a PDF
+  if (src.indexOf('data:application/pdf') === 0) {
+    // #toolbar=0 hides the top toolbar, overflow trick hides bottom bar
+    container.innerHTML = '<div class="devis-pdf-wrap"><iframe src="' + src + '#toolbar=0&navpanes=0&scrollbar=1"></iframe></div>';
+  } else {
+    container.innerHTML = '<img src="' + src + '" alt="Devis ' + (idx+1) + '">';
+  }
+  
+  // Update nav highlights
+  renderDevisViewerNav();
+}
+
+// Render thumbnail navigation bar at bottom
+function renderDevisViewerNav() {
+  var nav = document.getElementById('devisViewerNav');
+  var images = (psmData[currentCardId] && psmData[currentCardId].devisImages) || [];
+  
+  if (images.length <= 1) {
+    // Single image or none - just show delete button if exists
+    if (images.length === 1) {
+      nav.innerHTML = '<button class="devis-viewer-thumb-delete" onclick="removeDevisFromViewer(0)" title="Supprimer">🗑️</button>';
+    } else {
+      nav.innerHTML = '';
+    }
+    return;
+  }
+  
+  nav.innerHTML = images.map(function(src, i) {
+    var activeClass = (i === devisViewerIdx) ? 'active' : '';
+    var thumbSrc = src.indexOf('data:application/pdf') === 0 ? '' : src;
+    var thumbContent = thumbSrc 
+      ? '<img src="' + thumbSrc + '" alt="' + (i+1) + '">'
+      : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1e293b;color:#94a3b8;font-size:10px;font-weight:700;">PDF</div>';
+    return '<div class="devis-viewer-thumb ' + activeClass + '" onclick="renderDevisViewerContent(' + i + ')">' + thumbContent + '</div>';
+  }).join('') + '<button class="devis-viewer-thumb-delete" onclick="removeDevisFromViewer(' + devisViewerIdx + ')" title="Supprimer image active">🗑️</button>';
+}
+
+function removeDevisFromViewer(idx) {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var images = psmData[currentCardId].devisImages || [];
+  if (!images[idx]) return;
+  
+  // Delete from Storage if it's a URL
+  deleteFromStorage(images[idx]);
+  
+  images.splice(idx, 1);
+  psmData[currentCardId].devisImages = images;
+  saveToFirebase();
+  renderCards();
+  
+  if (images.length === 0) {
+    document.getElementById('devisModeUpload').style.display = 'flex';
+    document.getElementById('devisModeViewer').style.display = 'none';
+    document.getElementById('devisViewerContent').innerHTML = '';
+    document.getElementById('devisViewerNav').innerHTML = '';
+  } else {
+    devisViewerIdx = Math.min(devisViewerIdx, images.length - 1);
+    renderDevisViewerContent(devisViewerIdx);
+  }
+  showToast('🗑️ Image supprimée', 'info');
 }
 
 function openDevisUpload(id) {
@@ -3564,12 +4323,203 @@ function openDevisUpload(id) {
 }
 
 function closeDevisOverlay() {
+  // Deactivate magnifier
+  if (magnifierActive) toggleMagnifier();
+  // Exit fullscreen if active
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(function(){});
+  }
   document.getElementById('devisOverlay').classList.remove('visible');
   document.body.classList.remove('devis-open');
 }
 
+// When user exits fullscreen (Escape or F11), close devis viewer too
+document.addEventListener('fullscreenchange', function() {
+  if (!document.fullscreenElement) {
+    var overlay = document.getElementById('devisOverlay');
+    if (overlay && overlay.classList.contains('visible')) {
+      overlay.classList.remove('visible');
+      document.body.classList.remove('devis-open');
+    }
+  }
+});
+
 function openDevisOverlay(id) {
   openDevisViewer(id);
+}
+
+// Magnifier system
+var magnifierActive = false;
+var magnifierZoom = 2.5;
+var magnifierImgCache = null;
+var pdfZoomLevel = 100;
+
+function toggleMagnifier() {
+  magnifierActive = !magnifierActive;
+  var btn = document.getElementById('btnMagnify');
+  var mag = document.getElementById('devisMagnifier');
+  var overlay = document.getElementById('devisMagOverlay');
+  var content = document.getElementById('devisViewerContent');
+  
+  btn.classList.toggle('active', magnifierActive);
+  
+  if (magnifierActive) {
+    var img = content.querySelector('img');
+    var iframe = content.querySelector('iframe');
+    
+    if (img) {
+      // IMAGE MODE: show magnifier rectangle
+      magnifierImgCache = img;
+      overlay.style.display = 'block';
+      overlay.addEventListener('mousemove', moveMagnifier);
+      overlay.addEventListener('mouseleave', hideMagnifier);
+      overlay.addEventListener('wheel', zoomMagnifier, { passive: false });
+    } else if (iframe) {
+      // PDF MODE: use scroll wheel to zoom the iframe
+      pdfZoomLevel = 100;
+      overlay.style.display = 'block';
+      overlay.style.cursor = 'zoom-in';
+      overlay.addEventListener('wheel', zoomPdfWheel, { passive: false });
+      overlay.addEventListener('click', zoomPdfClick);
+      showToast('🔍 Molette = zoom / Clic = zoom in / Clic droit = reset', 'info');
+      overlay.addEventListener('contextmenu', resetPdfZoom);
+    }
+  } else {
+    overlay.style.display = 'none';
+    overlay.style.cursor = 'crosshair';
+    mag.style.display = 'none';
+    overlay.removeEventListener('mousemove', moveMagnifier);
+    overlay.removeEventListener('mouseleave', hideMagnifier);
+    overlay.removeEventListener('wheel', zoomMagnifier);
+    overlay.removeEventListener('wheel', zoomPdfWheel);
+    overlay.removeEventListener('click', zoomPdfClick);
+    overlay.removeEventListener('contextmenu', resetPdfZoom);
+    magnifierImgCache = null;
+    // Reset PDF zoom
+    var content2 = document.getElementById('devisViewerContent');
+    var wrap = content2.querySelector('.devis-pdf-wrap');
+    if (wrap) {
+      wrap.style.transform = '';
+      wrap.style.transformOrigin = '';
+    }
+  }
+}
+
+// PDF zoom with mouse wheel
+function zoomPdfWheel(e) {
+  e.preventDefault();
+  var content = document.getElementById('devisViewerContent');
+  var wrap = content.querySelector('.devis-pdf-wrap');
+  if (!wrap) return;
+  
+  var rect = content.getBoundingClientRect();
+  var mx = ((e.clientX - rect.left) / rect.width * 100);
+  var my = ((e.clientY - rect.top) / rect.height * 100);
+  
+  if (e.deltaY < 0) {
+    pdfZoomLevel = Math.min(300, pdfZoomLevel + 15);
+  } else {
+    pdfZoomLevel = Math.max(100, pdfZoomLevel - 15);
+  }
+  
+  wrap.style.transformOrigin = mx + '% ' + my + '%';
+  wrap.style.transform = 'scale(' + (pdfZoomLevel / 100) + ')';
+  
+  var overlay = document.getElementById('devisMagOverlay');
+  overlay.style.cursor = pdfZoomLevel > 100 ? 'zoom-out' : 'zoom-in';
+}
+
+function zoomPdfClick(e) {
+  var content = document.getElementById('devisViewerContent');
+  var wrap = content.querySelector('.devis-pdf-wrap');
+  if (!wrap) return;
+  
+  var rect = content.getBoundingClientRect();
+  var mx = ((e.clientX - rect.left) / rect.width * 100);
+  var my = ((e.clientY - rect.top) / rect.height * 100);
+  
+  pdfZoomLevel = Math.min(300, pdfZoomLevel + 30);
+  wrap.style.transformOrigin = mx + '% ' + my + '%';
+  wrap.style.transform = 'scale(' + (pdfZoomLevel / 100) + ')';
+}
+
+function resetPdfZoom(e) {
+  e.preventDefault();
+  pdfZoomLevel = 100;
+  var content = document.getElementById('devisViewerContent');
+  var wrap = content.querySelector('.devis-pdf-wrap');
+  if (wrap) {
+    wrap.style.transform = '';
+    wrap.style.transformOrigin = '';
+  }
+  showToast('Zoom réinitialisé', 'info');
+}
+
+// IMAGE magnifier with canvas
+function moveMagnifier(e) {
+  var panel = document.querySelector('.devis-overlay-panel');
+  var mag = document.getElementById('devisMagnifier');
+  var magCanvas = document.getElementById('devisMagCanvas');
+  var rect = panel.getBoundingClientRect();
+  
+  var mx = e.clientX - rect.left;
+  var my = e.clientY - rect.top;
+  
+  var magW = 400, magH = 300;
+  var left = mx - magW / 2;
+  var top = my - magH / 2;
+  left = Math.max(0, Math.min(rect.width - magW, left));
+  top = Math.max(0, Math.min(rect.height - magH, top));
+  
+  mag.style.display = 'block';
+  mag.style.left = left + 'px';
+  mag.style.top = top + 'px';
+  
+  if (magnifierImgCache && magnifierImgCache.naturalWidth) {
+    var img = magnifierImgCache;
+    var imgRect = img.getBoundingClientRect();
+    var ctx = magCanvas.getContext('2d');
+    magCanvas.width = magW;
+    magCanvas.height = magH;
+    
+    var scaleX = img.naturalWidth / imgRect.width;
+    var scaleY = img.naturalHeight / imgRect.height;
+    
+    var srcX = (e.clientX - imgRect.left) * scaleX - (magW / 2 / magnifierZoom) * scaleX;
+    var srcY = (e.clientY - imgRect.top) * scaleY - (magH / 2 / magnifierZoom) * scaleY;
+    var srcW = (magW / magnifierZoom) * scaleX;
+    var srcH = (magH / magnifierZoom) * scaleY;
+    
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, magW, magH);
+    ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, magW, magH);
+  }
+}
+
+function hideMagnifier() {
+  document.getElementById('devisMagnifier').style.display = 'none';
+}
+
+function zoomMagnifier(e) {
+  if (!magnifierActive) return;
+  e.preventDefault();
+  if (e.deltaY < 0) {
+    magnifierZoom = Math.min(6, magnifierZoom + 0.3);
+  } else {
+    magnifierZoom = Math.max(1.5, magnifierZoom - 0.3);
+  }
+  moveMagnifier(e);
+}
+
+// Toggle real browser fullscreen (like F11)
+function toggleDevisFullscreen() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(function(){});
+  } else {
+    document.documentElement.requestFullscreen().catch(function(){
+      showToast('Plein écran non supporté', 'warning');
+    });
+  }
 }
 
 // ═══ FICHE OVERLAY ═══
@@ -3677,39 +4627,95 @@ function handleDevisFiles(input) {
   input.value = '';
 }
 
+function uploadToStorage(cardId, base64) {
+  return new Promise(function(resolve, reject) {
+    try {
+      var storageRef = firebase.storage();
+      var fileName = 'psm-devis/' + cardId + '/' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+      
+      // Detect mime type from base64
+      var match = base64.match(/^data:([^;]+);base64,/);
+      var mime = match ? match[1] : 'application/octet-stream';
+      var ext = mime === 'application/pdf' ? '.pdf' : '.jpg';
+      
+      var ref = storageRef.ref(fileName + ext);
+      
+      ref.putString(base64, 'data_url').then(function(snapshot) {
+        return snapshot.ref.getDownloadURL();
+      }).then(function(url) {
+        resolve(url);
+      }).catch(function(err) {
+        console.error('Storage upload error:', err);
+        // Check for quota exceeded
+        if (err.code === 'storage/quota-exceeded' || err.code === 'storage/retry-limit-exceeded') {
+          showToast('⚠️ ESPACE SERVEUR INSUFFISANT! Contactez l\'administrateur.', 'error');
+        }
+        // Fallback: save base64 directly in DB
+        resolve(base64);
+      });
+    } catch(e) {
+      console.error('Storage not available, using base64:', e);
+      resolve(base64);
+    }
+  });
+}
+
+function deleteFromStorage(url) {
+  if (!url || !url.startsWith('https://firebasestorage')) return;
+  try {
+    var ref = firebase.storage().refFromURL(url);
+    ref.delete().catch(function(e) { console.log('Storage delete error:', e); });
+  } catch(e) { /* ignore */ }
+}
+
 function addDevisImage(base64) {
   if (!currentCardId || !psmData[currentCardId]) return;
   if (!psmData[currentCardId].devisImages) psmData[currentCardId].devisImages = [];
-  psmData[currentCardId].devisImages.push(base64);
-  saveToFirebase();
-  renderDevisImages();
-  renderCards();
-  showToast('📋 Image de devis ajoutée', 'success');
+  
+  showToast('📤 Envoi en cours...', 'info');
+  
+  uploadToStorage(currentCardId, base64).then(function(urlOrBase64) {
+    psmData[currentCardId].devisImages.push(urlOrBase64);
+    saveToFirebase();
+    renderCards();
+    
+    var overlay = document.getElementById('devisOverlay');
+    if (overlay && overlay.classList.contains('visible')) {
+      document.getElementById('devisModeUpload').style.display = 'none';
+      document.getElementById('devisModeViewer').style.display = 'flex';
+      var newIdx = psmData[currentCardId].devisImages.length - 1;
+      renderDevisViewerContent(newIdx);
+    }
+    showToast('📋 Devis ajouté et sauvegardé', 'success');
+  });
 }
 
-// Add devis image to a specific card (for drag & drop on card)
 function addDevisImageToCard(cardId, base64) {
   if (!psmData[cardId]) return;
   if (!psmData[cardId].devisImages) psmData[cardId].devisImages = [];
-  psmData[cardId].devisImages.push(base64);
-  saveToFirebase();
-  renderCards();
-  // If this card is currently selected, also update the devis grid
-  if (cardId === currentCardId) {
-    renderDevisImages();
-  }
-  showToast('📋 Image de devis ajoutée', 'success');
+  
+  showToast('📤 Envoi en cours...', 'info');
+  
+  uploadToStorage(cardId, base64).then(function(urlOrBase64) {
+    psmData[cardId].devisImages.push(urlOrBase64);
+    saveToFirebase();
+    renderCards();
+    
+    if (cardId === currentCardId) {
+      var overlay = document.getElementById('devisOverlay');
+      if (overlay && overlay.classList.contains('visible')) {
+        document.getElementById('devisModeUpload').style.display = 'none';
+        document.getElementById('devisModeViewer').style.display = 'flex';
+        var newIdx = psmData[cardId].devisImages.length - 1;
+        renderDevisViewerContent(newIdx);
+      }
+    }
+    showToast('📋 Devis ajouté et sauvegardé', 'success');
+  });
 }
 
 function removeDevisImage(idx) {
-  if (!currentCardId || !psmData[currentCardId]) return;
-  const images = psmData[currentCardId].devisImages || [];
-  images.splice(idx, 1);
-  psmData[currentCardId].devisImages = images;
-  saveToFirebase();
-  renderDevisImages();
-  renderCards();
-  showToast('🗑️ Image supprimée', 'info');
+  removeDevisFromViewer(idx);
 }
 
 function openDevisLightbox(idx) {
