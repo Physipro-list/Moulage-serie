@@ -679,6 +679,10 @@ function startFirebaseSync(){
             if(r.id&&!fbIds[r.id]&&!isIdDeleted(r.id)){merged[month].push(r);}
           });
         });
+        // FIX: Final anti-resurrection filter on initial load
+        Object.keys(merged).forEach(function(month){
+          merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
+        });
         safeLSSet(lk,JSON.stringify(merged));
         renderTable(dept);
         // Push merged data if local had unique entries
@@ -777,7 +781,7 @@ var DELETED_IDS_KEY='physipro_deleted_ids';
 function getDeletedIds(){try{return JSON.parse(localStorage.getItem(DELETED_IDS_KEY))||{};}catch(e){return {};}}
 function markIdDeleted(id){var d=getDeletedIds();d[id]=Date.now();localStorage.setItem(DELETED_IDS_KEY,JSON.stringify(d));}
 function isIdDeleted(id){return !!getDeletedIds()[id];}
-function cleanOldDeletedIds(){var d=getDeletedIds();var cutoff=Date.now()-7*24*60*60*1000;var changed=false;for(var k in d){if(d[k]<cutoff){delete d[k];changed=true;}}if(changed)localStorage.setItem(DELETED_IDS_KEY,JSON.stringify(d));}
+function cleanOldDeletedIds(){var d=getDeletedIds();var cutoff=Date.now()-90*24*60*60*1000;var changed=false;for(var k in d){if(d[k]<cutoff){delete d[k];changed=true;}}if(changed)localStorage.setItem(DELETED_IDS_KEY,JSON.stringify(d));}
 function listenFB(dept){
   var path=FB_PATHS[dept];
   if(fbListeners[dept])fbDb.ref(path).off('value',fbListeners[dept]);
@@ -803,6 +807,10 @@ function listenFB(dept){
       (localData[month]||[]).forEach(function(r){
         if(r.id&&!fbIds[r.id]&&!isIdDeleted(r.id)){merged[month].push(r);hasLocalOnly=true;}
       });
+    });
+    // FIX: Final pass — remove any deleted IDs that slipped through merge
+    Object.keys(merged).forEach(function(month){
+      merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
     });
     safeLSSet(lk,JSON.stringify(merged));
     renderTable(dept);
@@ -830,9 +838,13 @@ function pushToFB(dept){
   _fbWriting[dept]=true;
   setSyncBadge('syncing');
   fbDb.ref(FB_PATHS[dept]).set(data).then(function(){
-    _fbWriting[dept]=false;
+    // FIX: Keep _fbWriting=true for 1.5s after push to block the listener
+    // that fires on our own write (Firebase triggers listener on own .set())
+    setTimeout(function(){
+      _fbWriting[dept]=false;
+      setSyncBadge('online');
+    }, 1500);
     _retryCount[dept]=0;
-    setSyncBadge('online');
     console.log('✅ Firebase saved:',dept);
   }).catch(function(err){
     // FIX #11: keep _fbWriting=true during retry window to block listener
@@ -1063,6 +1075,10 @@ function doRefresh(dept){
           (localData[month]||[]).forEach(function(r){
             if(r.id&&!fbIds[r.id]&&!isIdDeleted(r.id)){merged[month].push(r);}
           });
+        });
+        // FIX: Final anti-resurrection filter on refresh
+        Object.keys(merged).forEach(function(month){
+          merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
         });
         safeLSSet(lk,JSON.stringify(merged));
       }
@@ -1360,8 +1376,26 @@ function editQty(dept,idx,el){var md=gmd(dept);var row=md.rows[idx];if(!row||row
 function setReason(d,i,v){var md=gmd(d);var r=md.rows[i];if(!r||r.type!=='entry')return;r.errorReason=v;r.hasError=!!v;r.errQty=v?1:0;md.data[md.month]=md.rows;saveD(d,md.data);renderTable(d);}
 function tgErr(d,i){var md=gmd(d);var r=md.rows[i];if(!r||r.type!=='entry')return;var c=r.hasError!==undefined?r.hasError:((r.errQty||0)>0);r.hasError=!c;r.errQty=!c?1:0;if(c)r.errorReason='';md.data[md.month]=md.rows;saveD(d,md.data);renderTable(d);}
 function cyc(d,i){var md=gmd(d);var r=md.rows[i];if(!r)return;var o=['recu','enCours','complet'];var c=r.coutureStatus||'recu';r.coutureStatus=o[(o.indexOf(c)+1)%o.length];md.data[md.month]=md.rows;saveD(d,md.data);renderTable(d);}
-function delRow(d,i){if(!confirm('Supprimer?'))return;var md=gmd(d);var row=md.rows[i];if(row&&row.id)markIdDeleted(row.id);md.rows.splice(i,1);md.data[md.month]=md.rows;saveD(d,md.data);renderTable(d);showToast('🗑️','info');}
-function delDateSep(d,i){if(!confirm('Supprimer ce séparateur de date?'))return;var md=gmd(d);var row=md.rows[i];if(row&&row.id)markIdDeleted(row.id);md.rows.splice(i,1);md.data[md.month]=md.rows;saveD(d,md.data);renderTable(d);showToast('🗑️ Séparateur supprimé','info');}
+function delRow(d,i){if(!confirm('Supprimer?'))return;var md=gmd(d);var row=md.rows[i];if(row&&row.id)markIdDeleted(row.id);md.rows.splice(i,1);md.data[md.month]=md.rows;
+  // FIX: Push immédiatement à Firebase (pas debounce) pour éviter résurrection
+  safeLSSet(d==='inspection'?IK:CK,JSON.stringify(md.data));
+  _fbWriting[d]=true; // Block listener pendant le push
+  if(fbDb&&fbUser){
+    fbDb.ref(FB_PATHS[d]).set(md.data).then(function(){
+      _fbWriting[d]=false;setSyncBadge('online');
+      console.log('🗑️ Suppression synced to Firebase');
+    }).catch(function(e){_fbWriting[d]=false;console.error('❌ Delete sync error:',e);});
+  }
+  renderTable(d);showToast('🗑️','info');}
+function delDateSep(d,i){if(!confirm('Supprimer ce séparateur de date?'))return;var md=gmd(d);var row=md.rows[i];if(row&&row.id)markIdDeleted(row.id);md.rows.splice(i,1);md.data[md.month]=md.rows;
+  safeLSSet(d==='inspection'?IK:CK,JSON.stringify(md.data));
+  _fbWriting[d]=true;
+  if(fbDb&&fbUser){
+    fbDb.ref(FB_PATHS[d]).set(md.data).then(function(){
+      _fbWriting[d]=false;setSyncBadge('online');
+    }).catch(function(e){_fbWriting[d]=false;});
+  }
+  renderTable(d);showToast('🗑️ Séparateur supprimé','info');}
 function editDateSep(evt,d,i){var md=gmd(d);var row=md.rows[i];if(!row||row.type!=='date')return;var el=evt.target;var old=row.dateLabel;var inp=document.createElement('input');inp.type='date';inp.className='date-row-input';
 // FIX #18: Convert DD/MM/YYYY → YYYY-MM-DD for date input
 var dp=old.split('/');if(dp.length===3)inp.value=dp[2]+'-'+dp[1]+'-'+dp[0];else inp.value=old;
