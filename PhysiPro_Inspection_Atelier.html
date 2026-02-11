@@ -585,6 +585,22 @@ document.addEventListener('DOMContentLoaded',function(){
 /* ═══ FIREBASE SYNC ═══ */
 var FB_PATHS={inspection:'inspectionData',couture:'coutureData',lists:'inspectionLists',colCfg:'inspectionColCfg',colWidths:'inspectionColWidths'};
 var _fbWriting={};
+var _fbWritingSafety={};
+function setFbWriting(dept,val){
+  _fbWriting[dept]=val;
+  if(val){
+    // Safety net: auto-release after 10s to prevent permanent lock
+    clearTimeout(_fbWritingSafety[dept]);
+    _fbWritingSafety[dept]=setTimeout(function(){
+      if(_fbWriting[dept]){
+        console.warn('[SAFETY] _fbWriting forced release for',dept);
+        _fbWriting[dept]=false;
+      }
+    },10000);
+  }else{
+    clearTimeout(_fbWritingSafety[dept]);
+  }
+}
 
 /* ═══ EMAIL → INSPECTEUR MAPPING ═══ */
 var EMAIL_INSP_MAP={
@@ -733,6 +749,7 @@ function startFirebaseSync(){
       var d=snap.val();if(d){localStorage.setItem('physipro_colwidths_'+dept,JSON.stringify(d));renderTable(dept);}
     }).catch(function(e){console.error('[FB] ColWidths load error:',dept,e);});
   });
+  }); // End of deleted IDs .then() chain
 }
 var _serieListener=null;
 function listenSerieCards(){
@@ -904,7 +921,6 @@ function listenFB(dept){
       setTimeout(function(){_merging[dept]=false;},2000);
     }
   });
-  }); // End of deleted IDs .then() chain
 }
 function stopFirebaseSync(){
   Object.keys(fbListeners).forEach(function(k){
@@ -921,13 +937,13 @@ function pushToFB(dept){
   if(!fbUser){setSyncBadge('offline');return;}
   var lk=dept==='inspection'?IK:CK;
   var data;try{data=JSON.parse(localStorage.getItem(lk))||{};}catch(e){return;}
-  _fbWriting[dept]=true;
+  setFbWriting(dept,true);
   setSyncBadge('syncing');
   fbDb.ref(FB_PATHS[dept]).set(data).then(function(){
     // FIX: Keep _fbWriting=true for 1.5s after push to block the listener
     // that fires on our own write (Firebase triggers listener on own .set())
     setTimeout(function(){
-      _fbWriting[dept]=false;
+      setFbWriting(dept,false);
       setSyncBadge('online');
     }, 1500);
     _retryCount[dept]=0;
@@ -943,7 +959,7 @@ function pushToFB(dept){
       // _fbWriting stays true until retry completes
       setTimeout(function(){pushToFB(dept);},delay);
     }else{
-      _fbWriting[dept]=false; // Only release after all retries exhausted
+      setFbWriting(dept,false); // Only release after all retries exhausted
       _retryCount[dept]=0;
       setSyncBadge('offline');
       showToast('⚠️ Firebase: '+err.message+' — données sauvées localement','error');
@@ -1465,21 +1481,21 @@ function cyc(d,i){var md=gmd(d);var r=md.rows[i];if(!r)return;var o=['recu','enC
 function delRow(d,i){if(!confirm('Supprimer?'))return;var md=gmd(d);var row=md.rows[i];if(row&&row.id)markIdDeleted(row.id);md.rows.splice(i,1);md.data[md.month]=md.rows;
   // FIX: Push immédiatement à Firebase (pas debounce) pour éviter résurrection
   safeLSSet(d==='inspection'?IK:CK,JSON.stringify(md.data));
-  _fbWriting[d]=true; // Block listener pendant le push
   if(fbDb&&fbUser){
+    setFbWriting(d,true); // Block listener pendant le push
     fbDb.ref(FB_PATHS[d]).set(md.data).then(function(){
-      _fbWriting[d]=false;setSyncBadge('online');
+      setFbWriting(d,false);setSyncBadge('online');
       console.log('🗑️ Suppression synced to Firebase');
-    }).catch(function(e){_fbWriting[d]=false;console.error('❌ Delete sync error:',e);});
+    }).catch(function(e){setFbWriting(d,false);console.error('❌ Delete sync error:',e);});
   }
   renderTable(d);showToast('🗑️','info');}
 function delDateSep(d,i){if(!confirm('Supprimer ce séparateur de date?'))return;var md=gmd(d);var row=md.rows[i];if(row&&row.id)markIdDeleted(row.id);md.rows.splice(i,1);md.data[md.month]=md.rows;
   safeLSSet(d==='inspection'?IK:CK,JSON.stringify(md.data));
-  _fbWriting[d]=true;
   if(fbDb&&fbUser){
+    setFbWriting(d,true);
     fbDb.ref(FB_PATHS[d]).set(md.data).then(function(){
-      _fbWriting[d]=false;setSyncBadge('online');
-    }).catch(function(e){_fbWriting[d]=false;});
+      setFbWriting(d,false);setSyncBadge('online');
+    }).catch(function(e){setFbWriting(d,false);});
   }
   renderTable(d);showToast('🗑️ Séparateur supprimé','info');}
 function editDateSep(evt,d,i){var md=gmd(d);var row=md.rows[i];if(!row||row.type!=='date')return;var el=evt.target;var old=row.dateLabel;var inp=document.createElement('input');inp.type='date';inp.className='date-row-input';
