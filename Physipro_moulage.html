@@ -1823,11 +1823,11 @@
     .notif-bell-btn.has-notifs { 
       background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); 
       border-color: #b91c1c;
-      animation: bellSuperFlash 0.5s ease-in-out infinite;
+      animation: pcNotifFlash 0.5s ease-in-out infinite;
     }
     .notif-bell-btn.has-notifs .notif-bell-icon { animation: bellShake 0.3s ease-in-out infinite; font-size: 16px; }
     .notif-bell-btn.has-notifs .notif-bell-text { color: #fff; font-weight: 700; }
-    @keyframes bellSuperFlash {
+    @keyframes pcNotifFlash {
       0%, 100% { 
         box-shadow: 0 0 8px 3px rgba(239, 68, 68, 0.9); 
         transform: scale(1); 
@@ -1840,6 +1840,12 @@
       }
     }
     @keyframes bellShake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-20deg); } 75% { transform: rotate(20deg); } }
+    /* Chat button style */
+    .moulage-chat-btn { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: transparent; border: 1px solid rgba(59,130,246,0.4); border-radius: 11px; cursor: pointer; transition: all 0.3s; font-size: 11px; }
+    .moulage-chat-btn:hover { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.6); transform: scale(1.1); }
+    /* Chat button in header */
+    .moulage-chat-btn { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: transparent; border: 1px solid rgba(59,130,246,0.4); border-radius: 11px; cursor: pointer; transition: all 0.3s; font-size: 12px; }
+    .moulage-chat-btn:hover { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.6); }
     @keyframes notifPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
     .notif-popup { position: fixed; top: 60px; right: 20px; width: 340px; max-height: 450px; background: #1f2937; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); z-index: 99997; display: none; flex-direction: column; overflow: hidden; border: 2px solid #3b82f6; }
     .notif-popup.active { display: flex; }
@@ -3230,6 +3236,7 @@
           <span class="mobile-notif-icon">🔔</span>
           <span class="mobile-notif-badge" id="mobileNotifBadge"></span>
         </button>
+
         <button class="mobile-refresh-btn" id="mobileRefreshBtn" onclick="mobileRefresh()">🔄</button>
       </div>
     </div>
@@ -3386,7 +3393,7 @@
           <span class="notif-bell-icon">🔔</span>
           <span class="notif-bell-text" id="notifBellText"></span>
         </button>
-        <button class="chat-open-btn" onclick="openChatFromHeader()" title="Ouvrir le chat" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;background:transparent;border:1px solid rgba(255,255,255,0.3);border-radius:11px;cursor:pointer;transition:all 0.3s;font-size:11px;">💬</button>
+        <button class="moulage-chat-btn" onclick="openMoulageChatFromHeader()" title="Ouvrir le chat">💬</button>
         <div class="search-box-small">
           <input type="text" id="globalSearch" placeholder="🔍 Rechercher..." oninput="handleGlobalSearch(this.value)">
           <button class="btn-settings-inside" onclick="openSettingsModal()" title="Paramètres">⚙️</button>
@@ -13215,7 +13222,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         
         // Flash + sound for NEW notifications
         if (!_psmFirstLoad && psmCrossNotifs.length > _psmLastCount) {
-          // Sound only - no banner
+          // Flash banner removed - bell flash only
+          // Sound
           try {
             var ctx = new (window.AudioContext || window.webkitAudioContext)();
             [0, 0.15].forEach(function(delay, i) {
@@ -13237,26 +13245,29 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     }
     
     function updatePsmBadge() {
-      // PSM button removed - notifications now integrated into main bell
-      // PSM count can be added to the main bell if needed
+      // PSM wrench button removed
     }
     
-    function openPsmFromNotif() {
-      // Navigate to PSM page
+        function openPsmFromNotif() {
       window.location.href = 'PhysiPro_PSM.html';
     }
-
-    // ===== openChatFromHeader =====
-    function openChatFromHeader() {
-      // If mobile, go to mobile chat
+    
+    // Chat button handler
+    function openMoulageChatFromHeader() {
       if (window.innerWidth <= 768) {
         if (typeof goToMobileChat === 'function') goToMobileChat();
       } else {
-        // Desktop: find first fiche and open its chat, or scroll to kanban
-        var firstCard = document.querySelector('.card');
-        if (firstCard) firstCard.click();
+        var cid = typeof currentCardId !== 'undefined' ? currentCardId : null;
+        if (cid && typeof openFiche === 'function') {
+          openFiche(cid);
+        } else {
+          var firstBtn = document.querySelector('.mcard-fiche-btn');
+          if (firstBtn) { firstBtn.click(); }
+          else { showToast('\u{1F4AC} Sélectionnez un moulage pour ouvrir le chat', 'info'); }
+        }
       }
     }
+    window.openMoulageChatFromHeader = openMoulageChatFromHeader;
     
     // ===== SYSTÈME DE MODAL DE NOTIFICATIONS AVEC NAVIGATION =====
     let currentNotifIndex = 0;
@@ -15844,7 +15855,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       console.log('📱 PWA: Installation terminée');
     });
     
-  </script>
+    </script>
   
   <!-- GALERIE PHOTOS ONEDRIVE -->
   <div class="photo-gallery-overlay" id="photoGalleryOverlay">
