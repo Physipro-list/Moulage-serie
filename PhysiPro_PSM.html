@@ -290,34 +290,75 @@ body {
   background: none;
   border: none;
   color: #fff;
-  font-size: 20px;
+  font-size: 22px;
   cursor: pointer;
   padding: 2px 6px;
   transition: all 0.2s;
 }
 .tb-bell-btn:hover { transform: scale(1.15); }
+.tb-bell-btn.bell-ringing {
+  animation: bellShake 0.5s infinite;
+  filter: drop-shadow(0 0 8px rgba(239,68,68,0.8));
+}
 .tb-bell-badge {
   position: absolute;
-  top: -2px; right: -2px;
+  top: -8px; right: -10px;
   background: #ef4444;
   color: #fff;
-  font-size: 9px;
-  font-weight: 800;
-  min-width: 16px;
-  height: 16px;
+  font-size: 12px;
+  font-weight: 900;
+  min-width: 22px;
+  height: 22px;
   border-radius: 50%;
   display: none;
   align-items: center;
   justify-content: center;
   line-height: 1;
+  border: 2px solid #0f172a;
+  z-index: 10;
 }
 .tb-bell-badge.has-notif {
   display: flex;
-  animation: bellPulse 1s infinite;
+  animation: bellPulse 0.5s infinite;
+  box-shadow: 0 0 16px 6px rgba(239,68,68,0.8), 0 0 32px 12px rgba(239,68,68,0.4);
 }
 @keyframes bellPulse {
-  0%, 100% { background: #ef4444; transform: scale(1); }
-  50% { background: #f59e0b; transform: scale(1.2); }
+  0%, 100% { background: #ef4444; transform: scale(1); box-shadow: 0 0 16px 6px rgba(239,68,68,0.8); }
+  50% { background: #f59e0b; transform: scale(1.5); box-shadow: 0 0 28px 12px rgba(245,158,11,0.9); }
+}
+@keyframes bellShake {
+  0%, 100% { transform: rotate(0deg); }
+  15% { transform: rotate(20deg) scale(1.1); }
+  30% { transform: rotate(-20deg) scale(1.1); }
+  45% { transform: rotate(15deg); }
+  60% { transform: rotate(-15deg); }
+  75% { transform: rotate(8deg); }
+  90% { transform: rotate(-8deg); }
+}
+/* Flash banner for new notifications */
+.notif-flash-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  background: linear-gradient(90deg, #ef4444, #f59e0b, #ef4444);
+  background-size: 200% 100%;
+  animation: flashBannerSlide 1s linear infinite;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  padding: 8px 16px;
+  z-index: 99999;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(239,68,68,0.6);
+  transform: translateY(-100%);
+  transition: transform 0.3s ease;
+}
+.notif-flash-banner.visible {
+  transform: translateY(0);
+}
+@keyframes flashBannerSlide {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 200% 0%; }
 }
 
 /* Send popup - destinataires */
@@ -1753,6 +1794,7 @@ body.devis-open .mat-collapse-bar { display: flex; }
       </div>
       <div class="user-status"><span class="status-dot" id="statusDot"></span><span class="user-name" id="currentUserDisplay">--</span></div>
     </div>
+    <div class="notif-flash-banner" id="notifFlashBanner" onclick="toggleNotifDropdown();hideFlashBanner()">📨 Nouveau PSM reçu! Cliquez ici pour voir</div>
     <div class="tb-search-row">
       <button class="btn-print-header" onclick="openPrintModal()" title="Imprimer">🖨️ Imprimer</button>
       <div class="search-box-small">
@@ -3049,8 +3091,6 @@ function confirmSendPsm(cardId) {
     if (r) recipients.push(r);
   });
   
-  console.log('[SEND DEBUG] recipients:', JSON.stringify(recipients.map(function(r){return {name:r.name, email:r.email};})));
-  console.log('[SEND DEBUG] myEmail:', currentUser ? currentUser.email : 'none');
   
   card.psmSent = true;
   card.psmSentBy = senderName;
@@ -3113,7 +3153,6 @@ function renderNotifications() {
     return (b[1].timestamp || 0) - (a[1].timestamp || 0);
   });
   
-  console.log('[NOTIF DEBUG] myEmail:', myEmail, '| myName:', myName, '| total notifs:', entries.length);
   
   // Show notifications where I am a recipient (by email or name match)
   var relevant = entries.filter(function(e) {
@@ -3122,7 +3161,6 @@ function renderNotifications() {
     // Match by email first (most reliable)
     if (n.sentToEmail && myEmail) {
       if (n.sentToEmail.toLowerCase() === myEmail.toLowerCase()) {
-        console.log('[NOTIF] ✓ EMAIL MATCH:', n.sentToEmail, '===', myEmail);
         return true;
       }
     }
@@ -3133,7 +3171,6 @@ function renderNotifications() {
       var myNameLower = myName.toLowerCase();
       if (sentToLower === myNameLower) return true;
       if (sentToLower.indexOf(myNameLower) !== -1) {
-        console.log('[NOTIF] ✓ NAME MATCH:', n.sentTo, 'contains', myName);
         return true;
       }
       if (myNameLower.indexOf(sentToLower.split(' ')[0]) !== -1) return true;
@@ -3145,11 +3182,9 @@ function renderNotifications() {
       return true;
     }
     
-    console.log('[NOTIF] ✗ NO MATCH for:', n.sentTo, n.sentToEmail, '| me:', myEmail, myName);
     return false;
   });
   
-  console.log('[NOTIF DEBUG] relevant:', relevant.length, '/', entries.length);
   
   var emailKey = myEmail.replace(/\./g, '_');
   var unreadCount = relevant.filter(function(e) {
@@ -3158,6 +3193,31 @@ function renderNotifications() {
   
   badge.textContent = unreadCount;
   badge.classList.toggle('has-notif', unreadCount > 0);
+  var bellBtn = document.getElementById('bellBtn');
+  bellBtn.classList.toggle('bell-ringing', unreadCount > 0);
+  
+  // Flash banner + sound when NEW unread notifications arrive
+  var prevCount = renderNotifications._lastCount || 0;
+  if (unreadCount > 0 && unreadCount > prevCount) {
+    // Show flash banner
+    var banner = document.getElementById('notifFlashBanner');
+    if (banner) {
+      var newest = relevant.find(function(e) { return !e[1].read || !e[1].read[emailKey]; });
+      if (newest) {
+        banner.textContent = '🔔 ' + (newest[1].title || 'Nouveau PSM') + ' — Cliquez ici!';
+      }
+      banner.classList.add('visible');
+      clearTimeout(renderNotifications._bannerTimer);
+      renderNotifications._bannerTimer = setTimeout(function() {
+        banner.classList.remove('visible');
+      }, 8000);
+    }
+    // Play notification sound
+    playNotifSound();
+    // Toast
+    showToast('🔔 ' + unreadCount + ' notification' + (unreadCount > 1 ? 's' : '') + ' non lue' + (unreadCount > 1 ? 's' : ''), 'info');
+  }
+  renderNotifications._lastCount = unreadCount;
   
   if (relevant.length === 0) {
     list.innerHTML = '<div class="notif-empty">Aucune notification</div>';
@@ -3190,6 +3250,30 @@ function getTimeAgo(ts) {
   if (hours < 24) return 'il y a ' + hours + 'h';
   var days = Math.floor(hours / 24);
   return 'il y a ' + days + 'j';
+}
+
+function playNotifSound() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Play two ascending tones
+    [0, 0.15].forEach(function(delay, i) {
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = i === 0 ? 587 : 880; // D5 then A5
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + 0.3);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.3);
+    });
+  } catch(e) {}
+}
+
+function hideFlashBanner() {
+  var banner = document.getElementById('notifFlashBanner');
+  if (banner) banner.classList.remove('visible');
 }
 
 function toggleNotifDropdown() {

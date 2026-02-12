@@ -1840,6 +1840,25 @@
       }
     }
     @keyframes bellShake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-15deg); } 75% { transform: rotate(15deg); } }
+    /* PSM cross-app notification bell */
+    .psm-bell-btn { display: flex; align-items: center; justify-content: center; gap: 3px; height: 22px; padding: 0 6px; background: transparent; border: 1px solid rgba(239,68,68,0.4); border-radius: 11px; cursor: pointer; transition: all 0.3s; font-size: 8px; font-weight: 700; color: #fca5a5; white-space: nowrap; }
+    .psm-bell-btn:hover { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.6); }
+    .psm-bell-btn .psm-bell-icon { font-size: 11px; }
+    .psm-bell-btn.has-psm-notifs {
+      background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+      border-color: #ef4444;
+      color: #fff;
+      animation: psmBellFlash 0.6s ease-in-out infinite;
+      box-shadow: 0 0 12px 4px rgba(239,68,68,0.7);
+    }
+    .psm-bell-btn.has-psm-notifs .psm-bell-icon { animation: bellShake 0.4s ease-in-out infinite; }
+    @keyframes psmBellFlash {
+      0%, 100% { box-shadow: 0 0 12px 4px rgba(239,68,68,0.7); transform: scale(1); background: linear-gradient(135deg, #ef4444, #b91c1c); }
+      50% { box-shadow: 0 0 24px 8px rgba(245,158,11,0.9); transform: scale(1.12); background: linear-gradient(135deg, #f59e0b, #ef4444); }
+    }
+    .psm-flash-banner { position: fixed; top: 0; left: 0; right: 0; background: linear-gradient(90deg, #ef4444, #f59e0b, #ef4444); background-size: 200% 100%; animation: psmFlashSlide 1s linear infinite; color: #fff; font-size: 13px; font-weight: 800; text-align: center; padding: 8px 16px; z-index: 99999; cursor: pointer; box-shadow: 0 4px 20px rgba(239,68,68,0.6); transform: translateY(-100%); transition: transform 0.3s ease; }
+    .psm-flash-banner.visible { transform: translateY(0); }
+    @keyframes psmFlashSlide { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
     @keyframes notifPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
     .notif-popup { position: fixed; top: 60px; right: 20px; width: 340px; max-height: 450px; background: #1f2937; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); z-index: 99997; display: none; flex-direction: column; overflow: hidden; border: 2px solid #3b82f6; }
     .notif-popup.active { display: flex; }
@@ -3230,6 +3249,10 @@
           <span class="mobile-notif-icon">🔔</span>
           <span class="mobile-notif-badge" id="mobileNotifBadge"></span>
         </button>
+        <button class="mobile-notif-btn" id="mobilePsmBtn" onclick="openPsmFromNotif()" style="display:none;">
+          <span class="mobile-notif-icon">🔧</span>
+          <span class="mobile-notif-badge" id="mobilePsmBadge"></span>
+        </button>
         <button class="mobile-refresh-btn" id="mobileRefreshBtn" onclick="mobileRefresh()">🔄</button>
       </div>
     </div>
@@ -3382,9 +3405,13 @@
         <div class="user-status"><span class="status-dot" id="statusDot"></span><span class="user-name" id="currentUserName">--</span></div>
       </div>
       <div class="tb-search-row">
-        <button class="notif-bell-btn" id="notifBellBtn" onclick="toggleNotifPopup()" title="Notifications">
+        <button class="notif-bell-btn" id="notifBellBtn" onclick="toggleNotifPopup()" title="Notifications Moulage">
           <span class="notif-bell-icon">🔔</span>
           <span class="notif-bell-text" id="notifBellText"></span>
+        </button>
+        <button class="psm-bell-btn" id="psmBellBtn" onclick="openPsmFromNotif()" title="Notifications PSM">
+          <span class="psm-bell-icon">🔧</span>
+          <span id="psmBellText"></span>
         </button>
         <div class="search-box-small">
           <input type="text" id="globalSearch" placeholder="🔍 Rechercher..." oninput="handleGlobalSearch(this.value)">
@@ -3393,6 +3420,7 @@
       </div>
     </div>
   </header>
+  <div class="psm-flash-banner" id="psmFlashBanner" onclick="openPsmFromNotif();hidePsmFlashBanner()">🔧 Nouveau PSM reçu! Cliquez ici pour ouvrir</div>
 
   <!-- ===== KANBAN ===== -->
   <div class="main-container">
@@ -11779,6 +11807,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           
           // Initialiser les notifications
           initNotifications();
+          initPsmCrossNotifications();
           
         } else {
           // Utilisateur déconnecté
@@ -13172,6 +13201,119 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         }, error => {
           console.log('❌ Erreur notifications:', error.message);
         });
+    }
+    
+    // ===== PSM CROSS-APP NOTIFICATIONS =====
+    var psmCrossNotifs = [];
+    var _psmFirstLoad = true;
+    var _psmLastCount = 0;
+    
+    function initPsmCrossNotifications() {
+      if (!firebaseDb || !currentUser) return;
+      var myEmail = currentUser.email;
+      var myName = getUserDisplayName(myEmail);
+      
+      firebaseDb.ref('psmNotifications').orderByChild('timestamp').limitToLast(50).on('value', function(snap) {
+        var all = snap.val() || {};
+        var entries = Object.entries(all);
+        var emailKey = myEmail.replace(/\./g, '_');
+        
+        // Filter: show notifications where I am a recipient
+        psmCrossNotifs = entries.filter(function(e) {
+          var n = e[1];
+          // Already read
+          if (n.read && n.read[emailKey]) return false;
+          // Match by email
+          if (n.sentToEmail && myEmail) {
+            if (n.sentToEmail.toLowerCase() === myEmail.toLowerCase()) return true;
+          }
+          // Match by name
+          if (n.sentTo && myName) {
+            var sentToLower = n.sentTo.toLowerCase();
+            var myNameLower = myName.toLowerCase();
+            if (sentToLower === myNameLower) return true;
+            if (sentToLower.indexOf(myNameLower) !== -1) return true;
+            if (myNameLower.indexOf(sentToLower.split(' ')[0]) !== -1) return true;
+          }
+          return false;
+        }).map(function(e) { return e[1]; });
+        
+        updatePsmBadge();
+        
+        // Flash + sound for NEW notifications
+        if (!_psmFirstLoad && psmCrossNotifs.length > _psmLastCount) {
+          // Flash banner
+          var banner = document.getElementById('psmFlashBanner');
+          if (banner && psmCrossNotifs.length > 0) {
+            var newest = psmCrossNotifs[0];
+            banner.textContent = '🔧 ' + (newest.title || 'Nouveau PSM') + ' — Cliquez pour ouvrir!';
+            banner.classList.add('visible');
+            clearTimeout(initPsmCrossNotifications._bannerTimer);
+            initPsmCrossNotifications._bannerTimer = setTimeout(function() {
+              banner.classList.remove('visible');
+            }, 8000);
+          }
+          // Sound
+          try {
+            var ctx = new (window.AudioContext || window.webkitAudioContext)();
+            [0, 0.15].forEach(function(delay, i) {
+              var osc = ctx.createOscillator();
+              var gain = ctx.createGain();
+              osc.connect(gain); gain.connect(ctx.destination);
+              osc.frequency.value = i === 0 ? 587 : 880;
+              osc.type = 'sine';
+              gain.gain.setValueAtTime(0.25, ctx.currentTime + delay);
+              gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + 0.3);
+              osc.start(ctx.currentTime + delay);
+              osc.stop(ctx.currentTime + delay + 0.3);
+            });
+          } catch(e) {}
+        }
+        _psmFirstLoad = false;
+        _psmLastCount = psmCrossNotifs.length;
+      });
+    }
+    
+    function updatePsmBadge() {
+      var btn = document.getElementById('psmBellBtn');
+      var text = document.getElementById('psmBellText');
+      var mobileBtn = document.getElementById('mobilePsmBtn');
+      var mobileBadge = document.getElementById('mobilePsmBadge');
+      var count = psmCrossNotifs.length;
+      // Desktop
+      if (btn && text) {
+        if (count > 0) {
+          text.textContent = count + ' PSM';
+          btn.classList.add('has-psm-notifs');
+        } else {
+          text.textContent = '';
+          btn.classList.remove('has-psm-notifs');
+        }
+      }
+      // Mobile
+      if (mobileBtn && mobileBadge) {
+        if (count > 0) {
+          mobileBadge.textContent = count;
+          mobileBadge.classList.add('active');
+          mobileBtn.classList.add('has-notifs');
+          mobileBtn.style.display = '';
+        } else {
+          mobileBadge.textContent = '';
+          mobileBadge.classList.remove('active');
+          mobileBtn.classList.remove('has-notifs');
+          mobileBtn.style.display = 'none';
+        }
+      }
+    }
+    
+    function openPsmFromNotif() {
+      // Navigate to PSM page
+      window.location.href = 'PhysiPro_PSM.html';
+    }
+    
+    function hidePsmFlashBanner() {
+      var banner = document.getElementById('psmFlashBanner');
+      if (banner) banner.classList.remove('visible');
     }
     
     // ===== SYSTÈME DE MODAL DE NOTIFICATIONS AVEC NAVIGATION =====
