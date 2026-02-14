@@ -560,6 +560,15 @@ body.col-resizing *{cursor:col-resize!important;}
     </div>
   </div>
 </header>
+<!-- ANTI-FLICKER: Loading overlay during Firebase sync -->
+<div id="initLoadingOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:9999;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.4s ease;">
+  <div style="font-size:28px;margin-bottom:12px;">⚙️</div>
+  <div style="color:var(--gold);font-size:14px;font-weight:600;">Chargement des données...</div>
+  <div style="margin-top:10px;width:120px;height:3px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;">
+    <div style="width:40%;height:100%;background:var(--gold);border-radius:2px;animation:loadBar 1.2s ease-in-out infinite alternate;"></div>
+  </div>
+</div>
+<style>@keyframes loadBar{0%{width:20%;margin-left:0}100%{width:50%;margin-left:50%}}</style>
 <!-- INSPECTION -->
 <div class="content active" id="tab-inspection">
   <div class="entry-bar">
@@ -718,12 +727,15 @@ firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(funct
     localStorage.setItem('physipro_last_email',user.email);
     setSyncBadge('online');
     startFirebaseSync();
-    // Safety re-render: ensure data displays even if race conditions occur
+    // ANTI-FLICKER: Safety timeout — if sync never completes within 6s, force render anyway
     setTimeout(function(){
-      renderTable('inspection');
-      
-      console.log('[INIT] Safety re-render completed');
-    }, 2500);
+      if(_initPhase){
+        console.warn('[INIT] Safety timeout — forcing render after 6s');
+        _initPhase=false;
+        renderTable('inspection');
+        hideLoadingOverlay();
+      }
+    }, 6000);
   }else{
     var savedEmail=localStorage.getItem('physipro_last_email');
     localStorage.removeItem('physipro_last_email');
@@ -806,7 +818,9 @@ function resolveInspName(email){
 }
 
 function startFirebaseSync(){
-  initApp(); // Always init first so tables are visible
+  _initPhase=true; // ANTI-FLICKER: Block all renderTable calls during sync
+  showLoadingOverlay();
+  initApp(); // Always init first so tables structure is ready
   // FIX: Load shared deleted IDs FIRST before any merge
   fbDb.ref(FB_DELETED_PATH).once('value').then(function(snap){
     _deletedIdsCache=snap.val()||{};
@@ -1220,6 +1234,11 @@ function markSyncDone(dept){
   if(dept==='inspection')migrateItemCase();
   if(_syncDone.inspection&&_syncDone.couture&&!_archiveRan){
     _archiveRan=true;
+    // ═══ ANTI-FLICKER: End init phase — do ONE final clean render ═══
+    _initPhase=false;
+    renderTable('inspection');
+    hideLoadingOverlay();
+    console.log('[INIT] ✅ Sync complete — single clean render done');
     setTimeout(function(){autoArchiveOldMonths();},2000);
   }
 }
@@ -1331,7 +1350,12 @@ function migrateItemCase(){
   if(anyChanged)renderTable('inspection');
 }
 var _appInited=false;
-function initApp(){if(_appInited){renderTable('inspection');return;}_appInited=true;cleanOldDeletedIds();initMonths();updateDates();renderTable('inspection');}
+/* ═══ ANTI-FLICKER SYSTEM ═══ */
+var _initPhase=false; // true during startup — blocks renderTable calls
+var _initRenderPending=false; // marks that a render was requested during init
+function showLoadingOverlay(){var el=document.getElementById('initLoadingOverlay');if(el)el.style.display='flex';}
+function hideLoadingOverlay(){var el=document.getElementById('initLoadingOverlay');if(el){el.style.opacity='0';setTimeout(function(){el.style.display='none';el.style.opacity='1';},400);}}
+function initApp(){if(_appInited){if(!_initPhase)renderTable('inspection');return;}_appInited=true;cleanOldDeletedIds();initMonths();updateDates();if(!_initPhase)renderTable('inspection');/* During init phase, render is skipped — markSyncDone will do the final render */}
 
 /* ═══ LISTS ═══ */
 var DEFAULT_LISTS={employes_atelier:['Pierre Caron','Serge Lavallée','Tommy Beaudoin','Nestor Torres','Mathieu Perreault','Cheickna','Daniel Charest','Saul','Pablo','Sylvain Carrier','Stéphane','Paul','Didier','Michel Coffe','Manuel'],items:['Commande client','Premium','Ultra','Pz','Siliko','Physiair','Hp2','Cinch','Resolve','Brio','Thoraciques','Thoraciques faconnés','C3s','Axis','Lxa','Biseau','Glissières','Pelvien','Moulage','Moulage du cnc','Moulage retour d\'essayage','Appui tête normal','Appui tête bouclier','Appui tête juif','Appui tête constance','Appui tête prolongement latéral','App moignon','App mollet','Airfoam','Coussin de table','Gdsquared gel','Nssquared','Viscozen','Néozen','Valdis','Peinture moulage','Coussin dossier','Easy-fit','Inventaire','Série'],clients:['C1south','Hme','Inventaire','France Rts','Vermeiren','Cubro','Chsld Rimouski','Constance','Hopital Juif'],erreurs:['erreur','mauvais format','Mauvais matériaux','Mauvaise plaque','Oublie','Mauvaise épaisseur','Pelvien oublié','Coins pas coupés','Erreur magasin','mauvaise mesure','Manque coupe canvas','Biseau collé au lieu de velcro','Biseau mauvaise mesure','Item mauvais coté'],inspecteurs:['Valérie','Michelle','Nestor','Cassie','Serge','Daniel'],coutureuses:['Cassie','Michelle','Nestor','Valérie']};
@@ -1529,6 +1553,8 @@ function stopResize(e){
 
 /* ═══ RENDER TABLE (column-aware) ═══ */
 function renderTable(dept){
+  /* ANTI-FLICKER: Skip renders during init phase — one final render will happen in markSyncDone */
+  if(_initPhase){_initRenderPending=true;console.log('[RENDER] Blocked during init: '+dept);return;}
   var md=gmd(dept);var rows=md.rows;var month=md.month;
   var vis=getVisCols(dept);var defs=getDefs(dept);
   var theadId='insp-thead';
