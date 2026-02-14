@@ -8,6 +8,28 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
+    v1588 - SKIP MENU MOBILE + FIX CLIGNOTEMENT + OPTIMISATION
+    ═══════════════════════════════════════════════════════════════════
+    
+    🆕 MODIFICATIONS v1588:
+    
+    1. MENU MOBILE SUPPRIMÉ - DIRECT AU MOULAGE
+       → Après login, on arrive directement sur la liste des cartes
+       → Plus de menu intermédiaire "🏭 Moulage" à cliquer
+       → L'écran d'accueil mobile (mobileHomeScreen) est bypassed
+    
+    2. FIX CLIGNOTEMENT MULTIPLE
+       → Suppression des timeouts multiples concurrents
+       → Un seul appel renderMobileCards centralisé après init
+       → Plus de flash/flicker quand l'app se charge
+    
+    3. OPTIMISATION FLUX MOBILE
+       → initMobileView simplifié et déterministe
+       → Suppression des appels redondants renderMobileCards
+       → Bouton retour "←" ramène à la liste (plus au menu)
+    
+    ═══════════════════════════════════════════════════════════════════
+
     v1587 - BOUTON CAMERA MOBILE + NAV MOBILE MOULAGE ONLY
     ═══════════════════════════════════════════════════════════════════
     
@@ -116,7 +138,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1586</title>
+  <title>PhysiPro Moulages v1588</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -1823,11 +1845,11 @@
     .notif-bell-btn.has-notifs { 
       background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); 
       border-color: #b91c1c;
-      animation: pcNotifFlash 0.5s ease-in-out infinite;
+      animation: bellSuperFlash 0.5s ease-in-out infinite;
     }
     .notif-bell-btn.has-notifs .notif-bell-icon { animation: bellShake 0.3s ease-in-out infinite; font-size: 16px; }
     .notif-bell-btn.has-notifs .notif-bell-text { color: #fff; font-weight: 700; }
-    @keyframes pcNotifFlash {
+    @keyframes bellSuperFlash {
       0%, 100% { 
         box-shadow: 0 0 8px 3px rgba(239, 68, 68, 0.9); 
         transform: scale(1); 
@@ -1840,12 +1862,6 @@
       }
     }
     @keyframes bellShake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-20deg); } 75% { transform: rotate(20deg); } }
-    /* Chat button style */
-    .moulage-chat-btn { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: transparent; border: 1px solid rgba(59,130,246,0.4); border-radius: 11px; cursor: pointer; transition: all 0.3s; font-size: 11px; }
-    .moulage-chat-btn:hover { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.6); transform: scale(1.1); }
-    /* Chat button in header */
-    .moulage-chat-btn { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: transparent; border: 1px solid rgba(59,130,246,0.4); border-radius: 11px; cursor: pointer; transition: all 0.3s; font-size: 12px; }
-    .moulage-chat-btn:hover { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.6); }
     @keyframes notifPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
     .notif-popup { position: fixed; top: 60px; right: 20px; width: 340px; max-height: 450px; background: #1f2937; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); z-index: 99997; display: none; flex-direction: column; overflow: hidden; border: 2px solid #3b82f6; }
     .notif-popup.active { display: flex; }
@@ -3227,7 +3243,7 @@
   <div class="mobile-app" id="mobileApp">
     <!-- Header Mobile -->
     <div class="mobile-header">
-      <button class="mobile-header-back" onclick="backToMobileHome()" title="Retour au menu">←</button>
+      <button class="mobile-header-back" onclick="backToMobileHome()" title="Retour à la liste" style="visibility:hidden;">←</button>
       <div class="mobile-header-center">
         <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" class="mobile-logo" alt="PhysiPro">
       </div>
@@ -3236,7 +3252,6 @@
           <span class="mobile-notif-icon">🔔</span>
           <span class="mobile-notif-badge" id="mobileNotifBadge"></span>
         </button>
-
         <button class="mobile-refresh-btn" id="mobileRefreshBtn" onclick="mobileRefresh()">🔄</button>
       </div>
     </div>
@@ -3393,7 +3408,7 @@
           <span class="notif-bell-icon">🔔</span>
           <span class="notif-bell-text" id="notifBellText"></span>
         </button>
-        <button class="moulage-chat-btn" onclick="openMoulageChatFromHeader()" title="Ouvrir le chat">💬</button>
+        <button class="chat-open-btn" onclick="openChatFromHeader()" title="Ouvrir le chat" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;background:transparent;border:1px solid rgba(255,255,255,0.3);border-radius:11px;cursor:pointer;transition:all 0.3s;font-size:11px;">💬</button>
         <div class="search-box-small">
           <input type="text" id="globalSearch" placeholder="🔍 Rechercher..." oninput="handleGlobalSearch(this.value)">
           <button class="btn-settings-inside" onclick="openSettingsModal()" title="Paramètres">⚙️</button>
@@ -4144,7 +4159,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1587';
+    const APP_VERSION = '1588';
     let versionCheckInterval = null;
     
     // ═══════════════════════════════════════════════════════════════
@@ -11699,11 +11714,12 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         }
         
         // Mettre à jour la vue mobile si on est sur mobile
-        if (window.innerWidth <= 768) {
-          console.log('📱 Appel renderMobileCards depuis checkDataLoaded');
-          // S'assurer que la fonction existe et l'appeler
+        // v1588: Appel unique contrôlé (évite clignotement)
+        if (window.innerWidth <= 768 && !mobileInitDone) {
+          console.log('📱 renderMobileCards depuis initializeApp (fallback)');
           if (typeof renderMobileCards === 'function') {
             renderMobileCards();
+            mobileInitDone = true;
           } else {
             // Si la fonction n'existe pas encore, réessayer dans 500ms
             setTimeout(() => {
@@ -11771,15 +11787,18 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           // Initialiser l'application
           await initializeApp();
           
-          // FORCER le rendu mobile après initialisation
+          // v1588: Appel unique et centralisé pour mobile après initializeApp
           if (window.innerWidth <= 768) {
-            console.log('📱 Forçage du rendu mobile après initializeApp');
-            setTimeout(() => {
-              if (typeof renderMobileCards === 'function' && Object.keys(cardsData).length > 0) {
-                renderMobileCards();
-              }
-            }, 100);
-            // Démarrer le listener photo après auth (Firebase rules require auth)
+            console.log('📱 Init mobile après auth - appel unique');
+            // S'assurer que le home screen est caché (direct aux cartes)
+            const hs = document.getElementById('mobileHomeScreen');
+            if (hs) hs.classList.remove('active');
+            // Un seul appel renderMobileCards après que les données soient chargées
+            if (typeof renderMobileCards === 'function' && Object.keys(cardsData).length > 0) {
+              renderMobileCards();
+              mobileInitDone = true;
+            }
+            // Démarrer le listener photo après auth
             if (typeof startPhotoRequestsListener === 'function') {
               startPhotoRequestsListener();
             }
@@ -13222,8 +13241,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         
         // Flash + sound for NEW notifications
         if (!_psmFirstLoad && psmCrossNotifs.length > _psmLastCount) {
-          // Flash banner removed - bell flash only
-          // Sound
+          // Sound only - no banner
           try {
             var ctx = new (window.AudioContext || window.webkitAudioContext)();
             [0, 0.15].forEach(function(delay, i) {
@@ -13245,29 +13263,26 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     }
     
     function updatePsmBadge() {
-      // PSM wrench button removed
+      // PSM button removed - notifications now integrated into main bell
+      // PSM count can be added to the main bell if needed
     }
     
-        function openPsmFromNotif() {
+    function openPsmFromNotif() {
+      // Navigate to PSM page
       window.location.href = 'PhysiPro_PSM.html';
     }
-    
-    // Chat button handler
-    function openMoulageChatFromHeader() {
+
+    // ===== openChatFromHeader =====
+    function openChatFromHeader() {
+      // If mobile, go to mobile chat
       if (window.innerWidth <= 768) {
         if (typeof goToMobileChat === 'function') goToMobileChat();
       } else {
-        var cid = typeof currentCardId !== 'undefined' ? currentCardId : null;
-        if (cid && typeof openFiche === 'function') {
-          openFiche(cid);
-        } else {
-          var firstBtn = document.querySelector('.mcard-fiche-btn');
-          if (firstBtn) { firstBtn.click(); }
-          else { showToast('\u{1F4AC} Sélectionnez un moulage pour ouvrir le chat', 'info'); }
-        }
+        // Desktop: find first fiche and open its chat, or scroll to kanban
+        var firstCard = document.querySelector('.card');
+        if (firstCard) firstCard.click();
       }
     }
-    window.openMoulageChatFromHeader = openMoulageChatFromHeader;
     
     // ===== SYSTÈME DE MODAL DE NOTIFICATIONS AVEC NAVIGATION =====
     let currentNotifIndex = 0;
@@ -15295,19 +15310,27 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     }
     window.closeMobileChat = closeMobileChat;
     
-    // Initialiser après le chargement - avec retry
+    // Initialiser après le chargement - OPTIMISÉ v1588: skip menu, direct au moulage
+    let mobileInitDone = false;
     function initMobileView() {
+      if (window.innerWidth > 768) return;
+      if (mobileInitDone && Object.keys(cardsData).length > 0) return; // Déjà fait et cartes chargées
+      
       console.log('📱 initMobileView - largeur:', window.innerWidth, 'cartes:', Object.keys(cardsData).length);
-      if (window.innerWidth <= 768) {
-        // Afficher l'écran d'accueil mobile
-        document.getElementById('mobileHomeScreen').classList.add('active');
-        startPhotoRequestsListener();
-        if (Object.keys(cardsData).length > 0) {
-          renderMobileCards();
-        } else {
-          console.log('📱 Pas de cartes, réessai dans 1s...');
-          setTimeout(initMobileView, 1000);
-        }
+      
+      // v1588: Ne PAS afficher le mobileHomeScreen - aller directement aux cartes
+      // S'assurer que le home screen est caché
+      const homeScreen = document.getElementById('mobileHomeScreen');
+      if (homeScreen) homeScreen.classList.remove('active');
+      
+      startPhotoRequestsListener();
+      
+      if (Object.keys(cardsData).length > 0) {
+        renderMobileCards();
+        mobileInitDone = true;
+      } else if (!mobileInitDone) {
+        console.log('📱 Pas de cartes, réessai dans 1s...');
+        setTimeout(initMobileView, 1000);
       }
     }
     
@@ -15315,7 +15338,9 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     // MOBILE: ÉCRAN D'ACCUEIL + ENVOYER PHOTO
     // ═══════════════════════════════════════════════════════════
     function goToMoulageFromHome() {
-      document.getElementById('mobileHomeScreen').classList.remove('active');
+      // v1588: Menu supprimé, mais garder la fonction au cas où
+      const homeScreen = document.getElementById('mobileHomeScreen');
+      if (homeScreen) homeScreen.classList.remove('active');
     }
     window.goToMoulageFromHome = goToMoulageFromHome;
     
@@ -15334,7 +15359,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       if(photosPage) photosPage.classList.remove('active');
       var archiveOverlay = document.getElementById('photoArchiveOverlay');
       if(archiveOverlay) archiveOverlay.classList.remove('active');
-      document.getElementById('mobileHomeScreen').classList.add('active');
+      // v1588: Ne PAS réafficher le menu home - rester sur la liste des cartes
+      // L'écran mobileApp (liste) est toujours visible en arrière-plan
     }
     window.backToMobileHome = backToMobileHome;
     
@@ -15558,8 +15584,13 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     window.closeSendPhotoCamera = closeSendPhotoCamera;
     // ═══════════════════════════════════════════════════════════
     
-    // Premier appel après 1.5s, puis réessai si nécessaire
-    setTimeout(initMobileView, 1500);
+    // v1588: initMobileView appelé seulement si pas déjà initialisé (fallback de sécurité)
+    setTimeout(() => {
+      if (!mobileInitDone && window.innerWidth <= 768 && isAuthenticated) {
+        console.log('📱 Fallback: initMobileView après 2s');
+        initMobileView();
+      }
+    }, 2000);
     
     // IMPORTANT: Détecter le changement de taille d'écran (pour DevTools responsive)
     let wasDesktop = window.innerWidth > 768;
@@ -15568,8 +15599,12 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       if (isMobile && wasDesktop) {
         // On vient de passer en mode mobile!
         console.log('📱 RESIZE: Passage en mode mobile détecté');
+        // S'assurer que le home screen est caché
+        const hs = document.getElementById('mobileHomeScreen');
+        if (hs) hs.classList.remove('active');
         if (Object.keys(cardsData).length > 0) {
           renderMobileCards();
+          mobileInitDone = true;
         }
       }
       wasDesktop = !isMobile;
@@ -15855,7 +15890,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       console.log('📱 PWA: Installation terminée');
     });
     
-    </script>
+  </script>
   
   <!-- GALERIE PHOTOS ONEDRIVE -->
   <div class="photo-gallery-overlay" id="photoGalleryOverlay">
