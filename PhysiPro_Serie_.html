@@ -7640,8 +7640,12 @@ function escapeHtml(str) {
 // === 24.2 SAUVEGARDE/CHARGEMENT LOCALSTORAGE ===
 function saveSerieDataToLocalStorage() {
   try {
+    // Nettoyer les cartes demo ET les cartes supprimées
+    var delIds = {};
+    try { delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}'); } catch(e) {}
     Object.keys(serieCardsData).forEach(id => {
       if (id.startsWith('demo-')) { delete serieCardsData[id]; var dc=document.querySelector('.mcard[data-id="'+id+'"]'); if(dc) dc.remove(); }
+      if (delIds[id] || delIds[id.replace(/[.#$\/\[\]]/g, '_')]) { delete serieCardsData[id]; }
     });
     localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
     console.log('💾 Série+: Données sauvegardées', Object.keys(serieCardsData).length, 'commandes');
@@ -7682,10 +7686,39 @@ function loadSerieDataFromLocalStorage() {
   
   // Firebase = SOURCE DE VÉRITÉ
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
+    // Charger les IDs de cartes supprimées d'abord
+    firebaseDb.ref('serieDeletedCards').on('value', function(dSnap) {
+      var delData = dSnap.exists() ? dSnap.val() : {};
+      try {
+        var local = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
+        Object.keys(delData).forEach(function(k){ if(!local[k]) local[k] = delData[k]; });
+        localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(local));
+      } catch(e) {}
+      // Nettoyer les cartes supprimées des données locales
+      var cleaned = false;
+      Object.keys(serieCardsData).forEach(function(cid) {
+        if (delData[cid] || delData[cid.replace(/[.#$\/\[\]]/g, '_')]) {
+          delete serieCardsData[cid];
+          var el = document.querySelector('.mcard[data-id="'+cid+'"]') || document.querySelector('.mcard[data-card-id="'+cid+'"]');
+          if(el) el.remove();
+          cleaned = true;
+        }
+      });
+      if(cleaned) {
+        try{localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));}catch(e){}
+        updateSerieCounters();
+      }
+    });
     firebaseDb.ref('serieCommandes').on('value', (snapshot) => {
       const fbData = snapshot.exists() ? snapshot.val() : {};
       const demoKeys = Object.keys(fbData).filter(id => id.startsWith('demo-'));
       if (demoKeys.length > 0) { const p={}; demoKeys.forEach(k=>{p[k]=null;}); firebaseDb.ref('serieCommandes').update(p); demoKeys.forEach(k=>{delete fbData[k];}); }
+      // FIX: Filtrer aussi les cartes supprimées
+      var delIds = {};
+      try { delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}'); } catch(e) {}
+      Object.keys(fbData).forEach(function(cid) {
+        if (delIds[cid] || delIds[cid.replace(/[.#$\/\[\]]/g, '_')]) { delete fbData[cid]; }
+      });
       const oldIds = new Set(Object.keys(serieCardsData));
       const newIds = new Set(Object.keys(fbData));
       oldIds.forEach(oid => { if(!newIds.has(oid)){const s=document.querySelector('.mcard[data-id="'+oid+'"]')||document.querySelector('.mcard[data-card-id="'+oid+'"]');if(s)s.remove();} });
@@ -8554,6 +8587,25 @@ function deleteSerieCard(cardId) {
   if (card) card.remove();
   const card2 = document.querySelector(`.mcard[data-card-id="${cardId}"]`);
   if (card2) card2.remove();
+  
+  // FIX RÉSURRECTION: Marquer l'ID comme supprimé dans Firebase
+  // pour que les autres pages (Inspection, Couture) ne le ramènent pas
+  if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
+    var safeKey = cardId.replace(/[.#$\/\[\]]/g, '_');
+    firebaseDb.ref('serieDeletedCards/' + safeKey).set(Date.now())
+      .then(function(){ console.log('[DEL] Carte série ' + cardId + ' marquée supprimée'); })
+      .catch(function(e){ console.error('[DEL] Erreur:', e); });
+    // Aussi supprimer directement de Firebase serieCommandes
+    firebaseDb.ref('serieCommandes/' + cardId).remove()
+      .catch(function(e){ console.error('[DEL] Remove from FB error:', e); });
+  }
+  
+  // Aussi marquer localement
+  try {
+    var delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
+    delIds[cardId] = Date.now();
+    localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(delIds));
+  } catch(e) {}
   
   // Sauvegarder
   if (typeof saveSerieDataToLocalStorage === 'function') {

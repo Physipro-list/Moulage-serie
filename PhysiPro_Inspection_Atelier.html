@@ -342,10 +342,10 @@ body.col-resizing *{cursor:col-resize!important;}
 .xbell-btn:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.5);}
 .xbell-icon{font-size:12px;flex-shrink:0;}
 .xbell-text{font-size:8px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.xbell-btn.has-notifs{background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);border-color:#b91c1c;animation:xbellFlash 0.5s ease-in-out infinite;}
-.xbell-btn.has-notifs .xbell-icon{animation:xbellShake 0.3s ease-in-out infinite;}
+.xbell-btn.has-notifs{background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);border-color:#b91c1c;animation:xbellFlash 0.8s ease-in-out infinite;}
+.xbell-btn.has-notifs .xbell-icon{animation:xbellShake 0.4s ease-in-out infinite;}
 .xbell-btn.has-notifs .xbell-text{color:#fff;font-weight:700;}
-@keyframes xbellShake{0%,100%{transform:rotate(0);}25%{transform:rotate(-20deg);}75%{transform:rotate(20deg);}}
+@keyframes xbellShake{0%,100%{transform:rotate(0);}25%{transform:rotate(-15deg);}75%{transform:rotate(15deg);}}
 @keyframes xbellFlash{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.8);transform:scale(1);background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);}50%{box-shadow:0 0 15px 6px rgba(239,68,68,1);transform:scale(1.1);background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);}}
 
 /* Chat toggle button in topbar */
@@ -353,7 +353,7 @@ body.col-resizing *{cursor:col-resize!important;}
 .xchat-toggle:hover{background:rgba(59,130,246,0.15);border-color:rgba(59,130,246,0.6);}
 
 /* ===== FLOATING CHAT PANEL - Moulage style ===== */
-.xchat-panel{position:fixed;bottom:20px;right:20px;width:380px;height:min(480px, calc(100vh - 140px));background:linear-gradient(135deg,#1e3a5f 0%,#0f172a 100%);border-radius:16px;box-shadow:0 15px 50px rgba(0,0,0,0.5);z-index:99996;display:none;flex-direction:column;overflow:hidden;border:2px solid #3b82f6;}
+.xchat-panel{position:fixed;bottom:20px;right:20px;width:380px;height:520px;background:linear-gradient(135deg,#1e3a5f 0%,#0f172a 100%);border-radius:16px;box-shadow:0 15px 50px rgba(0,0,0,0.5);z-index:99996;display:none;flex-direction:column;overflow:hidden;border:2px solid #3b82f6;}
 .xchat-panel.active{display:flex;}
 
 /* Chat header - identical to Moulage chat-header */
@@ -490,14 +490,14 @@ body.col-resizing *{cursor:col-resize!important;}
 .xnotif-mark-all:hover{background:#374151;color:white;}
 
 /* Flash banner */
-.xchat-flash{display:none!important;position:fixed;top:0;left:0;right:0;padding:10px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:white;text-align:center;font-size:13px;font-weight:700;z-index:99999;transform:translateY(-100%);transition:transform 0.3s ease;cursor:pointer;}
+.xchat-flash{position:fixed;top:0;left:0;right:0;padding:10px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:white;text-align:center;font-size:13px;font-weight:700;z-index:99999;transform:translateY(-100%);transition:transform 0.3s ease;cursor:pointer;}
 .xchat-flash.visible{transform:translateY(0);}
 
 /* Empty state */
 .xchat-empty{text-align:center;padding:40px 20px;color:rgba(255,255,255,0.4);font-size:12px;}
 
 @media(max-width:768px){
-  .xchat-panel{width:calc(100% - 20px);right:10px;bottom:10px;height:min(70vh, calc(100vh - 80px));}
+  .xchat-panel{width:calc(100% - 20px);right:10px;bottom:10px;height:70vh;}
   .xdest-modal{width:95%;max-width:none;}
 }
 
@@ -818,6 +818,38 @@ function startFirebaseSync(){
   }).catch(function(e){console.error('[FB] Deleted IDs load error:',e);}).then(function(){
   // Start listening for deleted IDs in real-time
   listenDeletedIds();
+  // FIX RÉSURRECTION: Charger les cartes série supprimées AVANT le merge
+  var _serieDeletedCards={};
+  fbDb.ref('serieDeletedCards').once('value').then(function(dSnap){
+    _serieDeletedCards=dSnap.val()||{};
+    // Aussi sauvegarder localement
+    try{
+      var ld=JSON.parse(localStorage.getItem('physipro_serie_deleted_cards')||'{}');
+      for(var dk in _serieDeletedCards){if(!ld[dk])ld[dk]=_serieDeletedCards[dk];}
+      localStorage.setItem('physipro_serie_deleted_cards',JSON.stringify(ld));
+    }catch(e){}
+    console.log('[FB] Loaded '+Object.keys(_serieDeletedCards).length+' deleted serie cards');
+  }).catch(function(e){console.error('[FB] serieDeletedCards load error:',e);}).then(function(){
+  // Écouter les suppressions en temps réel
+  fbDb.ref('serieDeletedCards').on('value',function(snap){
+    _serieDeletedCards=snap.val()||{};
+    // Nettoyer le localStorage si une carte supprimée y traîne encore
+    try{
+      var cards=JSON.parse(localStorage.getItem(SK)||'{}');
+      var cleaned=false;
+      Object.keys(cards).forEach(function(cid){
+        var safeKey=cid.replace(/[.#$\/\[\]]/g,'_');
+        if(_serieDeletedCards[cid]||_serieDeletedCards[safeKey]){delete cards[cid];cleaned=true;}
+      });
+      if(cleaned){safeLSSet(SK,JSON.stringify(cards));console.log('[FB] Cleaned resurrected serie cards');}
+    }catch(e){}
+  });
+  function isSerieCardDeleted(cid){
+    var safeKey=cid.replace(/[.#$\/\[\]]/g,'_');
+    if(_serieDeletedCards[cid]||_serieDeletedCards[safeKey])return true;
+    try{var ld=JSON.parse(localStorage.getItem('physipro_serie_deleted_cards')||'{}');if(ld[cid]||ld[safeKey])return true;}catch(e){}
+    return false;
+  }
   // Load serie cards from Firebase (shared path with Serie+)
   fbDb.ref('serieCommandes').once('value').then(function(snap){
     var fbCards=snap.val();
@@ -825,10 +857,13 @@ function startFirebaseSync(){
       var local=getSerieCards();
       // FIX P24: Deep merge — FB wins for card-level/structural, local wins for atelier/couture
       var merged={};
-      // Start with all local cards
-      Object.keys(local).forEach(function(id){merged[id]=local[id];});
-      // Merge FB cards on top, preserving local atelier/couture
+      // Start with all local cards — BUT skip deleted ones
+      Object.keys(local).forEach(function(id){
+        if(!isSerieCardDeleted(id)) merged[id]=local[id];
+      });
+      // Merge FB cards on top, preserving local atelier/couture — skip deleted
       Object.keys(fbCards).forEach(function(id){
+        if(isSerieCardDeleted(id))return;
         if(!merged[id]){merged[id]=fbCards[id];return;}
         var lCard=merged[id],fbCard=fbCards[id];
         // Card-level: take FB
@@ -856,7 +891,7 @@ function startFirebaseSync(){
         }
       });
       safeLSSet(SK,JSON.stringify(merged));
-      console.log('[FB] Serie cards loaded: '+Object.keys(merged).length+' cards');
+      console.log('[FB] Serie cards loaded: '+Object.keys(merged).length+' cards (filtered deleted)');
     }
     // Listen for real-time updates from Serie+
     listenSerieCards();
@@ -923,6 +958,7 @@ function startFirebaseSync(){
     }).catch(function(e){console.error('[FB] ColWidths load error:',dept,e);});
   });
   }); // End of deleted IDs .then() chain
+  }); // End of serieDeletedCards .then() chain
 }
 var _serieListener=null;
 function listenSerieCards(){
@@ -930,7 +966,12 @@ function listenSerieCards(){
   _serieListener=fbDb.ref('serieCommandes').on('value',function(snap){
     var fbCards=snap.val();if(!fbCards)return;
     var local=getSerieCards();var changed=false;
+    // FIX RÉSURRECTION: Filtrer les cartes supprimées
+    var delIds={};
+    try{delIds=JSON.parse(localStorage.getItem('physipro_serie_deleted_cards')||'{}');}catch(e){}
     Object.keys(fbCards).forEach(function(id){
+      var safeKey=id.replace(/[.#$\/\[\]]/g,'_');
+      if(delIds[id]||delIds[safeKey]){delete fbCards[id];return;}
       if(!local[id]){local[id]=fbCards[id];changed=true;return;}
       var fbCard=fbCards[id],lCard=local[id];
       // FIX P26: Sync card-level fields WITH changed flag
