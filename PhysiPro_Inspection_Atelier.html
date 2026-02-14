@@ -560,15 +560,15 @@ body.col-resizing *{cursor:col-resize!important;}
     </div>
   </div>
 </header>
-<!-- ANTI-FLICKER: Loading overlay during Firebase sync -->
+<!-- DATA PROTECTION: Loading overlay during Firebase sync -->
 <div id="initLoadingOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:9999;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.4s ease;">
   <div style="font-size:28px;margin-bottom:12px;">⚙️</div>
   <div style="color:var(--gold);font-size:14px;font-weight:600;">Chargement des données...</div>
   <div style="margin-top:10px;width:120px;height:3px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;">
-    <div style="width:40%;height:100%;background:var(--gold);border-radius:2px;animation:initLoadBar 1.2s ease-in-out infinite alternate;"></div>
+    <div style="width:40%;height:100%;background:var(--gold);border-radius:2px;animation:initBar 1.2s ease-in-out infinite alternate;"></div>
   </div>
 </div>
-<style>@keyframes initLoadBar{0%{width:20%;margin-left:0}100%{width:50%;margin-left:50%}}</style>
+<style>@keyframes initBar{0%{width:20%;margin-left:0}100%{width:50%;margin-left:50%}}</style>
 <!-- INSPECTION -->
 <div class="content active" id="tab-inspection">
   <div class="entry-bar">
@@ -727,15 +727,16 @@ firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(funct
     localStorage.setItem('physipro_last_email',user.email);
     setSyncBadge('online');
     startFirebaseSync();
-    // ANTI-FLICKER: Safety — if sync never completes within 6s, force render
+    // Safety timeout — if sync never completes within 8s, force render
     setTimeout(function(){
       if(_initPhase){
-        console.warn('[INIT] Safety timeout 6s — forcing render');
+        console.warn('[INIT] Safety timeout 8s — forcing render');
         _initPhase=false;
+        _startupComplete=true;
         renderTable('inspection');
         hideLoadingOverlay();
       }
-    }, 6000);
+    }, 8000);
   }else{
     var savedEmail=localStorage.getItem('physipro_last_email');
     localStorage.removeItem('physipro_last_email');
@@ -819,8 +820,9 @@ function resolveInspName(email){
 
 function startFirebaseSync(){
   _initPhase=true;
+  _startupComplete=false;
   showLoadingOverlay();
-  initApp(); // Init structure (no render during initPhase)
+  initApp();
   // FIX: Load shared deleted IDs FIRST before any merge
   fbDb.ref(FB_DELETED_PATH).once('value').then(function(snap){
     _deletedIdsCache=snap.val()||{};
@@ -933,7 +935,6 @@ function startFirebaseSync(){
           merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
         });
         safeLSSet(lk,JSON.stringify(merged));
-        renderTable(dept);
         // Push merged data if local had unique entries
         var hadLocal=false;
         Object.keys(localData).forEach(function(month){
@@ -946,39 +947,12 @@ function startFirebaseSync(){
         // Firebase empty but local has data — push local up
         pushToFB(dept);
       }
-      // AUTO-RESTORE: Check if current/previous month was accidentally archived
-      (function(d,fb,loc){
-        var cm=gmk();
-        var pm=gmk(new Date(new Date().getFullYear(),new Date().getMonth()-1,1));
-        var active=fb||loc||{};
-        [cm,pm].forEach(function(mk){
-          var hasActive=active[mk]&&Array.isArray(active[mk])&&active[mk].filter(function(r){return r.type==='entry';}).length>1;
-          if(hasActive)return; // Already have real data for this month
-          fbDb.ref('archives/'+d+'/'+mk).once('value').then(function(aSnap){
-            var arch=aSnap.val();
-            if(!arch||!Array.isArray(arch)||arch.length===0)return;
-            console.log('[RESTORE] Found '+arch.length+' archived entries for '+d+'/'+mk+' — restoring!');
-            var lk2=d==='inspection'?IK:CK;
-            var cur;try{cur=JSON.parse(localStorage.getItem(lk2))||{};}catch(e2){cur={};}
-            if(!cur[mk])cur[mk]=[];
-            var exIds={};cur[mk].forEach(function(r){if(r.id)exIds[r.id]=true;});
-            arch.forEach(function(r){if(r.id&&!exIds[r.id]&&!isIdDeleted(r.id)){cur[mk].push(r);}});
-            safeLSSet(lk2,JSON.stringify(cur));
-            setFbWriting(d,true);
-            fbDb.ref(FB_PATHS[d]+'/'+mk).set(cur[mk]).then(function(){
-              fbDb.ref('archives/'+d+'/'+mk).remove();
-              setTimeout(function(){setFbWriting(d,false);},1500);
-              renderTable(d);
-              showToast('♻️ '+cur[mk].length+' entrées restaurées ('+mk+')','success');
-            }).catch(function(e3){setFbWriting(d,false);});
-          }).catch(function(e4){});
-        });
-      })(dept,fbData,localData);
-      listenFB(dept);
+      // DELAY listenFB by 3s to let startup finish and pushToFB complete
+      setTimeout(function(){listenFB(dept);},3000);
       markSyncDone(dept);
     }).catch(function(err){
       console.error('[FB] Load error for',dept,':',err);
-      listenFB(dept);
+      setTimeout(function(){listenFB(dept);},3000);
       markSyncDone(dept);
       renderTable(dept);
     });
@@ -1108,15 +1082,14 @@ function cleanOldDeletedIds(){
 function listenDeletedIds(){
   if(!fbDb)return;
   fbDb.ref(FB_DELETED_PATH).on('value',function(snap){
+    if(_initPhase)return; // Don't process during init
     var fbDel=snap.val()||{};
     _deletedIdsCache=fbDel;
-    // Also merge into local so offline works
     var local={};try{local=JSON.parse(localStorage.getItem(DELETED_IDS_KEY))||{};}catch(e){}
     var changed=false;
     for(var k in fbDel){if(!local[k]){local[k]=fbDel[k];changed=true;}}
     if(changed){
       localStorage.setItem(DELETED_IDS_KEY,JSON.stringify(local));
-      // Re-filter local data to remove any resurrected entries
       ['inspection','couture'].forEach(function(dept){
         var lk=dept==='inspection'?IK:CK;
         try{
@@ -1128,8 +1101,9 @@ function listenDeletedIds(){
             if(data[month].length<before)cleaned=true;
           });
           if(cleaned){
-            safeLSSet(lk,JSON.stringify(data));
-            renderTable(dept);
+            if(safeDataWrite(lk,data,'listenDeletedIds')){
+              renderTable(dept);
+            }
           }
         }catch(e){}
       });
@@ -1143,17 +1117,16 @@ function listenFB(dept){
   var path=FB_PATHS[dept];
   if(fbListeners[dept])fbDb.ref(path).off('value',fbListeners[dept]);
   fbListeners[dept]=fbDb.ref(path).on('value',function(snap){
-    if(_fbWriting[dept]||_merging[dept])return;
+    if(_fbWriting[dept]||_merging[dept]||_initPhase)return;
     var fbData=snap.val();
     var lk=dept==='inspection'?IK:CK;
     if(!fbData){
-      safeLSSet(lk,JSON.stringify({}));
-      renderTable(dept);
+      // 🛡️ NEVER wipe localStorage when Firebase is empty — data might be in transit
+      console.warn('[listenFB] Firebase returned NULL for '+dept+' — keeping local data');
       return;
     }
     var localData;try{localData=JSON.parse(localStorage.getItem(lk))||{};}catch(e){localData={};}
     var merged={};
-    // Filter out deleted IDs from Firebase data
     Object.keys(fbData).forEach(function(month){
       merged[month]=(fbData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});
     });
@@ -1165,11 +1138,14 @@ function listenFB(dept){
         if(r.id&&!fbIds[r.id]&&!isIdDeleted(r.id)){merged[month].push(r);hasLocalOnly=true;}
       });
     });
-    // FIX: Final pass — remove any deleted IDs that slipped through merge
     Object.keys(merged).forEach(function(month){
       merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
     });
-    safeLSSet(lk,JSON.stringify(merged));
+    // 🛡️ DATA PROTECTION: Only write if we're not losing data
+    if(!safeDataWrite(lk,merged,'listenFB')){
+      console.error('[listenFB] 🛡️ Write blocked — would lose data for '+dept);
+      return;
+    }
     renderTable(dept);
     if(hasLocalOnly){
       _merging[dept]=true;
@@ -1261,12 +1237,13 @@ function markSyncDone(dept){
   if(dept==='inspection')migrateItemCase();
   if(_syncDone.inspection&&_syncDone.couture&&!_archiveRan){
     _archiveRan=true;
-    // ═══ ANTI-FLICKER: End init — ONE clean render ═══
     _initPhase=false;
+    _startupComplete=true;
     renderTable('inspection');
     hideLoadingOverlay();
     console.log('[INIT] ✅ Sync complete — single clean render');
-    setTimeout(function(){autoArchiveOldMonths();},2000);
+    // Delay archive much more to let everything stabilize
+    setTimeout(function(){autoArchiveOldMonths();},10000);
   }
 }
 function getArchiveCutoff(){
@@ -1291,11 +1268,9 @@ function autoArchiveOldMonths(){
     var data;
     try{data=JSON.parse(localStorage.getItem(lk))||{};}catch(e){data={};}
     var monthsToArchive=[];
+    var protectedMonths=[gmk(),gmk(new Date(new Date().getFullYear(),new Date().getMonth()-1,1))];
     Object.keys(data).forEach(function(month){
-      // PROTECTION: Never archive current month or previous month
-      var cm=gmk();
-      var pm=gmk(new Date(new Date().getFullYear(),new Date().getMonth()-1,1));
-      if(month===cm||month===pm)return;
+      if(protectedMonths.indexOf(month)>=0)return; // NEVER archive current/previous month
       if(isMonthOlderThan(month,cutoff)&&data[month]&&data[month].length>0){
         monthsToArchive.push(month);
       }
@@ -1362,8 +1337,7 @@ function migrateItemCase(){
         });
       }
       if(changed){localStorage.setItem(sk,JSON.stringify(data));anyChanged=true;
-        // Push to Firebase — block listener to prevent re-merge
-        if(fbDb){var fbPath=dept==='inspection'?FB_PATHS.inspection:FB_PATHS.couture;setFbWriting(dept,true);fbDb.ref(fbPath).set(data).then(function(){setTimeout(function(){setFbWriting(dept,false);},1500);}).catch(function(e){setFbWriting(dept,false);console.error('[Migration] FB push error:',e);});}
+        if(fbDb){var fbPath=dept==='inspection'?FB_PATHS.inspection:FB_PATHS.couture;setFbWriting(dept,true);fbDb.ref(fbPath).set(data).then(function(){setTimeout(function(){setFbWriting(dept,false);},2000);}).catch(function(e){setFbWriting(dept,false);console.error('[Migration] FB push error:',e);});}
       }
     }catch(e){console.error('Migration error:',e);}
   });
@@ -1381,14 +1355,33 @@ function migrateItemCase(){
   if(anyChanged)renderTable('inspection');
 }
 var _appInited=false;
-/* ═══ ANTI-FLICKER SYSTEM ═══ 
- * Problem: ~12 renderTable() calls cascade during Firebase sync, causing visible flicker.
- * Solution: Block ALL renders during init, do ONE final render when sync is complete.
- * The loading overlay hides the empty/stale table during this process.
- */
+/* ═══ ANTI-FLICKER + DATA PROTECTION SYSTEM ═══ */
 var _initPhase=false;
+var _startupComplete=false;
 function showLoadingOverlay(){var el=document.getElementById('initLoadingOverlay');if(el)el.style.display='flex';}
 function hideLoadingOverlay(){var el=document.getElementById('initLoadingOverlay');if(el){el.style.opacity='0';setTimeout(function(){el.style.display='none';el.style.opacity='1';},400);}}
+/* Count total entries across all months */
+function countEntries(dataObj){var n=0;if(!dataObj)return 0;Object.keys(dataObj).forEach(function(m){if(Array.isArray(dataObj[m]))dataObj[m].forEach(function(r){if(r.type==='entry')n++;});});return n;}
+/* SAFE WRITE: Never overwrite localStorage with FEWER entries than what's already there */
+function safeDataWrite(lk,newData,source){
+  var oldRaw=localStorage.getItem(lk);
+  var oldData=null;try{oldData=JSON.parse(oldRaw)||null;}catch(e){}
+  var oldCount=countEntries(oldData);
+  var newCount=countEntries(newData);
+  if(oldCount>0&&newCount<oldCount&&newCount<oldCount*0.5){
+    console.error('🛡️ [PROTECTION] BLOCKED write from '+source+': would reduce entries from '+oldCount+' to '+newCount+' in '+lk);
+    // Backup the good data
+    try{localStorage.setItem(lk+'_backup',oldRaw);}catch(e){}
+    return false;
+  }
+  if(oldCount>3&&newCount<=1){
+    console.error('🛡️ [PROTECTION] BLOCKED catastrophic write from '+source+': '+oldCount+' → '+newCount+' in '+lk);
+    try{localStorage.setItem(lk+'_backup',oldRaw);}catch(e){}
+    return false;
+  }
+  safeLSSet(lk,JSON.stringify(newData));
+  return true;
+}
 function initApp(){if(_appInited){if(!_initPhase)renderTable('inspection');return;}_appInited=true;cleanOldDeletedIds();initMonths();updateDates();if(!_initPhase)renderTable('inspection');}
 
 /* ═══ LISTS ═══ */
@@ -1454,7 +1447,7 @@ function doRefresh(dept){
         Object.keys(merged).forEach(function(month){
           merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
         });
-        safeLSSet(lk,JSON.stringify(merged));
+        safeDataWrite(lk,merged,'doRefresh');
       }
       renderTable(dept);
       setSyncBadge('online');
