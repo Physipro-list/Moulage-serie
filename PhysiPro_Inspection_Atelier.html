@@ -1002,11 +1002,17 @@ function listenSerieCards(){
       if(fbCard.order&&fbCard.order!==lCard.order){lCard.order=fbCard.order;changed=true;}
       if(fbCard.numeroPO&&fbCard.numeroPO!==lCard.numeroPO){lCard.numeroPO=fbCard.numeroPO;changed=true;}
       // FIX P23: Deep merge grandeurs — preserve local atelier/couture, take FB for qty/name
-      if(fbCard.items&&lCard.items){
+      if(fbCard.items){
+        if(!lCard.items)lCard.items=[];
         fbCard.items.forEach(function(fItem,ii){
-          if(!lCard.items[ii])return;
+          // FIX: Si l'item n'existe pas localement, l'AJOUTER (ex: HP2 ajouté dans Série+)
+          if(!lCard.items[ii]){lCard.items[ii]=fItem;changed=true;return;}
+          // Sync item name
+          if(fItem.name&&fItem.name!==lCard.items[ii].name){lCard.items[ii].name=fItem.name;changed=true;}
+          if(!lCard.items[ii].grandeurs)lCard.items[ii].grandeurs=[];
           (fItem.grandeurs||[]).forEach(function(fG,gi){
-            if(!lCard.items[ii].grandeurs||!lCard.items[ii].grandeurs[gi])return;
+            // FIX: Si la grandeur n'existe pas localement, l'AJOUTER
+            if(!lCard.items[ii].grandeurs[gi]){lCard.items[ii].grandeurs[gi]=fG;changed=true;return;}
             var lG=lCard.items[ii].grandeurs[gi];
             // Sync structural fields from Serie+ (qty, name)
             if(fG.qty&&fG.qty!==lG.qty){lG.qty=fG.qty;changed=true;}
@@ -1818,23 +1824,51 @@ function reopenSerieModal(dept,idx){
 function scanBon(dept){window._reopenRowIdx=null;window._reopenDept=null;var id='insp-bon';var bon=document.getElementById(id).value.trim();if(!bon){showToast('#?','error');return;}
 // FIX #15: Clear global search before scan so new entries are visible
 var gs=document.getElementById('global-search');if(gs&&gs.value){gs.value='';onSearchInput();}
-// Try local first
-var m=findSerie(bon);
-if(m){document.getElementById(id).value='';document.getElementById(id).focus();openSerieModal(bon,m,dept);return;}
-// Not found locally — try Firebase directly before falling back to manual
+// ALWAYS fetch fresh from Firebase to get latest items/grandeurs
 if(fbDb){
   fbDb.ref('serieCommandes').once('value').then(function(snap){
     var fbCards=snap.val()||{};
-    // Update localStorage with fresh data
-    safeLSSet(SK,JSON.stringify(fbCards));
-    // Try again
+    // Merge: keep local atelier/couture data, take FB structure
+    var local=getSerieCards();
+    Object.keys(fbCards).forEach(function(cid){
+      if(!local[cid]){local[cid]=fbCards[cid];return;}
+      var lCard=local[cid],fbCard=fbCards[cid];
+      if(fbCard.client)lCard.client=fbCard.client;
+      if(fbCard.order)lCard.order=fbCard.order;
+      if(fbCard.numeroPO)lCard.numeroPO=fbCard.numeroPO;
+      if(fbCard.items){
+        if(!lCard.items)lCard.items=[];
+        fbCard.items.forEach(function(fItem,ii){
+          if(!lCard.items[ii]){lCard.items[ii]=fItem;return;}
+          if(fItem.name)lCard.items[ii].name=fItem.name;
+          if(!lCard.items[ii].grandeurs)lCard.items[ii].grandeurs=[];
+          (fItem.grandeurs||[]).forEach(function(fG,gi){
+            if(!lCard.items[ii].grandeurs[gi]){lCard.items[ii].grandeurs[gi]=fG;return;}
+            var lG=lCard.items[ii].grandeurs[gi];
+            if(fG.qty)lG.qty=fG.qty;
+            if(fG.name)lG.name=fG.name;
+          });
+        });
+      }
+    });
+    safeLSSet(SK,JSON.stringify(local));
+    // Now search
     var n=String(bon).trim();
     var found=null;
-    for(var cid in fbCards){if(fbCards[cid].order===n||fbCards[cid].numeroPO===n){found={cardId:cid,card:fbCards[cid]};break;}}
+    for(var cid in local){if(local[cid].order===n||local[cid].numeroPO===n){found={cardId:cid,card:local[cid]};break;}}
     document.getElementById(id).value='';document.getElementById(id).focus();
     if(found){openSerieModal(bon,found,dept);}else{openManualModal(bon,dept);}
-  }).catch(function(){document.getElementById(id).value='';document.getElementById(id).focus();openManualModal(bon,dept);});
-}else{document.getElementById(id).value='';document.getElementById(id).focus();openManualModal(bon,dept);}}
+  }).catch(function(){
+    // Fallback: try local
+    var m=findSerie(bon);
+    document.getElementById(id).value='';document.getElementById(id).focus();
+    if(m){openSerieModal(bon,m,dept);}else{openManualModal(bon,dept);}
+  });
+}else{
+  var m=findSerie(bon);
+  document.getElementById(id).value='';document.getElementById(id).focus();
+  if(m){openSerieModal(bon,m,dept);}else{openManualModal(bon,dept);}
+}}
 function openSerieModal(bon,match,dept){var cid=match.cardId;
 // Always re-read fresh card from localStorage (may have been updated by confirmSI)
 var freshCards=getSerieCards();var card=freshCards[cid]||match.card;
