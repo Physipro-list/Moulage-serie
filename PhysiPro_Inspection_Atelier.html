@@ -946,6 +946,34 @@ function startFirebaseSync(){
         // Firebase empty but local has data — push local up
         pushToFB(dept);
       }
+      // AUTO-RESTORE: Check if current/previous month was accidentally archived
+      (function(d,fb,loc){
+        var cm=gmk();
+        var pm=gmk(new Date(new Date().getFullYear(),new Date().getMonth()-1,1));
+        var active=fb||loc||{};
+        [cm,pm].forEach(function(mk){
+          var hasActive=active[mk]&&Array.isArray(active[mk])&&active[mk].filter(function(r){return r.type==='entry';}).length>1;
+          if(hasActive)return; // Already have real data for this month
+          fbDb.ref('archives/'+d+'/'+mk).once('value').then(function(aSnap){
+            var arch=aSnap.val();
+            if(!arch||!Array.isArray(arch)||arch.length===0)return;
+            console.log('[RESTORE] Found '+arch.length+' archived entries for '+d+'/'+mk+' — restoring!');
+            var lk2=d==='inspection'?IK:CK;
+            var cur;try{cur=JSON.parse(localStorage.getItem(lk2))||{};}catch(e2){cur={};}
+            if(!cur[mk])cur[mk]=[];
+            var exIds={};cur[mk].forEach(function(r){if(r.id)exIds[r.id]=true;});
+            arch.forEach(function(r){if(r.id&&!exIds[r.id]&&!isIdDeleted(r.id)){cur[mk].push(r);}});
+            safeLSSet(lk2,JSON.stringify(cur));
+            setFbWriting(d,true);
+            fbDb.ref(FB_PATHS[d]+'/'+mk).set(cur[mk]).then(function(){
+              fbDb.ref('archives/'+d+'/'+mk).remove();
+              setTimeout(function(){setFbWriting(d,false);},1500);
+              renderTable(d);
+              showToast('♻️ '+cur[mk].length+' entrées restaurées ('+mk+')','success');
+            }).catch(function(e3){setFbWriting(d,false);});
+          }).catch(function(e4){});
+        });
+      })(dept,fbData,localData);
       listenFB(dept);
       markSyncDone(dept);
     }).catch(function(err){
@@ -1264,6 +1292,10 @@ function autoArchiveOldMonths(){
     try{data=JSON.parse(localStorage.getItem(lk))||{};}catch(e){data={};}
     var monthsToArchive=[];
     Object.keys(data).forEach(function(month){
+      // PROTECTION: Never archive current month or previous month
+      var cm=gmk();
+      var pm=gmk(new Date(new Date().getFullYear(),new Date().getMonth()-1,1));
+      if(month===cm||month===pm)return;
       if(isMonthOlderThan(month,cutoff)&&data[month]&&data[month].length>0){
         monthsToArchive.push(month);
       }
