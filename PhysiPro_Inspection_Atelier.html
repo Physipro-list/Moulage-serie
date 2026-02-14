@@ -1660,7 +1660,7 @@ function cellHTML(dept,colId,row,idx,count,hasErr){
     case 'qty':var q=parseInt(row.qty)||1;return'<span class="cell-qty cell-editable" onclick="editQty(\''+dept+'\','+idx+',this)" style="cursor:pointer;min-width:24px;display:inline-block;">'+(q>1?q:'—')+'</span>';
     case 'item':
       var itemVal=row.item||'';
-      if(itemVal.indexOf('\n')>=0||itemVal.match(/\s+\d+\/\d+$/m)||itemVal.match(/\s+\d+x$/m)||itemVal.match(/\s+x\d+$/m)||itemVal.match(/^~/m)){
+      if(itemVal.indexOf('\n')>=0||itemVal.indexOf('|')>=0||itemVal.match(/\s+\d+\/\d+$/m)||itemVal.match(/\s+\d+x$/m)||itemVal.match(/\s+x\d+$/m)||itemVal.match(/^~/m)){
         if(window._showSerieDetail===false){
           return'<span style="font-weight:600;color:#60a5fa;font-size:inherit;white-space:nowrap;">Commande série</span>';
         }
@@ -1671,16 +1671,20 @@ function cellHTML(dept,colId,row,idx,count,hasErr){
           var c2=sm2.card;var grp={};var grpOrder=[];
           itemLines.forEach(function(line){
             var isPart=false;
+            // NEW FORMAT: "ItemName|~grandeurName qty" or "ItemName|grandeurName qty"
+            var pipeIdx=line.indexOf('|');
+            var iN='',gPart=line;
+            if(pipeIdx>=0){iN=line.substring(0,pipeIdx);gPart=line.substring(pipeIdx+1);}
             // Detect ~ prefix = partial marker
-            if(line.charAt(0)==='~'){isPart=true;line=line.substring(1);}
-            var mf=line.match(/^(.+?)\s+(\d+)\/(\d+)$/);
-            var mx=line.match(/^(.+?)\s+(\d+)x$/)||line.match(/^(.+?)\s*x(\d+)$/);
+            if(gPart.charAt(0)==='~'){isPart=true;gPart=gPart.substring(1);}
+            var mf=gPart.match(/^(.+?)\s+(\d+)\/(\d+)$/);
+            var mx=gPart.match(/^(.+?)\s+(\d+)x$/)||gPart.match(/^(.+?)\s*x(\d+)$/);
             var gN='',qDisp='';
             if(mf){gN=mf[1];isPart=true;qDisp=mf[2]+'x';}
             else if(mx){gN=mx[1];qDisp=mx[2]+'x';}
-            else{gN=line;qDisp='';}
-            var iN='';
-            (c2.items||[]).forEach(function(ci){(ci.grandeurs||[]).forEach(function(cg){if(cg.name===gN)iN=ci.name;});});
+            else{gN=gPart;qDisp='';}
+            // FALLBACK for old format (no pipe): try to find item name from card
+            if(!iN&&c2){(c2.items||[]).forEach(function(ci){(ci.grandeurs||[]).forEach(function(cg){if(cg.name===gN)iN=ci.name;});});}
             if(!iN)iN='—';
             if(!grp[iN]){grp[iN]=[];grpOrder.push(iN);}
             grp[iN].push({gN:gN,isPartial:isPart,qDisp:qDisp});
@@ -1689,9 +1693,11 @@ function cellHTML(dept,colId,row,idx,count,hasErr){
           var maxBadgeLen=0;
           grpOrder.forEach(function(iN){grp[iN].forEach(function(g){if(g.qDisp.length>maxBadgeLen)maxBadgeLen=g.qDisp.length;});});
           var bStyle=maxBadgeLen>3?'min-width:'+Math.ceil(maxBadgeLen*6.5)+'px;':'';
-          grpOrder.forEach(function(iN){
+          grpOrder.forEach(function(iN,grpIdx){
             var gs=grp[iN];
             var shortName=iN.replace(/^appuis?\s+/i,'').replace(/^coussin\s+/i,'').replace(/^appui\s+t[eê]te\s+/i,'Tête ');
+            // Séparateur entre items (pas avant le premier)
+            if(grpIdx>0)ih+='<div style="border-top:1px solid rgba(255,255,255,.15);margin:3px 0;"></div>';
             // Split into 2 balanced columns (ceil left, floor right), max 2 cols
             var half=Math.ceil(gs.length/2);
             var col1=gs.length>1?gs.slice(0,half):gs;
@@ -1965,8 +1971,8 @@ else{g.couture=g.couture||{};g.couture.qtyFait=newFait;if(noteText)g.couture.not
 if(isComplete){g.couture.status='pret';g.couture.inspected=true;g.couture.partiel=false;completedGrandeurs.push({ii:item.ii,gi:gI.gi});}
 else{g.couture.status='partiel';g.couture.partiel=true;g.couture.inspected=false;}
 g.couture.inspectedBy=fbUser?fbUser.email:'';g.couture.inspectedAt=new Date().toISOString();fbUpdates['items/'+item.ii+'/grandeurs/'+gI.gi+'/couture']=g.couture;}
-tq+=userQty;var gName=(gI.name||'STD');
-if(!isComplete){itemLines.push('~'+gName+' '+newFait+'x');}else{itemLines.push(gName+' '+newFait+'x');}
+tq+=userQty;var gName=(gI.name||'STD');var iName=(card.items[item.ii]?card.items[item.ii].name:'');
+if(!isComplete){itemLines.push((iName?iName+'|':'')+'~'+gName+' '+newFait+'x');}else{itemLines.push((iName?iName+'|':'')+ gName+' '+newFait+'x');}
 });if(tq<=0){showToast('Quantité = 0','error');return;}safeLSSet(SK,JSON.stringify(cards));if(fbDb&&Object.keys(fbUpdates).length){fbDb.ref('serieCommandes/'+ctx.cid).update(fbUpdates).then(function(){console.log('[FB] Serie card '+ctx.cid+' updated');cascadeToInventaire(ctx.cid,completedGrandeurs);}).catch(function(e){console.error('[FB] Serie push error:',e);showToast('⚠️ Sync échouée','error');});}var itemStr=itemLines.join('\n');
 // If reopened from an existing row (star click), update that row instead of creating new
 if(ctx.sourceRowIdx!=null){
@@ -1979,8 +1985,9 @@ if(ctx.sourceRowIdx!=null){
       var sd=cg[sec];if(!sd)return;
       var qf=parseInt(sd.qtyFait)||0;var tQ=parseInt(cg.qty)||0;
       if(qf<=0)return;
-      if(sd.inspected||qf>=tQ){allLines.push(cg.name+' '+qf+'x');allQty+=qf;}
-      else if(sd.partiel){allLines.push('~'+cg.name+' '+qf+'x');allQty+=qf;}
+      var prefix=ci.name?ci.name+'|':'';
+      if(sd.inspected||qf>=tQ){allLines.push(prefix+cg.name+' '+qf+'x');allQty+=qf;}
+      else if(sd.partiel){allLines.push(prefix+'~'+cg.name+' '+qf+'x');allQty+=qf;}
     });});
     existingRow.item=allLines.join('\n');
     existingRow.qty=allQty;
