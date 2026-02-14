@@ -560,7 +560,7 @@ body.col-resizing *{cursor:col-resize!important;}
     </div>
   </div>
 </header>
-<!-- DATA PROTECTION: Loading overlay during Firebase sync -->
+<!-- LOADING OVERLAY — masque tout pendant le sync Firebase -->
 <div id="initLoadingOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:9999;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.4s ease;">
   <div style="font-size:28px;margin-bottom:12px;">⚙️</div>
   <div style="color:var(--gold);font-size:14px;font-weight:600;">Chargement des données...</div>
@@ -727,12 +727,11 @@ firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(funct
     localStorage.setItem('physipro_last_email',user.email);
     setSyncBadge('online');
     startFirebaseSync();
-    // Safety timeout — if sync never completes within 8s, force render
+    // Safety: si le sync ne finit pas en 8s, force l'affichage
     setTimeout(function(){
       if(_initPhase){
-        console.warn('[INIT] Safety timeout 8s — forcing render');
+        console.warn('[INIT] Safety timeout 8s');
         _initPhase=false;
-        _startupComplete=true;
         renderTable('inspection');
         hideLoadingOverlay();
       }
@@ -820,36 +819,31 @@ function resolveInspName(email){
 
 function startFirebaseSync(){
   _initPhase=true;
-  _startupComplete=false;
   showLoadingOverlay();
   initApp();
-  // FIX: Load shared deleted IDs FIRST before any merge
+  console.log('[SYNC] ═══ Starting Firebase sync ═══');
+  // Step 1: Load deleted IDs
   fbDb.ref(FB_DELETED_PATH).once('value').then(function(snap){
     _deletedIdsCache=snap.val()||{};
-    // Merge into local
     var local={};try{local=JSON.parse(localStorage.getItem(DELETED_IDS_KEY))||{};}catch(e){}
     for(var k in _deletedIdsCache){if(!local[k])local[k]=_deletedIdsCache[k];}
     localStorage.setItem(DELETED_IDS_KEY,JSON.stringify(local));
-    console.log('[FB] Loaded '+Object.keys(_deletedIdsCache).length+' shared deleted IDs');
-  }).catch(function(e){console.error('[FB] Deleted IDs load error:',e);}).then(function(){
-  // Start listening for deleted IDs in real-time
+    console.log('[SYNC] Deleted IDs: '+Object.keys(_deletedIdsCache).length);
+  }).catch(function(e){console.error('[SYNC] Deleted IDs error:',e);}).then(function(){
   listenDeletedIds();
-  // FIX RÉSURRECTION: Charger les cartes série supprimées AVANT le merge
+  // Step 2: Load serie deleted cards
   var _serieDeletedCards={};
   fbDb.ref('serieDeletedCards').once('value').then(function(dSnap){
     _serieDeletedCards=dSnap.val()||{};
-    // Aussi sauvegarder localement
     try{
       var ld=JSON.parse(localStorage.getItem('physipro_serie_deleted_cards')||'{}');
       for(var dk in _serieDeletedCards){if(!ld[dk])ld[dk]=_serieDeletedCards[dk];}
       localStorage.setItem('physipro_serie_deleted_cards',JSON.stringify(ld));
     }catch(e){}
-    console.log('[FB] Loaded '+Object.keys(_serieDeletedCards).length+' deleted serie cards');
-  }).catch(function(e){console.error('[FB] serieDeletedCards load error:',e);}).then(function(){
-  // Écouter les suppressions en temps réel
+    console.log('[SYNC] Serie deleted cards: '+Object.keys(_serieDeletedCards).length);
+  }).catch(function(e){console.error('[SYNC] serieDeletedCards error:',e);}).then(function(){
   fbDb.ref('serieDeletedCards').on('value',function(snap){
     _serieDeletedCards=snap.val()||{};
-    // Nettoyer le localStorage si une carte supprimée y traîne encore
     try{
       var cards=JSON.parse(localStorage.getItem(SK)||'{}');
       var cleaned=false;
@@ -857,7 +851,7 @@ function startFirebaseSync(){
         var safeKey=cid.replace(/[.#$\/\[\]]/g,'_');
         if(_serieDeletedCards[cid]||_serieDeletedCards[safeKey]){delete cards[cid];cleaned=true;}
       });
-      if(cleaned){safeLSSet(SK,JSON.stringify(cards));console.log('[FB] Cleaned resurrected serie cards');}
+      if(cleaned){safeLSSet(SK,JSON.stringify(cards));}
     }catch(e){}
   });
   function isSerieCardDeleted(cid){
@@ -866,27 +860,20 @@ function startFirebaseSync(){
     try{var ld=JSON.parse(localStorage.getItem('physipro_serie_deleted_cards')||'{}');if(ld[cid]||ld[safeKey])return true;}catch(e){}
     return false;
   }
-  // Load serie cards from Firebase (shared path with Serie+)
+  // Step 3: Load serie cards
   fbDb.ref('serieCommandes').once('value').then(function(snap){
     var fbCards=snap.val();
     if(fbCards){
       var local=getSerieCards();
-      // FIX P24: Deep merge — FB wins for card-level/structural, local wins for atelier/couture
       var merged={};
-      // Start with all local cards — BUT skip deleted ones
-      Object.keys(local).forEach(function(id){
-        if(!isSerieCardDeleted(id)) merged[id]=local[id];
-      });
-      // Merge FB cards on top, preserving local atelier/couture — skip deleted
+      Object.keys(local).forEach(function(id){if(!isSerieCardDeleted(id))merged[id]=local[id];});
       Object.keys(fbCards).forEach(function(id){
         if(isSerieCardDeleted(id))return;
         if(!merged[id]){merged[id]=fbCards[id];return;}
         var lCard=merged[id],fbCard=fbCards[id];
-        // Card-level: take FB
         if(fbCard.client)lCard.client=fbCard.client;
         if(fbCard.order)lCard.order=fbCard.order;
         if(fbCard.numeroPO)lCard.numeroPO=fbCard.numeroPO;
-        // Items/grandeurs: deep merge preserving local atelier/couture
         if(fbCard.items&&lCard.items){
           fbCard.items.forEach(function(fItem,ii){
             if(!lCard.items[ii]){lCard.items[ii]=fItem;return;}
@@ -895,32 +882,31 @@ function startFirebaseSync(){
               if(!lCard.items[ii].grandeurs)lCard.items[ii].grandeurs=[];
               if(!lCard.items[ii].grandeurs[gi]){lCard.items[ii].grandeurs[gi]=fG;return;}
               var lG=lCard.items[ii].grandeurs[gi];
-              if(fG.qty)lG.qty=fG.qty;
-              if(fG.name)lG.name=fG.name;
-              // Preserve local atelier/couture if they exist
+              if(fG.qty)lG.qty=fG.qty;if(fG.name)lG.name=fG.name;
               if(fG.atelier&&!lG.atelier)lG.atelier=fG.atelier;
               if(fG.couture&&!lG.couture)lG.couture=fG.couture;
             });
           });
-        }else if(fbCard.items&&!lCard.items){
-          lCard.items=fbCard.items;
-        }
+        }else if(fbCard.items&&!lCard.items){lCard.items=fbCard.items;}
       });
       safeLSSet(SK,JSON.stringify(merged));
-      console.log('[FB] Serie cards loaded: '+Object.keys(merged).length+' cards (filtered deleted)');
+      console.log('[SYNC] Serie cards: '+Object.keys(merged).length);
     }
-    // Listen for real-time updates from Serie+
     listenSerieCards();
-  }).catch(function(e){console.error('[FB] Serie load error:',e);listenSerieCards();});
-  // Load from Firebase, merge with local, push if needed
+  }).catch(function(e){console.error('[SYNC] Serie error:',e);listenSerieCards();});
+
+  // Step 4: Load inspection + couture data
   ['inspection','couture'].forEach(function(dept){
     var path=FB_PATHS[dept];
     fbDb.ref(path).once('value').then(function(snap){
       var fbData=snap.val();
       var lk=dept==='inspection'?IK:CK;
       var localData=loadDLocal(dept);
+      var localCount=_countEntries(localData);
+      var fbCount=_countEntries(fbData);
+      console.log('[SYNC] '+dept+': Firebase='+fbCount+' Local='+localCount+' entries');
+
       if(fbData){
-        // Deep merge: merge at entry level within each month
         var merged={};
         Object.keys(fbData).forEach(function(month){merged[month]=(fbData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});});
         Object.keys(localData).forEach(function(month){
@@ -930,51 +916,72 @@ function startFirebaseSync(){
             if(r.id&&!fbIds[r.id]&&!isIdDeleted(r.id)){merged[month].push(r);}
           });
         });
-        // FIX: Final anti-resurrection filter on initial load
         Object.keys(merged).forEach(function(month){
           merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
         });
-        safeLSSet(lk,JSON.stringify(merged));
-        // Push merged data if local had unique entries
-        var hadLocal=false;
-        Object.keys(localData).forEach(function(month){
-          (localData[month]||[]).forEach(function(r){
-            if(r.id){var inFb=false;((fbData[month]||[])).forEach(function(fr){if(fr.id===r.id)inFb=true;});if(!inFb)hadLocal=true;}
+        var mergedCount=_countEntries(merged);
+        console.log('[SYNC] '+dept+': Merged='+mergedCount+' entries');
+
+        // 🛡️ PROTECTION: Ne JAMAIS écrire moins de données que ce qu'on a localement
+        if(localCount>2 && mergedCount<localCount){
+          console.warn('🛡️ [SYNC] '+dept+': Merge a MOINS d\'entrées ('+mergedCount+') que local ('+localCount+'). LOCAL WINS.');
+          // Garder local mais ajouter les entrées FB qui manquent
+          var finalData=JSON.parse(JSON.stringify(localData));
+          Object.keys(fbData).forEach(function(month){
+            if(!finalData[month])finalData[month]=[];
+            var localIds={};finalData[month].forEach(function(r){if(r.id)localIds[r.id]=true;});
+            (fbData[month]||[]).forEach(function(r){
+              if(r.id&&!localIds[r.id]&&!isIdDeleted(r.id)){finalData[month].push(r);}
+            });
           });
-        });
-        if(hadLocal)pushToFB(dept);
+          safeLSSet(lk,JSON.stringify(finalData));
+          pushToFB(dept);
+        }else{
+          safeLSSet(lk,JSON.stringify(merged));
+          var hadLocal=false;
+          Object.keys(localData).forEach(function(month){
+            (localData[month]||[]).forEach(function(r){
+              if(r.id){var inFb=false;((fbData[month]||[])).forEach(function(fr){if(fr.id===r.id)inFb=true;});if(!inFb)hadLocal=true;}
+            });
+          });
+          if(hadLocal)pushToFB(dept);
+        }
       }else if(localData&&Object.keys(localData).length>0){
-        // Firebase empty but local has data — push local up
+        console.log('[SYNC] '+dept+': Firebase VIDE, push local ('+localCount+' entries)');
         pushToFB(dept);
       }
-      // DELAY listenFB by 3s to let startup finish and pushToFB complete
-      setTimeout(function(){listenFB(dept);},3000);
+      // IMPORTANT: Attacher le listener realtime APRÈS 4 secondes
+      // pour laisser le pushToFB finir avant que le listener ne fire
+      setTimeout(function(){listenFB(dept);console.log('[SYNC] '+dept+': Listener realtime attaché');},4000);
       markSyncDone(dept);
     }).catch(function(err){
-      console.error('[FB] Load error for',dept,':',err);
-      setTimeout(function(){listenFB(dept);},3000);
+      console.error('[SYNC] Load error:',dept,err);
+      setTimeout(function(){listenFB(dept);},4000);
       markSyncDone(dept);
-      renderTable(dept);
     });
   });
-  // Sync lists
+  // Step 5: Sync lists + column config (pas de renderTable ici)
   fbDb.ref(FB_PATHS.lists).once('value').then(function(snap){
     var d=snap.val();if(!d)return;
     Object.keys(d).forEach(function(k){localStorage.setItem('physipro_list_'+k,JSON.stringify(d[k]));});
-    // Re-render after lists are loaded to ensure dropdowns are populated
-    renderTable('inspection');
-  }).catch(function(e){console.error('[FB] Lists sync error:',e);});
-  // Sync col config
+    console.log('[SYNC] Lists synced');
+  }).catch(function(e){console.error('[SYNC] Lists error:',e);});
   ['inspection','couture'].forEach(function(dept){
     fbDb.ref(FB_PATHS.colCfg+'/'+dept).once('value').then(function(snap){
-      var d=snap.val();if(d){localStorage.setItem('physipro_colcfg_'+dept,JSON.stringify(d));renderTable(dept);}
-    }).catch(function(e){console.error('[FB] ColCfg load error:',dept,e);});
+      var d=snap.val();if(d)localStorage.setItem('physipro_colcfg_'+dept,JSON.stringify(d));
+    }).catch(function(e){});
     fbDb.ref(FB_PATHS.colWidths+'/'+dept).once('value').then(function(snap){
-      var d=snap.val();if(d){localStorage.setItem('physipro_colwidths_'+dept,JSON.stringify(d));renderTable(dept);}
-    }).catch(function(e){console.error('[FB] ColWidths load error:',dept,e);});
+      var d=snap.val();if(d)localStorage.setItem('physipro_colwidths_'+dept,JSON.stringify(d));
+    }).catch(function(e){});
   });
-  }); // End of deleted IDs .then() chain
-  }); // End of serieDeletedCards .then() chain
+  }); // End serieDeletedCards chain
+  }); // End deletedIds chain
+}
+/* ═══ HELPER: Compter les entrées dans un objet data ═══ */
+function _countEntries(dataObj){
+  var n=0;if(!dataObj||typeof dataObj!=='object')return 0;
+  Object.keys(dataObj).forEach(function(m){if(Array.isArray(dataObj[m]))dataObj[m].forEach(function(r){if(r.type==='entry')n++;});});
+  return n;
 }
 var _serieListener=null;
 function listenSerieCards(){
@@ -1082,7 +1089,7 @@ function cleanOldDeletedIds(){
 function listenDeletedIds(){
   if(!fbDb)return;
   fbDb.ref(FB_DELETED_PATH).on('value',function(snap){
-    if(_initPhase)return; // Don't process during init
+    if(_initPhase)return;
     var fbDel=snap.val()||{};
     _deletedIdsCache=fbDel;
     var local={};try{local=JSON.parse(localStorage.getItem(DELETED_IDS_KEY))||{};}catch(e){}
@@ -1094,6 +1101,7 @@ function listenDeletedIds(){
         var lk=dept==='inspection'?IK:CK;
         try{
           var data=JSON.parse(localStorage.getItem(lk))||{};
+          var beforeCount=_countEntries(data);
           var cleaned=false;
           Object.keys(data).forEach(function(month){
             var before=data[month].length;
@@ -1101,9 +1109,13 @@ function listenDeletedIds(){
             if(data[month].length<before)cleaned=true;
           });
           if(cleaned){
-            if(safeDataWrite(lk,data,'listenDeletedIds')){
-              renderTable(dept);
+            var afterCount=_countEntries(data);
+            if(beforeCount>2 && afterCount<beforeCount*0.5){
+              console.error('🛡️ [listenDeletedIds] '+dept+': BLOQUÉ — supprimerait trop ('+beforeCount+'→'+afterCount+')');
+              return;
             }
+            safeLSSet(lk,JSON.stringify(data));
+            renderTable(dept);
           }
         }catch(e){}
       });
@@ -1121,11 +1133,12 @@ function listenFB(dept){
     var fbData=snap.val();
     var lk=dept==='inspection'?IK:CK;
     if(!fbData){
-      // 🛡️ NEVER wipe localStorage when Firebase is empty — data might be in transit
-      console.warn('[listenFB] Firebase returned NULL for '+dept+' — keeping local data');
+      // 🛡️ JAMAIS effacer localStorage quand Firebase est vide
+      console.warn('[listenFB] '+dept+': Firebase NULL — données locales conservées');
       return;
     }
     var localData;try{localData=JSON.parse(localStorage.getItem(lk))||{};}catch(e){localData={};}
+    var localCount=_countEntries(localData);
     var merged={};
     Object.keys(fbData).forEach(function(month){
       merged[month]=(fbData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});
@@ -1141,11 +1154,13 @@ function listenFB(dept){
     Object.keys(merged).forEach(function(month){
       merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
     });
-    // 🛡️ DATA PROTECTION: Only write if we're not losing data
-    if(!safeDataWrite(lk,merged,'listenFB')){
-      console.error('[listenFB] 🛡️ Write blocked — would lose data for '+dept);
+    var mergedCount=_countEntries(merged);
+    // 🛡️ PROTECTION: Ne jamais réduire les données
+    if(localCount>2 && mergedCount<localCount){
+      console.error('🛡️ [listenFB] '+dept+': BLOQUÉ — merged('+mergedCount+') < local('+localCount+')');
       return;
     }
+    safeLSSet(lk,JSON.stringify(merged));
     renderTable(dept);
     if(hasLocalOnly){
       _merging[dept]=true;
@@ -1229,7 +1244,7 @@ function pushColCfgToFB(dept){
     console.error('❌ ColWidths sync error:',dept,err.message);
   });
 }
-/* ═══ AUTO-ARCHIVE SYSTEM ═══ */
+/* ═══ AUTO-ARCHIVE SYSTEM (SECTION SÉPARÉE — facile à modifier) ═══ */
 var _archiveRan=false;
 var _syncDone={inspection:false,couture:false};
 function markSyncDone(dept){
@@ -1237,14 +1252,22 @@ function markSyncDone(dept){
   if(dept==='inspection')migrateItemCase();
   if(_syncDone.inspection&&_syncDone.couture&&!_archiveRan){
     _archiveRan=true;
+    // Fin de l'init — UN seul render propre
     _initPhase=false;
-    _startupComplete=true;
     renderTable('inspection');
     hideLoadingOverlay();
     console.log('[INIT] ✅ Sync complete — single clean render');
-    // Delay archive much more to let everything stabilize
-    setTimeout(function(){autoArchiveOldMonths();},10000);
+    // Archives après 10s pour laisser tout se stabiliser
+    setTimeout(function(){runArchiveSystem();},10000);
   }
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * ARCHIVE SYSTEM — Section isolée, modifiable indépendamment
+ * Pour modifier les archives, changer UNIQUEMENT cette section.
+ * ═══════════════════════════════════════════════════════════ */
+function runArchiveSystem(){
+  autoArchiveOldMonths();
 }
 function getArchiveCutoff(){
   var now=new Date();
@@ -1255,10 +1278,15 @@ function isMonthOlderThan(monthKey,cutoffKey){
   if(!monthKey||!cutoffKey)return false;
   return monthKey<cutoffKey;
 }
+function getProtectedMonths(){
+  // Mois JAMAIS archivés: courant + précédent
+  return [gmk(), gmk(new Date(new Date().getFullYear(),new Date().getMonth()-1,1))];
+}
 function autoArchiveOldMonths(){
   if(!fbDb||!fbUser){console.log('[Archive] Pas connecté, skip');return;}
   var cutoff=getArchiveCutoff();
-  console.log('[Archive] Cutoff: garder >= '+cutoff);
+  var protectedMonths=getProtectedMonths();
+  console.log('[Archive] Cutoff: >= '+cutoff+' | Protégés: '+protectedMonths.join(', '));
   var totalArchived=0;
   var depts=['inspection','couture'];
   var pending=depts.length;
@@ -1268,9 +1296,9 @@ function autoArchiveOldMonths(){
     var data;
     try{data=JSON.parse(localStorage.getItem(lk))||{};}catch(e){data={};}
     var monthsToArchive=[];
-    var protectedMonths=[gmk(),gmk(new Date(new Date().getFullYear(),new Date().getMonth()-1,1))];
     Object.keys(data).forEach(function(month){
-      if(protectedMonths.indexOf(month)>=0)return; // NEVER archive current/previous month
+      // PROTECTION: Ne jamais archiver les mois protégés
+      if(protectedMonths.indexOf(month)>=0)return;
       if(isMonthOlderThan(month,cutoff)&&data[month]&&data[month].length>0){
         monthsToArchive.push(month);
       }
@@ -1283,12 +1311,9 @@ function autoArchiveOldMonths(){
     console.log('[Archive] '+dept+': '+monthsToArchive.length+' mois à archiver: '+monthsToArchive.join(', '));
     var updates={};
     monthsToArchive.forEach(function(month){
-      // Write to archives path
       updates['archives/'+dept+'/'+month]=data[month];
-      // Remove from active path
       updates[FB_PATHS[dept]+'/'+month]=null;
     });
-    // Log the operation
     var logKey='archLog_'+Date.now()+'_'+dept;
     updates['archiveLogs/'+logKey]={
       module:dept,
@@ -1298,9 +1323,7 @@ function autoArchiveOldMonths(){
       archivedBy:fbUser.email,
       cutoffMonth:cutoff
     };
-    // Execute batch update
     fbDb.ref().update(updates).then(function(){
-      // Remove from localStorage
       monthsToArchive.forEach(function(month){delete data[month];});
       safeLSSet(lk,JSON.stringify(data));
       totalArchived+=monthsToArchive.length;
@@ -1317,6 +1340,7 @@ function autoArchiveOldMonths(){
   });
   if(pending===0&&totalArchived===0){console.log('[Archive] Rien à archiver');}
 }
+/* ═══ FIN ARCHIVE SYSTEM ═══ */
 
 function migrateItemCase(){
   function toTitleCase(s){if(!s)return s;return s.charAt(0).toUpperCase()+s.slice(1).toLowerCase();}
@@ -1337,51 +1361,28 @@ function migrateItemCase(){
         });
       }
       if(changed){localStorage.setItem(sk,JSON.stringify(data));anyChanged=true;
-        if(fbDb){var fbPath=dept==='inspection'?FB_PATHS.inspection:FB_PATHS.couture;setFbWriting(dept,true);fbDb.ref(fbPath).set(data).then(function(){setTimeout(function(){setFbWriting(dept,false);},2000);}).catch(function(e){setFbWriting(dept,false);console.error('[Migration] FB push error:',e);});}
+        if(fbDb){var fbPath=dept==='inspection'?FB_PATHS.inspection:FB_PATHS.couture;
+          setFbWriting(dept,true);
+          fbDb.ref(fbPath).set(data).then(function(){setTimeout(function(){setFbWriting(dept,false);},2000);}).catch(function(e){setFbWriting(dept,false);});
+        }
       }
     }catch(e){console.error('Migration error:',e);}
   });
-  // Migrate saved lists
   ['items','clients'].forEach(function(listName){
     var lk='physipro_list_'+listName;
     var raw2=localStorage.getItem(lk);if(!raw2)return;
     try{var arr=JSON.parse(raw2);var ch=false;
       arr=arr.map(function(v){var nv=toTitleCase(v);if(nv!==v)ch=true;return nv;});
       if(ch){localStorage.setItem(lk,JSON.stringify(arr));anyChanged=true;
-        // Push lists to Firebase
         if(fbDb)fbDb.ref(FB_PATHS.lists+'/'+listName).set(arr).catch(function(e){});}
     }catch(e){}
   });
-  if(anyChanged)renderTable('inspection');
 }
 var _appInited=false;
-/* ═══ ANTI-FLICKER + DATA PROTECTION SYSTEM ═══ */
+/* ═══ ANTI-FLICKER SYSTEM ═══ */
 var _initPhase=false;
-var _startupComplete=false;
 function showLoadingOverlay(){var el=document.getElementById('initLoadingOverlay');if(el)el.style.display='flex';}
 function hideLoadingOverlay(){var el=document.getElementById('initLoadingOverlay');if(el){el.style.opacity='0';setTimeout(function(){el.style.display='none';el.style.opacity='1';},400);}}
-/* Count total entries across all months */
-function countEntries(dataObj){var n=0;if(!dataObj)return 0;Object.keys(dataObj).forEach(function(m){if(Array.isArray(dataObj[m]))dataObj[m].forEach(function(r){if(r.type==='entry')n++;});});return n;}
-/* SAFE WRITE: Never overwrite localStorage with FEWER entries than what's already there */
-function safeDataWrite(lk,newData,source){
-  var oldRaw=localStorage.getItem(lk);
-  var oldData=null;try{oldData=JSON.parse(oldRaw)||null;}catch(e){}
-  var oldCount=countEntries(oldData);
-  var newCount=countEntries(newData);
-  if(oldCount>0&&newCount<oldCount&&newCount<oldCount*0.5){
-    console.error('🛡️ [PROTECTION] BLOCKED write from '+source+': would reduce entries from '+oldCount+' to '+newCount+' in '+lk);
-    // Backup the good data
-    try{localStorage.setItem(lk+'_backup',oldRaw);}catch(e){}
-    return false;
-  }
-  if(oldCount>3&&newCount<=1){
-    console.error('🛡️ [PROTECTION] BLOCKED catastrophic write from '+source+': '+oldCount+' → '+newCount+' in '+lk);
-    try{localStorage.setItem(lk+'_backup',oldRaw);}catch(e){}
-    return false;
-  }
-  safeLSSet(lk,JSON.stringify(newData));
-  return true;
-}
 function initApp(){if(_appInited){if(!_initPhase)renderTable('inspection');return;}_appInited=true;cleanOldDeletedIds();initMonths();updateDates();if(!_initPhase)renderTable('inspection');}
 
 /* ═══ LISTS ═══ */
@@ -1447,7 +1448,13 @@ function doRefresh(dept){
         Object.keys(merged).forEach(function(month){
           merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
         });
-        safeDataWrite(lk,merged,'doRefresh');
+        var localCount=_countEntries(localData);
+        var mergedCount=_countEntries(merged);
+        if(localCount>2 && mergedCount<localCount){
+          console.warn('🛡️ [doRefresh] merged('+mergedCount+') < local('+localCount+') — keeping local');
+        }else{
+          safeLSSet(lk,JSON.stringify(merged));
+        }
       }
       renderTable(dept);
       setSyncBadge('online');
