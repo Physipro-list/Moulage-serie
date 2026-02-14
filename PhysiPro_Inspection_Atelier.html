@@ -1129,16 +1129,17 @@ function listenFB(dept){
   var path=FB_PATHS[dept];
   if(fbListeners[dept])fbDb.ref(path).off('value',fbListeners[dept]);
   fbListeners[dept]=fbDb.ref(path).on('value',function(snap){
-    if(_fbWriting[dept]||_merging[dept]||_initPhase)return;
+    if(_fbWriting[dept]||_merging[dept]||_initPhase){console.log('[listenFB] '+dept+': Skipped (writing='+!!_fbWriting[dept]+' merging='+!!_merging[dept]+' init='+_initPhase+')');return;}
     var fbData=snap.val();
     var lk=dept==='inspection'?IK:CK;
     if(!fbData){
-      // 🛡️ JAMAIS effacer localStorage quand Firebase est vide
       console.warn('[listenFB] '+dept+': Firebase NULL — données locales conservées');
       return;
     }
     var localData;try{localData=JSON.parse(localStorage.getItem(lk))||{};}catch(e){localData={};}
     var localCount=_countEntries(localData);
+    var fbCount=_countEntries(fbData);
+    console.log('[listenFB] '+dept+': FB='+fbCount+' Local='+localCount);
     var merged={};
     Object.keys(fbData).forEach(function(month){
       merged[month]=(fbData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});
@@ -1589,6 +1590,8 @@ function stopResize(e){
 function renderTable(dept){
   if(_initPhase){console.log('[RENDER] Blocked during init:',dept);return;}
   var md=gmd(dept);var rows=md.rows;var month=md.month;
+  var entryCount=0;rows.forEach(function(r){if(r.type==='entry')entryCount++;});
+  console.log('[RENDER] '+dept+' month='+month+' rows='+rows.length+' entries='+entryCount);
   var vis=getVisCols(dept);var defs=getDefs(dept);
   var theadId='insp-thead';
   var tbodyId='insp-body';
