@@ -1806,7 +1806,7 @@ document.addEventListener('DOMContentLoaded', function() {
   db = firebase.database();
   
   firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(e){console.log('Persist:',e);});
-    firebase.auth().onAuthStateChanged(user => {
+  firebase.auth().onAuthStateChanged(user => {
     if (user) {
       currentUser = user;
       document.getElementById('loginOverlay').classList.add('hidden');
@@ -1880,13 +1880,51 @@ function initData() {
     jobsData = snap.val() || {};
     renderJobs();
     if (window.innerWidth <= 768) renderMobileList();
+  }, err => {
+    console.error('Firebase jobs listener error:', err);
+    showToast('❌ Erreur chargement jobs: ' + err.message, 'error');
+    // Retry once after re-auth
+    retryAfterAuthRefresh('jobs');
   });
   db.ref('materiauxBO').on('value', snap => {
     matBOData = snap.val() || {};
     renderMatBO();
     if (window.innerWidth <= 768 && mobileCurrentTab === 'mat') renderMobileList();
+  }, err => {
+    console.error('Firebase materiauxBO listener error:', err);
+    showToast('❌ Erreur chargement matériaux: ' + err.message, 'error');
   });
   initCommandes();
+}
+
+// Retry helper: refresh auth token and re-attach listener
+function retryAfterAuthRefresh(path) {
+  if (!currentUser) return;
+  currentUser.getIdToken(true).then(() => {
+    console.log('Token refreshed, re-attaching ' + path + ' listener...');
+    if (path === 'jobs') {
+      db.ref('jobs').once('value').then(snap => {
+        jobsData = snap.val() || {};
+        renderJobs();
+        if (window.innerWidth <= 768) renderMobileList();
+        showToast('✅ Données rechargées avec succès', 'success');
+        // Re-attach real-time listener
+        db.ref('jobs').on('value', snap => {
+          jobsData = snap.val() || {};
+          renderJobs();
+          if (window.innerWidth <= 768) renderMobileList();
+        }, err => {
+          console.error('Firebase jobs listener error (retry):', err);
+        });
+      }).catch(err => {
+        console.error('Retry failed for jobs:', err);
+        showToast('❌ Reconnexion échouée. Rechargez la page.', 'error');
+      });
+    }
+  }).catch(err => {
+    console.error('Token refresh failed:', err);
+    showToast('⚠️ Session expirée. Veuillez vous reconnecter.', 'warning');
+  });
 }
 
 // ===== RENDER JOBS =====
@@ -1988,6 +2026,9 @@ function initCommandes() {
   db.ref('commandesAttente').on('value', snap => {
     commandesData = snap.val() || {};
     renderCommandes();
+  }, err => {
+    console.error('Firebase commandesAttente listener error:', err);
+    showToast('❌ Erreur chargement commandes: ' + err.message, 'error');
   });
 }
 
@@ -3439,6 +3480,8 @@ function listenForNotifications() {
   db.ref('jobNotifications').orderByChild('to').equalTo(currentUser.email).on('value', snap => {
     allNotifications = snap.val() || {};
     updateNotifBell();
+  }, err => {
+    console.error('Firebase notifications listener error:', err);
   });
 }
 
@@ -4050,6 +4093,8 @@ var XChat = (function() {
       
       firstLoad = false;
       lastCount = entries.length;
+    }, function(err) {
+      console.error('Firebase crossAppChat listener error:', err);
     });
   }
   
