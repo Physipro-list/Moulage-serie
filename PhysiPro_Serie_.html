@@ -6334,11 +6334,11 @@ if(localStorage.getItem('physipro_last_email')){
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 2px;">
                   <label>N° PO</label>
-                  <input type="text" id="serieFieldPO" onblur="updateSerieField('numeroPO', this.value)">
+                  <input type="text" id="serieFieldPO" onblur="updateSerieField('po', this.value)">
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 2px;">
                   <label>N° Soumission</label>
-                  <input type="text" id="serieFieldSoumission" onblur="updateSerieField('numeroSoumission', this.value)">
+                  <input type="text" id="serieFieldSoumission" onblur="updateSerieField('soumission', this.value)">
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 2px;">
                   <label>Date reçue</label>
@@ -7941,579 +7941,469 @@ function selectSerieCard(cardId, fromUserClick = false) {
   // Le modal s'ouvre via le bouton "Fiche" ou "📋 Info" dans l'entête
 }
 
+
 // ================================================================
-// SYSTÈME JSON - Import automatique de commandes (v608)
-// Base de données des coussins PhysiPro
+// SYSTÈME JSON — Import de commandes Série+ (v2.0 — réécrit)
 // ================================================================
 
-const PHYSIPRO_COUSSINS = {
-  // Coussins standard
-  "S5000": { nom: "Coussin Physiair", dims: ["14x14", "16x16", "16x18", "17x17", "18x16", "18x18", "20x20"], epaisseurs: ["2.5\"", "3\""], horsStandard: ">=21\" largeur" },
-  "S5360": { nom: "Coussin Air Foam", dims: ["14x14", "16x16", "16x18", "17x17", "18x16", "18x18", "20x20"], epaisseurs: ["2.5\"", "3\"", "3.5\"", "4\""], horsStandard: ">=21\" largeur" },
-  "S2455": { nom: "Coussin LXA", dims: ["14x14", "16x16", "16x18", "17x17", "18x16", "18x18", "20x20"], epaisseurs: ["2\"", "3\""], horsStandard: ">=21\" largeur" },
-  "S5300": { nom: "Coussin Temper-Flo", dims: ["14x14", "16x16", "16x18", "17x17", "18x16", "18x18", "20x20"], epaisseurs: ["3\"", "4\""], horsStandard: ">=21\" largeur" },
-  "S2950": { nom: "Coussin Brio", dims: ["16x18", "17x17", "18x18", "20x20"], epaisseurs: [], horsStandard: ">=21\" L ou P", notes: "Min 14x14, Max 21x21" },
-  "S2985": { nom: "Coussin C3S", dims: ["16x16", "17x17"], epaisseurs: ["3.5\""], horsStandard: "autres formats" },
-  "S2991": { nom: "Coussin Ellipse", dims: ["17x17", "18x18", "20x20"], epaisseurs: ["2.5\""], horsStandard: ">=21\" L ou P", notes: "Options gel" },
-  "S1266": { nom: "Coussin Ultra", dims: ["14-26\" x 14-22\""], epaisseurs: ["3\""], horsStandard: "plage libre" },
-  
-  // Coussins Resolve
-  "S2300": { nom: "Resolve (avec appuis-pelviens)", dims: ["10x10", "10x12", "12x10", "12x12", "12x14", "14x12", "14x14", "14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "hors liste", notes: "BC 2025 Québec" },
-  "S2305": { nom: "Resolve (sans appui-pelvien)", dims: ["10x10", "10x12", "12x10", "12x12", "12x14", "14x12", "14x14", "14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "hors liste", notes: "BC 2025 Québec" },
-  "S2310": { nom: "Resolve profil abaissé (avec appuis-pelviens)", dims: ["10x10", "10x12", "12x10", "12x12", "12x14", "14x12", "14x14", "14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "hors liste" },
-  "S2315": { nom: "Resolve profil abaissé (sans appui-pelvien)", dims: ["10x10", "10x12", "12x10", "12x12", "12x14", "14x12", "14x14", "14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "hors liste" },
-  "S2605": { nom: "Resolve Air (sans appui-pelvien)", dims: ["14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "autres formats", notes: "Insert cellules d'air BC 2025" },
-  "S2615": { nom: "Resolve Air profil abaissé (sans appui-pelvien)", dims: ["14x16", "16x16", "16x18", "18x16", "18x18", "20x16", "20x18", "20x20"], epaisseurs: [], horsStandard: "autres formats", notes: "Insert cellules d'air BC 2025" },
-  
-  // Autres coussins
-  "S5100": { nom: "Coussin Siliko", dims: ["12-20\" x 12-20\""], epaisseurs: [], horsStandard: ">20\" L ou P", notes: "BC 2024 Québec / Forfait B EU" },
-  "S1265": { nom: "Coussin Pression Zero", dims: ["12-20\" x 12-20\""], epaisseurs: [], horsStandard: "forfait B", notes: "Grille par plages EU" },
-  "S1270": { nom: "Coussin Pression Zero", dims: ["12-20\" x 12-20\""], epaisseurs: [], horsStandard: "forfait B", notes: "Grille par plages EU" },
-  "S5400": { nom: "Coussin Easy Fit", dims: ["14x14", "14x16", "15x16", "15x17", "16x16", "16x17", "16x18", "17x16", "17x17", "17x18", "18x16", "18x17", "18x18", "18x19", "18x20", "19x17", "19x18", "19x19", "19x20", "20x16", "20x17", "20x18", "20x19", "20x20"], epaisseurs: [], horsStandard: "hors 26 formats = soumission" },
-  "S2955": { nom: "Coussin Fusion (personnalisé <=20\")", dims: ["10-20\" x 10-22\""], epaisseurs: [], horsStandard: "sur mesure", notes: "Composition sur mesure" },
-  "S2956": { nom: "Coussin Fusion (personnalisé >=21\")", dims: ["21-26\" x 10-22\""], epaisseurs: [], horsStandard: "sur mesure", notes: "Composition sur mesure" },
-  "S2361": { nom: "Contour Insert 2\"", dims: ["14x14", "16x14", "16x16", "16x18", "18x16"], epaisseurs: ["2\""], horsStandard: ">=21\" ou hors liste", notes: "Min 14x14, Max 24x24" },
-  "S2366": { nom: "Contour Insert 3\"", dims: ["14x14", "16x14", "16x16", "16x18", "18x16"], epaisseurs: ["3\""], horsStandard: ">=21\" ou hors liste", notes: "Min 14x14, Max 24x24" },
-  "S2371": { nom: "Contour Insert 4\"", dims: ["14x14", "16x14", "16x16", "16x18", "18x16"], epaisseurs: ["4\""], horsStandard: ">=21\" ou hors liste", notes: "Min 14x14, Max 24x24" }
-};
+// === CLIENTS RECONNUS (pour couleurs de cartes) ===
+const SERIE_CLIENTS_CONNUS = ['Vermeiren', 'HME', 'C1SOUTH', 'Cubro', 'France', 'Inventaire'];
 
-// Structure JSON attendue pour l'import
-const JSON_TEMPLATE = {
-  commande: {
-    numero: "123456",
-    client: "Nom du client",
-    dateCommande: "2025-01-15",
-    dateLivraison: "2025-02-15",
-    region: "QC", // QC, ON, MA
-    notes: "Notes générales de la commande"
-  },
-  items: [
-    {
-      // Atelier
-      departement: "atelier",
-      code: "S5000-1616",
-      description: "Coussin Physiair 16x16",
-      quantite: 2,
-      dimensions: "16x16",
-      epaisseur: "3\"",
-      options: ["Option 1", "Option 2"],
-      notes: "Notes spécifiques à l'item"
-    },
-    {
-      // Couture
-      departement: "couture",
-      code: "HOUSSE-STD",
-      description: "Housse standard",
-      quantite: 2,
-      couleur: "Noir",
-      tissu: "Spacer",
-      notes: ""
-    },
-    {
-      // Inspection
-      departement: "inspection",
-      code: "INSP-FIN",
-      description: "Inspection finale",
-      quantite: 1,
-      notes: ""
-    }
-  ]
-};
-
-// Ouvrir le modal JSON
+// === OUVRIR LE MODAL D'IMPORT JSON ===
 function openSerieJsonModal() {
+  document.getElementById('serieJsonModal')?.remove();
+
   const modal = document.createElement('div');
   modal.className = 'settings-overlay';
   modal.id = 'serieJsonModal';
   modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-  
+
   modal.innerHTML = `
-    <div class="settings-panel" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+    <div class="settings-panel" style="max-width:900px;max-height:90vh;overflow-y:auto;">
       <div class="settings-header">
-        <span class="settings-title">📥 Import JSON - Commande Série+</span>
+        <span class="settings-title">📥 Import JSON — Série+</span>
         <button class="settings-close-btn" onclick="document.getElementById('serieJsonModal').remove()">✕</button>
       </div>
-      
+
       <div class="settings-section">
-        <h3 style="color: #60a5fa; margin-bottom: 10px;">1. Coller le JSON</h3>
-        <textarea id="serieJsonInput" style="width: 100%; height: 180px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #444; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px;" placeholder='[{"commande": {...}, "items": [...]}]'></textarea>
-        <div style="margin-top: 10px; display: flex; gap: 8px;">
-          <button class="settings-btn" onclick="validateSerieJson()">✓ Valider</button>
-          <button class="settings-btn settings-btn-secondary" onclick="previewSerieJson()">👁️ Aperçu</button>
+        <h3 style="color:#60a5fa;margin-bottom:10px;">1. Coller le JSON</h3>
+        <textarea id="serieJsonInput" style="width:100%;height:200px;background:#1e1e1e;color:#d4d4d4;border:1px solid #444;border-radius:6px;padding:10px;font-family:monospace;font-size:11px;" placeholder='Collez le JSON généré par ChatGPT ou Claude ici...'></textarea>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="settings-btn" onclick="serieJsonValidate()">✓ Valider</button>
+          <button class="settings-btn settings-btn-secondary" onclick="serieJsonPreview()">👁️ Aperçu</button>
+          <button class="settings-btn" style="background:#a855f7;" onclick="serieJsonCopyPrompt()">📋 Copier le prompt IA</button>
         </div>
-        <div id="serieJsonValidation" style="margin-top: 10px; padding: 8px; border-radius: 4px; display: none;"></div>
-        <div id="serieJsonPreview" style="margin-top: 10px; display: none;"></div>
+        <div id="serieJsonStatus" style="margin-top:10px;padding:8px;border-radius:4px;display:none;font-size:12px;"></div>
+        <div id="serieJsonPreviewZone" style="margin-top:10px;display:none;"></div>
       </div>
-      
-      <div class="settings-section" style="background: #1a2744; padding: 16px; border-radius: 8px; border: 2px solid #3b82f6;">
-        <h3 style="color: #60a5fa; margin-bottom: 12px;">2. Combien de cartes voulez-vous créer?</h3>
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <input type="number" id="serieImportCardCount" value="5" min="1" max="100" 
-                 style="width: 80px; padding: 10px; border-radius: 6px; border: 2px solid #3b82f6; background: #0f172a; color: white; text-align: center; font-weight: 700; font-size: 18px;">
-          <span style="color: #94a3b8; font-size: 12px;">cartes à créer</span>
-          <button class="settings-btn" style="background: #22c55e; padding: 10px 20px; font-size: 14px;" onclick="importSerieJsonWithCount()">📥 Importer</button>
-        </div>
-      </div>
-      
-      <div class="settings-section">
-        <h3 style="color: #ef4444; margin-bottom: 10px;">🗑️ Nettoyer</h3>
-        <div style="display: flex; gap: 8px;">
-          <button class="settings-btn settings-btn-danger" onclick="cleanupImportedSerieCards()">🗑️ Cartes importées</button>
-          <button class="settings-btn settings-btn-danger" onclick="clearAllSerieCards()">⚠️ TOUT</button>
+
+      <div class="settings-section" style="background:#1a2744;padding:16px;border-radius:8px;border:2px solid #3b82f6;">
+        <h3 style="color:#60a5fa;margin-bottom:12px;">2. Importer</h3>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="color:#94a3b8;font-size:12px;">Limiter à</label>
+            <input type="number" id="serieJsonMaxCards" value="50" min="1" max="500"
+                   style="width:70px;padding:8px;border-radius:6px;border:2px solid #3b82f6;background:#0f172a;color:white;text-align:center;font-weight:700;font-size:16px;">
+            <span style="color:#94a3b8;font-size:12px;">cartes max</span>
+          </div>
+          <button class="settings-btn" style="background:#22c55e;padding:10px 24px;font-size:14px;" onclick="serieJsonImport()">📥 Importer</button>
         </div>
       </div>
-      
+
       <div class="settings-section">
-        <h3 style="color: #a855f7; margin-bottom: 10px;">3. Prompt ChatGPT</h3>
-        <button class="settings-btn" style="background: #a855f7;" onclick="copyJsonPrompt()">📋 Copier le prompt</button>
+        <h3 style="color:#ef4444;margin-bottom:10px;">🗑️ Nettoyer</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="settings-btn settings-btn-danger" onclick="serieJsonCleanupImported()">🗑️ Cartes importées</button>
+          <button class="settings-btn settings-btn-danger" onclick="serieJsonClearAll()">⚠️ TOUT supprimer</button>
+        </div>
       </div>
     </div>
   `;
-  
+
   document.body.appendChild(modal);
 }
 window.openSerieJsonModal = openSerieJsonModal;
 
-// v614: Importer avec le nombre de cartes spécifié
-function importSerieJsonWithCount() {
-  const result = validateSerieJson();
-  if (!result) {
+// === VALIDER LE JSON ===
+function serieJsonValidate() {
+  const input = document.getElementById('serieJsonInput')?.value?.trim();
+  const statusEl = document.getElementById('serieJsonStatus');
+  if (!statusEl) return null;
+  statusEl.style.display = 'block';
+
+  if (!input) {
+    statusEl.style.background = '#7f1d1d';
+    statusEl.innerHTML = '❌ Aucun JSON collé.';
+    return null;
+  }
+
+  try {
+    let data = JSON.parse(input);
+
+    // Normaliser : accepter un objet unique ou un tableau
+    if (!Array.isArray(data)) data = [data];
+
+    const erreurs = [];
+    let totalItems = 0;
+
+    data.forEach((cmd, i) => {
+      const lbl = 'Commande ' + (i + 1);
+      if (!cmd.commande) erreurs.push(lbl + ': clé "commande" manquante');
+      if (!cmd.commande?.numero) erreurs.push(lbl + ': "commande.numero" manquant');
+      if (!cmd.commande?.client) erreurs.push(lbl + ': "commande.client" manquant');
+      if (!cmd.items || !Array.isArray(cmd.items) || cmd.items.length === 0) erreurs.push(lbl + ': "items" manquant ou vide');
+      totalItems += (cmd.items?.length || 0);
+    });
+
+    if (erreurs.length > 0) {
+      statusEl.style.background = '#7f1d1d';
+      statusEl.innerHTML = '❌ ' + erreurs.slice(0, 6).join('<br>') + (erreurs.length > 6 ? '<br>...' : '');
+      return null;
+    }
+
+    statusEl.style.background = '#14532d';
+    statusEl.innerHTML = '✅ JSON valide — ' + data.length + ' commande(s), ' + totalItems + ' item(s)';
+    return data;
+
+  } catch (e) {
+    statusEl.style.background = '#7f1d1d';
+    statusEl.innerHTML = '❌ JSON invalide : ' + e.message;
+    return null;
+  }
+}
+window.serieJsonValidate = serieJsonValidate;
+
+// === APERÇU ===
+function serieJsonPreview() {
+  const data = serieJsonValidate();
+  if (!data) return;
+
+  const zone = document.getElementById('serieJsonPreviewZone');
+  if (!zone) return;
+  zone.style.display = 'block';
+  zone.style.background = '#1a1a1a';
+  zone.style.padding = '10px';
+  zone.style.borderRadius = '6px';
+  zone.style.maxHeight = '300px';
+  zone.style.overflowY = 'auto';
+
+  let html = '<h4 style="color:#60a5fa;margin-bottom:8px;">Aperçu — ' + data.length + ' commande(s)</h4>';
+
+  data.forEach((cmd, idx) => {
+    const c = cmd.commande || {};
+    const items = cmd.items || [];
+    // Compter les items groupés
+    const grouped = {};
+    items.forEach(it => {
+      const key = it.nom || it.description || it.code || 'Item';
+      if (!grouped[key]) grouped[key] = { count: 0, grandeurs: [] };
+      grouped[key].count++;
+      grouped[key].grandeurs.push((it.grandeur || it.dimensions || 'Std') + ' x' + (it.quantite || 1));
+    });
+
+    html += '<div style="background:#252525;border-radius:6px;padding:8px;margin-bottom:6px;border-left:3px solid #3b82f6;font-size:11px;">';
+    html += '<div><strong style="color:#f59e0b;">#' + (idx + 1) + '</strong> — <strong>' + (c.numero || '?') + '</strong> | ' + (c.client || '?') + '</div>';
+    if (c.dateLivraison) html += '<div style="color:#94a3b8;">Livraison: ' + c.dateLivraison + '</div>';
+    html += '<div style="margin-top:4px;color:#94a3b8;">';
+    Object.entries(grouped).forEach(([name, info]) => {
+      html += '<div>• <strong>' + name + '</strong> — ' + info.grandeurs.join(', ') + '</div>';
+    });
+    html += '</div></div>';
+  });
+
+  zone.innerHTML = html;
+}
+window.serieJsonPreview = serieJsonPreview;
+
+// === IMPORTER LE JSON ===
+function serieJsonImport() {
+  const data = serieJsonValidate();
+  if (!data) {
     showToast('❌ JSON invalide', 'error');
     return;
   }
-  
-  const totalCommandes = result.commandes.length;
-  const cardCount = parseInt(document.getElementById('serieImportCardCount')?.value) || totalCommandes;
-  const commandesToImport = result.commandes.slice(0, cardCount);
-  
+
+  const maxCards = parseInt(document.getElementById('serieJsonMaxCards')?.value) || data.length;
+  const commandesToImport = data.slice(0, maxCards);
+
   if (commandesToImport.length === 0) {
     showToast('❌ Aucune commande', 'error');
     return;
   }
-  
-  const totalItems = commandesToImport.reduce((sum, cmd) => sum + (cmd.items?.length || 0), 0);
-  
-  if (!confirm(`Importer ${commandesToImport.length} carte(s) sur ${totalCommandes}?\n(${totalItems} items)`)) {
-    return;
-  }
-  
-  // Utiliser la même logique que importSerieJson mais avec les commandes limitées
-  if (typeof serieCardsData === 'undefined') {
-    window.serieCardsData = {};
-  }
-  
-  let createdCards = [];
-  let errors = [];
-  
+
+  const totalItems = commandesToImport.reduce((s, cmd) => s + (cmd.items?.length || 0), 0);
+  if (!confirm('Importer ' + commandesToImport.length + ' commande(s) avec ' + totalItems + ' item(s) ?')) return;
+
+  let created = 0;
+  let errors = 0;
+
   commandesToImport.forEach((cmdData, idx) => {
     try {
+      const c = cmdData.commande || {};
       const cardId = 'serie-' + Date.now() + '-' + idx + '-' + Math.random().toString(36).substr(2, 5);
-      
-      const itemsGrouped = {};
-      
-      if (cmdData.items && Array.isArray(cmdData.items)) {
-        cmdData.items.forEach(item => {
-          const itemKey = item.code || item.description || 'Item';
-          const itemName = item.description || item.code || 'Item';
-          
-          if (!itemsGrouped[itemKey]) {
-            itemsGrouped[itemKey] = {
-              name: itemName,
-              code: item.code || '',
-              grandeurs: []
-            };
-          }
-          
-          const grandeurName = item.dimensions || item.epaisseur || 'Standard';
-          const qty = parseInt(item.quantite) || 1;
-          
-          let existingGrandeur = itemsGrouped[itemKey].grandeurs.find(g => g.name === grandeurName);
-          if (existingGrandeur) {
-            existingGrandeur.qty += qty;
-          } else {
-            itemsGrouped[itemKey].grandeurs.push({
-              name: grandeurName,
-              qty: qty,
-              notes: item.notes || '',
-              atelier: { qtyFait: 0, inspected: false },
-              couture: { qtyFait: 0 },
-              inspection: { qtyFait: 0, qtyRecu: 0 }
-            });
-          }
-        });
-      }
-      
-      const itemsArray = Object.values(itemsGrouped);
-      
-      serieCardsData[cardId] = {
-        id: cardId,
-        client: cmdData.commande?.client || 'Client',
-        name: cmdData.commande?.client || '',
-        order: cmdData.commande?.numero || '',
-        po: cmdData.commande?.po || '',
-        soumission: '',
-        dateRecue: cmdData.commande?.dateCommande || new Date().toISOString().split('T')[0],
-        dateLivraison: cmdData.commande?.dateLivraison || '',
-        notes: cmdData.commande?.notes || '',
-        isBO: false,
-        raisonBO: '',
-        items: itemsArray,
-        materiaux: {},
-        createdAt: new Date().toISOString()
-      };
-      
-      const created = createSerieCardFromData(cardId, serieCardsData[cardId]);
-      if (created) {
-        createdCards.push(cardId);
-      }
-      
-    } catch (e) {
-      console.error('Erreur import commande', idx, e);
-      errors.push(`Commande ${idx + 1}: ${e.message}`);
-    }
-  });
-  
-  // Sauvegarder
-  if (typeof saveSerieData === 'function') {
-    saveSerieData();
-  } else {
-    localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
-  }
-  
-  // Mettre à jour compteurs
-  if (typeof updateSerieCounters === 'function') {
-    updateSerieCounters();
-  }
-  
-  // Fermer le modal
-  document.getElementById('serieJsonModal')?.remove();
-  
-  // Feedback
-  if (createdCards.length > 0) {
-    showToast(`✅ ${createdCards.length} carte(s) importée(s)`, 'success');
-    
-    setTimeout(() => {
-      if (typeof selectSerieCard === 'function') {
-        selectSerieCard(createdCards[0], true);
-      }
-    }, 200);
-  }
-  
-  if (errors.length > 0) {
-    showToast(`⚠️ ${errors.length} erreur(s)`, 'warning');
-  }
-}
-window.importSerieJsonWithCount = importSerieJsonWithCount;
 
-// Nettoyer les cartes importées (commençant par "serie-")
-function cleanupImportedSerieCards() {
-  const importedIds = Object.keys(serieCardsData || {}).filter(id => id.startsWith('serie-'));
-  
-  if (importedIds.length === 0) {
-    showToast('Aucune carte importée à supprimer', 'info');
-    return;
-  }
-  
-  if (!confirm(`Supprimer ${importedIds.length} carte(s) importée(s)?`)) {
-    return;
-  }
-  
-  importedIds.forEach(cardId => {
-    // Supprimer des données
-    delete serieCardsData[cardId];
-    
-    // Supprimer du DOM
-    const card = document.querySelector(`.mcard[data-id="${cardId}"]`);
-    if (card) card.remove();
-    const card2 = document.querySelector(`.mcard[data-card-id="${cardId}"]`);
-    if (card2) card2.remove();
-  });
-  
-  // Sauvegarder
-  if (typeof saveSerieDataToLocalStorage === 'function') {
-    saveSerieDataToLocalStorage();
-  }
-  if (typeof saveSerieData === 'function') {
-    saveSerieData();
-  }
-  
-  // Mettre à jour les compteurs
-  if (typeof updateSerieCounters === 'function') {
-    updateSerieCounters();
-  }
-  
-  showToast(`✅ ${importedIds.length} carte(s) supprimée(s)`, 'success');
-}
-window.cleanupImportedSerieCards = cleanupImportedSerieCards;
+      // --- Regrouper les items par nom ---
+      const groupes = {};
+      (cmdData.items || []).forEach(item => {
+        const key = item.nom || item.description || item.code || 'Item';
+        if (!groupes[key]) {
+          groupes[key] = {
+            name: key,
+            code: item.code || '',
+            grandeurs: []
+          };
+        }
 
-// Valider le JSON (v609 - supporte plusieurs commandes)
-function validateSerieJson() {
-  const input = document.getElementById('serieJsonInput').value.trim();
-  const validation = document.getElementById('serieJsonValidation');
-  validation.style.display = 'block';
-  
-  if (!input) {
-    validation.style.background = '#7f1d1d';
-    validation.innerHTML = '❌ Aucun JSON fourni';
-    return null;
-  }
-  
-  try {
-    const data = JSON.parse(input);
-    
-    // Vérifier si c'est un tableau de commandes ou une seule commande
-    if (Array.isArray(data)) {
-      // PLUSIEURS COMMANDES
-      const errors = [];
-      let totalItems = 0;
-      
-      data.forEach((cmd, idx) => {
-        if (!cmd.commande) errors.push(`Commande ${idx + 1}: manque "commande"`);
-        if (!cmd.commande?.numero) errors.push(`Commande ${idx + 1}: manque "numero"`);
-        if (!cmd.commande?.client) errors.push(`Commande ${idx + 1}: manque "client"`);
-        if (!cmd.items || !Array.isArray(cmd.items)) errors.push(`Commande ${idx + 1}: manque "items"`);
-        totalItems += cmd.items?.length || 0;
+        const gName = item.grandeur || item.dimensions || 'Std';
+        const qty = parseInt(item.quantite) || 1;
+
+        // Fusionner si même grandeur
+        const existing = groupes[key].grandeurs.find(g => g.name === gName);
+        if (existing) {
+          existing.qty += qty;
+        } else {
+          groupes[key].grandeurs.push({
+            name: gName,
+            qty: qty,
+            notes: item.notes || '',
+            atelier:    { prod: '', qtyFait: 0, inspected: false, sentToCouture: false },
+            couture:    { qtyFait: 0, coutureStatus: 'afaire', habille: false, sentToInsp: false },
+            inspection: { qtyFait: 0, qtyRecu: 0 }
+          });
+        }
       });
-      
-      if (errors.length > 0) {
-        validation.style.background = '#7f1d1d';
-        validation.innerHTML = '❌ Erreurs: ' + errors.slice(0, 5).join(', ') + (errors.length > 5 ? '...' : '');
-        return null;
-      }
-      
-      validation.style.background = '#14532d';
-      validation.innerHTML = `✅ JSON valide! ${data.length} commandes, ${totalItems} items au total`;
-      return { multiple: true, commandes: data };
-      
-    } else {
-      // UNE SEULE COMMANDE
-      const errors = [];
-      if (!data.commande) errors.push('Manque: commande');
-      if (!data.commande?.numero) errors.push('Manque: commande.numero');
-      if (!data.commande?.client) errors.push('Manque: commande.client');
-      if (!data.items || !Array.isArray(data.items)) errors.push('Manque: items (tableau)');
-      if (data.items?.length === 0) errors.push('Aucun item dans la commande');
-      
-      if (errors.length > 0) {
-        validation.style.background = '#7f1d1d';
-        validation.innerHTML = '❌ Erreurs: ' + errors.join(', ');
-        return null;
-      }
-      
-      validation.style.background = '#14532d';
-      validation.innerHTML = `✅ JSON valide! 1 commande, ${data.items.length} items`;
-      return { multiple: false, commandes: [data] };
-    }
-    
-  } catch (e) {
-    validation.style.background = '#7f1d1d';
-    validation.innerHTML = '❌ JSON invalide: ' + e.message;
-    return null;
-  }
-}
-window.validateSerieJson = validateSerieJson;
 
-// Prévisualiser le JSON (v609 - supporte plusieurs commandes)
-function previewSerieJson() {
-  const result = validateSerieJson();
-  if (!result) return;
-  
-  const preview = document.getElementById('serieJsonPreview');
-  preview.style.display = 'block';
-  preview.style.background = '#1a1a1a';
-  preview.style.padding = '10px';
-  preview.style.borderRadius = '6px';
-  preview.style.maxHeight = '300px';
-  preview.style.overflowY = 'auto';
-  
-  let html = `<h4 style="color: #60a5fa; margin-bottom: 8px;">Prévisualisation - ${result.commandes.length} commande(s)</h4>`;
-  
-  result.commandes.forEach((data, idx) => {
-    const atelierItems = data.items.filter(i => i.departement === 'atelier');
-    const coutureItems = data.items.filter(i => i.departement === 'couture');
-    const inspectionItems = data.items.filter(i => i.departement === 'inspection');
-    
-    html += `
-      <div style="background: #252525; border-radius: 6px; padding: 8px; margin-bottom: 8px; border-left: 3px solid #3b82f6;">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px;">
-          <div>
-            <strong style="color: #f59e0b;">#${idx + 1}</strong> - <strong>${data.commande.numero}</strong><br>
-            <strong>Client:</strong> ${data.commande.client}<br>
-            <strong>Région:</strong> ${data.commande.region || 'QC'}
-          </div>
-          <div>
-            <span style="color: #3b82f6;">Atelier: ${atelierItems.length}</span> | 
-            <span style="color: #22c55e;">Couture: ${coutureItems.length}</span> | 
-            <span style="color: #f59e0b;">Insp: ${inspectionItems.length}</span>
-          </div>
-        </div>
-        ${atelierItems.length > 0 ? `
-        <div style="margin-top: 6px; font-size: 10px; color: #94a3b8;">
-          Items: ${atelierItems.map(i => `${i.code || 'N/A'} (x${i.quantite})`).join(', ')}
-        </div>` : ''}
-      </div>
-    `;
-  });
-  
-  preview.innerHTML = html;
-}
-window.previewSerieJson = previewSerieJson;
+      const itemsArray = Object.values(groupes);
 
-// Importer le JSON (v610 - CORRIGÉ avec la bonne structure de données)
-function importSerieJson() {
-  const result = validateSerieJson();
-  if (!result) {
-    showToast('❌ JSON invalide - vérifiez le format', 'error');
-    return;
-  }
-  
-  const totalItems = result.commandes.reduce((sum, cmd) => sum + (cmd.items?.length || 0), 0);
-  
-  if (!confirm(`Importer ${result.commandes.length} commande(s) avec ${totalItems} items au total?`)) {
-    return;
-  }
-  
-  // Vérifier que serieCardsData existe
-  if (typeof serieCardsData === 'undefined') {
-    window.serieCardsData = {};
-  }
-  
-  let createdCards = [];
-  let errors = [];
-  
-  result.commandes.forEach((cmdData, idx) => {
-    try {
-      // Créer un ID unique pour la carte
-      const cardId = 'serie-' + Date.now() + '-' + idx + '-' + Math.random().toString(36).substr(2, 5);
-      
-      // Grouper les items par nom/description pour créer la structure correcte
-      const itemsGrouped = {};
-      
-      if (cmdData.items && Array.isArray(cmdData.items)) {
-        cmdData.items.forEach(item => {
-          // Utiliser le code ou la description comme clé de groupe
-          const itemKey = item.code || item.description || 'Item';
-          const itemName = item.description || item.code || 'Item';
-          
-          if (!itemsGrouped[itemKey]) {
-            itemsGrouped[itemKey] = {
-              name: itemName,
-              code: item.code || '',
-              grandeurs: []
-            };
-          }
-          
-          // Ajouter la grandeur (dimension + quantité)
-          const grandeurName = item.dimensions || item.epaisseur || 'Standard';
-          const qty = parseInt(item.quantite) || 1;
-          
-          // Chercher si cette grandeur existe déjà
-          let existingGrandeur = itemsGrouped[itemKey].grandeurs.find(g => g.name === grandeurName);
-          if (existingGrandeur) {
-            existingGrandeur.qty += qty;
-          } else {
-            itemsGrouped[itemKey].grandeurs.push({
-              name: grandeurName,
-              qty: qty,
-              notes: item.notes || '',
-              atelier: { qtyFait: 0, inspected: false },
-              couture: { qtyFait: 0 },
-              inspection: { qtyFait: 0, qtyRecu: 0 }
-            });
-          }
-        });
-      }
-      
-      // Convertir en tableau d'items
-      const itemsArray = Object.values(itemsGrouped);
-      
-      // Créer les données de la carte avec la VRAIE structure
+      // --- Construire les données de la carte ---
+      // Noms de champs alignés sur initSerieCardData + loadSerieFiche
       serieCardsData[cardId] = {
         id: cardId,
-        client: cmdData.commande.client || 'Client',
-        name: cmdData.commande.client || '',
-        order: cmdData.commande.numero || '',
-        po: cmdData.commande.po || '',
-        soumission: '',
-        dateRecue: cmdData.commande.dateCommande || new Date().toISOString().split('T')[0],
-        dateLivraison: cmdData.commande.dateLivraison || '',
-        notes: cmdData.commande.notes || '',
+        client: c.client || 'Autre',
+        name: c.client || '',
+        order: c.numero || '',
+        po: c.po || '',
+        soumission: c.soumission || '',
+        dateRecue: c.dateCommande || c.dateRecue || new Date().toISOString().split('T')[0],
+        dateLivraison: c.dateLivraison || '',
+        notes: c.notes || '',
         isBO: false,
         raisonBO: '',
         items: itemsArray,
         materiaux: {},
         createdAt: new Date().toISOString()
       };
-      
-      console.log('📦 Carte créée:', cardId, 'avec', itemsArray.length, 'items');
-      console.log('   Items:', itemsArray.map(i => i.name + ' (' + i.grandeurs.length + ' grandeurs)').join(', '));
-      
-      // Créer la carte visuelle
-      const created = createSerieCardFromData(cardId, serieCardsData[cardId]);
-      if (created) {
-        createdCards.push(cardId);
+
+      if (createSerieCardFromData(cardId, serieCardsData[cardId])) {
+        created++;
       } else {
-        errors.push(`Carte ${cmdData.commande.numero}: erreur création visuelle`);
+        errors++;
       }
-      
     } catch (e) {
-      console.error('Erreur import commande', idx, e);
-      errors.push(`Commande ${idx + 1}: ${e.message}`);
+      console.error('❌ Import commande ' + idx + ':', e);
+      errors++;
     }
   });
-  
-  // Sauvegarder
-  if (typeof saveSerieData === 'function') {
-    saveSerieData();
-  } else {
-    localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
-  }
-  
+
+  // Sauvegarder vers localStorage + Firebase
+  saveSerieDataToLocalStorage();
+
+  // Compteurs
+  if (typeof updateSerieCounters === 'function') updateSerieCounters();
+
   // Fermer le modal
   document.getElementById('serieJsonModal')?.remove();
-  
+
   // Feedback
-  if (createdCards.length > 0) {
-    showToast(`✅ ${createdCards.length} commande(s) importée(s) (${totalItems} items)`, 'success');
-    
+  if (created > 0) {
+    showToast('✅ ' + created + ' carte(s) importée(s)', 'success');
     // Sélectionner la première carte créée
-    setTimeout(() => {
-      if (typeof selectSerieCard === 'function') {
-        selectSerieCard(createdCards[0], true);
-      }
-    }, 200);
+    const firstNew = Object.keys(serieCardsData).find(id => id.startsWith('serie-'));
+    if (firstNew) {
+      setTimeout(() => { selectSerieCard(firstNew, true); }, 200);
+    }
   }
-  
-  if (errors.length > 0) {
-    console.error('Erreurs import:', errors);
-    showToast(`⚠️ ${errors.length} erreur(s) - voir console`, 'warning');
+  if (errors > 0) {
+    showToast('⚠️ ' + errors + ' erreur(s) — voir console F12', 'warning');
   }
 }
-window.importSerieJson = importSerieJson;
+window.serieJsonImport = serieJsonImport;
 
-// Créer une carte série depuis les données (v625 - dans section collapsable)
+// === NETTOYER LES CARTES IMPORTÉES (série-*) ===
+function serieJsonCleanupImported() {
+  const ids = Object.keys(serieCardsData || {}).filter(id => id.startsWith('serie-'));
+  if (ids.length === 0) { showToast('Aucune carte importée', 'info'); return; }
+  if (!confirm('Supprimer ' + ids.length + ' carte(s) importée(s) ?')) return;
+
+  ids.forEach(id => {
+    delete serieCardsData[id];
+    const el = document.querySelector('.mcard[data-id="' + id + '"]') || document.querySelector('.mcard[data-card-id="' + id + '"]');
+    if (el) el.remove();
+  });
+
+  saveSerieDataToLocalStorage();
+  if (typeof updateSerieCounters === 'function') updateSerieCounters();
+  showToast('✅ ' + ids.length + ' carte(s) supprimée(s)', 'success');
+}
+window.serieJsonCleanupImported = serieJsonCleanupImported;
+
+// === SUPPRIMER TOUTES LES CARTES ===
+function serieJsonClearAll() {
+  const count = Object.keys(serieCardsData || {}).length;
+  if (count === 0) { showToast('Aucune carte', 'info'); return; }
+  if (!confirm('⚠️ SUPPRIMER LES ' + count + ' CARTE(S) ?\nCette action est irréversible.')) return;
+  if (!confirm('Vraiment TOUT supprimer ?')) return;
+
+  Object.keys(serieCardsData).forEach(id => {
+    const el = document.querySelector('.mcard[data-id="' + id + '"]') || document.querySelector('.mcard[data-card-id="' + id + '"]');
+    if (el) el.remove();
+  });
+
+  serieCardsData = {};
+  saveSerieDataToLocalStorage();
+  if (typeof updateSerieCounters === 'function') updateSerieCounters();
+  showToast('🗑️ Toutes les cartes supprimées', 'success');
+}
+window.serieJsonClearAll = serieJsonClearAll;
+
+// === COPIER LE PROMPT IA ===
+function serieJsonCopyPrompt() {
+  const prompt = serieJsonGeneratePrompt();
+  navigator.clipboard.writeText(prompt).then(() => {
+    showToast('📋 Prompt copié !', 'success');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = prompt;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    showToast('📋 Prompt copié !', 'success');
+  });
+}
+window.serieJsonCopyPrompt = serieJsonCopyPrompt;
+
+// === GÉNÉRATEUR DU PROMPT IA ===
+function serieJsonGeneratePrompt() {
+  const clientsList = (typeof SERIE_CLIENTS_LIST !== 'undefined' ? SERIE_CLIENTS_LIST : SERIE_CLIENTS_CONNUS).join(', ');
+
+  return `# PROMPT — Convertir des bons de commande PhysiPro en JSON pour Série+
+
+Tu analyses des confirmations de commande PhysiPro et génères un JSON simplifié pour le suivi de production.
+
+## RÈGLE #1 — PRODUITS PRINCIPAUX SEULEMENT
+
+Chaque bon de commande contient des lignes numérotées. Tu dois IGNORER :
+- La ligne "PRODUCTION" (toujours ligne 1)
+- La ligne "INFO CLIENT" (toujours ligne 2) → mettre l'info dans les notes de la commande
+- TOUTES les lignes d'options/composants à 0$ (housses, découpes, mousses, installations)
+  Exemples à ignorer : HP01, S1900-RES, S2200, S2465, VR10077, S5001, S5002, S1271, S1277, UL7530, VIF10, PHY7530, D4695, S1902, S2828
+
+Tu gardes UNIQUEMENT les produits principaux (généralement ceux avec un prix > 0$ et un ARTICLE NO).
+
+## RÈGLE #2 — NOMS SIMPLIFIÉS
+
+Le CODE du produit te dit quel NOM utiliser. Voici la table de correspondance :
+
+### Coussins
+| Préfixe code | Nom à utiliser |
+|---|---|
+| S5000 | Coussin Physiair |
+| S5360 | Coussin Air Foam |
+| S1265 | Coussin Pression Zéro |
+| S1266 | Coussin Ultra |
+| S2256, S2300, S2305 | Coussin Resolve |
+| S2310, S2315 | Coussin Resolve Profil Abaissé |
+| S2605, S2615 | Coussin Resolve Air |
+| S5100 | Coussin Siliko |
+| S5400 | Coussin Easy Fit |
+| S2950 | Coussin Brio |
+| S2985 | Coussin C3S |
+| S2955, S2956 | Coussin Fusion |
+| S2361, S2366, S2371 | Coussin Contour Insert |
+| S5300 | Coussin Temper-Flo |
+| S2455 | Coussin LXA |
+
+### Dossiers
+| Préfixe code | Nom à utiliser |
+|---|---|
+| HPC | Dossier HP2 Contour |
+| HPP | Dossier HP2 Profilé |
+| D5200 | Dossier Premium |
+| D5250 | Dossier Valdis |
+| D5440 | Dossier Premium Velcro |
+
+### Accessoires / Positionnement
+| Préfixe code | Nom à utiliser |
+|---|---|
+| D6020 | Appui thoracique HP2 Gauche |
+| D6065 | Appui thoracique HP2 Droit |
+| D3851 à D3854, HPT001 à HPT007 | Appui thoracique |
+| S2826 | Adducteur |
+| S2795, S2800, S2810, S2815 | Abducteur |
+
+Si un code n'est pas dans cette liste, utilise le nom court de la description du produit.
+
+## RÈGLE #3 — GRANDEUR = DIMENSIONS SEULEMENT
+
+Extrais les dimensions du code ou de la description : "16x20", "18x18", "17x18x3", "7x6".
+Ne mets PAS Left/Right dans la grandeur (c'est déjà dans le nom).
+Pour les produits sans dimension claire, utilise "Std".
+
+## STRUCTURE JSON
+
+Génère UNIQUEMENT le JSON brut, sans explications, sans backticks markdown.
+
+\`\`\`json
+[
+  {
+    "commande": {
+      "numero": "00291161",
+      "client": "Vermeiren",
+      "po": "2600233",
+      "soumission": "",
+      "dateCommande": "2026-02-13",
+      "dateLivraison": "2026-03-12",
+      "notes": "Vermeiren Iberica (Spain) - Julie Houtakkers"
+    },
+    "items": [
+      {
+        "nom": "Dossier HP2 Contour",
+        "code": "HPC1620",
+        "grandeur": "16x20",
+        "quantite": 2,
+        "notes": ""
+      },
+      {
+        "nom": "Coussin Resolve",
+        "code": "S2256-1818",
+        "grandeur": "18x18",
+        "quantite": 1,
+        "notes": ""
+      }
+    ]
+  }
+]
+\`\`\`
+
+### Champs commande
+- **numero** : SALES ORDER # (ex: 00291161)
+- **client** : DOIT être un de : ${clientsList}. Vermeiren NV = "Vermeiren"
+- **po** : # P.O. du document
+- **soumission** : Quote # si présent, sinon ""
+- **dateCommande** : Date (AAAA-MM-JJ)
+- **dateLivraison** : Shipping date (AAAA-MM-JJ)
+- **notes** : Destinataire final de la ligne INFO CLIENT
+
+### Champs items
+- **nom** : Nom simplifié selon la table ci-dessus
+- **code** : Code produit complet (ex: HPC1620, S2256-1818)
+- **grandeur** : Dimensions seulement (ex: "16x20", "18x18")
+- **quantite** : QTY du document
+- **notes** : Vide sauf info spéciale (ex: "Type F Cover" si pertinent)
+
+## DOCUMENT(S) À ANALYSER :
+[COLLE TON/TES BON(S) DE COMMANDE ICI]
+`;
+}
+
+
+// === CRÉER UNE CARTE SÉRIE DEPUIS LES DONNÉES ===
 function createSerieCardFromData(cardId, data) {
-  // Chercher le nouveau conteneur (section collapsable)
   let container = document.getElementById('serieCollapsableCards');
-  if (!container) {
-    // Fallback à l'ancien conteneur
-    container = document.getElementById('serieCardsList');
-  }
-  if (!container) {
-    container = document.getElementById('serieCardsContent');
-  }
+  if (!container) container = document.getElementById('serieCardsList');
+  if (!container) container = document.getElementById('serieCardsContent');
   if (!container) {
     console.error('❌ Conteneur de cartes Série+ introuvable!');
     return false;
   }
-  
-  // Déterminer la classe client
+
   const clientKey = (data.client || 'Autre').toLowerCase().replace(/[^a-z0-9]/g, '');
   let clientClass = 'client-default';
   if (['vermeiren', 'hme', 'c1south', 'cubro', 'france', 'inventaire'].includes(clientKey)) {
     clientClass = 'client-' + clientKey;
   }
-  
+
   const cardHtml = `
     <div class="mcard serie-card ${clientClass}" data-card-id="${cardId}" data-id="${cardId}" draggable="true" onclick="selectSerieCard('${cardId}', true)">
       <div class="mcard-header-simple">
@@ -8525,19 +8415,14 @@ function createSerieCardFromData(cardId, data) {
       </div>
     </div>
   `;
-  
+
   container.insertAdjacentHTML('beforeend', cardHtml);
-  
-  // Mettre à jour le compteur
-  if (typeof updateSerieCounters === 'function') {
-    updateSerieCounters();
-  }
-  
+  if (typeof updateSerieCounters === 'function') updateSerieCounters();
   console.log('✅ Carte créée:', cardId, data.client);
   return true;
 }
 
-// v615: Confirmation avant suppression - modale personnalisée
+// === CONFIRMATION AVANT SUPPRESSION ===
 function confirmDeleteSerieCard(cardId) {
   const data = serieCardsData[cardId];
   const clientName = data?.client || '';
@@ -8549,9 +8434,7 @@ function confirmDeleteSerieCard(cardId) {
 }
 window.confirmDeleteSerieCard = confirmDeleteSerieCard;
 
-// Modale de confirmation de suppression
 function showDeleteConfirmModal(label, onConfirm) {
-  // Retirer un ancien modal si présent
   const old = document.getElementById('deleteConfirmOverlay');
   if (old) old.remove();
 
@@ -8591,156 +8474,35 @@ function closeDeleteConfirmModal() {
 window.showDeleteConfirmModal = showDeleteConfirmModal;
 window.closeDeleteConfirmModal = closeDeleteConfirmModal;
 
-// v615: Supprimer une carte série
+// === SUPPRIMER UNE CARTE SÉRIE ===
 function deleteSerieCard(cardId) {
-  // Supprimer des données
   delete serieCardsData[cardId];
-  
-  // Supprimer du DOM
+
   const card = document.querySelector(`.mcard[data-id="${cardId}"]`);
   if (card) card.remove();
   const card2 = document.querySelector(`.mcard[data-card-id="${cardId}"]`);
   if (card2) card2.remove();
-  
-  // FIX RÉSURRECTION: Marquer l'ID comme supprimé dans Firebase
-  // pour que les autres pages (Inspection, Couture) ne le ramènent pas
+
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
     var safeKey = cardId.replace(/[.#$\/\[\]]/g, '_');
     firebaseDb.ref('serieDeletedCards/' + safeKey).set(Date.now())
       .then(function(){ console.log('[DEL] Carte série ' + cardId + ' marquée supprimée'); })
       .catch(function(e){ console.error('[DEL] Erreur:', e); });
-    // Aussi supprimer directement de Firebase serieCommandes
     firebaseDb.ref('serieCommandes/' + cardId).remove()
       .catch(function(e){ console.error('[DEL] Remove from FB error:', e); });
   }
-  
-  // Aussi marquer localement
+
   try {
     var delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
     delIds[cardId] = Date.now();
     localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(delIds));
   } catch(e) {}
-  
-  // Sauvegarder
-  if (typeof saveSerieDataToLocalStorage === 'function') {
-    saveSerieDataToLocalStorage();
-  }
-  
-  // Mettre à jour les compteurs
-  if (typeof updateSerieCounters === 'function') {
-    updateSerieCounters();
-  }
-  
+
+  if (typeof saveSerieDataToLocalStorage === 'function') saveSerieDataToLocalStorage();
+  if (typeof updateSerieCounters === 'function') updateSerieCounters();
   showToast('🗑️ Carte supprimée', 'success');
 }
 window.deleteSerieCard = deleteSerieCard;
-
-// Copier le prompt ChatGPT
-function copyJsonPrompt() {
-  const prompt = generateChatGPTPrompt();
-  navigator.clipboard.writeText(prompt).then(() => {
-    showToast('📋 Prompt copié!', 'success');
-  }).catch(() => {
-    // Fallback
-    const textarea = document.createElement('textarea');
-    textarea.value = prompt;
-    document.body.appendChild(textarea);
-    textarea.select();
-    document.execCommand('copy');
-    textarea.remove();
-    showToast('📋 Prompt copié!', 'success');
-  });
-}
-window.copyJsonPrompt = copyJsonPrompt;
-
-// Générer le prompt ChatGPT
-function generateChatGPTPrompt() {
-  return `# PROMPT POUR GÉNÉRER UN JSON DE COMMANDE PHYSIPRO
-
-Tu es un assistant qui analyse des devis/bons de commande PhysiPro et génère un fichier JSON structuré pour import automatique.
-
-## CODES DES COUSSINS DISPONIBLES
-
-${Object.entries(PHYSIPRO_COUSSINS).map(([code, data]) => 
-  `- **${code}**: ${data.nom} (Dims: ${Array.isArray(data.dims) ? data.dims.join(', ') : data.dims})${data.epaisseurs?.length ? ' | Épaisseurs: ' + data.epaisseurs.join(', ') : ''}`
-).join('\n')}
-
-## STRUCTURE JSON À GÉNÉRER
-
-\`\`\`json
-{
-  "commande": {
-    "numero": "XXXXXX",
-    "client": "Nom du client",
-    "dateCommande": "AAAA-MM-JJ",
-    "dateLivraison": "AAAA-MM-JJ",
-    "region": "QC",
-    "notes": "Notes générales"
-  },
-  "items": [
-    {
-      "departement": "atelier",
-      "code": "S5000-1616",
-      "description": "Coussin Physiair 16x16 3po",
-      "quantite": 1,
-      "dimensions": "16x16",
-      "epaisseur": "3\\"",
-      "options": [],
-      "notes": ""
-    },
-    {
-      "departement": "couture",
-      "code": "HOUSSE-STD",
-      "description": "Housse standard noir",
-      "quantite": 1,
-      "couleur": "Noir",
-      "tissu": "Spacer",
-      "notes": ""
-    },
-    {
-      "departement": "inspection",
-      "code": "INSP-FIN",
-      "description": "Inspection finale",
-      "quantite": 1,
-      "notes": ""
-    }
-  ]
-}
-\`\`\`
-
-## RÈGLES D'EXTRACTION
-
-1. **Numéro de commande**: Cherche le numéro à 6 chiffres (ex: 123456, #300001)
-2. **Client**: Nom complet du client ou de l'établissement
-3. **Région**: QC (Québec), ON (Ontario), MA (Maritime) - par défaut QC
-4. **Code coussin**: Utilise les codes de la liste ci-dessus (S5000, S5360, S2300, etc.)
-5. **Dimensions**: Format LxP en pouces (ex: "16x16", "18x20")
-6. **Épaisseur**: En pouces avec guillemets (ex: "3\\"", "2.5\\"")
-7. **Départements**:
-   - \`atelier\`: Coussins, mousses, assemblages
-   - \`couture\`: Housses, tissus, coutures
-   - \`inspection\`: Contrôle qualité, vérifications
-
-## INSTRUCTIONS
-
-Analyse le document/devis fourni et génère UNIQUEMENT le JSON (pas d'explications).
-Si une information est manquante, utilise une valeur par défaut raisonnable.
-Assure-toi que le JSON est valide et peut être parsé directement.
-
----
-
-DOCUMENT À ANALYSER:
-[COLLE TON DEVIS/BON DE COMMANDE ICI]
-`;
-}
-
-// Afficher le template JSON
-function showJsonTemplate() {
-  const template = JSON.stringify(JSON_TEMPLATE, null, 2);
-  document.getElementById('serieJsonInput').value = template;
-  showToast('📄 Template chargé', 'info');
-}
-window.showJsonTemplate = showJsonTemplate;
 
 // Ouvrir le modal d'infos pour la commande sélectionnée (depuis le bouton dans l'en-tête)
 function openSerieInfoModal() {
@@ -8785,11 +8547,11 @@ function openSerieCardInfoModal(cardId) {
         </div>
         <div class="serie-card-info-field">
           <label>N° PO</label>
-          <input type="text" id="modalSeriePO" value="${data.po || ''}" onblur="updateSerieFieldFromModal('numeroPO', this.value)">
+          <input type="text" id="modalSeriePO" value="${data.po || ''}" onblur="updateSerieFieldFromModal('po', this.value)">
         </div>
         <div class="serie-card-info-field">
           <label>N° Soumission</label>
-          <input type="text" id="modalSerieSoumission" value="${data.soumission || ''}" onblur="updateSerieFieldFromModal('numeroSoumission', this.value)">
+          <input type="text" id="modalSerieSoumission" value="${data.soumission || ''}" onblur="updateSerieFieldFromModal('soumission', this.value)">
         </div>
         <div class="serie-card-info-field">
           <label>Date reçue</label>
@@ -8799,7 +8561,6 @@ function openSerieCardInfoModal(cardId) {
           <label>Date livraison</label>
           <div class="serie-modal-date-pill" id="modalSerieDateLiv" onclick="openSerieModalDatePicker('dateLivraison', this)" data-date="${data.dateLivraison || ''}">${data.dateLivraison || 'aaaa-mm-jj'}</div>
         </div>
-        <button class="serie-modal-json-btn" onclick="insererJSON(); closeSerieCardInfoModal();">📦 Insérer JSON</button>
       </div>
       <div class="serie-card-info-footer" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
         <button onclick="showDeleteConfirmModal('${data.client ? data.client + ' — #' + (data.order || cardId) : '#' + (data.order || cardId)}', function(){ deleteSerieCard('${cardId}'); closeSerieCardInfoModal(); })" style="padding:6px 14px;border:none;border-radius:6px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">🗑️ Supprimer</button>
@@ -10660,9 +10421,6 @@ function openAddSerieCommandeModal() {
             <div class="cmd-date-pill" id="newCmdDateLiv" onclick="openNewCmdDatePicker('dateLiv', this)" style="padding: 8px; border-radius: 6px; border: 1px solid #3b82f6; font-size: 12px; background: white; text-align: center; cursor: pointer;">aaaa-mm-jj</div>
           </div>
         </div>
-        <button onclick="insererJSONDansNouvelle()" style="background: linear-gradient(to bottom, #dc2626, #b91c1c); border: none; color: white; padding: 10px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; margin-top: 4px;">
-          📦 Insérer JSON (items prédéfinis)
-        </button>
       </div>
       <div style="padding: 12px 16px; background: rgba(0,0,0,0.2); display: flex; gap: 10px; justify-content: flex-end;">
         <button onclick="closeSerieAddCommandeModal()" style="background: #6b7280; border: none; color: white; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer;">Annuler</button>
@@ -10917,8 +10675,8 @@ function createSerieCommandeFromModal() {
   serieCardsData[newId] = {
     client: client,
     order: order,
-    numeroPO: po,
-    numeroSoumission: soumission,
+    po: po,
+    soumission: soumission,
     dateRecue: dateRecue,
     dateLivraison: dateLiv,
     notes: '',
@@ -10981,42 +10739,6 @@ function createSerieCommandeFromModal() {
   showToast('✅ Commande ' + order + ' créée', 'success');
 }
 
-function insererJSONDansNouvelle() {
-  // Structure json standard avec items et grandeurs
-  window.tempNewCmdItems = [
-    {
-      name: 'Coussin assise',
-      grandeurs: [
-        { name: 'S', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } },
-        { name: 'M', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } },
-        { name: 'L', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } }
-      ]
-    },
-    {
-      name: 'Coussin dossier',
-      grandeurs: [
-        { name: 'S', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } },
-        { name: 'M', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } },
-        { name: 'L', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } }
-      ]
-    },
-    {
-      name: 'Appui-tête',
-      grandeurs: [
-        { name: 'Std', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } }
-      ]
-    },
-    {
-      name: 'Accoudoirs',
-      grandeurs: [
-        { name: 'G', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } },
-        { name: 'D', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } }
-      ]
-    }
-  ];
-
-  showToast('📦 Items JSON prêts à être ajoutés', 'success');
-}
 
 // Mettre à jour le compteur de commandes
 function updateSerieCommandesCount() {
@@ -11032,62 +10754,6 @@ function updateSerieCommandesCount() {
   if (countBadge3) countBadge3.textContent = count;
 }
 
-// === INSÉRER JASERON ===
-// Insère les items, grandeurs et quantités d'un json dans la commande
-function insererJSON() {
-  if (!currentSerieId) {
-    showToast('⚠️ Sélectionnez une commande d\'abord', 'warning');
-    return;
-  }
-
-  const data = serieCardsData[currentSerieId];
-  if (!data) return;
-
-  // Structure json standard avec items et grandeurs
-  const jsonItems = [
-    {
-      name: 'Coussin assise',
-      grandeurs: [
-        { name: 'S', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } },
-        { name: 'M', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } },
-        { name: 'L', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } }
-      ]
-    },
-    {
-      name: 'Coussin dossier',
-      grandeurs: [
-        { name: 'S', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } },
-        { name: 'M', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } },
-        { name: 'L', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } }
-      ]
-    },
-    {
-      name: 'Appui-tête',
-      grandeurs: [
-        { name: 'Std', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } }
-      ]
-    },
-    {
-      name: 'Accoudoirs',
-      grandeurs: [
-        { name: 'G', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } },
-        { name: 'D', qty: 1, atelier: { prod: '', qtyFait: 0 }, couture: { qtyFait: 0, status: 'À faire' }, inspection: { qtyFait: 0, status: 'En attente' } }
-      ]
-    }
-  ];
-
-  // Ajouter les items du json à la commande
-  if (!data.items) data.items = [];
-
-  jsonItems.forEach(item => {
-    data.items.push(item);
-  });
-
-  // Mettre à jour l'affichage
-  renderSerieItemsList(currentSerieId);
-
-  showToast('✅ JSON inséré (' + jsonItems.length + ' items)', 'success');
-}
 
 // === createSerieInventory / createSerieInventoryCouture SUPPRIMÉS ===
 function createSerieInventory() { showToast('Inventaire supprimé', 'info'); }
