@@ -727,15 +727,15 @@ firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(funct
     localStorage.setItem('physipro_last_email',user.email);
     setSyncBadge('online');
     startFirebaseSync();
-    // Safety: si le sync ne finit pas en 8s, force l'affichage
+    // Safety: si le sync ne finit pas en 12s, force l'affichage
     setTimeout(function(){
       if(_initPhase){
-        console.warn('[INIT] Safety timeout 8s');
+        console.warn('[INIT] Safety timeout 12s');
         _initPhase=false;
         renderTable('inspection');
         hideLoadingOverlay();
       }
-    }, 8000);
+    }, 12000);
   }else{
     var savedEmail=localStorage.getItem('physipro_last_email');
     localStorage.removeItem('physipro_last_email');
@@ -896,6 +896,50 @@ function startFirebaseSync(){
   }).catch(function(e){console.error('[SYNC] Serie error:',e);listenSerieCards();});
 
   // Step 4: Load inspection + couture data
+  // 🆕 ÉTAPE 4A: D'abord vérifier si les archives contiennent des données du mois courant/précédent
+  // qui auraient été archivées par erreur — les restaurer AVANT le merge principal
+  var protectedMonths=getProtectedMonths();
+  var archiveRestorePromises=[];
+  ['inspection','couture'].forEach(function(dept){
+    var archPath='archives/'+dept;
+    var p=fbDb.ref(archPath).once('value').then(function(archSnap){
+      var archData=archSnap.val();
+      if(!archData)return;
+      var toRestore={};
+      var restoreCount=0;
+      protectedMonths.forEach(function(month){
+        if(archData[month]&&Array.isArray(archData[month])&&archData[month].length>0){
+          toRestore[month]=archData[month];
+          restoreCount+=archData[month].filter(function(r){return r.type==='entry';}).length;
+        }
+      });
+      if(restoreCount>0){
+        console.log('♻️ [SYNC] '+dept+': Restauration de '+restoreCount+' entrées depuis archives ('+Object.keys(toRestore).join(', ')+')');
+        // Remettre dans le chemin actif ET supprimer des archives
+        var updates={};
+        Object.keys(toRestore).forEach(function(month){
+          updates[FB_PATHS[dept]+'/'+month]=toRestore[month];
+          updates[archPath+'/'+month]=null;
+        });
+        return fbDb.ref().update(updates).then(function(){
+          console.log('✅ [SYNC] '+dept+': Archives restaurées');
+          showToast('♻️ '+restoreCount+' entrées restaurées depuis archives','success');
+        });
+      }
+    }).catch(function(e){console.warn('[SYNC] Archive check error for '+dept+':',e);});
+    archiveRestorePromises.push(p);
+  });
+
+  // Attendre la restauration des archives AVANT de faire le merge principal
+  Promise.all(archiveRestorePromises).then(function(){
+    console.log('[SYNC] Archive restore check complete, proceeding with main sync');
+    _doMainSync();
+  }).catch(function(e){
+    console.warn('[SYNC] Archive restore error, proceeding anyway:',e);
+    _doMainSync();
+  });
+
+  function _doMainSync(){
   ['inspection','couture'].forEach(function(dept){
     var path=FB_PATHS[dept];
     fbDb.ref(path).once('value').then(function(snap){
@@ -907,25 +951,13 @@ function startFirebaseSync(){
       console.log('[SYNC] '+dept+': Firebase='+fbCount+' Local='+localCount+' entries');
 
       if(fbData){
-        var merged={};
-        Object.keys(fbData).forEach(function(month){merged[month]=(fbData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});});
-        Object.keys(localData).forEach(function(month){
-          if(!merged[month]){merged[month]=(localData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});return;}
-          var fbIds={};(merged[month]||[]).forEach(function(r){if(r.id)fbIds[r.id]=true;});
-          (localData[month]||[]).forEach(function(r){
-            if(r.id&&!fbIds[r.id]&&!isIdDeleted(r.id)){merged[month].push(r);}
-          });
-        });
-        Object.keys(merged).forEach(function(month){
-          merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
-        });
+        var merged=_safeMerge(fbData,localData);
         var mergedCount=_countEntries(merged);
         console.log('[SYNC] '+dept+': Merged='+mergedCount+' entries');
 
-        // 🛡️ PROTECTION: Ne JAMAIS écrire moins de données que ce qu'on a localement
+        // 🛡️ PROTECTION ABSOLUE: Ne JAMAIS réduire les données
         if(localCount>2 && mergedCount<localCount){
-          console.warn('🛡️ [SYNC] '+dept+': Merge a MOINS d\'entrées ('+mergedCount+') que local ('+localCount+'). LOCAL WINS.');
-          // Garder local mais ajouter les entrées FB qui manquent
+          console.warn('🛡️ [SYNC] '+dept+': Merge a MOINS d\'entrées ('+mergedCount+') que local ('+localCount+'). LOCAL WINS + FB entries added.');
           var finalData=JSON.parse(JSON.stringify(localData));
           Object.keys(fbData).forEach(function(month){
             if(!finalData[month])finalData[month]=[];
@@ -950,16 +982,25 @@ function startFirebaseSync(){
         console.log('[SYNC] '+dept+': Firebase VIDE, push local ('+localCount+' entries)');
         pushToFB(dept);
       }
-      // IMPORTANT: Attacher le listener realtime APRÈS 4 secondes
-      // pour laisser le pushToFB finir avant que le listener ne fire
-      setTimeout(function(){listenFB(dept);console.log('[SYNC] '+dept+': Listener realtime attaché');},4000);
+      // 🆕 Listener realtime attaché après 5s (augmenté de 4→5) + protection supplémentaire
+      setTimeout(function(){
+        if(!_initPhase){
+          listenFB(dept);
+          console.log('[SYNC] '+dept+': Listener realtime attaché');
+        }else{
+          // Si encore en init, attendre encore 3s
+          setTimeout(function(){listenFB(dept);console.log('[SYNC] '+dept+': Listener realtime attaché (delayed)');},3000);
+        }
+      },5000);
       markSyncDone(dept);
     }).catch(function(err){
       console.error('[SYNC] Load error:',dept,err);
-      setTimeout(function(){listenFB(dept);},4000);
+      setTimeout(function(){listenFB(dept);},5000);
       markSyncDone(dept);
     });
   });
+  } // end _doMainSync
+
   // Step 5: Sync lists + column config (pas de renderTable ici)
   fbDb.ref(FB_PATHS.lists).once('value').then(function(snap){
     var d=snap.val();if(!d)return;
@@ -976,6 +1017,32 @@ function startFirebaseSync(){
   });
   }); // End serieDeletedCards chain
   }); // End deletedIds chain
+}
+/* ═══ SAFE MERGE: Fonction centralisée de merge — NE PERD JAMAIS de données ═══ */
+function _safeMerge(fbData,localData){
+  var merged={};
+  if(fbData){
+    Object.keys(fbData).forEach(function(month){
+      merged[month]=(fbData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});
+    });
+  }
+  if(localData){
+    Object.keys(localData).forEach(function(month){
+      if(!merged[month]){
+        merged[month]=(localData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});
+        return;
+      }
+      var existingIds={};
+      (merged[month]||[]).forEach(function(r){if(r.id)existingIds[r.id]=true;});
+      (localData[month]||[]).forEach(function(r){
+        if(r.id&&!existingIds[r.id]&&!isIdDeleted(r.id)){merged[month].push(r);}
+      });
+    });
+  }
+  Object.keys(merged).forEach(function(month){
+    merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
+  });
+  return merged;
 }
 /* ═══ HELPER: Compter les entrées dans un objet data ═══ */
 function _countEntries(dataObj){
@@ -1131,11 +1198,16 @@ function listenDeletedIds(){
 function stopListenDeletedIds(){
   if(fbDb)fbDb.ref(FB_DELETED_PATH).off('value');
 }
+var _archiveRunning=false; // 🆕 Flag pour bloquer listenFB pendant l'archive
 function listenFB(dept){
   var path=FB_PATHS[dept];
   if(fbListeners[dept])fbDb.ref(path).off('value',fbListeners[dept]);
   fbListeners[dept]=fbDb.ref(path).on('value',function(snap){
-    if(_fbWriting[dept]||_merging[dept]||_initPhase){console.log('[listenFB] '+dept+': Skipped (writing='+!!_fbWriting[dept]+' merging='+!!_merging[dept]+' init='+_initPhase+')');return;}
+    // 🛡️ BLOQUER pendant: écriture, merge, init, ou archive en cours
+    if(_fbWriting[dept]||_merging[dept]||_initPhase||_archiveRunning){
+      console.log('[listenFB] '+dept+': Skipped (writing='+!!_fbWriting[dept]+' merging='+!!_merging[dept]+' init='+_initPhase+' archive='+_archiveRunning+')');
+      return;
+    }
     var fbData=snap.val();
     var lk=dept==='inspection'?IK:CK;
     if(!fbData){
@@ -1146,33 +1218,28 @@ function listenFB(dept){
     var localCount=_countEntries(localData);
     var fbCount=_countEntries(fbData);
     console.log('[listenFB] '+dept+': FB='+fbCount+' Local='+localCount);
-    var merged={};
-    Object.keys(fbData).forEach(function(month){
-      merged[month]=(fbData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});
-    });
-    var hasLocalOnly=false;
-    Object.keys(localData).forEach(function(month){
-      if(!merged[month]){merged[month]=(localData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});hasLocalOnly=true;return;}
-      var fbIds={};(merged[month]||[]).forEach(function(r){if(r.id)fbIds[r.id]=true;});
-      (localData[month]||[]).forEach(function(r){
-        if(r.id&&!fbIds[r.id]&&!isIdDeleted(r.id)){merged[month].push(r);hasLocalOnly=true;}
-      });
-    });
-    Object.keys(merged).forEach(function(month){
-      merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
-    });
+    
+    // 🆕 Utiliser _safeMerge centralisé
+    var merged=_safeMerge(fbData,localData);
     var mergedCount=_countEntries(merged);
-    // 🛡️ PROTECTION: Ne jamais réduire les données
+    
+    // 🛡️ PROTECTION ABSOLUE: Ne JAMAIS réduire les données
     if(localCount>2 && mergedCount<localCount){
-      console.error('🛡️ [listenFB] '+dept+': BLOQUÉ — merged('+mergedCount+') < local('+localCount+')');
+      console.error('🛡️ [listenFB] '+dept+': BLOQUÉ — merged('+mergedCount+') < local('+localCount+'). Données locales PRÉSERVÉES.');
+      return;
+    }
+    // 🛡️ PROTECTION #2: Si Firebase n'a que 1-2 entrées mais local en a beaucoup, c'est suspect
+    if(fbCount<=2 && localCount>5){
+      console.error('🛡️ [listenFB] '+dept+': Firebase suspectement vide ('+fbCount+') vs local ('+localCount+'). BLOQUÉ. Push local vers FB.');
+      pushToFB(dept);
       return;
     }
     safeLSSet(lk,JSON.stringify(merged));
     renderTable(dept);
-    if(hasLocalOnly){
+    if(mergedCount>fbCount){
       _merging[dept]=true;
       debouncePush(dept);
-      setTimeout(function(){_merging[dept]=false;},2000);
+      setTimeout(function(){_merging[dept]=false;},3000);
     }
   });
 }
@@ -1298,7 +1365,12 @@ function autoArchiveOldMonths(){
   var depts=['inspection','couture'];
   var pending=depts.length;
 
+  // 🆕 Bloquer listenFB pendant TOUTE l'opération d'archive
+  _archiveRunning=true;
+
   depts.forEach(function(dept){
+    // 🆕 Bloquer aussi le writer pour ce dept
+    setFbWriting(dept,true);
     var lk=dept==='inspection'?IK:CK;
     var data;
     try{data=JSON.parse(localStorage.getItem(lk))||{};}catch(e){data={};}
@@ -1311,8 +1383,12 @@ function autoArchiveOldMonths(){
       }
     });
     if(monthsToArchive.length===0){
+      setFbWriting(dept,false);
       pending--;
-      if(pending===0&&totalArchived>0)showToast('📦 '+totalArchived+' mois archivé(s)','success');
+      if(pending===0){
+        _archiveRunning=false;
+        if(totalArchived>0)showToast('📦 '+totalArchived+' mois archivé(s)','success');
+      }
       return;
     }
     console.log('[Archive] '+dept+': '+monthsToArchive.length+' mois à archiver: '+monthsToArchive.join(', '));
@@ -1335,17 +1411,24 @@ function autoArchiveOldMonths(){
       safeLSSet(lk,JSON.stringify(data));
       totalArchived+=monthsToArchive.length;
       console.log('✅ [Archive] '+dept+': '+monthsToArchive.length+' mois archivés');
+      // 🆕 Relâcher le writer après un délai pour laisser Firebase se stabiliser
+      setTimeout(function(){setFbWriting(dept,false);},3000);
       pending--;
-      if(pending===0&&totalArchived>0){
-        showToast('📦 '+totalArchived+' mois archivé(s) (avant '+gml(cutoff)+')','success');
-        renderTable('inspection');
+      if(pending===0){
+        setTimeout(function(){_archiveRunning=false;console.log('[Archive] ✅ Archive terminée, listenFB débloqué');},4000);
+        if(totalArchived>0){
+          showToast('📦 '+totalArchived+' mois archivé(s) (avant '+gml(cutoff)+')','success');
+          renderTable('inspection');
+        }
       }
     }).catch(function(err){
       console.error('❌ [Archive] '+dept+' error:',err.message);
+      setFbWriting(dept,false);
       pending--;
+      if(pending===0){_archiveRunning=false;}
     });
   });
-  if(pending===0&&totalArchived===0){console.log('[Archive] Rien à archiver');}
+  if(pending===0&&totalArchived===0){_archiveRunning=false;console.log('[Archive] Rien à archiver');}
 }
 /* ═══ FIN ARCHIVE SYSTEM ═══ */
 
@@ -1441,22 +1524,10 @@ function doRefresh(dept){
       if(fbData){
         var lk=dept==='inspection'?IK:CK;
         var localData;try{localData=JSON.parse(localStorage.getItem(lk))||{};}catch(e){localData={};}
-        // FIX #8: Merge au lieu d'écraser — préserver les entrées locales uniques
-        var merged={};
-        Object.keys(fbData).forEach(function(month){merged[month]=(fbData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});});
-        Object.keys(localData).forEach(function(month){
-          if(!merged[month]){merged[month]=(localData[month]||[]).filter(function(r){return !r.id||!isIdDeleted(r.id);});return;}
-          var fbIds={};(merged[month]||[]).forEach(function(r){if(r.id)fbIds[r.id]=true;});
-          (localData[month]||[]).forEach(function(r){
-            if(r.id&&!fbIds[r.id]&&!isIdDeleted(r.id)){merged[month].push(r);}
-          });
-        });
-        // FIX: Final anti-resurrection filter on refresh
-        Object.keys(merged).forEach(function(month){
-          merged[month]=merged[month].filter(function(r){return !r.id||!isIdDeleted(r.id);});
-        });
         var localCount=_countEntries(localData);
+        var merged=_safeMerge(fbData,localData);
         var mergedCount=_countEntries(merged);
+        // 🛡️ Protection: ne jamais réduire
         if(localCount>2 && mergedCount<localCount){
           console.warn('🛡️ [doRefresh] merged('+mergedCount+') < local('+localCount+') — keeping local');
         }else{
