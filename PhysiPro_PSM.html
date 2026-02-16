@@ -4273,17 +4273,29 @@ function buildDeptBarHtml(cardId, card) {
 }
 
 // Toggle department inclusion from card checkbox
-// This ONLY controls whether the dept is included in this PSM.
-// It does NOT affect the completion status.
+// When unchecking ANY dept, reset ALL completions — the card must be re-validated.
 function toggleCardDeptInclusion(cardId, dept) {
   if (!psmData[cardId]) return;
   if (!psmData[cardId].includeDepts) {
     psmData[cardId].includeDepts = { atelier: true, couture: true, metal: true };
   }
-  var current = psmData[cardId].includeDepts[dept] !== false;
-  psmData[cardId].includeDepts[dept] = !current;
+  var wasIncluded = psmData[cardId].includeDepts[dept] !== false;
+  psmData[cardId].includeDepts[dept] = !wasIncluded;
+  
+  // If we're UNCHECKING a dept, reset ALL departments' completion
+  if (wasIncluded) {
+    ['atelier', 'couture', 'metal'].forEach(function(d) {
+      if (psmData[cardId][d]) psmData[cardId][d].complete = false;
+    });
+  }
+  
   saveToFirebase();
   renderCards();
+  
+  // Reload the card details so all Compléter buttons reflect the change
+  if (cardId === currentCardId) {
+    loadCard(cardId);
+  }
 }
 
 function selectCard(id) {
@@ -4641,8 +4653,12 @@ function toggleComplete(dept) {
   // Check if card just became fully complete NOW
   var isNowFullyComplete = checkCardFullyComplete(psmData[currentCardId]);
   if (!wasFullyComplete && isNowFullyComplete) {
-    // Card just became complete — show notification modal
-    openPsmCompleteNotifyModal(currentCardId);
+    // Show celebration toast first, then modal after 3.5s delay
+    showToast('🎉 PSM complet!', 'success');
+    var completeCardId = currentCardId;
+    setTimeout(function() {
+      openPsmCompleteNotifyModal(completeCardId);
+    }, 3500);
   }
 }
 
@@ -4651,64 +4667,69 @@ function openPsmCompleteNotifyModal(cardId) {
   var card = psmData[cardId];
   if (!card) return;
   
-  var creatorName = card.createdByName || 'le créateur';
-  var creatorEmail = card.createdByEmail || '';
-  
-  // Remove existing modal if any
   var existing = document.getElementById('psmCompleteNotifyModal');
   if (existing) existing.remove();
   
-  var html = '<div class="modal-overlay" id="psmCompleteNotifyModal" onclick="if(event.target===this)closePsmCompleteNotifyModal()">' +
-    '<div class="modal" style="max-width:420px;">' +
+  var html = '<div class="modal-overlay" id="psmCompleteNotifyModal" style="opacity:0;transition:opacity 0.4s ease;" onclick="if(event.target===this)closePsmCompleteNotifyModal()">' +
+    '<div class="modal" style="max-width:380px;transform:translateY(30px) scale(0.95);transition:transform 0.4s ease;">' +
       '<div class="modal-header" style="background:linear-gradient(to bottom,#16a34a,#15803d);">' +
         '<span class="modal-title">✅ PSM Complet</span>' +
         '<button class="modal-close" onclick="closePsmCompleteNotifyModal()">✕</button>' +
       '</div>' +
-      '<div class="modal-body" style="text-align:center;padding:20px;">' +
-        '<div style="font-size:36px;margin-bottom:12px;">🎉</div>' +
-        '<div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:8px;">Ce PSM est maintenant complet!</div>' +
-        '<div style="font-size:12px;color:#94a3b8;margin-bottom:16px;">' +
-          escapeHtml(card.name || 'Patient') + ' — #' + escapeHtml(card.order || '---') +
-        '</div>' +
-        '<div style="font-size:13px;color:#e2e8f0;">Voulez-vous envoyer un courriel à</div>' +
-        '<div style="font-size:13px;color:#e2e8f0;margin-top:4px;"><strong style="color:#22c55e;">Orders</strong> <span style="font-size:10px;color:#64748b;">(orders@physipro.com)</span></div>' +
-        '<div style="font-size:13px;color:#e2e8f0;margin-top:4px;">pour confirmer que ce PSM est complet?</div>' +
+      '<div class="modal-body" style="text-align:center;padding:20px 16px;">' +
+        '<div style="font-size:36px;margin-bottom:10px;">🎉</div>' +
+        '<div style="font-size:13px;color:#e2e8f0;line-height:1.5;">Voulez-vous envoyer un courriel à<br><strong style="color:#4ade80;">Orders</strong> pour aviser que le PSM est terminé?</div>' +
       '</div>' +
       '<div class="modal-footer" style="justify-content:center;gap:12px;">' +
-        '<button class="modal-btn cancel" onclick="closePsmCompleteNotifyModal()">Non merci</button>' +
-        '<button class="modal-btn confirm" style="background:linear-gradient(to bottom,#22c55e,#16a34a);" onclick="sendPsmCompleteEmail(\'' + cardId + '\')">✉️ Oui, envoyer</button>' +
+        '<button class="modal-btn" style="background:linear-gradient(to bottom,#22c55e,#16a34a);color:#fff;font-size:12px;padding:9px 24px;font-weight:800;" onclick="sendPsmCompleteOutlook(\'' + cardId + '\')">✉️ Oui</button>' +
+        '<button class="modal-btn cancel" style="font-size:12px;padding:9px 24px;" onclick="closePsmCompleteNotifyModal()">Non</button>' +
       '</div>' +
     '</div>' +
   '</div>';
   
   document.body.insertAdjacentHTML('beforeend', html);
+  
+  requestAnimationFrame(function() {
+    var overlay = document.getElementById('psmCompleteNotifyModal');
+    if (overlay) {
+      overlay.style.opacity = '1';
+      overlay.querySelector('.modal').style.transform = 'translateY(0) scale(1)';
+    }
+  });
 }
 
 function closePsmCompleteNotifyModal() {
   var modal = document.getElementById('psmCompleteNotifyModal');
-  if (modal) modal.remove();
+  if (!modal) return;
+  modal.style.opacity = '0';
+  var inner = modal.querySelector('.modal');
+  if (inner) inner.style.transform = 'translateY(20px) scale(0.95)';
+  setTimeout(function() { if (modal.parentNode) modal.remove(); }, 350);
 }
 
-function sendPsmCompleteEmail(cardId) {
+function sendPsmCompleteOutlook(cardId) {
   var card = psmData[cardId];
   if (!card) return;
   
-  var completedBy = currentUser ? getPhysiproDisplayName(currentUser.email) : 'L\'équipe';
+  var completedBy = currentUser ? getPhysiproDisplayName(currentUser.email) : "L'équipe";
+  var toEmail = atob('b3JkZXJzQHBoeXNpcHJvLmNvbQ==');
   var subject = 'PSM ' + (card.name || 'Patient') + ' #' + (card.order || '---');
   var body = 'Bonjour,\n\n' +
     'Le PSM suivant est maintenant complet :\n\n' +
     'Patient : ' + (card.name || '—') + '\n' +
     'Commande : #' + (card.order || '---') + '\n\n' +
-    'Vous n\'aurez qu\'à cliquer sur le bouton Complet pour imprimer.\n\n' +
+    "Vous n'aurez qu'à cliquer sur le bouton Complet pour imprimer.\n\n" +
     'Complété par : ' + completedBy + '\n\n' +
-    'Merci,\n' +
-    'PhysiPro PSM';
+    'Merci,\nPhysiPro PSM';
   
-  var toEmail = atob('b3JkZXJzQHBoeXNpcHJvLmNvbQ==');
-  window.open('mailto:' + encodeURIComponent(toEmail) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_self');
+  var mailtoUrl = 'mailto:' + encodeURIComponent(toEmail) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  var w = 650, h = 500;
+  var left = Math.round((screen.width - w) / 2);
+  var top = Math.round((screen.height - h) / 2);
+  window.open(mailtoUrl, 'outlookCompose', 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',menubar=no,toolbar=no,status=no,scrollbars=yes');
   
   closePsmCompleteNotifyModal();
-  showToast('✉️ Courriel de notification ouvert', 'success');
+  showToast('📧 Outlook ouvert', 'success');
 }
 
 // Update the "Compléter" button in the department header bar.
@@ -6251,7 +6272,7 @@ function sendPsmFileNotifyEmail(cardId) {
     'Merci,\n' +
     'PhysiPro PSM';
   
-  window.open('mailto:' + encodeURIComponent(emails.join(';')) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_self');
+  window.open('mailto:' + encodeURIComponent(emails.join(';')) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
   
   closePsmFileNotifyModal();
   showToast('✉️ Courriel ouvert pour ' + names.join(', '), 'success');
