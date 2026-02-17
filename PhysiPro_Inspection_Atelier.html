@@ -1168,6 +1168,9 @@ function listenFB(dept) {
     safeLSSet(lk, JSON.stringify(merged));
     renderTable(dept);
 
+    // Run migration after first successful Firebase sync
+    if (!_migrationDone) { setTimeout(migrateItemToClient, 500); }
+
     // If merged has more than FB, push the difference
     if (mergedCount > fbCount) {
       _merging[dept] = true;
@@ -1603,64 +1606,73 @@ function initApp() {
   _appInited = true;
   initMonths();
   updateDates();
-  // Run one-time migration: move client values from item→client
-  setTimeout(migrateItemToClient, 3000);
 }
 
 // ═══ ONE-TIME MIGRATION: Move client-type values from item column to client column ═══
+var _migrationDone = false;
 function migrateItemToClient() {
-  var MIGRATION_KEY = 'physipro_migration_item2client_v2';
-  if (localStorage.getItem(MIGRATION_KEY) === 'done') return;
+  if (_migrationDone) return;
+  var MIGRATION_KEY = 'physipro_migration_item2client_v3';
+  if (localStorage.getItem(MIGRATION_KEY) === 'done') { _migrationDone = true; return; }
 
-  // Values that are clients, NOT items — case-insensitive match
+  // Values that should be in CLIENT, not in ITEM — case-insensitive
   var CLIENT_VALUES = ['commande client', 'commande', 'inventaire', 'série', 'serie',
     'c1south', 'hme', 'france rts', 'vermeiren', 'cubro', 'chsld rimouski',
     'constance', 'hopital juif'];
 
-  var changed = false;
-  var count = 0;
+  var totalCount = 0;
 
   ['inspection', 'couture'].forEach(function(dept) {
-    var data = loadD(dept);
-    if (!data) return;
+    var lk = dept === 'inspection' ? IK : CK;
+    var data;
+    try { data = JSON.parse(localStorage.getItem(lk)) || {}; } catch(e) { data = {}; }
+
+    var deptChanged = false;
     Object.keys(data).forEach(function(month) {
       var rows = data[month];
       if (!Array.isArray(rows)) return;
       for (var i = 0; i < rows.length; i++) {
         var r = rows[i];
-        if (r.type !== 'entry') continue;
-        var itemLower = (r.item || '').toLowerCase().trim();
+        if (!r || r.type !== 'entry') continue;
+        var itemVal = (r.item || '').trim();
+        var itemLower = itemVal.toLowerCase();
         if (CLIENT_VALUES.indexOf(itemLower) >= 0) {
-          // Move item value to client (only if client is empty or generic)
-          var clientLower = (r.client || '').toLowerCase().trim();
-          if (!clientLower || clientLower === '—' || clientLower === '-') {
-            r.client = r.item; // Transfer the value
+          // Transfer: if client is empty, move item value there
+          var cl = (r.client || '').trim();
+          if (!cl || cl === '—' || cl === '-' || cl === '') {
+            r.client = itemVal;
           }
-          r.item = '—'; // Clear item
-          changed = true;
-          count++;
+          r.item = '—';
+          deptChanged = true;
+          totalCount++;
         }
       }
     });
-    if (changed) {
+
+    if (deptChanged) {
       // Save locally
-      var lk = dept === 'inspection' ? IK : CK;
       safeLSSet(lk, JSON.stringify(data));
       // Push to Firebase
       if (fbDb) {
-        fbDb.ref(FB_PATHS[dept]).set(data).catch(function(e) {
-          console.error('[MIGRATION] Firebase push error for ' + dept, e);
+        _fbWriting[dept] = true;
+        fbDb.ref(FB_PATHS[dept]).set(data).then(function() {
+          _fbWriting[dept] = false;
+          console.log('[MIGRATION] ✅ Firebase mis à jour pour ' + dept);
+        }).catch(function(e) {
+          _fbWriting[dept] = false;
+          console.error('[MIGRATION] Erreur Firebase ' + dept, e);
         });
       }
     }
   });
 
+  _migrationDone = true;
   localStorage.setItem(MIGRATION_KEY, 'done');
-  if (count > 0) {
-    console.log('[MIGRATION] ✅ Migré ' + count + ' entrée(s): item→client');
-    // Refresh tables
+
+  if (totalCount > 0) {
+    console.log('[MIGRATION] ✅ Migré ' + totalCount + ' entrée(s): item→client');
     renderTable('inspection');
-    showToastMsg('🔄 Migration: ' + count + ' entrée(s) corrigée(s) — items transférés vers client', 'success');
+    showToastMsg('🔄 Migration: ' + totalCount + ' entrée(s) corrigée(s) — items transférés vers client', 'success');
   } else {
     console.log('[MIGRATION] Aucune entrée à migrer');
   }
