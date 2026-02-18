@@ -7746,12 +7746,9 @@ function escapeHtml(str) {
 // === 24.2 SAUVEGARDE/CHARGEMENT LOCALSTORAGE ===
 function saveSerieDataToLocalStorage() {
   try {
-    // Nettoyer les cartes demo ET les cartes supprimées
-    var delIds = {};
-    try { delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}'); } catch(e) {}
+    // Nettoyer seulement les cartes demo
     Object.keys(serieCardsData).forEach(id => {
       if (id.startsWith('demo-')) { delete serieCardsData[id]; var dc=document.querySelector('.mcard[data-id="'+id+'"]'); if(dc) dc.remove(); }
-      if (delIds[id] || delIds[id.replace(/[.#$\/\[\]]/g, '_')]) { delete serieCardsData[id]; }
     });
     localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
     console.log('💾 Série+: Données sauvegardées', Object.keys(serieCardsData).length, 'commandes');
@@ -7760,7 +7757,7 @@ function saveSerieDataToLocalStorage() {
         firebaseDb.ref('serieCommandes').set(serieCardsData)
           .then(() => console.log('☁️ Série+ synced (' + Object.keys(serieCardsData).length + ' cartes)'))
           .catch(e => console.error('Erreur Firebase Série+:', e));
-      } else { console.log('⚠️ Skip Firebase sync — aucune carte'); }
+      } else { console.log('⚠️ Skip Firebase sync — aucune carte (protection: pas d\'écrasement)'); }
     }
   } catch (e) { console.error('Erreur sauvegarde Série+:', e); }
 }
@@ -7819,12 +7816,6 @@ function loadSerieDataFromLocalStorage() {
       const fbData = snapshot.exists() ? snapshot.val() : {};
       const demoKeys = Object.keys(fbData).filter(id => id.startsWith('demo-'));
       if (demoKeys.length > 0) { const p={}; demoKeys.forEach(k=>{p[k]=null;}); firebaseDb.ref('serieCommandes').update(p); demoKeys.forEach(k=>{delete fbData[k];}); }
-      // FIX: Filtrer aussi les cartes supprimées
-      var delIds = {};
-      try { delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}'); } catch(e) {}
-      Object.keys(fbData).forEach(function(cid) {
-        if (delIds[cid] || delIds[cid.replace(/[.#$\/\[\]]/g, '_')]) { delete fbData[cid]; }
-      });
       const oldIds = new Set(Object.keys(serieCardsData));
       const newIds = new Set(Object.keys(fbData));
       oldIds.forEach(oid => { if(!newIds.has(oid)){const s=document.querySelector('.mcard[data-id="'+oid+'"]')||document.querySelector('.mcard[data-card-id="'+oid+'"]');if(s)s.remove();} });
