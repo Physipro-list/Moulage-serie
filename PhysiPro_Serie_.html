@@ -7744,7 +7744,9 @@ function escapeHtml(str) {
 }
 
 // === 24.2 SAUVEGARDE/CHARGEMENT LOCALSTORAGE ===
+var _serieIsSyncing = false;
 function saveSerieDataToLocalStorage() {
+  if (_serieIsSyncing) return;
   try {
     // Nettoyer seulement les cartes demo
     Object.keys(serieCardsData).forEach(id => {
@@ -7754,9 +7756,10 @@ function saveSerieDataToLocalStorage() {
     console.log('💾 Série+: Données sauvegardées', Object.keys(serieCardsData).length, 'commandes');
     if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
       if (Object.keys(serieCardsData).length > 0) {
+        _serieIsSyncing = true;
         firebaseDb.ref('serieCommandes').set(serieCardsData)
-          .then(() => console.log('☁️ Série+ synced (' + Object.keys(serieCardsData).length + ' cartes)'))
-          .catch(e => console.error('Erreur Firebase Série+:', e));
+          .then(() => { console.log('☁️ Série+ synced (' + Object.keys(serieCardsData).length + ' cartes)'); setTimeout(function(){ _serieIsSyncing = false; }, 500); })
+          .catch(e => { console.error('Erreur Firebase Série+:', e); _serieIsSyncing = false; });
       } else { console.log('⚠️ Skip Firebase sync — aucune carte (protection: pas d\'écrasement)'); }
     }
   } catch (e) { console.error('Erreur sauvegarde Série+:', e); }
