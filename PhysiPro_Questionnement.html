@@ -2575,7 +2575,41 @@ function archiveJobThenDelete(jobId, source) {
     archivedBy: currentUser ? currentUser.email : 'unknown'
   };
   db.ref().update(updates).then(function() {
-    // 4. Delete the job from active data
+    // 4. If this was a PSM questionnement, mark it resolved and send chat message
+    if (job.fromPSM && job.psmCardId) {
+      var resolverName = currentUser ? (currentUser.displayName || currentUser.email) : 'Questionnement';
+      var psmUpdates = {};
+      psmUpdates['psm/' + job.psmCardId + '/questionnementSent'] = false;
+      psmUpdates['psm/' + job.psmCardId + '/questionnementResolvedAt'] = new Date().toISOString();
+      psmUpdates['psm/' + job.psmCardId + '/questionnementResolvedBy'] = resolverName;
+      
+      // Collect all messages as the response summary
+      var responseText = '';
+      if (job.messages && job.messages.length > 0) {
+        responseText = job.messages.filter(function(m) { return m.text; }).map(function(m) {
+          return (m.author || '?') + ': ' + m.text;
+        }).join('\n');
+      }
+      
+      // Send a chat notification to PSM
+      var chatMsg = {
+        text: '✅ Questionnement réglé pour #' + (job.order || job.psmName || '') + ' (' + (job.psmDept || '') + ')\n\nRéponse:\n' + (responseText || 'Aucun détail'),
+        author: resolverName,
+        timestamp: new Date().toISOString(),
+        type: 'quest-resolved',
+        psmCardId: job.psmCardId,
+        psmDept: job.psmDept || ''
+      };
+      psmUpdates['psmChat/' + Date.now()] = chatMsg;
+      
+      db.ref().update(psmUpdates).then(function() {
+        console.log('PSM questionnement resolved for card:', job.psmCardId);
+      }).catch(function(e) {
+        console.error('PSM update error:', e);
+      });
+    }
+    
+    // 5. Delete the job from active data
     db.ref('jobs/' + jobId).remove().then(function() {
       showToast('📦 Job archivé + supprimé', 'success');
     }).catch(function(e) { showToast('❌ Suppression: ' + e.message, 'error'); });
