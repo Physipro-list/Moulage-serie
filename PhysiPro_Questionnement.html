@@ -1906,10 +1906,14 @@ function doLogin(event) {
   });
 }
 
-function doLogout() { firebase.auth().signOut(); }
+function doLogout() { _cleanupDataListeners(); firebase.auth().signOut(); }
 
 function initData() {
-  db.ref('jobs').on('value', snap => {
+  // ═══ LISTENER TRACKING — store references for proper cleanup ═══
+  if (!window._questListeners) window._questListeners = {};
+  _cleanupDataListeners(); // Clean any previous listeners
+
+  window._questListeners.jobs = db.ref('jobs').on('value', snap => {
     jobsData = snap.val() || {};
     renderJobs();
     if (window.innerWidth <= 768) renderMobileList();
@@ -1922,7 +1926,7 @@ function initData() {
   // Status cache from inspection/couture
   initStatusListeners();
   
-  db.ref('materiauxBO').on('value', snap => {
+  window._questListeners.matBO = db.ref('materiauxBO').on('value', snap => {
     matBOData = snap.val() || {};
     renderMatBO();
     if (window.innerWidth <= 768 && mobileCurrentTab === 'mat') renderMobileList();
@@ -1931,6 +1935,19 @@ function initData() {
     showToast('❌ Erreur chargement matériaux: ' + err.message, 'error');
   });
   initCommandes();
+}
+
+/* ═══ CLEANUP — Detach all Firebase listeners properly ═══ */
+function _cleanupDataListeners() {
+  if (!window._questListeners) return;
+  if (window._questListeners.jobs) { db.ref('jobs').off('value', window._questListeners.jobs); }
+  if (window._questListeners.matBO) { db.ref('materiauxBO').off('value', window._questListeners.matBO); }
+  if (window._questListeners.commandes) { db.ref('commandesAttente').off('value', window._questListeners.commandes); }
+  if (window._questListeners.inspMonth) { db.ref('inspectionData/' + window._questListeners._inspMonthKey).off('value', window._questListeners.inspMonth); }
+  if (window._questListeners.coutMonth) { db.ref('coutureData/' + window._questListeners._coutMonthKey).off('value', window._questListeners.coutMonth); }
+  if (window._questListeners.notifs) { db.ref('jobNotifications').off('value', window._questListeners.notifs); }
+  if (window._questListeners.jobsRetry) { db.ref('jobs').off('value', window._questListeners.jobsRetry); }
+  window._questListeners = {};
 }
 
 // Retry helper: refresh auth token and re-attach listener
@@ -1944,8 +1961,11 @@ function retryAfterAuthRefresh(path) {
         renderJobs();
         if (window.innerWidth <= 768) renderMobileList();
         showToast('✅ Données rechargées avec succès', 'success');
-        // Re-attach real-time listener
-        db.ref('jobs').on('value', snap => {
+        // Re-attach real-time listener (tracked)
+        if (window._questListeners && window._questListeners.jobsRetry) {
+          db.ref('jobs').off('value', window._questListeners.jobsRetry);
+        }
+        window._questListeners.jobsRetry = db.ref('jobs').on('value', snap => {
           jobsData = snap.val() || {};
           renderJobs();
           if (window.innerWidth <= 768) renderMobileList();
@@ -2071,8 +2091,20 @@ function initStatusListeners() {
   var now = new Date();
   var monthKey = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   
+  // Detach previous month listeners if any
+  if (window._questListeners && window._questListeners.inspMonth) {
+    db.ref('inspectionData/' + window._questListeners._inspMonthKey).off('value', window._questListeners.inspMonth);
+  }
+  if (window._questListeners && window._questListeners.coutMonth) {
+    db.ref('coutureData/' + window._questListeners._coutMonthKey).off('value', window._questListeners.coutMonth);
+  }
+  
+  // Track the month key for later cleanup
+  window._questListeners._inspMonthKey = monthKey;
+  window._questListeners._coutMonthKey = monthKey;
+  
   // Listen to inspectionData (current month) — cards here = "Couture" next step
-  db.ref('inspectionData/' + monthKey).on('value', function(snap) {
+  window._questListeners.inspMonth = db.ref('inspectionData/' + monthKey).on('value', function(snap) {
     var data = snap.val() || {};
     // Clear inspection entries
     Object.keys(_statusCache).forEach(function(k) { if (_statusCache[k] === 'Couture') delete _statusCache[k]; });
@@ -2083,7 +2115,7 @@ function initStatusListeners() {
   });
   
   // Listen to coutureData (current month) — cards here = "Insp. finale" next step
-  db.ref('coutureData/' + monthKey).on('value', function(snap) {
+  window._questListeners.coutMonth = db.ref('coutureData/' + monthKey).on('value', function(snap) {
     var data = snap.val() || {};
     Object.keys(_statusCache).forEach(function(k) { if (_statusCache[k] === 'Insp. finale') delete _statusCache[k]; });
     Object.values(data).forEach(function(card) {
@@ -2172,7 +2204,11 @@ let commandesData = {};
 
 function initCommandes() {
   if (!db) return;
-  db.ref('commandesAttente').on('value', snap => {
+  // Detach previous listener if any
+  if (window._questListeners && window._questListeners.commandes) {
+    db.ref('commandesAttente').off('value', window._questListeners.commandes);
+  }
+  window._questListeners.commandes = db.ref('commandesAttente').on('value', snap => {
     commandesData = snap.val() || {};
     renderCommandes();
   }, err => {
@@ -2513,13 +2549,13 @@ function openFiche(jobId) {
   document.getElementById('ficheAssigneeName').textContent = `${d.assignee || 'Job'} — #${d.order || '?'}`;
   
   document.getElementById('ficheFieldsList').innerHTML = `
-    <div class="fiche-field-row"><div class="fiche-field-label">🔢 N° Commande</div><div class="fiche-field-value"><input value="${escapeHtml(d.order)}" onchange="updateJobField('${jobId}','order',this.value)"></div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">👤 Client</div><div class="fiche-field-value"><input value="${escapeHtml(d.client)}" onchange="updateJobField('${jobId}','client',this.value)"></div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">👥 Assigné à</div><div class="fiche-field-value"><select onchange="updateJobField('${jobId}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===d.assignee?'selected':''}>${a}</option>`).join('')}</select></div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">🧾 N° PO</div><div class="fiche-field-value"><input value="${escapeHtml(d.numeroPO || '')}" onchange="updateJobField('${jobId}','numeroPO',this.value)"></div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">👩‍💼 Représentant</div><div class="fiche-field-value"><input value="${escapeHtml(d.representant || '')}" onchange="updateJobField('${jobId}','representant',this.value)"></div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">📥 Date Reçue</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateRecue','${jobId}')">${formatDateDisplay(d.dateRecue)||'📅 Sélectionner...'}</div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">📦 Date Livraison</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison','${jobId}')">${formatDateDisplay(d.dateLivraison)||'📅 Sélectionner...'}</div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">🔢 N° Commande</div><div class="fiche-field-value"><input value="${escapeHtml(d.order)}" onchange="updateJobField('${escapeHtml(jobId)}','order',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">👤 Client</div><div class="fiche-field-value"><input value="${escapeHtml(d.client)}" onchange="updateJobField('${escapeHtml(jobId)}','client',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">👥 Assigné à</div><div class="fiche-field-value"><select onchange="updateJobField('${escapeHtml(jobId)}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===d.assignee?'selected':''}>${a}</option>`).join('')}</select></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">🧾 N° PO</div><div class="fiche-field-value"><input value="${escapeHtml(d.numeroPO || '')}" onchange="updateJobField('${escapeHtml(jobId)}','numeroPO',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">👩‍💼 Représentant</div><div class="fiche-field-value"><input value="${escapeHtml(d.representant || '')}" onchange="updateJobField('${escapeHtml(jobId)}','representant',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">📥 Date Reçue</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateRecue','${escapeHtml(jobId)}')">${formatDateDisplay(d.dateRecue)||'📅 Sélectionner...'}</div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">📦 Date Livraison</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison','${escapeHtml(jobId)}')">${formatDateDisplay(d.dateLivraison)||'📅 Sélectionner...'}</div></div>
   `;
   
   // Render rappel section
@@ -3346,7 +3382,7 @@ function renderMobileList() {
       const msgCount = getMessageCount(id);
       const hasQ = hasUnresolvedQuestions(id);
       return `
-        <div class="mobile-job-card" onclick="openMobileFiche('${id}')">
+        <div class="mobile-job-card" onclick="openMobileFiche('${escapeHtml(id)}')">
           <div class="mobile-job-order">#${escapeHtml(job.order || '---')}</div>
           <div class="mobile-job-client">${escapeHtml(job.client || 'Client')}</div>
           <span class="mobile-job-assignee ${(job.assignee||'').toLowerCase()}">${escapeHtml(job.assignee||'')}</span>
@@ -3375,13 +3411,13 @@ function openMobileFiche(jobId) {
   document.getElementById('mobileFicheTitle').textContent = `#${job.order || '?'} — ${job.assignee || ''}`;
   
   document.getElementById('mobileFicheBody').innerHTML = `
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🔢 Commande</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.order)}" onchange="updateJobField('${jobId}','order',this.value)"></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👤 Client</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.client)}" onchange="updateJobField('${jobId}','client',this.value)"></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👥 Assigné à</div><div class="mobile-fiche-field-value"><select onchange="updateJobField('${jobId}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===job.assignee?'selected':''}>${a}</option>`).join('')}</select></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🧾 N° PO</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.numeroPO||'')}" onchange="updateJobField('${jobId}','numeroPO',this.value)"></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👩‍💼 Représentant</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.representant||'')}" onchange="updateJobField('${jobId}','representant',this.value)"></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📥 Date Reçue</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateRecue','${jobId}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateRecue)||'Sélectionner...'}</div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📦 Livraison</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison','${jobId}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateLivraison)||'Sélectionner...'}</div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🔢 Commande</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.order)}" onchange="updateJobField('${escapeHtml(jobId)}','order',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👤 Client</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.client)}" onchange="updateJobField('${escapeHtml(jobId)}','client',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👥 Assigné à</div><div class="mobile-fiche-field-value"><select onchange="updateJobField('${escapeHtml(jobId)}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===job.assignee?'selected':''}>${a}</option>`).join('')}</select></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🧾 N° PO</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.numeroPO||'')}" onchange="updateJobField('${escapeHtml(jobId)}','numeroPO',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👩‍💼 Représentant</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.representant||'')}" onchange="updateJobField('${escapeHtml(jobId)}','representant',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📥 Date Reçue</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateRecue','${escapeHtml(jobId)}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateRecue)||'Sélectionner...'}</div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📦 Livraison</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison','${escapeHtml(jobId)}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateLivraison)||'Sélectionner...'}</div></div>
     <div id="mobileRappelSection" style="margin-top:8px;"></div>
   `;
   
@@ -3398,7 +3434,7 @@ function openMobileFiche(jobId) {
         <div class="fiche-rappel-row" style="flex-wrap:wrap;">
           <div class="fiche-rappel-field">
             <div class="fiche-rappel-label">Rappel dans</div>
-            <select class="fiche-rappel-select" onchange="setRappelFromDays('${jobId}', this.value)">
+            <select class="fiche-rappel-select" onchange="setRappelFromDays('${escapeHtml(jobId)}', this.value)">
               <option value="">-- Aucun --</option>
               <option value="1" ${rappelJours==1?'selected':''}>1 jour</option>
               <option value="2" ${rappelJours==2?'selected':''}>2 jours</option>
@@ -3411,7 +3447,7 @@ function openMobileFiche(jobId) {
           </div>
           <div class="fiche-rappel-field">
             <div class="fiche-rappel-label">Action</div>
-            <select class="fiche-rappel-select" onchange="updateRappelAction('${jobId}', this.value)">
+            <select class="fiche-rappel-select" onchange="updateRappelAction('${escapeHtml(jobId)}', this.value)">
               <option value="">-- Choisir --</option>
               <option value="Appeler client" ${rappelAction==='Appeler client'?'selected':''}>Appeler client</option>
               <option value="Faire le suivi" ${rappelAction==='Faire le suivi'?'selected':''}>Faire le suivi</option>
@@ -3421,7 +3457,7 @@ function openMobileFiche(jobId) {
             </select>
           </div>
           <div style="display:flex;align-items:center;gap:8px;padding-top:4px;">
-            <input type="checkbox" ${rappelRenouvelable?'checked':''} onchange="toggleRappelRenouvelable('${jobId}', this.checked)" style="accent-color:#f59e0b;">
+            <input type="checkbox" ${rappelRenouvelable?'checked':''} onchange="toggleRappelRenouvelable('${escapeHtml(jobId)}', this.checked)" style="accent-color:#f59e0b;">
             <span style="font-size:10px;color:#92400e;font-weight:600;">Auto</span>
             <button onclick="clearRappel('${jobId}')" style="background:#fee2e2;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px;">🗑️</button>
           </div>
@@ -3447,11 +3483,18 @@ function deleteMobileJob() {
 
 // ===== MOBILE CHAT =====
 function renderMsgImages(msg) {
+  // Sanitize image URLs: only allow data: and https:// protocols
+  function safeImgUrl(url) {
+    if (!url) return '';
+    var s = String(url).trim();
+    if (s.startsWith('data:image/') || s.startsWith('https://')) return escapeHtml(s);
+    return '';
+  }
   if (msg.images && msg.images.length > 0) {
     const cls = msg.images.length === 1 ? 'mobile-msg-images-grid single' : 'mobile-msg-images-grid';
-    return `<div class="${cls}">${msg.images.map(img => `<img src="${img}" onclick="openLightbox(this.src)">`).join('')}</div>`;
+    return `<div class="${cls}">${msg.images.map(img => { var u=safeImgUrl(img); return u?`<img src="${u}" onclick="openLightbox(this.src)">`:''; }).join('')}</div>`;
   }
-  if (msg.image) return `<img class="mobile-msg-image" src="${msg.image}" onclick="openLightbox(this.src)">`;
+  if (msg.image) { var u=safeImgUrl(msg.image); return u?`<img class="mobile-msg-image" src="${u}" onclick="openLightbox(this.src)">`:''; }
   return '';
 }
 
@@ -3684,7 +3727,11 @@ function handleGlobalSearch(value) {
 // ===== NOTIFICATIONS SYSTEM =====
 function listenForNotifications() {
   if (!db || !currentUser?.email) return;
-  db.ref('jobNotifications').orderByChild('to').equalTo(currentUser.email).on('value', snap => {
+  // Detach previous listener if any
+  if (window._questListeners && window._questListeners.notifs) {
+    db.ref('jobNotifications').off('value', window._questListeners.notifs);
+  }
+  window._questListeners.notifs = db.ref('jobNotifications').orderByChild('to').equalTo(currentUser.email).on('value', snap => {
     allNotifications = snap.val() || {};
     updateNotifBell();
   }, err => {
@@ -3806,7 +3853,7 @@ function renderRappelSection(jobId, d) {
     <div class="fiche-rappel-row">
       <div class="fiche-rappel-field">
         <div class="fiche-rappel-label">Rappel dans</div>
-        <select class="fiche-rappel-select" id="ficheRappelJours" onchange="setRappelFromDays('${jobId}', this.value)">
+        <select class="fiche-rappel-select" id="ficheRappelJours" onchange="setRappelFromDays('${escapeHtml(jobId)}', this.value)">
           <option value="">-- Aucun --</option>
           <option value="1" ${rappelJours==1?'selected':''}>1 jour</option>
           <option value="2" ${rappelJours==2?'selected':''}>2 jours</option>
@@ -3819,7 +3866,7 @@ function renderRappelSection(jobId, d) {
       </div>
       <div class="fiche-rappel-field">
         <div class="fiche-rappel-label">Action</div>
-        <select class="fiche-rappel-select" id="ficheRappelAction" onchange="updateRappelAction('${jobId}', this.value)">
+        <select class="fiche-rappel-select" id="ficheRappelAction" onchange="updateRappelAction('${escapeHtml(jobId)}', this.value)">
           <option value="">-- Choisir --</option>
           <option value="Appeler client" ${rappelAction==='Appeler client'?'selected':''}>Appeler client</option>
           <option value="Faire le suivi" ${rappelAction==='Faire le suivi'?'selected':''}>Faire le suivi</option>
@@ -3831,7 +3878,7 @@ function renderRappelSection(jobId, d) {
       <div class="fiche-rappel-field" style="flex:0.6;">
         <div class="fiche-rappel-label">Renouveler</div>
         <div class="fiche-rappel-checkbox">
-          <input type="checkbox" id="ficheRappelRenouvelable" ${rappelRenouvelable?'checked':''} onchange="toggleRappelRenouvelable('${jobId}', this.checked)">
+          <input type="checkbox" id="ficheRappelRenouvelable" ${rappelRenouvelable?'checked':''} onchange="toggleRappelRenouvelable('${escapeHtml(jobId)}', this.checked)">
           <label for="ficheRappelRenouvelable">Auto</label>
         </div>
       </div>

@@ -724,6 +724,69 @@ var HUB_ACCESS={'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['moulage','jobs','inspection
 var currentMonth='',data={},zoom=90,currentListKey='';
 var dpYear,dpMonth,dpRowIdx,dpField,dpSelectedDate=null;
 
+/* ═══ SYNC PROTECTION FLAGS (modèle Inspection Atelier) ═══ */
+var _fbWriting = false;          // Blocks listener during our own writes
+var _fbWritingSafety = null;     // Auto-release timer
+var _syncPhase = 'idle';         // 'idle' | 'syncing' | 'live'
+var _coutureListener = null;     // Active Firebase .on() listener
+var _retryCount = 0;
+var _maxRetries = 3;
+var _syncTimeout = null;
+
+function setFbWriting(val) {
+  _fbWriting = val;
+  if (_fbWritingSafety) clearTimeout(_fbWritingSafety);
+  if (val) { _fbWritingSafety = setTimeout(function() { _fbWriting = false; }, 5000); }
+}
+
+/* ─── Count entries helper ─── */
+function _countEntries(arr) {
+  if (!Array.isArray(arr)) return 0;
+  var n = 0;
+  arr.forEach(function(r) { if (r && !r._empty) n++; });
+  return n;
+}
+
+/* ─── Safe merge: combines FB + local, never loses data ─── */
+function _safeMergeCouture(fbArr, localArr) {
+  if (!Array.isArray(fbArr)) fbArr = [];
+  if (!Array.isArray(localArr)) localArr = [];
+  // Filter deleted IDs from both
+  fbArr = fbArr.filter(function(r) { return !r.id || !isCoutureIdDeleted(r.id); });
+  localArr = localArr.filter(function(r) { return !r.id || !isCoutureIdDeleted(r.id); });
+  // Build map of FB IDs
+  var ids = {};
+  var merged = [];
+  fbArr.forEach(function(r) { if (r.id) ids[r.id] = true; merged.push(r); });
+  // Add local-only entries
+  localArr.forEach(function(r) {
+    if (r.id && !ids[r.id]) { merged.push(r); }
+  });
+  return merged.filter(function(r) { return !r._empty; });
+}
+
+/* ─── safeLSSet: localStorage write with protection ─── */
+function safeLSSet(k, v) {
+  try {
+    if (k.indexOf('physipro_couture_data_') === 0) {
+      var currentData; try { currentData = JSON.parse(localStorage.getItem(k)) || []; } catch(e) { currentData = []; }
+      var currentCount = _countEntries(currentData);
+      var newData; try { newData = JSON.parse(v) || []; } catch(e) { newData = []; }
+      var newCount = _countEntries(newData);
+      if (currentCount > 5 && newCount < currentCount * 0.5) {
+        console.error('🛡️ [safeLSSet] BLOQUÉ couture: ' + currentCount + ' → ' + newCount + ' entries. Écriture refusée.');
+        return false;
+      }
+    }
+    localStorage.setItem(k, v);
+    return true;
+  } catch(e) {
+    console.error('❌ localStorage quota:', k, e.message);
+    showToast('⚠️ Stockage plein', 'error');
+    return false;
+  }
+}
+
 var DEFAULT_LISTS={
   clients:["2 CARE 4 MEDICAL", "2330 2029 INC-QUEBEC", "AB- HOME MEDICAL SOLUTIONS", "ABILITY HEALTHCARE", "ADAPT MOBILYY INC", "ADVANTAGE HOME HEALTH SOLUTIONS", "AIM SERVICES", "AINES ST-JEAN-SUR RICHELIEU", "ALIGN HOME HEALTH CARE DE ST-CATHERINES", "AMYLIOR INC.", "ANDRE LAFERRIERE", "ANDRES ARGUELLO SANCHEZ", "ASS. VOILE ADAPTÉE", "ASSIST HEALTH SUPPLIES LTD", "ASSOCIATION  DE LA CONSTRUCTION DU QUÉBEC", "BC -CROSSROADS MOB.", "BELGIUM", "BERG ACCES & MOBILITY", "BETTER CARE MOBILITY AIDS LTD", "BOUCHRA AIT DADS", "BRANDON MOBILITY", "BRITISH COLOMBIA", "C. VIGEANT", "C.R. LUCIE BRUNEAU-RÉSIDENCE DELORINIER", "CALGARY CO-OP HOME HEALTH CARE LIMITED", "CANADA CARE MEDICAL", "CAREWEST FANNING CENTRE", "CAROLINE CONSTANTINEAU", "CARREFOUR PROVIDENCE", "CENTRE ACCUEIL COWANSVILLE", "CENTRE ADMINISTRATIF - DRUMMOND", "CENTRE D'AUTONOMIE", "CENTRE D'AUTONOMIE CHICOUTIMI", "CENTRE D'AUTONOMIE ENR", "CENTRE D'HEBERGEMENT PAUL-EMILE-LEGER", "CENTRE D'HÉBERGEMENT CHAMPLAIN DE ST-FRANCOIS", "CENTRE D'HÉBERGEMENT MANOIR DE VERDUN", "CENTRE D'HÉBERGEMENT ST-AUGUSTIN", "CENTRE D'HÉBERGEMENT ST-VINCENT", "CENTRE DE PROTECTION-RÉADAPTATION DE LA CÔTE NORD", "CENTRE DE READAPT. GASPESIE", "CENTRE DE READAPT. LUCIE BRUNEAU", "CENTRE HEBERG. DRAPEAU-DESCHAMBAULT", "CENTRE HOSPITALIER GRANBY", "CENTRE MONTEREGIEN DE READAPT - CHATEAUGUAY CMR", "CENTRE MONTEREGIEN DE READAPT - CHATEAUGUAY MON", "CENTRE MONTEREGIEN DE READAPT - LONGUEUIL MON", "CENTRE MONTEREGIEN DE READAPT - ST-HUBERT", "CENTRE MONTEREGIEN DE READAPT - ST-HUBERT CMR", "CENTRE MONTEREGIEN DE READAPT - ST-HUBERT MON", "CENTRE MONTEREGIEN DE READAPT - ST-HYACINTHE MON", "CENTRE MUL TISERVICE CLOUTIER", "CENTRE MULTISERVICES CHRIST-ROI", "CENTRE MULTISERVICES ST-JOSEPH", "CENTRE PROTECTION-READAPTATION DE LA COTE NORD", "CENTRE READAPT LA RESSOURSE", "CENTRE SANTE ET SERV SOCIAUX REGION DE THETFORD", "CH  CHARLESBOURG", "CH AMOS", "CH DE FORTIERVILLE", "CH DU GRAND PORTAGE", "CH LIMOILOU", "CH MULTISERVICES E.ANGUS", "CH RENE LEVESQUE", "CH RENÉ LÉVESQUE", "CH REPENTIGNY", "CH-RDP DU ROSEAU", "CHARLES LAMBERT", "CHARLES LEMOYNE", "CHC MARIE-VICTORIN", "CHEMITEC", "CHSLD LAMBTON", "CHSLD LAVAL", "CHSLD LECLERC-GRANBY", "CHSLD N-A LABRIE", "CHSLD PARPHILLA FERLAND", "CHSLD RIMOUSKI", "CHSLD SAINT-LAURENT", "CHSLD ST-LAMBERT-SUR-LE-GOLF", "CHSLD VAL D'OR", "CHSLD VIGI", "CHSLD VIGI LES CHUTES", "CHSLD VIGIL'ORCHIDEE BLANCHE", "CHUS - MAGASIN CLINIQUE DE FLEURIMONT", "CHUS HOTEL DIEU", "CHUS STE-JUSTINE", "CHUSFLEURIMONT", "CISS-AT-CH  LA SARRE", "CISSS AT SERVICE D'AIDE TECHNIQUE", "CISSS BSL- KAMOURASKA", "CISSS CÔTE-NORD", "CISSS DE LA COTE NORD", "CISSS DES LAURENTIDES - SITE BOUCLIER", "CISSS DRUMMOND", "CISSS DU BAS SAINT-LAURENT-MITIS", "CISSS MONTEREGIE-EST", "CISSS-AT-CH-AMOS", "CISSSMO - CMR", "CIUSSS CENTRE SUD DE L'ILE DE MONTREAL", "CIUSSS DE L'EST-DE-L'ILE-DE-MONTRÉAL", "CIUSSS DE L'ESTRIE ( CRE )", "CIUSSS MCQ CENTRE ADM. ET SERV. EXT EN DEF. MOTRICE ADULTES", "CIUSSSCN-IUSMQ", "CLIENT PRIVÉ", "CLSC BEAUCEVILLE", "CLSC COOKSHIRE", "CLSC COWANSVILLE", "CLSC DE DRUMOND", "CLSC DERAGON", "CLSC DES PATRIOTES", "CLSC DES SEIGNEURIES", "CLSC DU CSSS ST-JEROME", "CLSC LA SARRE", "CLSC LIONEL CHAREST", "CLSC LONGUEUIL EST", "CLSC ST-DONAT", "CLSC SUZOR COTE", "CLSC VALLÉE DES FORTS", "CLSC VARENNES", "CLSC VERDUN", "CLSC YVAN DUQUETTE", "CNESST QUEBEC", "CONGDON'S AIDS TO DAILY LIVING LTD", "CORRINNE CARRIERE", "CR CONSTANCE-LETHBRIDGE", "CR MARIE ENFANT", "CRDP CHAUDIERE APPALACHE- BEAUCEVILLE", "CRDP CHAUDIERE APPALACHES - LEVIS", "CRDP CHAUDIÈRE APPALACHES - CHARNY", "CRDP LE BOUCLIER - JOLIETTE", "CRDP LE BOUCLIER - NOTRE-DAME-DES-PRAIRIES", "CRDP LE BOUCLIER - ST-JEROME", "CRDP VAL D'OR", "CRLB-RESIDENCE GOUIN", "CROSSROADS MOBILITY", "CSSC HOPITAL BAIE-ST-PAUL", "CSSS ASBESTOS", "CSSS DE COATICOOK", "CSSS DE JONQUIÈRE", "CSSS DE ROUYN-NORANDA", "CSSS DE VAUDREUIL-SOULANGES", "CSSS DES ETCHEMINS", "CSSS DES SOMMETS", "CSSS DORVAL LACHINE LASALLE", "CSSS DU HAUT-SAINT-LAURENT", "CSSS DU NORD DE LANAUDIERE", "CSSS MARIA-CHAPDELAINE", "CSSS MEMPHREMAGOG", "CSSS PIERRE DE SAUREL COURTE DUREE HDS", "CSSS RIVIERE DU LOUP", "CSSS ST-JEROME", "CSSS-IUGS PAVILLON ARGYLE", "CUBRO CHRISTCHURCH WAREHOUSE", "CUBRO LIMITED", "DAUPHIN MOBILITY", "DEUX-MONTAGNES", "DRUMMONDVILLE CIUSSS MCQ", "EASTERN MEDICAL SUPPLIES WAREHOUSE", "ECI MEDICAL EQUIPMENT", "ECO MEDICAL EQUIPMENT", "ECOLE DENISE-PELLETIER", "ECOLE MARIE-RIVIER", "EMBRACOR HALIFAX", "EMBRACOR MEDICAL", "EMO GATINEAU", "EMSO", "ENTREPOT 2424 WATT", "ENTREPOT MARIE-SOLEIL RIVERIN", "ENTREPOT MAV", "EVA NADEAU", "FABRYS", "FIRST CHOICE MOBILITY PRODUCTS", "FISHER'S HOME HEALTH CARE", "FONDATION RICHARD LEMIEUX", "FOYER SUTTON", "FRANCE", "FREDERICTON", "GATINEAU", "GOOD ACCESS", "GRAND-PORTAGE", "GROUPE MEDIK SERVICE INC.", "HANDI HOUSE LIMITED", "HARDING MEDICAL SUPPLIES - IPE", "HARDING MEDICAL SUPPLIES - NB", "HARDING MEDICAL SUPPLIES -NE", "HD LÉVIS", "HEALTHINC MEDICAL EQUIPEMENT LTD - BC HME", "HEALTHING MEDICAL - SURREY", "HOME HEALTH CARE CENTER", "HOME MEDICAL EQUIPMENT", "HOME MEDICAL SOLUTIONS INC", "HOME MEDICAL SOLUTIONS INC - AB", "HOMEQUIP", "HONORÉ-MERCIER", "HOPITAL ANNA LABERGE", "HOPITAL CHARLES-LEMOYNE", "HOPITAL DE LA CITE DE LA SANTE", "HOPITAL DE MARIA", "HOPITAL DE MONTMAGNY", "HOPITAL DOLBEAU-MISTASSINI", "HOPITAL DU HAUT-RICHELIEU", "HOPITAL JUIF DE READAPT", "HOPITAL MONTMAGNY", "HOPITAL PIERRE-BOUCHER", "HOPITAL READAPT. VILLA MEDICA", "HOPITAL RICHARDSON", "HOPITAL ST-RAYMOND PORTNEUF", "HOPITAL STE-JUSTINE", "HOPITAL VILLE-MARIE", "HOTEL DIEU LEVIS", "INST. READAPTATION GINGRAS LINDSAY DE MONTREAL", "INVENTAIRE", "IRDPQ ( D.RESS.FINANCIERE )", "IRDPQ HAMEL", "IRDPQ ST-LOUIS", "ISLAND MEDIQUIP LTD", "ISLAND MEDIQUIP-NANAIMO", "IUGM", "IWK HEALTH CENTER OCC THERAPY", "JEAN GUY MONTPLAISIR", "JENNIFER SMITH-CHARRON", "KINGSTON OXYGEN", "KOOTENAY COLUMBIA HOME MEDICAL EQUIPMENT", "L'EMERGENT SEPT-ILES", "LA CLINIQUE ORTHESIUM", "LA ROSE, REMBOUREUR", "LAURENCE TREMBLAY", "LAWTONS", "LAWTONS HOME HEALTH CARE", "LAWTONS SYDNEY", "LES COTONNIERS-UTRF", "LOUIS SEIZE", "LUKE GINGRAS INC.", "MAB-MACKAY", "MACDONALD'S HOME HEALTH CARE LTD", "MADELEINE GAGNON-MERIFIELD", "MAISON ANDRE VIGER", "MAISON DES AINES BELOEIL", "MAISON DES AINES DE BAIE-COMEAU", "MAISON DES AINES ST-JEAN-SUR-RICH", "MAISON DES AINÉS", "MAISON DES AINÉS & ALTERNATIVE CARIGNAN", "MAISON DES AINÉS DE GRANBY", "MAISON DES AINÉS SHERBROOKE", "MAISON DES AINÉS ST-AMABLE", "MAISON DES AINÉS ST-MARTIN", "MAISON ST-PATRICE", "MARIE-PIER LANGUEDOC", "MARIE-SOLEIL RIVERIN", "MAXIMUM HEALTHCARE & MOBILITY LTD - AB", "MAXIMUM HEALTHCARE- CALGARY", "MDA COATICOOK", "MDA ST-MARTIN", "MDAMA SAGUENAY", "MED MOBILITY", "MED PLUS MEDICAL EQUIPMENT DISTRIBUTION", "MEDICUS QC", "METRO HEALTH SERVICES INC", "MICHEL VACHON", "MOTION COURTENAY", "MOTION EDMONTON", "MOTION NORTH BAY", "MOTION OSHAWA", "MOTION SASKATOON", "MOTION SPECIALITIES BURNABY", "MOTION SPECIALITIES CALGARY", "MOTION SPECIALITIES CORNWALL", "MOTION SPECIALITIES KAMLOOPS", "MOTION SPECIALITIES KELOWNA", "MOTION SPECIALITIES KINGSTON", "MOTION SPECIALITIES LANGLEY", "MOTION SPECIALITIES NANAIMO", "MOTION SPECIALITIES RED DEER", "MOTION SPECIALITIES SASKATOON", "MOTION SPECIALITIES SUDBURY", "MOTION SPECIALITIES THUNDER BAY", "MOTION SPECIALITIES TIMMINS", "MOTION SPECIALITIES VICTORIA", "MOTION SPECIALTIES LONDON", "MOTION SPECIALTIES OTTAWA", "NATIONAL SEATING & MOBILITY - RED DEER AB", "NATIONAL SEATING & MOBILITY LTD - BC", "NATIONAL SEATING MOBILITY LTD - ALBERTA", "NICOLET", "NOUVEAU CHUM", "ONTARIO HOME HEALTH", "ONTARIO MEDICAL SUPPLY", "ORTHO ML INC.", "ORTHÈSES PARENT", "PARC D'ÉQUIPEMENT VAL St -FRANCOIS", "PAVILLON STE-CÉCILE", "PERFORMANCE MOBILITY", "PHARMASAVE", "PHYSIPRO INVENTAIRE", "PHYSIPRO QC", "POINTES-DES-CASCADES", "PORCO, MARIA", "PREMIUM MOBILITY PRODUCTS INC.", "PRIVÉ - FOYER SUTTON", "RAMIMED VALLEYFIELD", "REHAB RENTALS SUPPLIES", "RELIABLE CUSTOM SEATING", "REPENTIGNY-RESERVE MEDICALE", "RESTAIR LTD", "RICHMOND- PARC ÉQUIPEMENT VAL ST-FRANÇOIS", "RIVIERE DES PRAIRIES", "RIVIERE ROUGE", "RIVIÈRE-DU-LOUP", "ROGER RACINE", "ROLLING SPOKES", "ROUYN-NORANDA", "SAAQ", "SAINT-ANNE-DES-MONTS", "SAINTE-FOY", "SALIM BABOU", "SAT RDL", "SEPT-ILES", "SILVER CROSS SUDBURY", "SOUDURE WELTEK", "SOV C. D'HEB REAL MOREL", "SOV C. D'HEB. DES SEIGNEURS", "SOV CLSC DE VERDUN", "SPEX SEATING", "SPIRIT HEALTHCARE MOBILITY & EQUIPMENT", "ST-HYACINTHE", "ST-RAYMOND DE PORTNEUF", "STA RDL", "STAN CASSIDY REHABILTATION CENTER", "SUPERIOR HOME HEALTH CARE", "SUSANNE ROBERT", "TAKE CARE MOBILITY INC.", "TANGO MEDICAL", "TLC MEDICAL SUPPLY INC.", "TRI CITY HOME MEDICAL EQUIPMENT", "ULTRA MEDIC", "UNIVERSITÉ DE SHERBROOKE", "URFI BOUCHERVILLE", "URFI LAPRAIRIE", "VERMEIREN NV", "VIGI SHERMONT", "VILLA DU BONHEUR", "VILLA MEDICA", "WANG HUNG MEDICAL EQUIPMENT", "WATERFORD HOSPITAL", "WESTERN HEALTH CARE INC"],
   noms:["ABIRE 642","ABIRE2 644","ASIA","CASSIE","THÉRÈSE","ÉQUIPE","JOANNE","KAFUI","KHALIDA","KHATOUN","LOUISETTE","MANON","MARTINE","MERCEDES","SLOBO","SOUAD","STEPH"],
@@ -741,7 +804,7 @@ function todayStr(){return new Date().toISOString().split('T')[0];}
 function formatDateDisplay(dateStr){if(!dateStr)return '';var p=dateStr.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0].slice(2):dateStr;}
 
 function initMonthSelector(){var sel=document.getElementById('monthSelect');var now=new Date();var html='';for(var i=-3;i<=6;i++){var d=new Date(now.getFullYear(),now.getMonth()+i,1);var val=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');var label=d.toLocaleDateString('fr-CA',{year:'numeric',month:'long'});html+='<option value="'+val+'"'+(i===0?' selected':'')+'>'+label+'</option>';}sel.innerHTML=html;currentMonth=sel.value;}
-function changeMonth(){currentMonth=document.getElementById('monthSelect').value;loadData();if(_statsVisible)renderStats();}
+function changeMonth(){_stopCoutureListener();currentMonth=document.getElementById('monthSelect').value;loadData();if(_statsVisible)renderStats();}
 
 function adjustZoom(d){zoom=Math.max(50,Math.min(200,zoom+d));applyZoom();localStorage.setItem('physipro_couture_zoom',zoom);}
 function applyZoom(){document.getElementById('zoomValue').textContent=zoom+'%';var size=Math.round(11*zoom/100);document.documentElement.style.setProperty('--tbl-zoom',size+'px');}
@@ -1193,7 +1256,7 @@ saveData();renderTable();closeEntryModal();showToast('✅ Enregistré','success'
 var serieCardsCache={};var _serieListener=null;
 function loadSerieCards(){if(!fbDb||!fbUser)return;fbDb.ref('serieCommandes').once('value').then(function(snap){serieCardsCache=snap.val()||{};console.log('[Couture] Serie cards: '+Object.keys(serieCardsCache).length);listenSerieCards();}).catch(function(e){console.error('[Couture] Serie load error:',e);});}
 function listenSerieCards(){if(_serieListener||!fbDb)return;_serieListener=fbDb.ref('serieCommandes').on('value',function(snap){serieCardsCache=snap.val()||{};});}
-function findSerie(num){var n=String(num).trim();var nNorm=n.replace(/^0+/,'');for(var id in serieCardsCache){var c=serieCardsCache[id];var oNorm=String(c.order||'').replace(/^0+/,'');var pNorm=String(c.numeroPO||'').replace(/^0+/,'');if(c.order===n||c.numeroPO===n||oNorm===nNorm||pNorm===nNorm)return{cardId:id,card:c};}return null;}
+function findSerie(num){var n=String(num).trim();for(var id in serieCardsCache){var c=serieCardsCache[id];if(c.order===n||c.numeroPO===n)return{cardId:id,card:c};}return null;}
 function getUnfinishedCouture(card){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){var done=(g.couture&&g.couture.inspected)||false;var qf=parseInt(g.couture&&g.couture.qtyFait)||0;var inInv=(g.couture&&g.couture.sentToInventaire)||false;if(!done)pend.push({gi:gi,name:g.name,qty:g.qty,qtyFait:qf,inInventaire:inInv});});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
 
 function onBonCmdChange(idx,val){val=(val||'').trim();updateCell(idx,'bonCmd',val);if(!val)return;var m=findSerie(val);if(m){openSerieModal(val,m,idx);}}
@@ -1306,23 +1369,41 @@ function loadListsFromFB(){if(!fbDb||!fbUser)return;fbDb.ref('coutureLists').onc
 function saveData(){
   // Filter out _empty ready rows before persisting
   var cleanData=(data[currentMonth]||[]).filter(function(r){return !r._empty;});
-  try{localStorage.setItem('physipro_couture_data_'+currentMonth,JSON.stringify(cleanData));}catch(e){console.error('localStorage save error:',e);}
+  safeLSSet('physipro_couture_data_'+currentMonth,JSON.stringify(cleanData));
   try{var pending=JSON.parse(localStorage.getItem('physipro_couture_pending')||'{}');pending[currentMonth]=Date.now();localStorage.setItem('physipro_couture_pending',JSON.stringify(pending));}catch(e){}
   if(!fbDb||!fbUser){setSyncBadge('offline');return;}
-  _syncMonth(currentMonth);
+  _pushMonthToFB(currentMonth);
 }
-function _syncMonth(month){
+function _pushMonthToFB(month){
+  if(!fbUser){setSyncBadge('offline');return;}
+  setFbWriting(true);
   setSyncBadge('saving');
   var monthData;
   try{monthData=JSON.parse(localStorage.getItem('physipro_couture_data_'+month)||'[]');}catch(e){monthData=(data[month]||[]).filter(function(r){return !r._empty;});}
   fbDb.ref('inspectionCoutureData/'+month).set(monthData).then(function(){
-    setSyncBadge('online');
+    setTimeout(function(){setFbWriting(false);setSyncBadge('online');},1500);
+    _retryCount=0;
+    console.log('✅ [Couture] Firebase saved:',month);
     // Remove from pending
     try{var pending=JSON.parse(localStorage.getItem('physipro_couture_pending')||'{}');delete pending[month];localStorage.setItem('physipro_couture_pending',JSON.stringify(pending));}catch(e){}
   }).catch(function(e){
-    console.error('Sync error for',month,e);
-    setSyncBadge('offline');
+    console.error('❌ [Couture] Firebase error:',month,e.message);
+    _retryCount++;
+    if(_retryCount<=_maxRetries){
+      var delay=_retryCount*2000;
+      console.log('🔄 Retry '+_retryCount+'/'+_maxRetries+' in '+delay+'ms');
+      setTimeout(function(){_pushMonthToFB(month);},delay);
+    }else{
+      setFbWriting(false);
+      _retryCount=0;
+      setSyncBadge('offline');
+      showToast('⚠️ Firebase: '+e.message,'error');
+    }
   });
+}
+function _debouncePush(month){
+  if(_syncTimeout)clearTimeout(_syncTimeout);
+  _syncTimeout=setTimeout(function(){_pushMonthToFB(month);},800);
 }
 function syncAllPending(){
   if(!fbDb||!fbUser)return;
@@ -1331,7 +1412,7 @@ function syncAllPending(){
     var months=Object.keys(pending);
     if(months.length===0)return;
     console.log('[Couture] Syncing '+months.length+' pending month(s):',months.join(', '));
-    months.forEach(function(m){_syncMonth(m);});
+    months.forEach(function(m){_pushMonthToFB(m);});
     if(months.length>0)showToast('🔄 '+months.length+' mois synchronisé'+(months.length>1?'s':''),'success');
   }catch(e){console.error('syncAllPending error:',e);}
 }
@@ -1339,14 +1420,91 @@ function loadData(){
   // Try localStorage first for immediate display
   try{var local=localStorage.getItem('physipro_couture_data_'+currentMonth);if(local)data[currentMonth]=JSON.parse(local);}catch(e){}
   if(!fbDb||!fbUser){renderTable();return;}
+  _syncPhase='syncing';
   fbDb.ref('inspectionCoutureData/'+currentMonth).once('value').then(function(snap){
     var fbData=snap.val()||[];
     // Anti-resurrection: filter out deleted IDs
     if(Array.isArray(fbData)){fbData=fbData.filter(function(r){return !r.id||!isCoutureIdDeleted(r.id);});}
-    if(fbData.length||!data[currentMonth]||!data[currentMonth].length){data[currentMonth]=fbData;}
-    try{localStorage.setItem('physipro_couture_data_'+currentMonth,JSON.stringify(data[currentMonth]));}catch(e){}
+    var localData=data[currentMonth]||[];
+    var localCount=_countEntries(localData);
+    var fbCount=_countEntries(fbData);
+    console.log('[Couture] loadData: FB='+fbCount+' Local='+localCount);
+    // Safe merge instead of blind overwrite
+    var merged=_safeMergeCouture(fbData,localData);
+    var mergedCount=_countEntries(merged);
+    // Protection: never reduce data
+    if(localCount>2&&mergedCount<localCount){
+      console.error('🛡️ [Couture] BLOCKED — merged('+mergedCount+') < local('+localCount+')');
+      merged=localData;
+    }
+    data[currentMonth]=merged;
+    safeLSSet('physipro_couture_data_'+currentMonth,JSON.stringify(merged));
     renderTable();
-  }).catch(function(e){console.error('loadData error:',e);renderTable();});
+    // If merged has more than FB, push the difference
+    if(mergedCount>fbCount&&mergedCount>0){
+      _debouncePush(currentMonth);
+    }
+    _syncPhase='live';
+    // Attach realtime listener after initial sync
+    setTimeout(function(){_listenCoutureData();},1500);
+  }).catch(function(e){console.error('loadData error:',e);_syncPhase='live';renderTable();});
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * REALTIME LISTENER — Protected, cannot reduce data
+ * ═══════════════════════════════════════════════════════════ */
+function _listenCoutureData(){
+  // Detach previous listener if any
+  if(_coutureListener){fbDb.ref('inspectionCoutureData/'+currentMonth).off('value',_coutureListener);_coutureListener=null;}
+  if(!fbDb||!fbUser)return;
+  _coutureListener=fbDb.ref('inspectionCoutureData/'+currentMonth).on('value',function(snap){
+    // Block during: our own writes, syncing
+    if(_fbWriting||_syncPhase==='syncing'){
+      console.log('[Couture] Listener skipped (writing='+_fbWriting+' sync='+_syncPhase+')');
+      return;
+    }
+    var fbData=snap.val();
+    // Firebase empty: keep local
+    if(!fbData||!Array.isArray(fbData)){
+      console.warn('[Couture] Listener: Firebase NULL/empty — keeping local');
+      return;
+    }
+    fbData=fbData.filter(function(r){return !r.id||!isCoutureIdDeleted(r.id);});
+    var localData=data[currentMonth]||[];
+    var localCount=_countEntries(localData);
+    var fbCount=_countEntries(fbData);
+    console.log('[Couture] Listener: FB='+fbCount+' Local='+localCount);
+    // Protection: if FB suspiciously empty vs local, push local
+    if(fbCount<=1&&localCount>5){
+      console.error('🛡️ [Couture] FB suspiciously empty ('+fbCount+') vs local ('+localCount+'). Pushing local.');
+      _debouncePush(currentMonth);
+      return;
+    }
+    var merged=_safeMergeCouture(fbData,localData);
+    var mergedCount=_countEntries(merged);
+    // Protection: never reduce data
+    if(localCount>2&&mergedCount<localCount){
+      console.error('🛡️ [Couture] BLOCKED — merged('+mergedCount+') < local('+localCount+')');
+      return;
+    }
+    data[currentMonth]=merged;
+    safeLSSet('physipro_couture_data_'+currentMonth,JSON.stringify(merged));
+    renderTable();
+    // If merged has more than FB, push the difference
+    if(mergedCount>fbCount){
+      setFbWriting(true);
+      _debouncePush(currentMonth);
+      setTimeout(function(){setFbWriting(false);},3000);
+    }
+  });
+}
+
+/* ─── Stop listener (called on month change or logout) ─── */
+function _stopCoutureListener(){
+  if(_coutureListener&&fbDb){
+    fbDb.ref('inspectionCoutureData/'+currentMonth).off('value',_coutureListener);
+    _coutureListener=null;
+  }
 }
 
 function checkOldMonths(){
@@ -1598,7 +1756,7 @@ document.addEventListener('DOMContentLoaded',function(){cleanOldCoutureDeletedId
 window.addEventListener('online',function(){
   console.log('[Couture] Internet de retour — sync en cours...');
   showToast('🌐 Internet détecté — synchronisation...','info');
-  setTimeout(function(){syncAllPending();},1500);
+  setTimeout(function(){syncAllPending();_listenCoutureData();},1500);
 });
 window.addEventListener('offline',function(){
   console.log('[Couture] Hors ligne — sauvegarde locale active');

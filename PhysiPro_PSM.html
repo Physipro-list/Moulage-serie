@@ -4284,21 +4284,48 @@ function filterCards(val) {
 }
 
 // ═══ PSM INIT ═══
-var _skipNextSync = false;
+var _psmFbWriting = false;       // Flag: blocks listener during our own writes
+var _psmFbWritingSafety = null;  // Auto-release timer
+var _psmListener = null;         // PSM main listener reference
+var _psmChatListener = null;     // PSM chat listener reference
+var _psmRetryCount = 0;
+
+function _setPsmFbWriting(val) {
+  _psmFbWriting = val;
+  if (_psmFbWritingSafety) clearTimeout(_psmFbWritingSafety);
+  if (val) { _psmFbWritingSafety = setTimeout(function() { _psmFbWriting = false; console.log('[PSM] Write flag auto-released'); }, 5000); }
+}
+
 function initPSM() {
   loadCustomMateriaux();
   
+  // Detach previous listeners if any (safety)
+  _cleanupPsmListeners();
+  
   // Listen for questionnement resolution chat messages
-  db.ref('psmChat').orderByChild('timestamp').limitToLast(1).on('child_added', function(snap) {
+  _psmChatListener = db.ref('psmChat').orderByChild('timestamp').limitToLast(1).on('child_added', function(snap) {
     var msg = snap.val();
     if (msg && msg.type === 'quest-resolved') {
       showToast('💬 ' + (msg.author || '') + ': Questionnement réglé pour #' + (msg.psmCardId || '').substring(0, 10), 'success');
     }
   });
   
-  db.ref('psm').on('value', function(snap) {
-    if (_skipNextSync) { _skipNextSync = false; return; }
-    psmData = snap.val() || {};
+  _psmListener = db.ref('psm').on('value', function(snap) {
+    // Block during our own writes
+    if (_psmFbWriting) {
+      console.log('[PSM] Listener skipped — write in progress');
+      return;
+    }
+    var fbData = snap.val() || {};
+    // Merge: keep any local-only cards not in Firebase
+    var merged = {};
+    // Start with Firebase data
+    Object.keys(fbData).forEach(function(k) { merged[k] = fbData[k]; });
+    // Add any local-only cards
+    Object.keys(psmData).forEach(function(k) {
+      if (!merged[k]) { merged[k] = psmData[k]; }
+    });
+    psmData = merged;
     renderCards();
     if (currentCardId && psmData[currentCardId]) {
       loadCard(currentCardId);
@@ -4312,6 +4339,11 @@ function initPSM() {
     console.error('PSM Firebase error:', error.code, error.message);
     showToast('❌ Erreur Firebase: ' + (error.code || error.message), 'error');
   });
+}
+
+function _cleanupPsmListeners() {
+  if (_psmListener && db) { db.ref('psm').off('value', _psmListener); _psmListener = null; }
+  if (_psmChatListener && db) { db.ref('psmChat').off('child_added', _psmChatListener); _psmChatListener = null; }
 }
 
 // ═══ DATE AGING SYSTEM ═══
@@ -5312,14 +5344,49 @@ function _doSaveToFirebase() {
     showToast('⚠️ Espace serveur: ' + sizeMB + 'MB utilisé', 'warning');
   }
   
-  _skipNextSync = true;
-  db.ref('psm').set(psmData).catch(function(e) { 
-    _skipNextSync = false;
+  _setPsmFbWriting(true);
+  db.ref('psm').set(psmData).then(function() {
+    setTimeout(function() { _setPsmFbWriting(false); }, 1500);
+    _psmRetryCount = 0;
+    console.log('✅ [PSM] Firebase saved');
+  }).catch(function(e) { 
     console.error('PSM save error:', e);
-    if (e.message && e.message.indexOf('size') !== -1) {
-      showToast('❌ ERREUR: Données trop volumineuses! Supprimez des fichiers.', 'error');
+    _psmRetryCount++;
+    if (_psmRetryCount <= 3) {
+      var delay = _psmRetryCount * 2000;
+      console.log('🔄 [PSM] Retry ' + _psmRetryCount + '/3 in ' + delay + 'ms');
+      setTimeout(function() { _doSaveToFirebase(); }, delay);
+    } else {
+      _setPsmFbWriting(false);
+      _psmRetryCount = 0;
+      if (e.message && e.message.indexOf('size') !== -1) {
+        showToast('❌ ERREUR: Données trop volumineuses! Supprimez des fichiers.', 'error');
+      } else {
+        showToast('⚠️ Firebase: ' + e.message, 'error');
+      }
     }
   });
+}
+
+/* ─── Save single card (more efficient for single-card edits) ─── */
+function saveCardToFirebase(cardId) {
+  if (!cardId || !psmData[cardId]) return saveToFirebase();
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(function() {
+    _saveTimer = null;
+    _setPsmFbWriting(true);
+    var updates = {};
+    updates['psm/' + cardId] = psmData[cardId];
+    db.ref().update(updates).then(function() {
+      setTimeout(function() { _setPsmFbWriting(false); }, 1500);
+      console.log('✅ [PSM] Card ' + cardId + ' saved');
+    }).catch(function(e) {
+      _setPsmFbWriting(false);
+      console.error('PSM card save error:', e);
+      // Fallback to full save
+      saveToFirebase();
+    });
+  }, 300);
 }
 
 // ═══ SEND PSM + NOTIFICATIONS ═══
@@ -5456,9 +5523,12 @@ function confirmSendPsm(cardId) {
 
 // Notification system
 var psmNotifications = {};
+var _psmNotifListener = null;
 
 function initNotifications() {
-  db.ref('psmNotifications').orderByChild('timestamp').limitToLast(50).on('value', function(snap) {
+  // Detach previous listener if any
+  if (_psmNotifListener && db) { db.ref('psmNotifications').off('value', _psmNotifListener); }
+  _psmNotifListener = db.ref('psmNotifications').orderByChild('timestamp').limitToLast(50).on('value', function(snap) {
     psmNotifications = snap.val() || {};
     renderNotifications();
   });
