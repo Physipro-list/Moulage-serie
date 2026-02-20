@@ -1101,8 +1101,7 @@ body {
         <div class="logo-top-fixed"><img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro"></div>
         <div class="logo-bottom-text">Questionnement</div>
       </div>
-          </div>
-  </div>
+    </div>
   </div>
   <div class="tb-center"><span class="top-title">Questionnements</span></div>
   <div class="tb-right">
@@ -1838,6 +1837,71 @@ document.addEventListener('DOMContentLoaded', function() {
   firebase.initializeApp(FIREBASE_CONFIG);
   db = firebase.database();
   
+  // ===== PERMISSIONS: V=View, A=Add, M=Modify, S=Supprimer, N=Notifications/Chat =====
+  var _P={'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['N'],'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':['V','N'],'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':['V','N'],'cmhAcGh5c2lwcm8uY29t':['V','N'],'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':['V','N'],'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':['V','A','N'],'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':['V','N'],'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['V','A','M','S','N'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['V','A','M','S','N'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['N'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['N'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['V','A','M','S','N'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['N'],'c3JveUBwaHlzaXByby5jb20=':['V','A','M','S','N'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['V','A','M','N'],'c2VydmljZTNAcGh5c2lwcm8uY29t':['V','A','M','N'],'c2VydmljZTFAcGh5c2lwcm8uY29t':['V','A','M','N'],'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'b3JkZXJzQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':['V','N'],'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':['V','N']};
+  function hasPermission(perm) {
+    if (!currentUser || !currentUser.email) return false;
+    try { var k = btoa(currentUser.email.toLowerCase()); var p = _P[k]; return p ? p.indexOf(perm) !== -1 : false; } catch(e) { return false; }
+  }
+
+  // ===== VERSION PROTECTION =====
+  var APP_VERSION = 20260220;  // YYYYMMDD — increment on each deploy
+  var APP_MODULE = 'questionnement';
+  var _versionOK = true;
+  var _versionBanner = null;
+
+  function checkAppVersion() {
+    db.ref('appSettings/versions/' + APP_MODULE).once('value', function(snap) {
+      var required = snap.val();
+      if (required && typeof required === 'number' && APP_VERSION < required) {
+        _versionOK = false;
+        showVersionWarning(required);
+      } else {
+        // Register our version
+        db.ref('appSettings/versions/' + APP_MODULE).set(APP_VERSION);
+        _versionOK = true;
+      }
+    });
+  }
+
+  function showVersionWarning(required) {
+    if (_versionBanner) return;
+    _versionBanner = document.createElement('div');
+    _versionBanner.id = 'versionWarningBanner';
+    _versionBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(90deg,#dc2626,#b91c1c);color:white;padding:12px 20px;text-align:center;font-weight:bold;font-size:14px;box-shadow:0 4px 20px rgba(220,38,38,0.5);animation:vwPulse 2s infinite;';
+    _versionBanner.innerHTML = '⚠️ ATTENTION — Votre version est obsolète (v' + APP_VERSION + ', requise: v' + required + '). Les modifications sont BLOQUÉES. Veuillez rafraîchir la page (Ctrl+Shift+R) pour obtenir la dernière version. <button onclick="location.reload(true)" style="margin-left:15px;background:white;color:#dc2626;border:none;padding:6px 16px;border-radius:6px;font-weight:bold;cursor:pointer;">🔄 Rafraîchir</button>';
+    document.body.prepend(_versionBanner);
+    // Add pulse animation
+    if (!document.getElementById('vwPulseStyle')) {
+      var s = document.createElement('style');
+      s.id = 'vwPulseStyle';
+      s.textContent = '@keyframes vwPulse{0%,100%{opacity:1}50%{opacity:0.85}}';
+      document.head.appendChild(s);
+    }
+  }
+
+  // Guard all writes — returns true if write is BLOCKED
+  function writeBlocked(silent) {
+    if (!_versionOK) {
+      if (!silent) showToast('🚫 Version obsolète — rafraîchissez la page (Ctrl+Shift+R)', 'error');
+      return true;
+    }
+    return false;
+  }
+
+  // Safe job update — only writes changed fields, never overwrites entire job
+  function safeJobUpdate(jobId, updates, errorCb) {
+    if (writeBlocked()) return;
+    if (!jobId || !updates) return;
+    updates._lastModifiedBy = currentUser ? currentUser.email : 'unknown';
+    updates._lastModifiedAt = new Date().toISOString();
+    updates._appVersion = APP_VERSION;
+    db.ref('jobs/' + jobId).update(updates).catch(function(err) {
+      if (errorCb) errorCb(err);
+      else showToast('❌ ' + err.message, 'error');
+    });
+  }
+
   firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(e){console.log('Persist:',e);});
   firebase.auth().onAuthStateChanged(user => {
     if (user) {
@@ -1847,6 +1911,7 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('currentUserName').textContent = getUserDisplayName(user.email);
       localStorage.setItem('physipro_last_email', user.email);
       initLogoMenu('jobs');
+      checkAppVersion();
       initData();
       listenForNotifications();
       // Check rappels every 5 minutes + on load (delayed to let data load)
@@ -1906,14 +1971,10 @@ function doLogin(event) {
   });
 }
 
-function doLogout() { _cleanupDataListeners(); firebase.auth().signOut(); }
+function doLogout() { firebase.auth().signOut(); }
 
 function initData() {
-  // ═══ LISTENER TRACKING — store references for proper cleanup ═══
-  if (!window._questListeners) window._questListeners = {};
-  _cleanupDataListeners(); // Clean any previous listeners
-
-  window._questListeners.jobs = db.ref('jobs').on('value', snap => {
+  db.ref('jobs').on('value', snap => {
     jobsData = snap.val() || {};
     renderJobs();
     if (window.innerWidth <= 768) renderMobileList();
@@ -1926,7 +1987,7 @@ function initData() {
   // Status cache from inspection/couture
   initStatusListeners();
   
-  window._questListeners.matBO = db.ref('materiauxBO').on('value', snap => {
+  db.ref('materiauxBO').on('value', snap => {
     matBOData = snap.val() || {};
     renderMatBO();
     if (window.innerWidth <= 768 && mobileCurrentTab === 'mat') renderMobileList();
@@ -1935,19 +1996,6 @@ function initData() {
     showToast('❌ Erreur chargement matériaux: ' + err.message, 'error');
   });
   initCommandes();
-}
-
-/* ═══ CLEANUP — Detach all Firebase listeners properly ═══ */
-function _cleanupDataListeners() {
-  if (!window._questListeners) return;
-  if (window._questListeners.jobs) { db.ref('jobs').off('value', window._questListeners.jobs); }
-  if (window._questListeners.matBO) { db.ref('materiauxBO').off('value', window._questListeners.matBO); }
-  if (window._questListeners.commandes) { db.ref('commandesAttente').off('value', window._questListeners.commandes); }
-  if (window._questListeners.inspMonth) { db.ref('inspectionData/' + window._questListeners._inspMonthKey).off('value', window._questListeners.inspMonth); }
-  if (window._questListeners.coutMonth) { db.ref('coutureData/' + window._questListeners._coutMonthKey).off('value', window._questListeners.coutMonth); }
-  if (window._questListeners.notifs) { db.ref('jobNotifications').off('value', window._questListeners.notifs); }
-  if (window._questListeners.jobsRetry) { db.ref('jobs').off('value', window._questListeners.jobsRetry); }
-  window._questListeners = {};
 }
 
 // Retry helper: refresh auth token and re-attach listener
@@ -1961,11 +2009,8 @@ function retryAfterAuthRefresh(path) {
         renderJobs();
         if (window.innerWidth <= 768) renderMobileList();
         showToast('✅ Données rechargées avec succès', 'success');
-        // Re-attach real-time listener (tracked)
-        if (window._questListeners && window._questListeners.jobsRetry) {
-          db.ref('jobs').off('value', window._questListeners.jobsRetry);
-        }
-        window._questListeners.jobsRetry = db.ref('jobs').on('value', snap => {
+        // Re-attach real-time listener
+        db.ref('jobs').on('value', snap => {
           jobsData = snap.val() || {};
           renderJobs();
           if (window.innerWidth <= 768) renderMobileList();
@@ -2091,20 +2136,8 @@ function initStatusListeners() {
   var now = new Date();
   var monthKey = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   
-  // Detach previous month listeners if any
-  if (window._questListeners && window._questListeners.inspMonth) {
-    db.ref('inspectionData/' + window._questListeners._inspMonthKey).off('value', window._questListeners.inspMonth);
-  }
-  if (window._questListeners && window._questListeners.coutMonth) {
-    db.ref('coutureData/' + window._questListeners._coutMonthKey).off('value', window._questListeners.coutMonth);
-  }
-  
-  // Track the month key for later cleanup
-  window._questListeners._inspMonthKey = monthKey;
-  window._questListeners._coutMonthKey = monthKey;
-  
   // Listen to inspectionData (current month) — cards here = "Couture" next step
-  window._questListeners.inspMonth = db.ref('inspectionData/' + monthKey).on('value', function(snap) {
+  db.ref('inspectionData/' + monthKey).on('value', function(snap) {
     var data = snap.val() || {};
     // Clear inspection entries
     Object.keys(_statusCache).forEach(function(k) { if (_statusCache[k] === 'Couture') delete _statusCache[k]; });
@@ -2115,7 +2148,7 @@ function initStatusListeners() {
   });
   
   // Listen to coutureData (current month) — cards here = "Insp. finale" next step
-  window._questListeners.coutMonth = db.ref('coutureData/' + monthKey).on('value', function(snap) {
+  db.ref('coutureData/' + monthKey).on('value', function(snap) {
     var data = snap.val() || {};
     Object.keys(_statusCache).forEach(function(k) { if (_statusCache[k] === 'Insp. finale') delete _statusCache[k]; });
     Object.values(data).forEach(function(card) {
@@ -2185,6 +2218,8 @@ function renderMatBO() {
 }
 
 function addMatOrder(matId) {
+  if (!hasPermission('A')) { showToast('🔒 Permission insuffisante (Ajout)', 'error'); return; }
+  if (writeBlocked()) return;
   var orderId = 'ord_' + Date.now();
   var randomOrder = String(Math.floor(100000 + Math.random() * 900000));
   db.ref('materiauxBO/' + matId + '/orders/' + orderId).set(randomOrder)
@@ -2192,10 +2227,14 @@ function addMatOrder(matId) {
 }
 
 function removeMatOrder(matId, orderId) {
+  if (!hasPermission('S')) { showToast('🔒 Permission insuffisante (Supprimer)', 'error'); return; }
+  if (writeBlocked()) return;
   db.ref('materiauxBO/' + matId + '/orders/' + orderId).remove();
 }
 
 function saveMatOrder(matId, orderId, value) {
+  if (!hasPermission('M')) { showToast('🔒 Permission insuffisante (Modifier)', 'error'); return; }
+  if (writeBlocked()) return;
   db.ref('materiauxBO/' + matId + '/orders/' + orderId).set(value.trim());
 }
 
@@ -2204,11 +2243,7 @@ let commandesData = {};
 
 function initCommandes() {
   if (!db) return;
-  // Detach previous listener if any
-  if (window._questListeners && window._questListeners.commandes) {
-    db.ref('commandesAttente').off('value', window._questListeners.commandes);
-  }
-  window._questListeners.commandes = db.ref('commandesAttente').on('value', snap => {
+  db.ref('commandesAttente').on('value', snap => {
     commandesData = snap.val() || {};
     renderCommandes();
   }, err => {
@@ -2254,6 +2289,8 @@ function closeCommandeModal() {
 }
 
 function saveCommande() {
+  if (!hasPermission('A')) { showToast('🔒 Permission insuffisante (Ajout)', 'error'); return; }
+  if (writeBlocked()) return;
   const order = document.getElementById('commandeOrder').value.trim();
   if (!order) { showToast('⚠️ N° commande requis', 'error'); return; }
   if (!db) { showToast('❌ Base de données non connectée', 'error'); return; }
@@ -2276,6 +2313,8 @@ function saveCommande() {
 
 function deleteCommande(id) {
   if (!db) return;
+  if (!hasPermission('S')) { showToast('🔒 Permission insuffisante (Supprimer)', 'error'); return; }
+  if (writeBlocked()) return;
   db.ref('commandesAttente/' + id).remove().then(() => {
     showToast('🗑️ Commande retirée', 'info');
   });
@@ -2339,6 +2378,8 @@ function closeCommandeEdit() {
 }
 
 function saveCommandeEdit() {
+  if (!hasPermission('M')) { showToast('🔒 Permission insuffisante (Modifier)', 'error'); return; }
+  if (writeBlocked()) return;
   const id = document.getElementById('commandeEditId').value;
   const order = document.getElementById('commandeEditOrder').value.trim();
   const client = document.getElementById('commandeEditClient').value;
@@ -2360,6 +2401,8 @@ function saveCommandeEdit() {
 // ===== JOB MODAL =====
 function openJobModal(assignee) {
   if (!currentUser) { showToast('⚠️ Veuillez vous connecter d\'abord', 'error'); return; }
+  if (!hasPermission('A')) { showToast('🔒 Permission insuffisante (Ajout)', 'error'); return; }
+  if (writeBlocked()) return;
   document.getElementById('jobModal').classList.add('active');
   document.getElementById('jobOrder').value = '';
   document.getElementById('jobClient').value = '';
@@ -2378,6 +2421,7 @@ function openJobModal(assignee) {
 function closeJobModal() { document.getElementById('jobModal').classList.remove('active'); }
 
 function saveJob() {
+  if (!hasPermission('A')) { showToast('🔒 Permission insuffisante (Ajout)', 'error'); return; }
   const order = document.getElementById('jobOrder').value.trim();
   const client = document.getElementById('jobClient').value.trim();
   const assignee = document.getElementById('jobAssignee').value;
@@ -2406,6 +2450,10 @@ function saveJob() {
   // Close modal immediately for snappy UX
   closeJobModal();
   
+  if (writeBlocked()) return;
+  jobData._appVersion = APP_VERSION;
+  jobData._lastModifiedBy = currentUser.email || '';
+  jobData._lastModifiedAt = new Date().toISOString();
   db.ref('jobs/' + id).set(jobData)
     .then(() => {
       showToast('✅ Job #' + order + ' créé!', 'success');
@@ -2514,6 +2562,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function saveMat() {
+  if (!hasPermission('A')) { showToast('🔒 Permission insuffisante (Ajout)', 'error'); return; }
+  if (writeBlocked()) return;
   const selectVal = document.getElementById('matSelectValue').value;
   const dateReception = document.getElementById('matDateReception').value;
   if (!selectVal) { showToast('Sélectionnez un matériau', 'error'); return; }
@@ -2535,6 +2585,7 @@ function saveMat() {
 }
 
 function deleteMat(id) {
+  if (!hasPermission('S')) { showToast('🔒 Permission insuffisante (Supprimer)', 'error'); return; }
   db.ref('materiauxBO/' + id).remove().catch(e => showToast('❌ ' + e.message, 'error'));
   showToast('Matériau supprimé', 'info');
 }
@@ -2549,13 +2600,13 @@ function openFiche(jobId) {
   document.getElementById('ficheAssigneeName').textContent = `${d.assignee || 'Job'} — #${d.order || '?'}`;
   
   document.getElementById('ficheFieldsList').innerHTML = `
-    <div class="fiche-field-row"><div class="fiche-field-label">🔢 N° Commande</div><div class="fiche-field-value"><input value="${escapeHtml(d.order)}" onchange="updateJobField('${escapeHtml(jobId)}','order',this.value)"></div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">👤 Client</div><div class="fiche-field-value"><input value="${escapeHtml(d.client)}" onchange="updateJobField('${escapeHtml(jobId)}','client',this.value)"></div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">👥 Assigné à</div><div class="fiche-field-value"><select onchange="updateJobField('${escapeHtml(jobId)}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===d.assignee?'selected':''}>${a}</option>`).join('')}</select></div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">🧾 N° PO</div><div class="fiche-field-value"><input value="${escapeHtml(d.numeroPO || '')}" onchange="updateJobField('${escapeHtml(jobId)}','numeroPO',this.value)"></div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">👩‍💼 Représentant</div><div class="fiche-field-value"><input value="${escapeHtml(d.representant || '')}" onchange="updateJobField('${escapeHtml(jobId)}','representant',this.value)"></div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">📥 Date Reçue</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateRecue','${escapeHtml(jobId)}')">${formatDateDisplay(d.dateRecue)||'📅 Sélectionner...'}</div></div>
-    <div class="fiche-field-row"><div class="fiche-field-label">📦 Date Livraison</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison','${escapeHtml(jobId)}')">${formatDateDisplay(d.dateLivraison)||'📅 Sélectionner...'}</div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">🔢 N° Commande</div><div class="fiche-field-value"><input value="${escapeHtml(d.order)}" onchange="updateJobField('${jobId}','order',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">👤 Client</div><div class="fiche-field-value"><input value="${escapeHtml(d.client)}" onchange="updateJobField('${jobId}','client',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">👥 Assigné à</div><div class="fiche-field-value"><select onchange="updateJobField('${jobId}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===d.assignee?'selected':''}>${a}</option>`).join('')}</select></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">🧾 N° PO</div><div class="fiche-field-value"><input value="${escapeHtml(d.numeroPO || '')}" onchange="updateJobField('${jobId}','numeroPO',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">👩‍💼 Représentant</div><div class="fiche-field-value"><input value="${escapeHtml(d.representant || '')}" onchange="updateJobField('${jobId}','representant',this.value)"></div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">📥 Date Reçue</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateRecue','${jobId}')">${formatDateDisplay(d.dateRecue)||'📅 Sélectionner...'}</div></div>
+    <div class="fiche-field-row"><div class="fiche-field-label">📦 Date Livraison</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison','${jobId}')">${formatDateDisplay(d.dateLivraison)||'📅 Sélectionner...'}</div></div>
   `;
   
   // Render rappel section
@@ -2574,6 +2625,8 @@ function openFiche(jobId) {
 }
 
 function updateJobField(jobId, field, value) {
+  if (!hasPermission('M')) { showToast('🔒 Permission insuffisante (Modifier)', 'error'); return; }
+  if (writeBlocked()) return;
   db.ref('jobs/' + jobId + '/' + field).set(value).catch(err => showToast('❌ ' + err.message, 'error'));
 }
 
@@ -2757,6 +2810,8 @@ function archiveJobThenDelete(jobId, source) {
 
 function deleteCurrentJob() {
   if (!currentJobId) return;
+  if (!hasPermission('S')) { showToast('🔒 Permission insuffisante (Supprimer)', 'error'); return; }
+  if (writeBlocked()) return;
   if (!confirm('Supprimer ce job?\n\n📦 Un fichier archive sera téléchargé automatiquement.')) return;
   archiveJobThenDelete(currentJobId, 'desktop');
 }
@@ -2997,7 +3052,7 @@ function sendInlineReply(questionIndex) {
     showToast(`📤 Réponse envoyée à: ${destinataires.map(d => d.name.split(' ')[0]).join(', ')}`, 'success');
   } else { showToast('💬 Message ajouté', 'info'); }
   
-  db.ref('jobs/' + currentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+  safeJobUpdate(currentJobId, {messages: job.messages});
   renderMessages(currentJobId);
 }
 
@@ -3010,7 +3065,7 @@ function resolveThread(questionIndex) {
   job.messages[questionIndex].resolved = true;
   job.messages[questionIndex].resolvedAt = new Date().toISOString();
   job.messages[questionIndex].resolvedBy = getCurrentUserName();
-  db.ref('jobs/' + jobId).set(job).catch(err => showToast('❌ Erreur: ' + err.message, 'error'));
+  safeJobUpdate(jobId, {messages: job.messages});
   if (currentJobId) renderMessages(currentJobId);
   if (mobileCurrentJobId && window.innerWidth <= 768) openMobileChat();
   showToast('✅ Question résolue', 'success');
@@ -3073,7 +3128,7 @@ function sendMessage() {
   job.messages.push(newMessage);
   closeCompose();
   renderMessages(currentJobId);
-  db.ref('jobs/' + currentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+  safeJobUpdate(currentJobId, {messages: job.messages});
   scrollChatToBottom();
   
   if (currentComposeType !== 'pinned') {
@@ -3126,7 +3181,7 @@ function confirmDeleteMsg() {
   });
   
   if (deleteMsgIsMobile) { openMobileChat(); } else { renderMessages(deleteMsgCurrentJobId); }
-  db.ref('jobs/' + deleteMsgCurrentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+  safeJobUpdate(deleteMsgCurrentJobId, {messages: job.messages});
   closeDeleteConfirmModal();
   showToast('🗑️ Message supprimé');
 }
@@ -3186,7 +3241,7 @@ function saveEdit() {
   const msg = job.messages[editMsgCurrentIndex];
   if (newText && msg) {
     msg.content = newText; msg.edited = true; msg.editedAt = new Date().toISOString();
-    db.ref('jobs/' + editMsgCurrentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+    safeJobUpdate(editMsgCurrentJobId, {messages: job.messages});
     showToast('✏️ Modifié');
   }
   if (textEl) { textEl.contentEditable = 'false'; textEl.removeAttribute('id'); }
@@ -3254,7 +3309,7 @@ function sendToSelectedDestinatairesFinal() {
       createNotification({ to: dest.email, toName: dest.name, from: authorEmail, fromName: authorName, jobId, jobName, messageType: message.type, messageContent: message.content?.substring(0, 100) || '', timestamp: Date.now() });
     });
     
-    db.ref('jobs/' + jobId).set(jobsData[jobId]).catch(err => showToast('❌ ' + err.message, 'error'));
+    safeJobUpdate(jobId, {messages: jobsData[jobId].messages});
     renderMessages(jobId);
   }
   
@@ -3382,7 +3437,7 @@ function renderMobileList() {
       const msgCount = getMessageCount(id);
       const hasQ = hasUnresolvedQuestions(id);
       return `
-        <div class="mobile-job-card" onclick="openMobileFiche('${escapeHtml(id)}')">
+        <div class="mobile-job-card" onclick="openMobileFiche('${id}')">
           <div class="mobile-job-order">#${escapeHtml(job.order || '---')}</div>
           <div class="mobile-job-client">${escapeHtml(job.client || 'Client')}</div>
           <span class="mobile-job-assignee ${(job.assignee||'').toLowerCase()}">${escapeHtml(job.assignee||'')}</span>
@@ -3411,13 +3466,13 @@ function openMobileFiche(jobId) {
   document.getElementById('mobileFicheTitle').textContent = `#${job.order || '?'} — ${job.assignee || ''}`;
   
   document.getElementById('mobileFicheBody').innerHTML = `
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🔢 Commande</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.order)}" onchange="updateJobField('${escapeHtml(jobId)}','order',this.value)"></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👤 Client</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.client)}" onchange="updateJobField('${escapeHtml(jobId)}','client',this.value)"></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👥 Assigné à</div><div class="mobile-fiche-field-value"><select onchange="updateJobField('${escapeHtml(jobId)}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===job.assignee?'selected':''}>${a}</option>`).join('')}</select></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🧾 N° PO</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.numeroPO||'')}" onchange="updateJobField('${escapeHtml(jobId)}','numeroPO',this.value)"></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👩‍💼 Représentant</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.representant||'')}" onchange="updateJobField('${escapeHtml(jobId)}','representant',this.value)"></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📥 Date Reçue</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateRecue','${escapeHtml(jobId)}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateRecue)||'Sélectionner...'}</div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📦 Livraison</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison','${escapeHtml(jobId)}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateLivraison)||'Sélectionner...'}</div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🔢 Commande</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.order)}" onchange="updateJobField('${jobId}','order',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👤 Client</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.client)}" onchange="updateJobField('${jobId}','client',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👥 Assigné à</div><div class="mobile-fiche-field-value"><select onchange="updateJobField('${jobId}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===job.assignee?'selected':''}>${a}</option>`).join('')}</select></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🧾 N° PO</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.numeroPO||'')}" onchange="updateJobField('${jobId}','numeroPO',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👩‍💼 Représentant</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.representant||'')}" onchange="updateJobField('${jobId}','representant',this.value)"></div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📥 Date Reçue</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateRecue','${jobId}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateRecue)||'Sélectionner...'}</div></div>
+    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📦 Livraison</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison','${jobId}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateLivraison)||'Sélectionner...'}</div></div>
     <div id="mobileRappelSection" style="margin-top:8px;"></div>
   `;
   
@@ -3434,7 +3489,7 @@ function openMobileFiche(jobId) {
         <div class="fiche-rappel-row" style="flex-wrap:wrap;">
           <div class="fiche-rappel-field">
             <div class="fiche-rappel-label">Rappel dans</div>
-            <select class="fiche-rappel-select" onchange="setRappelFromDays('${escapeHtml(jobId)}', this.value)">
+            <select class="fiche-rappel-select" onchange="setRappelFromDays('${jobId}', this.value)">
               <option value="">-- Aucun --</option>
               <option value="1" ${rappelJours==1?'selected':''}>1 jour</option>
               <option value="2" ${rappelJours==2?'selected':''}>2 jours</option>
@@ -3447,7 +3502,7 @@ function openMobileFiche(jobId) {
           </div>
           <div class="fiche-rappel-field">
             <div class="fiche-rappel-label">Action</div>
-            <select class="fiche-rappel-select" onchange="updateRappelAction('${escapeHtml(jobId)}', this.value)">
+            <select class="fiche-rappel-select" onchange="updateRappelAction('${jobId}', this.value)">
               <option value="">-- Choisir --</option>
               <option value="Appeler client" ${rappelAction==='Appeler client'?'selected':''}>Appeler client</option>
               <option value="Faire le suivi" ${rappelAction==='Faire le suivi'?'selected':''}>Faire le suivi</option>
@@ -3457,7 +3512,7 @@ function openMobileFiche(jobId) {
             </select>
           </div>
           <div style="display:flex;align-items:center;gap:8px;padding-top:4px;">
-            <input type="checkbox" ${rappelRenouvelable?'checked':''} onchange="toggleRappelRenouvelable('${escapeHtml(jobId)}', this.checked)" style="accent-color:#f59e0b;">
+            <input type="checkbox" ${rappelRenouvelable?'checked':''} onchange="toggleRappelRenouvelable('${jobId}', this.checked)" style="accent-color:#f59e0b;">
             <span style="font-size:10px;color:#92400e;font-weight:600;">Auto</span>
             <button onclick="clearRappel('${jobId}')" style="background:#fee2e2;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px;">🗑️</button>
           </div>
@@ -3477,24 +3532,19 @@ function closeMobileFiche() {
 
 function deleteMobileJob() {
   if (!mobileCurrentJobId) return;
+  if (!hasPermission('S')) { showToast('🔒 Permission insuffisante (Supprimer)', 'error'); return; }
+  if (writeBlocked()) return;
   if (!confirm('Supprimer ce job?\n\n📦 Un fichier archive sera téléchargé automatiquement.')) return;
   archiveJobThenDelete(mobileCurrentJobId, 'mobile');
 }
 
 // ===== MOBILE CHAT =====
 function renderMsgImages(msg) {
-  // Sanitize image URLs: only allow data: and https:// protocols
-  function safeImgUrl(url) {
-    if (!url) return '';
-    var s = String(url).trim();
-    if (s.startsWith('data:image/') || s.startsWith('https://')) return escapeHtml(s);
-    return '';
-  }
   if (msg.images && msg.images.length > 0) {
     const cls = msg.images.length === 1 ? 'mobile-msg-images-grid single' : 'mobile-msg-images-grid';
-    return `<div class="${cls}">${msg.images.map(img => { var u=safeImgUrl(img); return u?`<img src="${u}" onclick="openLightbox(this.src)">`:''; }).join('')}</div>`;
+    return `<div class="${cls}">${msg.images.map(img => `<img src="${img}" onclick="openLightbox(this.src)">`).join('')}</div>`;
   }
-  if (msg.image) { var u=safeImgUrl(msg.image); return u?`<img class="mobile-msg-image" src="${u}" onclick="openLightbox(this.src)">`:''; }
+  if (msg.image) return `<img class="mobile-msg-image" src="${msg.image}" onclick="openLightbox(this.src)">`;
   return '';
 }
 
@@ -3683,7 +3733,7 @@ function sendMobileMessage() {
       showToast(`📤 Réponse envoyée à: ${destinataires.map(d => d.name.split(' ')[0]).join(', ')}`, 'success');
     } else { showToast('💬 Message ajouté', 'info'); }
     
-    db.ref('jobs/' + mobileCurrentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+    safeJobUpdate(mobileCurrentJobId, {messages: job.messages});
     closeMobileCompose(); window.mobileReplyToIdx = null; openMobileChat();
     return;
   }
@@ -3696,7 +3746,7 @@ function sendMobileMessage() {
   };
   
   job.messages.push(newMessage);
-  db.ref('jobs/' + mobileCurrentJobId).set(job).catch(err => showToast('❌ ' + err.message, 'error'));
+  safeJobUpdate(mobileCurrentJobId, {messages: job.messages});
   closeMobileCompose(); window.mobileReplyToIdx = null; openMobileChat();
   
   if (mobileComposeType !== 'pinned') {
@@ -3727,11 +3777,7 @@ function handleGlobalSearch(value) {
 // ===== NOTIFICATIONS SYSTEM =====
 function listenForNotifications() {
   if (!db || !currentUser?.email) return;
-  // Detach previous listener if any
-  if (window._questListeners && window._questListeners.notifs) {
-    db.ref('jobNotifications').off('value', window._questListeners.notifs);
-  }
-  window._questListeners.notifs = db.ref('jobNotifications').orderByChild('to').equalTo(currentUser.email).on('value', snap => {
+  db.ref('jobNotifications').orderByChild('to').equalTo(currentUser.email).on('value', snap => {
     allNotifications = snap.val() || {};
     updateNotifBell();
   }, err => {
@@ -3853,7 +3899,7 @@ function renderRappelSection(jobId, d) {
     <div class="fiche-rappel-row">
       <div class="fiche-rappel-field">
         <div class="fiche-rappel-label">Rappel dans</div>
-        <select class="fiche-rappel-select" id="ficheRappelJours" onchange="setRappelFromDays('${escapeHtml(jobId)}', this.value)">
+        <select class="fiche-rappel-select" id="ficheRappelJours" onchange="setRappelFromDays('${jobId}', this.value)">
           <option value="">-- Aucun --</option>
           <option value="1" ${rappelJours==1?'selected':''}>1 jour</option>
           <option value="2" ${rappelJours==2?'selected':''}>2 jours</option>
@@ -3866,7 +3912,7 @@ function renderRappelSection(jobId, d) {
       </div>
       <div class="fiche-rappel-field">
         <div class="fiche-rappel-label">Action</div>
-        <select class="fiche-rappel-select" id="ficheRappelAction" onchange="updateRappelAction('${escapeHtml(jobId)}', this.value)">
+        <select class="fiche-rappel-select" id="ficheRappelAction" onchange="updateRappelAction('${jobId}', this.value)">
           <option value="">-- Choisir --</option>
           <option value="Appeler client" ${rappelAction==='Appeler client'?'selected':''}>Appeler client</option>
           <option value="Faire le suivi" ${rappelAction==='Faire le suivi'?'selected':''}>Faire le suivi</option>
@@ -3878,7 +3924,7 @@ function renderRappelSection(jobId, d) {
       <div class="fiche-rappel-field" style="flex:0.6;">
         <div class="fiche-rappel-label">Renouveler</div>
         <div class="fiche-rappel-checkbox">
-          <input type="checkbox" id="ficheRappelRenouvelable" ${rappelRenouvelable?'checked':''} onchange="toggleRappelRenouvelable('${escapeHtml(jobId)}', this.checked)">
+          <input type="checkbox" id="ficheRappelRenouvelable" ${rappelRenouvelable?'checked':''} onchange="toggleRappelRenouvelable('${jobId}', this.checked)">
           <label for="ficheRappelRenouvelable">Auto</label>
         </div>
       </div>
