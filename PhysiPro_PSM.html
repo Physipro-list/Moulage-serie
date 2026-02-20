@@ -2874,6 +2874,9 @@ body.psm-printing .chat-widget-btn { display: none !important; }
 .xchat-msg .xmsg-author{font-size:10px;font-weight:600;color:#1e293b;margin-bottom:3px;}
 .xchat-msg .xmsg-content{color:#334155;font-size:11px;}
 .xchat-msg .xmsg-source{font-size:8px;color:#94a3b8;margin-top:3px;}
+.xmsg-source-card{font-size:8px;color:#60a5fa;margin-top:1px;font-style:italic;}
+.xmsg-deeplink{display:inline-block;margin-top:4px;padding:2px 8px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:4px;color:#93c5fd;font-size:8px;font-weight:600;cursor:pointer;text-decoration:none;transition:all 0.2s;}
+.xmsg-deeplink:hover{background:rgba(59,130,246,0.3);color:#fff;}
 .xchat-msg .xmsg-time{font-size:8px;color:#94a3b8;float:right;}
 .xchat-msg .xmsg-delete{position:absolute;top:3px;right:3px;background:rgba(239,68,68,0.15);border:none;border-radius:50%;width:16px;height:16px;cursor:pointer;font-size:10px;color:#dc2626;opacity:0;transition:opacity 0.2s;}
 .xchat-msg:hover .xmsg-delete{opacity:0.7;}
@@ -4666,6 +4669,7 @@ function filterCards(val) {
 
 // ═══ PSM INIT ═══
 var _skipNextSync = false;
+var _deepLinkHandled = false;
 function initPSM() {
   loadCustomMateriaux();
   
@@ -4681,6 +4685,21 @@ function initPSM() {
     if (_skipNextSync) { _skipNextSync = false; return; }
     psmData = snap.val() || {};
     renderCards();
+    
+    // Deep link: check URL for ?card=XXX on first load
+    if (!_deepLinkHandled) {
+      _deepLinkHandled = true;
+      var params = new URLSearchParams(window.location.search);
+      var deepCard = params.get('card');
+      if (deepCard && psmData[deepCard]) {
+        selectCard(deepCard);
+        showToast('📋 Carte ouverte depuis lien', 'info');
+        // Clean URL
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+    }
+    
     if (currentCardId && psmData[currentCardId]) {
       loadCard(currentCardId);
     } else {
@@ -7779,6 +7798,31 @@ var QChat = (function() {
         closeCompose();
         showToast('📤 Message envoyé', 'success');
         
+        // Bridge to crossAppChat so message appears in topbar on ALL pages
+        var card = psmData[_currentCardId] || {};
+        var crossMsg = {
+          content: text || '📷 Photo(s)',
+          type: _composeType === 'reply' ? 'normal' : (_composeType || 'problem'),
+          authorEmail: user.email,
+          authorName: authorName,
+          sourcePage: 'psm',
+          sourceModule: 'PSM',
+          sourceCardId: _currentCardId,
+          sourceCardName: (card.name || 'Patient') + ' #' + (card.order || '---'),
+          timestamp: Date.now(),
+          createdAt: firebase.database.ServerValue.TIMESTAMP,
+          recipients: [],
+          readBy: {}
+        };
+        // Auto-read by sender
+        var ek = user.email.toLowerCase().replace(/\./g,'_');
+        crossMsg.readBy[ek] = true;
+        // If replying, add original author as recipient
+        if (isReply && replyToEmail) {
+          crossMsg.recipients = [{name: replyToAuthor || '', email: replyToEmail}];
+        }
+        database.ref('crossAppChat').push().set(crossMsg).catch(function(){});
+        
         // If this is a reply, show confirmation modal
         if (isReply && replyToEmail) {
           _pendingNotif = {
@@ -7895,6 +7939,15 @@ var QChat = (function() {
 var XChat = (function() {
   var PAGE_ID = 'psm';
   var PAGE_NAMES = {moulage:'Moulage',psm:'PSM',questionnement:'Questionnement',serie:'Série+',inspection:'Inspection Atelier',couture:'Production Couture',archives:'Archives'};
+  var PAGE_URLS = {
+    moulage:'PhysiPro_Moulage.html',
+    psm:'PhysiPro_PSM.html',
+    questionnement:'PhysiPro_Questionnement.html',
+    serie:'PhysiPro_Serie_.html',
+    inspection:'PhysiPro_Inspection.html',
+    couture:'PhysiPro_Couture.html',
+    archives:'PhysiPro_Archives.html'
+  };
   
   var messages = [];
   var unreadCount = 0;
@@ -8169,6 +8222,20 @@ var XChat = (function() {
     var typeLabels = {problem:'❓ Question',normal:'💬 Discussion',pinned:'📌 Épinglé'};
     var delBtn = isMe ? '<button class="xmsg-delete" onclick="XChat.deleteMsg(\'' + id + '\')">✕</button>' : '';
     
+    // Source card info
+    var cardInfo = '';
+    if (msg.sourceCardName || msg.sourceCardId) {
+      cardInfo = '<div class="xmsg-source-card">📋 ' + esc(msg.sourceCardName || msg.sourceCardId || '') + '</div>';
+    }
+    
+    // Deep link button
+    var deepLink = '';
+    if (msg.sourcePage && msg.sourcePage !== PAGE_ID && PAGE_URLS[msg.sourcePage]) {
+      var url = PAGE_URLS[msg.sourcePage];
+      if (msg.sourceCardId) url += '?card=' + encodeURIComponent(msg.sourceCardId);
+      deepLink = '<a class="xmsg-deeplink" href="' + url + '" target="_blank">🔗 Ouvrir dans ' + esc(srcName) + '</a>';
+    }
+    
     return '<div class="xchat-msg ' + typeClass + '">' +
       delBtn +
       '<div class="xmsg-type">' + (typeLabels[msg.type] || '💬 Discussion') + ' <span class="xmsg-time">' + fmtTime(msg.timestamp) + '</span></div>' +
@@ -8176,6 +8243,7 @@ var XChat = (function() {
       '<div class="xmsg-content">' + esc(msg.content || '').replace(/\n/g,'<br>') + '</div>' +
       (msg.image ? '<img class="xmsg-image" src="' + msg.image + '" onclick="window.open(this.src)">' : '') +
       '<div class="xmsg-source">📍 ' + esc(srcName) + '</div>' +
+      cardInfo + deepLink +
     '</div>';
   }
   
@@ -8185,12 +8253,24 @@ var XChat = (function() {
     var srcName = PAGE_NAMES[msg.sourcePage] || msg.sourcePage || '';
     var delBtn = isMe ? '<button class="xmsg-delete" onclick="XChat.deleteMsg(\'' + id + '\')">✕</button>' : '';
     
+    var cardInfo = '';
+    if (msg.sourceCardName || msg.sourceCardId) {
+      cardInfo = '<div class="xmsg-source-card">📋 ' + esc(msg.sourceCardName || msg.sourceCardId || '') + '</div>';
+    }
+    var deepLink = '';
+    if (msg.sourcePage && msg.sourcePage !== PAGE_ID && PAGE_URLS[msg.sourcePage]) {
+      var url = PAGE_URLS[msg.sourcePage];
+      if (msg.sourceCardId) url += '?card=' + encodeURIComponent(msg.sourceCardId);
+      deepLink = '<a class="xmsg-deeplink" href="' + url + '" target="_blank">🔗 Ouvrir dans ' + esc(srcName) + '</a>';
+    }
+    
     return '<div class="xthread-question' + (hasReplies ? ' has-replies' : '') + '">' +
       delBtn +
       '<div class="xmsg-type">❓ Question <span class="xmsg-time" style="float:right;font-weight:400;color:#94a3b8;">' + fmtTime(msg.timestamp) + '</span></div>' +
       '<div class="xmsg-author">' + esc(msg.authorName || '') + (isMe ? ' (moi)' : '') + '</div>' +
       '<div class="xmsg-content">' + esc(msg.content || '').replace(/\n/g,'<br>') + '</div>' +
       '<div class="xmsg-source">📍 ' + esc(srcName) + '</div>' +
+      cardInfo + deepLink +
     '</div>';
   }
   
@@ -8335,6 +8415,14 @@ var XChat = (function() {
       recipients: selectedDest,
       readBy: {}
     };
+    
+    // Add card context if a card is currently open
+    if (typeof currentCardId !== 'undefined' && currentCardId && typeof psmData !== 'undefined' && psmData[currentCardId]) {
+      var _card = psmData[currentCardId];
+      msgData.sourceCardId = currentCardId;
+      msgData.sourceCardName = (_card.name || 'Patient') + ' #' + (_card.order || '---');
+      msgData.sourceModule = 'PSM';
+    }
     
     if (replyToThread) {
       msgData.threadId = replyToThread;
@@ -8532,9 +8620,7 @@ var XChat = (function() {
     </div>
   </div>
   <div class="xchat-buttons-row">
-    <button class="xchat-add-btn question" onclick="XChat.openCompose('problem')"><span class="icon">❓</span><span class="label">Question</span></button>
-    <button class="xchat-add-btn discussion" onclick="XChat.openCompose('normal')"><span class="icon">💬</span><span class="label">Discussion</span></button>
-    <button class="xchat-add-btn pinned" onclick="XChat.openCompose('pinned')"><span class="icon">📌</span><span class="label">Épinglé</span></button>
+    <button class="xchat-add-btn discussion" onclick="XChat.openCompose('normal')" style="flex:1;"><span class="icon">💬</span><span class="label">Ouvrir une discussion</span></button>
   </div>
 </div>
 
