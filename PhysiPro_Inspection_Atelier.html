@@ -686,6 +686,11 @@ var fbUser=null;
 var fbListeners={};
 var _syncTimeout={};
 
+// === VERSION PROTECTION ===
+var APP_VERSION=20260220;var APP_MODULE='inspection';var _versionOK=true;
+function checkAppVersion(){if(!fbDb)return;fbDb.ref('appSettings/versions/'+APP_MODULE).once('value').then(function(s){var r=s.val();if(r&&typeof r==='number'&&APP_VERSION<r){_versionOK=false;var b=document.createElement('div');b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;background:#dc2626;color:white;padding:12px 20px;font-weight:700;text-align:center;font-size:14px;';b.innerHTML='⚠️ VERSION OBSOLÈTE. <button onclick="location.reload(true)" style="margin-left:15px;background:white;color:#dc2626;border:none;padding:6px 16px;border-radius:6px;font-weight:bold;cursor:pointer;">🔄 Rafraîchir</button>';document.body.prepend(b);}else{fbDb.ref('appSettings/versions/'+APP_MODULE).set(APP_VERSION);_versionOK=true;}});}
+function writeBlocked(s){if(!_versionOK){if(!s)alert('🔒 Version obsolète');return true;}return false;}
+
 function doLogin(event) {
   if (event) event.preventDefault();
   var email = document.getElementById('loginEmail').value.trim();
@@ -945,6 +950,7 @@ fbAuth.onAuthStateChanged(function(user) {
     overlay.classList.add('hidden');
     var ps = document.getElementById('preauth-hide'); if (ps) ps.remove();
     initLogoMenu('inspection');
+    checkAppVersion();
     var displayName = getPhysiproDisplayName(user.email);
     var badge = document.getElementById('userBadge');
     var dot = document.getElementById('statusDot');
@@ -2101,7 +2107,7 @@ md.data[md.month]=md.rows;saveD(d,md.data);showToast('📅 Date modifiée','succ
 
 /* ═══ SÉRIE+ ═══ */
 function getSerieCards(){try{return JSON.parse(localStorage.getItem(SK))||{};}catch(e){return {};}}
-function findSerie(num){var cards=getSerieCards();var n=String(num).trim();var nNorm=n.replace(/^0+/,'');for(var id in cards){var c=cards[id];var oNorm=String(c.order||'').replace(/^0+/,'');var pNorm=String(c.numeroPO||'').replace(/^0+/,'');if(c.order===n||c.numeroPO===n||oNorm===nNorm||pNorm===nNorm)return{cardId:id,card:c};}return null;}
+function findSerie(num){var cards=getSerieCards();var n=String(num).trim();for(var id in cards)if(cards[id].order===n||cards[id].numeroPO===n)return{cardId:id,card:cards[id]};return null;}
 function getUnfinished(card,dept){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){if(dept==='inspection'){var done=(g.atelier&&g.atelier.inspected)||false;var inInv=(g.atelier&&g.atelier.sentToInventaire)||false;var qf=parseInt(g.atelier&&g.atelier.qtyFait)||0;var isP=(g.atelier&&g.atelier.partiel)||false;var tQ=parseInt(g.qty)||0;if(!done){var rem=isP?(tQ-qf):tQ;pend.push({gi:gi,name:g.name,qty:tQ,qtyFait:qf,remaining:rem,inInventaire:inInv,wasPartial:isP});}}else{var done2=(g.couture&&g.couture.inspected)||false;var inInv2=(g.couture&&g.couture.sentToInventaire)||false;var qf2=parseInt(g.couture&&g.couture.qtyFait)||0;var isP2=(g.couture&&g.couture.partiel)||false;var tQ2=parseInt(g.qty)||0;if(!done2){var rem2=isP2?(tQ2-qf2):tQ2;pend.push({gi:gi,name:g.name,qty:tQ2,qtyFait:qf2,remaining:rem2,inInventaire:inInv2,wasPartial:isP2});}}});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
 function rowHasPartial(row){if(!row||!row.item)return false;
   // Detect partial: either "~" prefix lines OR fraction "3/5" format
@@ -2115,8 +2121,8 @@ function reopenSerieModal(dept,idx){
     fbDb.ref('serieCommandes').once('value').then(function(snap){
       var fbCards=snap.val()||{};
       safeLSSet(SK,JSON.stringify(fbCards));
-      var n=String(bon).trim();var nNorm=n.replace(/^0+/,'');var found=null;
-      for(var cid in fbCards){var oNorm=String(fbCards[cid].order||'').replace(/^0+/,'');var pNorm=String(fbCards[cid].numeroPO||'').replace(/^0+/,'');if(fbCards[cid].order===n||fbCards[cid].numeroPO===n||oNorm===nNorm||pNorm===nNorm){found={cardId:cid,card:fbCards[cid]};break;}}
+      var n=String(bon).trim();var found=null;
+      for(var cid in fbCards){if(fbCards[cid].order===n||fbCards[cid].numeroPO===n){found={cardId:cid,card:fbCards[cid]};break;}}
       if(found){openSerieModal(bon,found,dept);}
       else{showToast('Carte Série+ introuvable pour '+bon,'error');}
     }).catch(function(){
@@ -2162,11 +2168,10 @@ if(fbDb){
       }
     });
     safeLSSet(SK,JSON.stringify(local));
-    // Now search (with zero-padding tolerance)
+    // Now search
     var n=String(bon).trim();
-    var nNorm=n.replace(/^0+/,'');
     var found=null;
-    for(var cid in local){var oNorm=String(local[cid].order||'').replace(/^0+/,'');var pNorm=String(local[cid].numeroPO||'').replace(/^0+/,'');if(local[cid].order===n||local[cid].numeroPO===n||oNorm===nNorm||pNorm===nNorm){found={cardId:cid,card:local[cid]};break;}}
+    for(var cid in local){if(local[cid].order===n||local[cid].numeroPO===n){found={cardId:cid,card:local[cid]};break;}}
     document.getElementById(id).value='';document.getElementById(id).focus();
     if(found){openSerieModal(bon,found,dept);}else{openManualModal(bon,dept);}
   }).catch(function(){
@@ -2573,6 +2578,7 @@ window.addEventListener('beforeunload', function() { inspCreateBackup(); });
 var XChat = (function() {
   var PAGE_ID = 'inspection';
   var PAGE_NAMES = {moulage:'Moulage',psm:'PSM',questionnement:'Questionnement',serie:'Série+',inspection:'Inspection Atelier',couture:'Production Couture',archives:'Archives'};
+  var PAGE_URLS = {moulage:'Physipro_moulage.html',psm:'PhysiPro_PSM.html',questionnement:'PhysiPro_Questionnement.html',serie:'PhysiPro_Serie_.html',inspection:'PhysiPro_Inspection.html',couture:'PhysiPro_Couture.html',archives:'PhysiPro_Archives.html',entrepot:'PhysiPro_Entrepot.html'};
   
   var messages = [];
   var unreadCount = 0;
@@ -3211,9 +3217,7 @@ var XChat = (function() {
     </div>
   </div>
   <div class="xchat-buttons-row">
-    <button class="xchat-add-btn question" onclick="XChat.openCompose('problem')"><span class="icon">❓</span><span class="label">Question</span></button>
-    <button class="xchat-add-btn discussion" onclick="XChat.openCompose('normal')"><span class="icon">💬</span><span class="label">Discussion</span></button>
-    <button class="xchat-add-btn pinned" onclick="XChat.openCompose('pinned')"><span class="icon">📌</span><span class="label">Épinglé</span></button>
+    <button class="xchat-add-btn discussion" onclick="XChat.openCompose('normal')" style="flex:1;"><span class="icon">💬</span><span class="label">Ouvrir une discussion</span></button>
   </div>
 </div>
 
