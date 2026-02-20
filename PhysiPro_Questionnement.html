@@ -426,7 +426,8 @@ body {
 .mat-card-code { font-size: 9px; font-weight: 600; color: #93c5fd; }
 .mat-card-date { font-size: 7px; padding: 1px 5px; background: rgba(0,0,0,0.3); color: #fbbf24; border-radius: 3px; font-weight: 600; white-space: nowrap; }
 .mat-card-date.unknown { color: #fca5a5; }
-.mat-card-del { width: 16px; height: 16px; border-radius: 50%; background: #ef4444; border: 1px solid rgba(255,255,255,0.4); color: #fff; font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; margin-left: 4px; }
+.mat-card-del { width: 22px; height: 22px; border-radius: 50%; background: #ef4444; border: 1px solid rgba(255,255,255,0.4); color: #fff; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; margin-left: 4px; position: relative; z-index: 5; }
+.mat-card-del:hover { background: #dc2626; transform: scale(1.2); }
 .mat-card-orders { padding: 4px 6px; }
 .mat-card-order-item { display: flex; align-items: center; gap: 3px; padding: 2px 4px; margin-bottom: 2px; background: rgba(255,255,255,0.06); border-radius: 4px; font-size: 9px; color: #e2e8f0; }
 .mat-card-order-item .order-hash { color: #93c5fd; font-weight: 700; font-size: 9px; }
@@ -1560,6 +1561,67 @@ let db = null;
 let currentUser = null;
 let jobsData = {};
 let matBOData = {};
+
+// ===== PERMISSIONS: V=View, A=Add, M=Modify, S=Supprimer, N=Notifications/Chat =====
+var _P={'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['N'],'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':['V','N'],'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':['V','N'],'cmhAcGh5c2lwcm8uY29t':['V','N'],'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':['V','N'],'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':['V','A','N'],'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':['V','N'],'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['V','A','M','S','N'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['V','A','M','S','N'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['N'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['N'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['V','A','M','S','N'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['N'],'c3JveUBwaHlzaXByby5jb20=':['V','A','M','S','N'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['V','A','M','N'],'c2VydmljZTNAcGh5c2lwcm8uY29t':['V','A','M','N'],'c2VydmljZTFAcGh5c2lwcm8uY29t':['V','A','M','N'],'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'b3JkZXJzQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':['V','N'],'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':['V','N']};
+function hasPermission(perm) {
+  if (!currentUser || !currentUser.email) return false;
+  try { var k = btoa(currentUser.email.toLowerCase()); var p = _P[k]; return p ? p.indexOf(perm) !== -1 : false; } catch(e) { return false; }
+}
+
+// ===== VERSION PROTECTION =====
+var APP_VERSION = 20260220;
+var APP_MODULE = 'questionnement';
+var _versionOK = true;
+var _versionBanner = null;
+
+function checkAppVersion() {
+  if (!db) return;
+  db.ref('appSettings/versions/' + APP_MODULE).once('value', function(snap) {
+    var required = snap.val();
+    if (required && typeof required === 'number' && APP_VERSION < required) {
+      _versionOK = false;
+      showVersionWarning(required);
+    } else {
+      db.ref('appSettings/versions/' + APP_MODULE).set(APP_VERSION);
+      _versionOK = true;
+    }
+  });
+}
+
+function showVersionWarning(required) {
+  if (_versionBanner) return;
+  _versionBanner = document.createElement('div');
+  _versionBanner.id = 'versionWarningBanner';
+  _versionBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(90deg,#dc2626,#b91c1c);color:white;padding:12px 20px;text-align:center;font-weight:bold;font-size:14px;box-shadow:0 4px 20px rgba(220,38,38,0.5);animation:vwPulse 2s infinite;';
+  _versionBanner.innerHTML = '⚠️ VERSION OBSOLÈTE (v' + APP_VERSION + ', requise: v' + required + '). Modifications BLOQUÉES. <button onclick="location.reload(true)" style="margin-left:15px;background:white;color:#dc2626;border:none;padding:6px 16px;border-radius:6px;font-weight:bold;cursor:pointer;">🔄 Rafraîchir</button>';
+  document.body.prepend(_versionBanner);
+  if (!document.getElementById('vwPulseStyle')) {
+    var s = document.createElement('style'); s.id = 'vwPulseStyle';
+    s.textContent = '@keyframes vwPulse{0%,100%{opacity:1}50%{opacity:0.85}}';
+    document.head.appendChild(s);
+  }
+}
+
+function writeBlocked(silent) {
+  if (!_versionOK) {
+    if (!silent) showToast('🚫 Version obsolète — rafraîchissez (Ctrl+Shift+R)', 'error');
+    return true;
+  }
+  return false;
+}
+
+function safeJobUpdate(jobId, updates, errorCb) {
+  if (writeBlocked()) return;
+  if (!jobId || !updates) return;
+  updates._lastModifiedBy = currentUser ? currentUser.email : 'unknown';
+  updates._lastModifiedAt = new Date().toISOString();
+  updates._appVersion = APP_VERSION;
+  db.ref('jobs/' + jobId).update(updates).catch(function(err) {
+    if (errorCb) errorCb(err);
+    else showToast('❌ ' + err.message, 'error');
+  });
+}
 const MATERIAUX_DISPONIBLES = [
   // === MOUSSE - NÉOCORE VF-40 ===
   { code: "VR10404", materiau: "NÉOCORE VF-40 ¼\" - 22x24", epaisseur: "¼\"", category: "Mousse", localisation: "A1-01" },
@@ -1837,71 +1899,6 @@ document.addEventListener('DOMContentLoaded', function() {
   firebase.initializeApp(FIREBASE_CONFIG);
   db = firebase.database();
   
-  // ===== PERMISSIONS: V=View, A=Add, M=Modify, S=Supprimer, N=Notifications/Chat =====
-  var _P={'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['N'],'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':['V','N'],'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':['V','N'],'cmhAcGh5c2lwcm8uY29t':['V','N'],'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':['V','N'],'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':['V','A','N'],'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':['V','N'],'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['V','A','M','S','N'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['V','A','M','S','N'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['N'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['N'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['V','A','M','S','N'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['N'],'c3JveUBwaHlzaXByby5jb20=':['V','A','M','S','N'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['V','A','M','N'],'c2VydmljZTNAcGh5c2lwcm8uY29t':['V','A','M','N'],'c2VydmljZTFAcGh5c2lwcm8uY29t':['V','A','M','N'],'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'b3JkZXJzQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':['V','N'],'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':['V','N']};
-  function hasPermission(perm) {
-    if (!currentUser || !currentUser.email) return false;
-    try { var k = btoa(currentUser.email.toLowerCase()); var p = _P[k]; return p ? p.indexOf(perm) !== -1 : false; } catch(e) { return false; }
-  }
-
-  // ===== VERSION PROTECTION =====
-  var APP_VERSION = 20260220;  // YYYYMMDD — increment on each deploy
-  var APP_MODULE = 'questionnement';
-  var _versionOK = true;
-  var _versionBanner = null;
-
-  function checkAppVersion() {
-    db.ref('appSettings/versions/' + APP_MODULE).once('value', function(snap) {
-      var required = snap.val();
-      if (required && typeof required === 'number' && APP_VERSION < required) {
-        _versionOK = false;
-        showVersionWarning(required);
-      } else {
-        // Register our version
-        db.ref('appSettings/versions/' + APP_MODULE).set(APP_VERSION);
-        _versionOK = true;
-      }
-    });
-  }
-
-  function showVersionWarning(required) {
-    if (_versionBanner) return;
-    _versionBanner = document.createElement('div');
-    _versionBanner.id = 'versionWarningBanner';
-    _versionBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(90deg,#dc2626,#b91c1c);color:white;padding:12px 20px;text-align:center;font-weight:bold;font-size:14px;box-shadow:0 4px 20px rgba(220,38,38,0.5);animation:vwPulse 2s infinite;';
-    _versionBanner.innerHTML = '⚠️ ATTENTION — Votre version est obsolète (v' + APP_VERSION + ', requise: v' + required + '). Les modifications sont BLOQUÉES. Veuillez rafraîchir la page (Ctrl+Shift+R) pour obtenir la dernière version. <button onclick="location.reload(true)" style="margin-left:15px;background:white;color:#dc2626;border:none;padding:6px 16px;border-radius:6px;font-weight:bold;cursor:pointer;">🔄 Rafraîchir</button>';
-    document.body.prepend(_versionBanner);
-    // Add pulse animation
-    if (!document.getElementById('vwPulseStyle')) {
-      var s = document.createElement('style');
-      s.id = 'vwPulseStyle';
-      s.textContent = '@keyframes vwPulse{0%,100%{opacity:1}50%{opacity:0.85}}';
-      document.head.appendChild(s);
-    }
-  }
-
-  // Guard all writes — returns true if write is BLOCKED
-  function writeBlocked(silent) {
-    if (!_versionOK) {
-      if (!silent) showToast('🚫 Version obsolète — rafraîchissez la page (Ctrl+Shift+R)', 'error');
-      return true;
-    }
-    return false;
-  }
-
-  // Safe job update — only writes changed fields, never overwrites entire job
-  function safeJobUpdate(jobId, updates, errorCb) {
-    if (writeBlocked()) return;
-    if (!jobId || !updates) return;
-    updates._lastModifiedBy = currentUser ? currentUser.email : 'unknown';
-    updates._lastModifiedAt = new Date().toISOString();
-    updates._appVersion = APP_VERSION;
-    db.ref('jobs/' + jobId).update(updates).catch(function(err) {
-      if (errorCb) errorCb(err);
-      else showToast('❌ ' + err.message, 'error');
-    });
-  }
-
   firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(e){console.log('Persist:',e);});
   firebase.auth().onAuthStateChanged(user => {
     if (user) {
@@ -2587,8 +2584,10 @@ function saveMat() {
 
 function deleteMat(id) {
   if (!hasPermission('S')) { showToast('🔒 Permission insuffisante (Supprimer)', 'error'); return; }
-  db.ref('materiauxBO/' + id).remove().catch(e => showToast('❌ ' + e.message, 'error'));
-  showToast('Matériau supprimé', 'info');
+  if (!confirm('Supprimer ce matériau?')) return;
+  db.ref('materiauxBO/' + id).remove().then(function() {
+    showToast('🗑️ Matériau supprimé', 'info');
+  }).catch(function(e) { showToast('❌ ' + e.message, 'error'); });
 }
 
 // ===== FICHE (DESKTOP) =====
