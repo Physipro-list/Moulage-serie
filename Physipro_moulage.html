@@ -3409,6 +3409,7 @@
           <span class="notif-bell-text" id="notifBellText"></span>
         </button>
         <button class="chat-open-btn" onclick="openChatFromHeader()" title="Ouvrir le chat" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;background:transparent;border:1px solid rgba(255,255,255,0.3);border-radius:11px;cursor:pointer;transition:all 0.3s;font-size:11px;">💬</button>
+        <button onclick="if(typeof XChat!=='undefined')XChat.toggle()" title="Chat Inter-App" style="display:flex;align-items:center;justify-content:center;gap:3px;height:22px;padding:0 8px;background:transparent;border:1px solid rgba(59,130,246,0.4);border-radius:11px;cursor:pointer;font-size:10px;font-weight:600;color:#93c5fd;white-space:nowrap;">💬 Chat</button>
         <div class="search-box-small">
           <input type="text" id="globalSearch" placeholder="🔍 Rechercher..." oninput="handleGlobalSearch(this.value)">
           <button class="btn-settings-inside" onclick="openSettingsModal()" title="Paramètres">⚙️</button>
@@ -4157,10 +4158,46 @@
     };
     
     // ═══════════════════════════════════════════════════════════════════
-    // SYSTÈME DE DÉTECTION DE NOUVELLE VERSION
+    // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    const APP_VERSION = '1588';
+    var APP_VERSION = 20260220;
+    var APP_MODULE = 'moulage';
+    var _versionOK = true;
     let versionCheckInterval = null;
+    
+    function checkAppVersion() {
+      if (typeof firebaseDb === 'undefined' || !firebaseDb) return;
+      firebaseDb.ref('appSettings/versions/' + APP_MODULE).once('value').then(function(snap) {
+        var required = snap.val();
+        if (required && typeof required === 'number' && APP_VERSION < required) {
+          _versionOK = false;
+          showVersionWarning(required);
+        } else {
+          firebaseDb.ref('appSettings/versions/' + APP_MODULE).set(APP_VERSION);
+          _versionOK = true;
+        }
+      });
+    }
+    
+    function showVersionWarning(required) {
+      var banner = document.getElementById('versionBanner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'versionBanner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;background:#dc2626;color:white;padding:12px 20px;font-weight:700;text-align:center;font-size:14px;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
+        document.body.prepend(banner);
+      }
+      banner.innerHTML = '⚠️ VERSION OBSOLÈTE (v' + APP_VERSION + ', requise: v' + required + '). Modifications BLOQUÉES. <button onclick="location.reload(true)" style="margin-left:15px;background:white;color:#dc2626;border:none;padding:6px 16px;border-radius:6px;font-weight:bold;cursor:pointer;">🔄 Rafraîchir</button>';
+      banner.style.display = 'block';
+    }
+    
+    function writeBlocked(silent) {
+      if (!_versionOK) {
+        if (!silent) showToast('🔒 Version obsolète — modifications bloquées. Rafraîchissez la page.', 'error');
+        return true;
+      }
+      return false;
+    }
     
     // ═══════════════════════════════════════════════════════════════
     // SYSTÈME DE VERSION v5 - DÉSACTIVÉ SUR MOBILE (5 ingénieurs)
@@ -4897,6 +4934,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     
     // Sauvegarde immédiate d'une carte (appelée par processPendingSaves)
     async function saveCardToFirebaseImmediate(cardId, cardData) {
+      if (writeBlocked(true)) return;
       // Vérification préalable
       if (!cardId || !cardData) {
         console.error('❌ saveCardToFirebaseImmediate: cardId ou cardData manquant');
@@ -5014,6 +5052,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     }
     
     async function saveAssociationsToFirebase() {
+      if (writeBlocked()) return false;
       try {
         // Validation avant sauvegarde
         if (typeof validateAssociationsBeforeSave === 'function') {
@@ -11818,6 +11857,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           }
           
           // Initialiser l'application
+          checkAppVersion();
           await initializeApp();
           
           // v1588: Appel unique et centralisé pour mobile après initializeApp
@@ -15953,5 +15993,124 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     <div class="nav-modal-grid" id="navModalGrid"></div>
   </div>
 </div>
+<!-- ===== XCHAT TOPBAR INTER-APP ===== -->
+<style>
+.xchat-panel{position:fixed;bottom:20px;right:20px;width:380px;height:min(480px,calc(100vh - 140px));background:linear-gradient(135deg,#1e3a5f 0%,#0f172a 100%);border-radius:16px;box-shadow:0 15px 50px rgba(0,0,0,0.5);z-index:99996;display:none;flex-direction:column;overflow:hidden;border:2px solid #3b82f6;}.xchat-panel.active{display:flex;}
+.xchat-hdr{display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:44px;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);border-radius:14px 14px 0 0;}.xchat-hdr-title{font-size:13px;font-weight:700;color:#fff;text-shadow:1px 1px 2px rgba(0,0,0,0.5);}.xchat-close{padding:4px 10px;background:linear-gradient(135deg,#ef4444,#dc2626);border:1px solid #b91c1c;border-radius:6px;color:#fff;font-size:11px;font-weight:600;cursor:pointer;}
+.xchat-scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;min-height:0;}.xchat-pinned{background:linear-gradient(135deg,#fefce8,#fef9c3);border-bottom:2px solid #fde047;padding:8px;display:none;}.xchat-pinned.has-items{display:block;}.xchat-pinned-header{font-size:10px;font-weight:700;color:#a16207;margin-bottom:6px;text-transform:uppercase;}.xchat-questions{background:#f8fafc;padding:6px 8px;display:none;}.xchat-questions.has-items{display:block;}.xchat-questions-header{font-size:9px;font-weight:700;color:#dc2626;margin-bottom:4px;text-transform:uppercase;}.xchat-messages{flex:1;padding:10px;display:flex;flex-direction:column;gap:8px;background:#f8fafc;}.xchat-empty{text-align:center;padding:40px 20px;color:#64748b;font-size:12px;}
+.xchat-msg{padding:8px 10px;border-radius:6px;font-size:11px;line-height:1.4;position:relative;}.xchat-msg.problem{background:#fef2f2;border:1px solid #fca5a5;}.xchat-msg.normal{background:#eff6ff;border:1px solid #93c5fd;}.xchat-msg.pinned{background:#fefce8;border:1px solid #fde047;}.xmsg-type{font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;}.xmsg-time{float:right;font-weight:400;color:#94a3b8;font-size:8px;}.xmsg-author{font-size:10px;font-weight:600;color:#1e293b;margin-bottom:3px;}.xmsg-content{color:#334155;font-size:11px;}.xmsg-source{font-size:8px;color:#94a3b8;margin-top:3px;}.xmsg-delete{position:absolute;top:3px;right:3px;background:rgba(239,68,68,0.15);border:none;border-radius:50%;width:16px;height:16px;cursor:pointer;font-size:10px;color:#dc2626;}
+.xthread-block{margin-bottom:10px;background:white;border-radius:8px;padding:8px;}.xthread-question{background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 10px;position:relative;}.xthread-question.has-replies{border-radius:6px 6px 0 0;margin-bottom:0;border-bottom:none;}.xthread-discussion{background:#eff6ff;border:1px solid #93c5fd;border-top:1px solid #cbd5e1;padding:8px 10px;position:relative;}.xthread-discussion:last-of-type{border-radius:0 0 6px 6px;}.xthread-reply-zone{clear:both;margin-top:8px;padding-top:6px;border-top:1px dashed rgba(0,0,0,0.1);}.xthread-reply-btn{display:inline-block;padding:5px 12px;background:linear-gradient(135deg,#3b82f6,#2563eb);border:none;border-radius:4px;color:white;font-size:9px;font-weight:600;cursor:pointer;}.xthread-reply-btn:hover{filter:brightness(1.1);}
+.xchat-compose{display:none;padding:8px 12px;background:#eff6ff;border:2px solid #93c5fd;border-radius:8px;margin:8px;}.xchat-compose.active{display:block;}.xchat-compose-type{font-weight:700;font-size:9px;text-transform:uppercase;color:#2563eb;margin-bottom:2px;}.xchat-compose-author{font-size:10px;font-weight:600;color:#1e293b;margin-bottom:4px;}.xchat-compose-textarea{width:100%;min-height:60px;padding:8px;border:1px solid #93c5fd;border-radius:4px;background:white;font-size:11px;font-family:inherit;resize:vertical;outline:none;}.xchat-compose-footer{display:flex;justify-content:space-between;align-items:center;margin-top:6px;}.xchat-compose-hint{font-size:9px;color:#64748b;}.xchat-compose-send{padding:6px 14px;background:linear-gradient(135deg,#3b82f6,#2563eb);border:none;border-radius:4px;color:white;font-size:10px;font-weight:600;cursor:pointer;}
+.xchat-buttons-row{display:flex;gap:6px;padding:8px;background:#f8fafc;border-top:2px solid #e2e8f0;border-radius:0 0 14px 14px;}.xchat-add-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:8px 6px;border-radius:8px;cursor:pointer;border:none;font-weight:600;transition:all 0.2s;background:linear-gradient(135deg,#dbeafe,#93c5fd);color:#1e3a8a;}.xchat-add-btn .icon{font-size:14px;}.xchat-add-btn .label{font-size:10px;}.xchat-add-btn:hover{transform:translateY(-1px);filter:brightness(1.05);}
+.xdest-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:99997;display:none;align-items:center;justify-content:center;}.xdest-overlay.active{display:flex;}.xdest-modal{background:white;border-radius:12px;width:340px;max-height:70vh;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4);}.xdest-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:linear-gradient(to right,#1e40af,#3b82f6);color:white;font-weight:700;font-size:14px;}.xdest-close{background:rgba(255,255,255,0.2);border:none;color:white;border-radius:50%;width:28px;height:28px;font-size:16px;cursor:pointer;}.xdest-body{max-height:50vh;overflow-y:auto;padding:8px;}.xdest-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;cursor:pointer;transition:all 0.2s;}.xdest-item:hover{background:#f1f5f9;}.xdest-item.selected{background:#dbeafe;border:1px solid #93c5fd;}.xdest-footer{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid #e2e8f0;}.xdest-count{font-size:11px;color:#64748b;}.xdest-send-btn{padding:8px 16px;background:linear-gradient(135deg,#3b82f6,#2563eb);border:none;border-radius:6px;color:white;font-weight:600;font-size:12px;cursor:pointer;}
+</style>
+<div class="xchat-panel" id="xchatPanel">
+  <div class="xchat-hdr"><span class="xchat-hdr-title">💬 Chat PhysiPro</span><button class="xchat-close" onclick="XChat.toggle()">✕ Fermer</button></div>
+  <div class="xchat-scroll" id="xchatScroll">
+    <div class="xchat-pinned" id="xchatPinned"><div class="xchat-pinned-header">📌 Messages épinglés</div><div id="xchatPinnedList"></div></div>
+    <div class="xchat-questions" id="xchatQuestions"><div class="xchat-questions-header">❓ Questions</div><div id="xchatQuestionsList"></div></div>
+    <div class="xchat-messages" id="xchatMessagesList"><div class="xchat-empty">💬 Aucun message.</div></div>
+  </div>
+  <div class="xchat-compose" id="xchatCompose">
+    <button style="position:absolute;top:3px;right:3px;background:rgba(239,68,68,0.15);border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:11px;color:#dc2626;" onclick="XChat.closeCompose()">✕</button>
+    <div class="xchat-compose-type" id="xchatComposeType">💬 DISCUSSION</div>
+    <div class="xchat-compose-author" id="xchatComposeAuthor"></div>
+    <textarea class="xchat-compose-textarea" id="xchatComposeText" placeholder="Écrivez votre message..."></textarea>
+    <div class="xchat-compose-footer"><span class="xchat-compose-hint">Entrée = nouvelle ligne</span><button class="xchat-compose-send" onclick="XChat.openDestModal()">📤 Choisir destinataires</button></div>
+  </div>
+  <div class="xchat-buttons-row"><button class="xchat-add-btn" onclick="XChat.openCompose('normal')" style="flex:1;"><span class="icon">💬</span><span class="label">Ouvrir une discussion</span></button></div>
+</div>
+<div class="xdest-overlay" id="xdestOverlay" onclick="XChat.closeDestModal(event)">
+  <div class="xdest-modal" onclick="event.stopPropagation()">
+    <div class="xdest-header"><span>📤 Envoyer à...</span><button class="xdest-close" onclick="XChat.closeDestModal(null,true)">✕</button></div>
+    <div class="xdest-body" id="xdestBody"></div>
+    <div class="xdest-footer"><span class="xdest-count" id="xdestCount">0 sélectionné(s)</span><button class="xdest-send-btn" onclick="XChat.sendMessage()">📤 Envoyer</button></div>
+  </div>
+</div>
+<script>
+var XChat=(function(){
+  var PAGE_ID='moulage';
+  var PAGE_NAMES={moulage:'Moulage',psm:'PSM',questionnement:'Questionnement',serie:'Série+',inspection:'Inspection Atelier',couture:'Production Couture',archives:'Archives'};
+  var PAGE_URLS={moulage:'Physipro_moulage.html',psm:'PhysiPro_PSM.html',questionnement:'PhysiPro_Questionnement.html',serie:'PhysiPro_Serie_.html',inspection:'PhysiPro_Inspection.html',couture:'PhysiPro_Couture.html',archives:'PhysiPro_Archives.html'};
+  var messages=[],isOpen=false,composeType='normal',replyToThread=null,selectedDest=[],unreadCount=0,firstLoad=true,lastCount=0;
+  function _E(b){try{return atob(b)}catch(e){return b}}
+  var TEAM=[
+    {name:'Daniel Roy',email:_E('YXRlbGllcmF0cEBwaHlzaXByby5jb20='),dept:'Atelier'},
+    {name:'Valérie Caron',email:_E('dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ=='),dept:'Atelier'},
+    {name:'Cassie Simard',email:_E('c3JveUBwaHlzaXByby5jb20='),dept:'Atelier'},
+    {name:'Stéphanie Dutremble',email:_E('c2ltZHV0QHBoeXNpcHJvLmNvbQ=='),dept:'Atelier'},
+    {name:'Simone Bouchard',email:_E('bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t'),dept:'Atelier'},
+    {name:'Nadia Gagne',email:_E('bmdhZ25lQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},
+    {name:'Sonia Boulanger',email:_E('c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},
+    {name:'Fabrys Frechette',email:_E('ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20='),dept:'Administration'},
+    {name:'Mario Ouellette',email:_E('bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t'),dept:'Administration'},
+    {name:'Roxanne Valois',email:_E('cmhAcGh5c2lwcm8uY29t'),dept:'Administration'},
+    {name:'Pierre Caron',email:_E('cGV0ZXJiYXNzNzZAZ21haWwuY29t'),dept:'Direction'},
+    {name:'Élyse Bolduc',email:_E('ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},
+    {name:'Éric Poirier',email:_E('ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},
+    {name:'Patrick Bouchard',email:_E('cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'}
+  ];
+  function getDb(){return(typeof firebaseDb!=='undefined'&&firebaseDb)?firebaseDb:null;}
+  function getUser(){return(typeof currentUser!=='undefined'&&currentUser)?currentUser:null;}
+  function getUserName(e){if(!e)return'Utilisateur';var el=e.toLowerCase();for(var i=0;i<TEAM.length;i++){if(TEAM[i].email.toLowerCase()===el)return TEAM[i].name;}if(typeof getUserDisplayName==='function')return getUserDisplayName(e);return e.split('@')[0];}
+  function esc(s){if(!s)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+  function fmtTime(ts){if(!ts)return'';var d=new Date(ts);return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+
+  function init(){
+    var database=getDb(),user=getUser();
+    if(!database||!user||!user.email){setTimeout(init,2000);return;}
+    database.ref('crossAppChat').orderByChild('timestamp').limitToLast(200).on('value',function(snap){
+      var data=snap.val()||{};var entries=Object.entries(data);entries.sort(function(a,b){return(a[1].timestamp||0)-(b[1].timestamp||0);});messages=entries;
+      var myEmail=(user.email||'').toLowerCase(),emailKey=myEmail.replace(/\./g,'_');unreadCount=0;
+      entries.forEach(function(e){var msg=e[1];if(msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail)return;if(msg.readBy&&msg.readBy[emailKey])return;if(msg.recipients&&msg.recipients.length>0){var isForMe=msg.recipients.some(function(r){return r.email&&r.email.toLowerCase()===myEmail;});if(!isForMe)return;}unreadCount++;});
+      renderMessages();
+      if(!firstLoad&&entries.length>lastCount){var newest=entries[entries.length-1];if(newest&&newest[1].authorEmail&&newest[1].authorEmail.toLowerCase()!==myEmail){if(typeof showToast==='function')showToast('💬 Nouveau message de '+(newest[1].authorName||''),'info');}}
+      firstLoad=false;lastCount=entries.length;
+    });
+  }
+  function toggle(){var panel=document.getElementById('xchatPanel');isOpen=!panel.classList.contains('active');panel.classList.toggle('active');if(isOpen)markVisibleRead();}
+  function renderMessages(){
+    var user=getUser();if(!user)return;var myEmail=(user.email||'').toLowerCase();
+    var pinnedSection=document.getElementById('xchatPinned'),questSection=document.getElementById('xchatQuestions'),msgList=document.getElementById('xchatMessagesList');
+    var pinned=[],threads={},regular=[];
+    messages.forEach(function(e){var msg=e[1];if(msg.type==='pinned'){pinned.push(e);}else if(msg.type==='problem'){var tid=e[0];if(!threads[tid])threads[tid]={question:e,replies:[]};else threads[tid].question=e;}else if(msg.threadId&&threads[msg.threadId]){threads[msg.threadId].replies.push(e);}else if(msg.threadId){threads[msg.threadId]={question:null,replies:[e]};}else{regular.push(e);}});
+    if(pinned.length>0){pinnedSection.classList.add('has-items');document.getElementById('xchatPinnedList').innerHTML=pinned.map(function(e){return renderMsg(e,myEmail,'pinned');}).join('');}else{pinnedSection.classList.remove('has-items');}
+    if(Object.keys(threads).length>0){questSection.classList.add('has-items');var thtml='';Object.keys(threads).forEach(function(key){var t=threads[key],q=t.question;if(!q)return;thtml+='<div class="xthread-block">';thtml+=renderQ(q,myEmail,t.replies.length>0);t.replies.forEach(function(r){thtml+=renderR(r,myEmail);});thtml+='<div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+q[0]+'\')">↩️ Répondre</button></div></div>';});document.getElementById('xchatQuestionsList').innerHTML=thtml;}else{questSection.classList.remove('has-items');}
+    if(regular.length>0){msgList.innerHTML=regular.map(function(e){return renderMsg(e,myEmail,'normal');}).join('');}else if(pinned.length===0&&!Object.keys(threads).length){msgList.innerHTML='<div class="xchat-empty">💬 Aucun message.</div>';}else{msgList.innerHTML='';}
+    if(isOpen){var scroll=document.getElementById('xchatScroll');if(scroll)scroll.scrollTop=scroll.scrollHeight;}
+  }
+  function renderMsg(e,myEmail,typeClass){
+    var id=e[0],msg=e[1],isMe=msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail;
+    var srcName=PAGE_NAMES[msg.sourcePage]||msg.sourcePage||'';
+    var labels={problem:'❓ Question',normal:'💬 Discussion',pinned:'📌 Épinglé'};
+    var del=isMe?'<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>':'';
+    var ci='';if(msg.sourceCardName||msg.sourceCardId)ci='<div style="font-size:8px;color:#60a5fa;margin-top:1px;font-style:italic;">📋 '+esc(msg.sourceCardName||msg.sourceCardId)+'</div>';
+    var dl='';if(msg.sourcePage&&msg.sourcePage!==PAGE_ID&&PAGE_URLS[msg.sourcePage]){var u=PAGE_URLS[msg.sourcePage];if(msg.sourceCardId)u+='?card='+encodeURIComponent(msg.sourceCardId);dl='<a style="display:inline-block;margin-top:4px;padding:2px 8px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:4px;color:#93c5fd;font-size:8px;font-weight:600;cursor:pointer;text-decoration:none;" href="'+u+'" target="_blank">🔗 Ouvrir dans '+esc(srcName)+'</a>';}
+    return'<div class="xchat-msg '+typeClass+'">'+del+'<div class="xmsg-type">'+(labels[msg.type]||'💬 Discussion')+' <span class="xmsg-time">'+fmtTime(msg.timestamp)+'</span></div><div class="xmsg-author">'+esc(msg.authorName||'Utilisateur')+(isMe?' (moi)':'')+'</div><div class="xmsg-content">'+esc(msg.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(srcName)+'</div>'+ci+dl+'<div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+id+'\')">↩️ Répondre</button></div></div>';
+  }
+  function renderQ(e,myEmail,hasR){var id=e[0],msg=e[1],isMe=msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail,srcName=PAGE_NAMES[msg.sourcePage]||'';var del=isMe?'<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>':'';return'<div class="xthread-question'+(hasR?' has-replies':'')+'">'+del+'<div class="xmsg-type">❓ Question <span class="xmsg-time" style="float:right;font-weight:400;color:#94a3b8;">'+fmtTime(msg.timestamp)+'</span></div><div class="xmsg-author">'+esc(msg.authorName||'')+(isMe?' (moi)':'')+'</div><div class="xmsg-content">'+esc(msg.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(srcName)+'</div><div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+id+'\')">↩️ Répondre</button></div></div>';}
+  function renderR(e,myEmail){var id=e[0],msg=e[1],isMe=msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail,srcName=PAGE_NAMES[msg.sourcePage]||'';var del=isMe?'<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>':'';return'<div class="xthread-discussion">'+del+'<div class="xmsg-type">↩️ Réponse <span style="float:right;font-weight:400;color:#94a3b8;font-size:8px;">'+fmtTime(msg.timestamp)+'</span></div><div class="xmsg-author">'+esc(msg.authorName||'')+(isMe?' (moi)':'')+'</div><div class="xmsg-content">'+esc(msg.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(srcName)+'</div><div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+(msg.threadId||id)+'\')">↩️ Répondre</button></div></div>';}
+
+  function openCompose(type){composeType=type;replyToThread=null;var z=document.getElementById('xchatCompose'),t=document.getElementById('xchatComposeType'),a=document.getElementById('xchatComposeAuthor'),ta=document.getElementById('xchatComposeText');z.className='xchat-compose active';t.textContent='💬 DISCUSSION';var u=getUser();a.textContent=u?getUserName(u.email):'Utilisateur';ta.value='';ta.focus();}
+  function closeCompose(){document.getElementById('xchatCompose').classList.remove('active');replyToThread=null;}
+  function replyToThreadFn(threadId){replyToThread=threadId;openCompose('normal');document.getElementById('xchatComposeType').textContent='↩️ RÉPONSE';}
+  function openDestModal(){var body=document.getElementById('xdestBody');if(!body)return;selectedDest=[];var html='';var byDept={};TEAM.forEach(function(t){if(!byDept[t.dept])byDept[t.dept]=[];byDept[t.dept].push(t);});Object.keys(byDept).forEach(function(dept){html+='<div style="font-size:9px;font-weight:700;color:#64748b;padding:8px 12px 4px;text-transform:uppercase;">'+dept+'</div>';byDept[dept].forEach(function(t,i){html+='<div class="xdest-item" onclick="XChat.toggleDest(this,'+i+',\''+dept+'\')" data-email="'+t.email+'" data-name="'+t.name+'"><span style="font-size:11px;">'+esc(t.name)+'</span></div>';});});body.innerHTML=html;document.getElementById('xdestOverlay').classList.add('active');document.getElementById('xdestCount').textContent='0 sélectionné(s)';}
+  function closeDestModal(ev,force){if(ev&&ev.target!==ev.currentTarget&&!force)return;document.getElementById('xdestOverlay').classList.remove('active');}
+  function toggleDest(el){el.classList.toggle('selected');var email=el.dataset.email,name=el.dataset.name;if(el.classList.contains('selected')){selectedDest.push({email:email,name:name});}else{selectedDest=selectedDest.filter(function(d){return d.email!==email;});}document.getElementById('xdestCount').textContent=selectedDest.length+' sélectionné(s)';}
+  function sendMessage(){var database=getDb(),user=getUser();if(!database||!user||!user.email){if(typeof showToast==='function')showToast('⚠️ Non connecté','error');return;}var content=document.getElementById('xchatComposeText').value.trim();if(!content)return;if(selectedDest.length===0){if(typeof showToast==='function')showToast('⚠️ Sélectionnez au moins un destinataire','error');return;}
+    var authorName=getUserName(user.email),emailKey=user.email.toLowerCase().replace(/\./g,'_');
+    var msgData={content:content,type:composeType,authorEmail:user.email,authorName:authorName,sourcePage:PAGE_ID,timestamp:Date.now(),createdAt:firebase.database.ServerValue.TIMESTAMP,recipients:selectedDest,readBy:{}};
+    if(typeof currentCardId!=='undefined'&&currentCardId&&typeof cardsData!=='undefined'&&cardsData[currentCardId]){var _c=cardsData[currentCardId];msgData.sourceCardId=currentCardId;msgData.sourceCardName=(_c.beneficiary||_c.name||'Moulage')+' #'+(_c.order||_c.id||'');msgData.sourceModule='Moulage';}
+    if(replyToThread){msgData.threadId=replyToThread;msgData.type='normal';}
+    msgData.readBy[emailKey]=true;
+    database.ref('crossAppChat').push().set(msgData).then(function(){var names=selectedDest.map(function(d){return d.name.split(' ')[0];}).join(', ');if(typeof showToast==='function')showToast('📤 Envoyé à: '+names,'success');closeCompose();closeDestModal(null,true);selectedDest=[];}).catch(function(e){if(typeof showToast==='function')showToast('❌ Erreur: '+e.message,'error');});}
+  function deleteMsg(id){var database=getDb();if(!database)return;database.ref('crossAppChat/'+id).remove().catch(function(){});}
+  function markVisibleRead(){var database=getDb(),user=getUser();if(!database||!user)return;var myEmail=(user.email||'').toLowerCase(),emailKey=myEmail.replace(/\./g,'_'),updates={};messages.forEach(function(e){var msg=e[1];if(msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail)return;if(msg.readBy&&msg.readBy[emailKey])return;if(msg.recipients&&msg.recipients.length>0){var isForMe=msg.recipients.some(function(r){return r.email&&r.email.toLowerCase()===myEmail;});if(!isForMe)return;}updates['crossAppChat/'+e[0]+'/readBy/'+emailKey]=true;});if(Object.keys(updates).length>0)database.ref().update(updates).catch(function(){});}
+
+  var attempts=0;function tryInit(){attempts++;if(getDb()&&getUser()){init();}else if(attempts<30){setTimeout(tryInit,1000);}}
+  setTimeout(tryInit,1500);
+  return{toggle:toggle,openCompose:openCompose,closeCompose:closeCompose,openDestModal:openDestModal,closeDestModal:closeDestModal,toggleDest:toggleDest,sendMessage:sendMessage,deleteMsg:deleteMsg,replyToThread:replyToThreadFn,markAllRead:function(){markVisibleRead();}};
+})();
+</script>
 </body>
 </html>
