@@ -2140,6 +2140,7 @@ md.data[md.month]=md.rows;saveD(d,md.data);showToast('📅 Date modifiée','succ
 function getSerieCards(){try{return JSON.parse(localStorage.getItem(SK))||{};}catch(e){return {};}}
 function findSerie(num){var cards=getSerieCards();var n=String(num).trim();if(!n)return null;var nStrip=n.replace(/^0+/,'');var nLast6=nStrip.slice(-6);for(var id in cards){var o=String(cards[id].order||'').trim();var p=String(cards[id].numeroPO||'').trim();var oStrip=o.replace(/^0+/,'');var pStrip=p.replace(/^0+/,'');if(o===n||p===n)return{cardId:id,card:cards[id]};if(oStrip===nStrip||pStrip===nStrip)return{cardId:id,card:cards[id]};if(oStrip.slice(-6)===nLast6&&nLast6.length>=4)return{cardId:id,card:cards[id]};if(pStrip.slice(-6)===nLast6&&nLast6.length>=4)return{cardId:id,card:cards[id]};}return null;}
 function getUnfinished(card,dept){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){if(dept==='inspection'){var done=(g.atelier&&g.atelier.inspected)||false;var inInv=(g.atelier&&g.atelier.sentToInventaire)||false;var qf=parseInt(g.atelier&&g.atelier.qtyFait)||0;var isP=(g.atelier&&g.atelier.partiel)||false;var tQ=parseInt(g.qty)||0;if(!done){var rem=isP?(tQ-qf):tQ;pend.push({gi:gi,name:g.name,qty:tQ,qtyFait:qf,remaining:rem,inInventaire:inInv,wasPartial:isP});}}else{var done2=(g.couture&&g.couture.inspected)||false;var inInv2=(g.couture&&g.couture.sentToInventaire)||false;var qf2=parseInt(g.couture&&g.couture.qtyFait)||0;var isP2=(g.couture&&g.couture.partiel)||false;var tQ2=parseInt(g.qty)||0;if(!done2){var rem2=isP2?(tQ2-qf2):tQ2;pend.push({gi:gi,name:g.name,qty:tQ2,qtyFait:qf2,remaining:rem2,inInventaire:inInv2,wasPartial:isP2});}}});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
+function getCompleted(card,dept){var res=[];(card.items||[]).forEach(function(item,ii){var done=[];(item.grandeurs||[]).forEach(function(g,gi){if(dept==='inspection'){var isDone=(g.atelier&&g.atelier.inspected)||false;if(isDone)done.push({gi:gi,name:g.name,qty:parseInt(g.qty)||0});}else{var isDone2=(g.couture&&g.couture.inspected)||false;if(isDone2)done.push({gi:gi,name:g.name,qty:parseInt(g.qty)||0});}});if(done.length)res.push({ii:ii,name:item.name,completed:done});});return res;}
 function rowHasPartial(row){if(!row||!row.item)return false;
   // Detect partial: either "~" prefix lines OR fraction "3/5" format
   return /\d+\/\d+$/m.test(row.item)||/^~/m.test(row.item);
@@ -2241,7 +2242,40 @@ if(fbDb){
 function openSerieModal(bon,match,dept){var cid=match.cardId;
 // Always re-read fresh card from localStorage (may have been updated by confirmSI)
 var freshCards=getSerieCards();var card=freshCards[cid]||match.card;
-var items=getUnfinished(card,dept);var h='<div class="serie-match-info"><div class="label">🔗 Série+</div><div class="value">'+esc(card.client||'')+' — '+esc(card.order||bon)+'</div></div>';if(!items.length){h+='<p style="color:var(--success);font-weight:700;">✅ Tout complété!</p>';}else{h+='<div class="item-choice">';items.forEach(function(item,idx){var pc=item.pending.filter(function(g){return g.wasPartial;}).length;var pt=pc>0?' <span style="background:rgba(251,191,36,.3);color:#fbbf24;font-size:8px;padding:1px 4px;border-radius:3px;font-weight:700;">⚠️'+pc+'</span>':'';h+='<button class="item-btn" onclick="selSI('+idx+')" data-idx="'+idx+'" style="'+(pc>0?'border-color:#fbbf24;background:rgba(251,191,36,.08);':'')+'">'+esc(item.name)+' ('+item.pending.length+')'+pt+'</button>';});h+='</div><div id="grandeurArea"></div><div style="display:none;text-align:right;margin-top:10px;" id="confirmArea"><button class="btn btn-add" onclick="confirmSI()">✅ Confirmer</button></div>';}window._ctx={bon:bon,cid:cid,card:card,items:items,dept:dept,si:null,cg:[],sourceRowIdx:window._reopenRowIdx!=null?window._reopenRowIdx:null,sourceDept:window._reopenDept||null};window._reopenRowIdx=null;window._reopenDept=null;document.getElementById('modalTitle').textContent=(dept==='inspection'?'☑️':'🧵')+' Série+';document.getElementById('modalBody').innerHTML=h;document.getElementById('modalOverlay').classList.add('show');}
+var items=getUnfinished(card,dept);var completed=getCompleted(card,dept);
+var h='<div class="serie-match-info"><div class="label">🔗 Série+</div><div class="value">'+esc(card.client||'')+' — '+esc(card.order||bon)+'</div></div>';
+if(!items.length && !completed.length){
+  h+='<p style="color:var(--success);font-weight:700;">✅ Tout complété!</p>';
+} else {
+  if(items.length){
+    h+='<div class="item-choice">';
+    items.forEach(function(item,idx){var pc=item.pending.filter(function(g){return g.wasPartial;}).length;var pt=pc>0?' <span style="background:rgba(251,191,36,.3);color:#fbbf24;font-size:8px;padding:1px 4px;border-radius:3px;font-weight:700;">⚠️'+pc+'</span>':'';h+='<button class="item-btn" onclick="selSI('+idx+')" data-idx="'+idx+'" style="'+(pc>0?'border-color:#fbbf24;background:rgba(251,191,36,.08);':'')+'">'+esc(item.name)+' ('+item.pending.length+')'+pt+'</button>';});
+    h+='</div>';
+  } else {
+    h+='<p style="color:var(--success);font-weight:700;margin:8px 0 4px;">✅ Tout complété!</p>';
+  }
+  h+='<div id="grandeurArea"></div><div style="display:none;text-align:right;margin-top:10px;" id="confirmArea"><button class="btn btn-add" onclick="confirmSI()">✅ Confirmer</button></div>';
+  if(completed.length){
+    h+='<div style="margin-top:12px;border-top:1px solid rgba(34,197,94,.3);padding-top:8px;">';
+    h+='<div style="font-size:10px;font-weight:700;color:#22c55e;margin-bottom:6px;">✅ Complétés</div>';
+    completed.forEach(function(ci){
+      h+='<div style="margin-bottom:4px;">';
+      h+='<div style="font-size:11px;font-weight:700;color:#86efac;margin-bottom:2px;">'+esc(ci.name)+'</div>';
+      ci.completed.forEach(function(g){
+        h+='<div style="display:flex;align-items:center;gap:6px;padding:3px 8px;margin:1px 0;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:4px;">';
+        h+='<span style="color:#22c55e;font-size:12px;">●</span>';
+        h+='<span style="color:#86efac;font-size:11px;font-weight:600;">'+esc(g.name)+'</span>';
+        h+='<span style="color:rgba(134,239,172,.6);font-size:10px;">Qté: '+g.qty+'</span>';
+        h+='<span style="flex:1;"></span>';
+        h+='<span style="color:#22c55e;font-weight:800;font-size:11px;">Complet</span>';
+        h+='</div>';
+      });
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+}
+window._ctx={bon:bon,cid:cid,card:card,items:items,dept:dept,si:null,cg:[],sourceRowIdx:window._reopenRowIdx!=null?window._reopenRowIdx:null,sourceDept:window._reopenDept||null};window._reopenRowIdx=null;window._reopenDept=null;document.getElementById('modalTitle').textContent=(dept==='inspection'?'☑️':'🧵')+' Série+';document.getElementById('modalBody').innerHTML=h;document.getElementById('modalOverlay').classList.add('show');}
 function selSI(idx){var ctx=window._ctx;ctx.si=idx;ctx.cg=[];ctx.cqty={};ctx.cnotes={};ctx.cpartiel={};document.querySelectorAll('.item-btn').forEach(function(b){b.classList.remove('selected');});document.querySelector('.item-btn[data-idx="'+idx+'"]').classList.add('selected');var item=ctx.items[idx];
 var cards=getSerieCards();var card=cards[ctx.cid]||ctx.card;
 var h='<div class="grandeur-list">';
