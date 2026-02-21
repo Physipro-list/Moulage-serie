@@ -2240,42 +2240,36 @@ if(fbDb){
   if(m){openSerieModal(bon,m,dept);}else{openManualModal(bon,dept);}
 }}
 function openSerieModal(bon,match,dept){var cid=match.cardId;
-// Always re-read fresh card from localStorage (may have been updated by confirmSI)
 var freshCards=getSerieCards();var card=freshCards[cid]||match.card;
 var items=getUnfinished(card,dept);var completed=getCompleted(card,dept);
+var completedMap={};completed.forEach(function(ci){completedMap[ci.ii]=ci;});
 var h='<div class="serie-match-info"><div class="label">🔗 Série+</div><div class="value">'+esc(card.client||'')+' — '+esc(card.order||bon)+'</div></div>';
 if(!items.length && !completed.length){
   h+='<p style="color:var(--success);font-weight:700;">✅ Tout complété!</p>';
 } else {
-  if(items.length){
-    h+='<div class="item-choice">';
-    items.forEach(function(item,idx){var pc=item.pending.filter(function(g){return g.wasPartial;}).length;var pt=pc>0?' <span style="background:rgba(251,191,36,.3);color:#fbbf24;font-size:8px;padding:1px 4px;border-radius:3px;font-weight:700;">⚠️'+pc+'</span>':'';h+='<button class="item-btn" onclick="selSI('+idx+')" data-idx="'+idx+'" style="'+(pc>0?'border-color:#fbbf24;background:rgba(251,191,36,.08);':'')+'">'+esc(item.name)+' ('+item.pending.length+')'+pt+'</button>';});
-    h+='</div>';
-  } else {
-    h+='<p style="color:var(--success);font-weight:700;margin:8px 0 4px;">✅ Tout complété!</p>';
-  }
-  h+='<div id="grandeurArea"></div><div style="display:none;text-align:right;margin-top:10px;" id="confirmArea"><button class="btn btn-add" onclick="confirmSI()">✅ Confirmer</button></div>';
-  if(completed.length){
-    h+='<div style="margin-top:12px;border-top:1px solid rgba(34,197,94,.3);padding-top:8px;">';
-    h+='<div style="font-size:10px;font-weight:700;color:#22c55e;margin-bottom:6px;">✅ Complétés</div>';
-    completed.forEach(function(ci){
-      h+='<div style="margin-bottom:4px;">';
-      h+='<div style="font-size:11px;font-weight:700;color:#86efac;margin-bottom:2px;">'+esc(ci.name)+'</div>';
-      ci.completed.forEach(function(g){
-        h+='<div style="display:flex;align-items:center;gap:6px;padding:3px 8px;margin:1px 0;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:4px;">';
-        h+='<span style="color:#22c55e;font-size:12px;">●</span>';
-        h+='<span style="color:#86efac;font-size:11px;font-weight:600;">'+esc(g.name)+'</span>';
-        h+='<span style="color:rgba(134,239,172,.6);font-size:10px;">Qté: '+g.qty+'</span>';
-        h+='<span style="flex:1;"></span>';
-        h+='<span style="color:#22c55e;font-weight:800;font-size:11px;">Complet</span>';
-        h+='</div>';
-      });
-      h+='</div>';
-    });
-    h+='</div>';
-  }
+  h+='<div class="item-choice">';
+  items.forEach(function(item,idx){
+    var pc=item.pending.filter(function(g){return g.wasPartial;}).length;
+    var pt=pc>0?' <span style="background:rgba(251,191,36,.3);color:#fbbf24;font-size:8px;padding:1px 4px;border-radius:3px;font-weight:700;">⚠️'+pc+'</span>':'';
+    h+='<button class="item-btn" onclick="selSI('+idx+')" data-idx="'+idx+'" style="'+(pc>0?'border-color:#fbbf24;background:rgba(251,191,36,.08);':'')+'">'+esc(item.name)+' ('+item.pending.length+')'+pt+'</button>';
+  });
+  completed.forEach(function(ci){
+    var hasPending=items.some(function(it){return it.ii===ci.ii;});
+    if(!hasPending){
+      h+='<button class="item-btn" style="background:rgba(34,197,94,.15);border-color:#22c55e;color:#22c55e;cursor:default;opacity:.85;" disabled>'+esc(ci.name)+' — Complet</button>';
+    }
+  });
+  h+='</div>';
+  h+='<div id="grandeurArea"></div>';
+  h+='<div style="display:none;text-align:right;margin-top:10px;" id="confirmArea"><button class="btn btn-add" onclick="confirmSI()">✅ Confirmer</button></div>';
 }
-window._ctx={bon:bon,cid:cid,card:card,items:items,dept:dept,si:null,cg:[],sourceRowIdx:window._reopenRowIdx!=null?window._reopenRowIdx:null,sourceDept:window._reopenDept||null};window._reopenRowIdx=null;window._reopenDept=null;document.getElementById('modalTitle').textContent=(dept==='inspection'?'☑️':'🧵')+' Série+';document.getElementById('modalBody').innerHTML=h;document.getElementById('modalOverlay').classList.add('show');}
+window._ctx={bon:bon,cid:cid,card:card,items:items,completed:completed,completedMap:completedMap,dept:dept,si:null,cg:[],sourceRowIdx:window._reopenRowIdx!=null?window._reopenRowIdx:null,sourceDept:window._reopenDept||null};
+window._reopenRowIdx=null;window._reopenDept=null;
+document.getElementById('modalTitle').textContent=(dept==='inspection'?'☑️':'🧵')+' Série+';
+document.getElementById('modalBody').innerHTML=h;
+document.getElementById('modalOverlay').classList.add('show');
+if(items.length){setTimeout(function(){selSI(0);},50);}
+}
 function selSI(idx){var ctx=window._ctx;ctx.si=idx;ctx.cg=[];ctx.cqty={};ctx.cnotes={};ctx.cpartiel={};document.querySelectorAll('.item-btn').forEach(function(b){b.classList.remove('selected');});document.querySelector('.item-btn[data-idx="'+idx+'"]').classList.add('selected');var item=ctx.items[idx];
 var cards=getSerieCards();var card=cards[ctx.cid]||ctx.card;
 var h='<div class="grandeur-list">';
@@ -2315,7 +2309,27 @@ h+='<div onclick="event.stopPropagation()" style="display:inline-flex;align-item
 h+='<button class="g-note-btn '+noteHasClass+'" id="gnotebtn_'+pi+'" onclick="event.stopPropagation();toggleGNoteArea('+pi+')">Note</button>';
 h+='</div></div>';
 h+='<div class="g-note-area" id="gnotearea_'+pi+'" onclick="event.stopPropagation()"><textarea id="gnotetxt_'+pi+'" placeholder="Note..." onchange="updateGNote('+pi+')">'+esc(existingNote)+'</textarea></div>';
-});h+='</div>';document.getElementById('grandeurArea').innerHTML=h;document.getElementById('confirmArea').style.display='block';}
+});
+// Add completed grandeurs for this item at the bottom
+var ctx2=window._ctx;if(ctx2 && ctx2.completedMap){
+  var itemII=ctx2.items[ctx2.si]?.ii;
+  var ci=ctx2.completedMap[itemII];
+  if(ci && ci.completed && ci.completed.length){
+    h+='<div style="margin-top:8px;border-top:1px solid rgba(34,197,94,.3);padding-top:6px;">';
+    h+='<div style="font-size:9px;font-weight:700;color:#22c55e;margin-bottom:4px;">✅ Grandeurs complétées</div>';
+    ci.completed.forEach(function(cg){
+      h+='<div style="display:flex;align-items:center;gap:6px;padding:3px 8px;margin:1px 0;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:4px;">';
+      h+='<span style="color:#22c55e;font-size:12px;">●</span>';
+      h+='<span style="color:#86efac;font-size:11px;font-weight:600;">'+esc(cg.name)+'</span>';
+      h+='<span style="color:rgba(134,239,172,.6);font-size:10px;">Qté: '+cg.qty+'</span>';
+      h+='<span style="flex:1;"></span>';
+      h+='<span style="color:#22c55e;font-weight:800;font-size:11px;">Complet</span>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+}
+h+='</div>';document.getElementById('grandeurArea').innerHTML=h;document.getElementById('confirmArea').style.display='block';}
 function toggleAllGrandeurs(){
   var ctx=window._ctx;if(!ctx||ctx.si===null)return;
   var item=ctx.items[ctx.si];
