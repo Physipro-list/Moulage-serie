@@ -2138,7 +2138,7 @@ md.data[md.month]=md.rows;saveD(d,md.data);showToast('📅 Date modifiée','succ
 
 /* ═══ SÉRIE+ ═══ */
 function getSerieCards(){try{return JSON.parse(localStorage.getItem(SK))||{};}catch(e){return {};}}
-function findSerie(num){var cards=getSerieCards();var n=String(num).trim();for(var id in cards)if(cards[id].order===n||cards[id].numeroPO===n)return{cardId:id,card:cards[id]};return null;}
+function findSerie(num){var cards=getSerieCards();var n=String(num).trim();if(!n)return null;var nStrip=n.replace(/^0+/,'');var nLast6=nStrip.slice(-6);for(var id in cards){var o=String(cards[id].order||'').trim();var p=String(cards[id].numeroPO||'').trim();var oStrip=o.replace(/^0+/,'');var pStrip=p.replace(/^0+/,'');if(o===n||p===n)return{cardId:id,card:cards[id]};if(oStrip===nStrip||pStrip===nStrip)return{cardId:id,card:cards[id]};if(oStrip.slice(-6)===nLast6&&nLast6.length>=4)return{cardId:id,card:cards[id]};if(pStrip.slice(-6)===nLast6&&nLast6.length>=4)return{cardId:id,card:cards[id]};}return null;}
 function getUnfinished(card,dept){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){if(dept==='inspection'){var done=(g.atelier&&g.atelier.inspected)||false;var inInv=(g.atelier&&g.atelier.sentToInventaire)||false;var qf=parseInt(g.atelier&&g.atelier.qtyFait)||0;var isP=(g.atelier&&g.atelier.partiel)||false;var tQ=parseInt(g.qty)||0;if(!done){var rem=isP?(tQ-qf):tQ;pend.push({gi:gi,name:g.name,qty:tQ,qtyFait:qf,remaining:rem,inInventaire:inInv,wasPartial:isP});}}else{var done2=(g.couture&&g.couture.inspected)||false;var inInv2=(g.couture&&g.couture.sentToInventaire)||false;var qf2=parseInt(g.couture&&g.couture.qtyFait)||0;var isP2=(g.couture&&g.couture.partiel)||false;var tQ2=parseInt(g.qty)||0;if(!done2){var rem2=isP2?(tQ2-qf2):tQ2;pend.push({gi:gi,name:g.name,qty:tQ2,qtyFait:qf2,remaining:rem2,inInventaire:inInv2,wasPartial:isP2});}}});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
 function rowHasPartial(row){if(!row||!row.item)return false;
   // Detect partial: either "~" prefix lines OR fraction "3/5" format
@@ -2202,7 +2202,8 @@ if(fbDb){
     // Now search
     var n=String(bon).trim();
     var found=null;
-    for(var cid in local){if(local[cid].order===n||local[cid].numeroPO===n){found={cardId:cid,card:local[cid]};break;}}
+    var nStrip=n.replace(/^0+/,'');var nL6=nStrip.slice(-6);
+    for(var cid in local){var o=String(local[cid].order||'');var p=String(local[cid].numeroPO||'');var os=o.replace(/^0+/,'');var ps=p.replace(/^0+/,'');if(o===n||p===n||os===nStrip||ps===nStrip||(os.slice(-6)===nL6&&nL6.length>=4)||(ps.slice(-6)===nL6&&nL6.length>=4)){found={cardId:cid,card:local[cid]};break;}}
     document.getElementById(id).value='';document.getElementById(id).focus();
     if(found){openSerieModal(bon,found,dept);}else{openManualModal(bon,dept);}
   }).catch(function(){
