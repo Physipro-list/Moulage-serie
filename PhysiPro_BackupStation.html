@@ -3,748 +3,198 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PhysiPro — Station de Sauvegarde</title>
+<title>🛡️ Sauvegarde</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;}
-:root{--bg:#050d1a;--card:#0c1929;--border:#1e3a5c;--gold:#fbbf24;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--purple:#a855f7;--text:#e2e8f0;--muted:#64748b;}
-body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
-/* LOGIN */
-.login-overlay{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;}
-.login-overlay.hidden{display:none;}
-.login-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:40px 32px;width:360px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5);}
-.login-box h1{font-size:24px;font-weight:800;color:var(--gold);margin-bottom:4px;}
-.login-box p{font-size:12px;color:var(--muted);margin-bottom:24px;}
-.login-box input{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;margin-bottom:10px;outline:none;font-family:inherit;}
-.login-box input:focus{border-color:var(--blue);}
-.login-box button{width:100%;padding:10px;background:linear-gradient(135deg,var(--blue),#1d4ed8);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;}
-.login-box button:hover{filter:brightness(1.1);}
-.login-err{color:var(--red);font-size:11px;margin-top:6px;min-height:16px;}
+body{font-family:-apple-system,sans-serif;background:#0a1628;color:#e2e8f0;overflow-x:hidden;font-size:10px;}
 /* TOPBAR */
-.topbar{height:56px;padding:0 24px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#04152c 0%,#1e3a5c 100%);border-bottom:2px solid var(--gold);position:sticky;top:0;z-index:100;}
-.tb-title{font-size:18px;font-weight:800;color:var(--gold);letter-spacing:.5px;display:flex;align-items:center;gap:10px;}
-.tb-title span{font-size:22px;}
-.tb-right{display:flex;align-items:center;gap:12px;}
-.tb-user{font-size:11px;color:rgba(255,255,255,.6);}
-.tb-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px rgba(34,197,94,.5);}
-.tb-logout{font-size:9px;padding:3px 8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:4px;color:rgba(255,255,255,.5);cursor:pointer;font-family:inherit;}
-.tb-logout:hover{background:rgba(255,255,255,.15);color:#fff;}
-/* MAIN */
-.main{padding:20px 24px;max-width:1200px;margin:0 auto;}
-/* STATUS BAR */
-.status-bar{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
-.status-card{flex:1;min-width:160px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;overflow:hidden;}
-.status-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
-.status-card.ok::before{background:var(--green);}
-.status-card.warn::before{background:var(--gold);}
-.status-card.err::before{background:var(--red);}
-.status-card.off::before{background:var(--muted);}
-.sc-icon{font-size:24px;margin-bottom:6px;}
-.sc-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;}
-.sc-value{font-size:18px;font-weight:800;margin-top:2px;}
-.sc-value.green{color:var(--green);}
-.sc-value.red{color:var(--red);}
-.sc-value.gold{color:var(--gold);}
-.sc-value.muted{color:var(--muted);}
-/* CONTROLS */
-.controls-row{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center;}
-.btn{padding:10px 20px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;align-items:center;gap:6px;}
-.btn:hover{transform:translateY(-1px);filter:brightness(1.1);}
-.btn-primary{background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;}
-.btn-folder{background:linear-gradient(135deg,var(--blue),#1d4ed8);color:#fff;}
-.btn-restore{background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;}
-.btn-stop{background:linear-gradient(135deg,var(--red),#b91c1c);color:#fff;}
-.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
-/* MODULES GRID */
-.modules-title{font-size:14px;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
-.modules-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:20px;}
-.mod-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;position:relative;overflow:hidden;transition:border-color .3s;}
-.mod-card.synced{border-color:rgba(34,197,94,.3);}
-.mod-card.changed{border-color:rgba(251,191,36,.4);}
-.mod-card.error{border-color:rgba(239,68,68,.4);}
-.mod-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
-.mod-name{font-size:13px;font-weight:700;color:#fff;}
-.mod-status{font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;}
-.mod-status.ok{background:rgba(34,197,94,.15);color:var(--green);}
-.mod-status.pending{background:rgba(251,191,36,.15);color:var(--gold);}
-.mod-status.err{background:rgba(239,68,68,.15);color:var(--red);}
-.mod-status.idle{background:rgba(100,116,139,.15);color:var(--muted);}
-.mod-paths{font-size:10px;color:var(--muted);line-height:1.6;}
-.mod-paths span{color:var(--text);font-weight:500;}
-.mod-size{font-size:9px;color:var(--muted);margin-top:6px;text-align:right;}
+.tb{height:32px;padding:0 6px;display:flex;align-items:center;background:linear-gradient(to bottom,#04152c,#4a8ef5);gap:4px;}
+.tb img{height:18px;cursor:pointer;filter:brightness(1.1);}
+.tb .tt{flex:1;text-align:center;font-size:10px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);letter-spacing:.03em;}
+.tb .tu{font-size:7px;color:rgba(255,255,255,.5);display:flex;align-items:center;gap:2px;}
+.tb .dot{width:4px;height:4px;border-radius:50%;background:#ef4444;}.tb .dot.on{background:#22c55e;}
+.tb .lo{font-size:6px;padding:1px 3px;background:none;border:1px solid rgba(255,255,255,.12);border-radius:2px;color:rgba(255,255,255,.35);cursor:pointer;}
+/* NAV */
+.nov{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:none;align-items:center;justify-content:center;padding:6px;}
+.nov.v{display:flex;}
+.nb{background:linear-gradient(160deg,#04152c,#1a3a5c);border:1px solid rgba(74,142,245,.3);border-radius:10px;padding:10px 8px;width:100%;max-width:250px;position:relative;}
+.nb .nt{text-align:center;font-size:10px;font-weight:700;color:#fff;margin-bottom:6px;}
+.ng{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;}
+.ni{display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 2px;border-radius:5px;border:1px solid rgba(255,255,255,.04);text-decoration:none;transition:all .15s;cursor:pointer;}
+.ni:hover{background:rgba(255,255,255,.06);}.ni.cur{border-color:rgba(74,142,245,.3);background:rgba(74,142,245,.06);}
+.ni .ic{font-size:13px;}.ni .la{font-size:7px;font-weight:600;color:#fff;}
+.nc{position:absolute;top:3px;right:6px;background:none;border:none;color:rgba(255,255,255,.3);font-size:12px;cursor:pointer;}
+/* LOGIN */
+.lov{position:fixed;inset:0;background:#0a1628;z-index:9999;display:flex;align-items:center;justify-content:center;}
+.lov.h{display:none;}
+.lb{background:#0f1d32;border:1px solid #1e3a5c;border-radius:8px;padding:16px 12px;width:220px;text-align:center;}
+.lb h1{font-size:13px;font-weight:800;color:#fbbf24;margin-bottom:1px;}
+.lb p{font-size:7px;color:#64748b;margin-bottom:10px;}
+.lb input{width:100%;padding:5px 7px;background:#0a1628;border:1px solid #1e3a5c;border-radius:3px;color:#e2e8f0;font-size:9px;margin-bottom:4px;outline:none;font-family:inherit;}
+.lb button{width:100%;padding:5px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;border:none;border-radius:3px;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;}
+.le{color:#ef4444;font-size:7px;margin-top:2px;min-height:8px;}
+/* PAGE */
+.pg{padding:5px 6px;}
+/* BIG ON/OFF BUTTON */
+.onoff-wrap{margin-bottom:4px;}
+.onoff-btn{width:100%;height:36px;border:none;border-radius:7px;cursor:pointer;font-size:14px;font-weight:900;font-family:inherit;letter-spacing:1px;transition:all .3s;display:flex;align-items:center;justify-content:center;gap:6px;}
+.onoff-btn.off{background:linear-gradient(135deg,#1e293b,#334155);color:#64748b;border:2px solid #475569;}
+.onoff-btn.on{background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:2px solid #22c55e;box-shadow:0 0 14px rgba(34,197,94,.35);}
+/* FOLDER ROW */
+.folder-row{display:flex;align-items:center;gap:4px;padding:3px 6px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);border-radius:4px;margin-bottom:4px;font-size:8px;}
+.folder-row .fn{flex:1;color:#22c55e;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.folder-row .fn.empty{color:#64748b;}
+.folder-row .fb{padding:2px 6px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:3px;font-size:7px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;}
+/* SCHED + LAST */
+.sched{display:flex;align-items:center;gap:4px;padding:3px 6px;background:rgba(59,130,246,.03);border:1px solid rgba(59,130,246,.06);border-radius:4px;margin-bottom:4px;font-size:7px;font-weight:600;flex-wrap:wrap;}
+.si{display:flex;align-items:center;gap:2px;}
+.sd{width:4px;height:4px;border-radius:50%;flex-shrink:0;}
+.sd.done{background:#22c55e;}.sd.next{background:#fbbf24;animation:p 1.5s infinite;}.sd.wait{background:#334155;}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.3}}
+.sched .sep{width:1px;height:8px;background:rgba(255,255,255,.08);}
+.sched .last{margin-left:auto;color:#64748b;display:flex;align-items:center;gap:2px;}
+.sched .last b{color:#fbbf24;}
+/* BTN ROW */
+.br{display:flex;gap:3px;margin-bottom:4px;}
+.bt{padding:3px;border:none;border-radius:3px;font-size:7px;font-weight:700;cursor:pointer;font-family:inherit;flex:1;text-align:center;}
+.bt:disabled{opacity:.25;cursor:default;}
+.bt-t{background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;}
+.bt-o{background:linear-gradient(135deg,#d97706,#b45309);color:#fff;}
+/* MODULES */
+.mt{font-size:7px;font-weight:800;color:#fbbf24;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;}
+.ml{margin-bottom:4px;}
+.mr{display:flex;align-items:center;gap:3px;padding:1px 3px;border-bottom:1px solid rgba(255,255,255,.015);height:16px;}
+.mr:hover{background:rgba(255,255,255,.01);}
+.mr .mi{font-size:9px;width:12px;text-align:center;flex-shrink:0;}
+.mr .mn{flex:1;font-weight:700;font-size:8px;}
+.mr .ms{font-size:6px;font-weight:800;padding:0 4px;border-radius:2px;}
+.ms.ok{background:rgba(34,197,94,.1);color:#22c55e;}
+.ms.wait{color:#475569;}
+.ms.err{background:rgba(239,68,68,.08);color:#ef4444;}
+.ms.run{background:rgba(59,130,246,.1);color:#3b82f6;}
+.mr .mz{font-size:6px;color:#475569;width:28px;text-align:right;flex-shrink:0;}
 /* LOG */
-.log-title{font-size:14px;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;}
-.log-box{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;max-height:250px;overflow-y:auto;font-family:'Courier New',monospace;font-size:10px;line-height:1.7;}
-.log-line{padding:1px 0;}
-.log-line.ok{color:var(--green);}
-.log-line.err{color:var(--red);}
-.log-line.info{color:var(--blue);}
-.log-line.warn{color:var(--gold);}
-.log-line.time{color:var(--muted);}
-/* SCHEDULE */
-.sched-bar{display:flex;gap:16px;align-items:center;padding:12px 16px;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:10px;margin-bottom:20px;flex-wrap:wrap;}
-.sched-item{font-size:11px;color:var(--text);font-weight:600;display:flex;align-items:center;gap:4px;}
-.sched-item .dot{width:6px;height:6px;border-radius:50%;}
-.sched-item .dot.done{background:var(--green);}
-.sched-item .dot.next{background:var(--gold);animation:pulse 1.5s infinite;}
-.sched-item .dot.wait{background:var(--muted);}
-@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
-/* TOAST */
-.toast{position:fixed;bottom:20px;right:20px;padding:12px 20px;border-radius:10px;font-size:12px;font-weight:600;color:#fff;z-index:99999;transform:translateY(100px);opacity:0;transition:all .3s;font-family:inherit;}
-.toast.show{transform:translateY(0);opacity:1;}
-.toast.success{background:linear-gradient(135deg,#16a34a,#22c55e);}
-.toast.error{background:linear-gradient(135deg,#b91c1c,#ef4444);}
-.toast.info{background:linear-gradient(135deg,#1d4ed8,#3b82f6);}
-/* OFFLINE */
-.offline-bar{position:fixed;top:0;left:0;right:0;z-index:999999;background:linear-gradient(135deg,#dc2626,#b91c1c);color:white;text-align:center;padding:8px;font-size:13px;font-weight:700;display:none;}
+.lt{font-size:7px;font-weight:800;color:#fbbf24;text-transform:uppercase;letter-spacing:.4px;margin-bottom:1px;}
+.log{background:#0f1d32;border:1px solid #1e3a5c;border-radius:3px;padding:3px 4px;max-height:90px;overflow-y:auto;font-family:'Courier New',monospace;font-size:7px;line-height:1.3;}
+.l-ok{color:#22c55e;}.l-err{color:#ef4444;}.l-info{color:#3b82f6;}.l-warn{color:#fbbf24;}.l-t{color:#475569;}
+.toast{position:fixed;bottom:6px;left:6px;right:6px;padding:5px;border-radius:4px;font-size:9px;font-weight:600;color:#fff;z-index:99999;text-align:center;transform:translateY(40px);opacity:0;transition:all .3s;font-family:inherit;}
+.toast.show{transform:translateY(0);opacity:1;}.toast.ok{background:#16a34a;}.toast.err{background:#b91c1c;}.toast.info{background:#1d4ed8;}
+.off-bar{position:fixed;top:0;left:0;right:0;z-index:999999;background:#dc2626;color:#fff;text-align:center;padding:2px;font-size:8px;font-weight:700;display:none;}
 </style>
 </head>
 <body>
-<div class="offline-bar" id="offlineBanner">⚠️ Mode hors-ligne — Les sauvegardes reprendront au retour d'internet</div>
+<div class="off-bar" id="offBar">⚠️ Hors-ligne</div>
+<div class="lov" id="loginOv"><div class="lb"><div style="font-size:20px;">🛡️</div><h1>Sauvegarde</h1><p>PhysiPro</p><input type="email" id="lEmail" placeholder="Courriel"><input type="password" id="lPass" placeholder="Mot de passe" onkeydown="if(event.key==='Enter')doLogin()"><button onclick="doLogin()" id="lBtn">Connexion</button><div class="le" id="lErr"></div></div></div>
 
-<!-- LOGIN -->
-<div class="login-overlay" id="loginOverlay">
-  <div class="login-box">
-    <div style="font-size:40px;margin-bottom:8px;">🛡️</div>
-    <h1>Station de Sauvegarde</h1>
-    <p>PhysiPro — Protection des données</p>
-    <input type="email" id="loginEmail" placeholder="Courriel">
-    <input type="password" id="loginPass" placeholder="Mot de passe" onkeydown="if(event.key==='Enter')doLogin()">
-    <button onclick="doLogin()" id="loginBtn">Se connecter</button>
-    <div class="login-err" id="loginErr"></div>
-  </div>
-</div>
-
-<!-- TOPBAR -->
-<header class="topbar" id="topbar" style="display:none;">
-  <div class="tb-title"><span>🛡️</span> Station de Sauvegarde</div>
-  <div class="tb-right">
-    <span class="tb-dot" id="statusDot"></span>
-    <span class="tb-user" id="userLabel">—</span>
-    <button class="tb-logout" onclick="doLogout()">🚪 Déconnexion</button>
-  </div>
+<header class="tb" id="topbar" style="display:none;">
+  <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" onclick="openNav()">
+  <span class="tt">🛡️ Sauvegarde</span>
+  <span class="tu"><span class="dot" id="sDot"></span><span id="uB">—</span></span>
+  <button class="lo" onclick="doLogout()">🚪</button>
 </header>
 
-<!-- MAIN CONTENT -->
-<div class="main" id="mainContent" style="display:none;">
+<div class="nov" id="navOv" onclick="if(event.target===this)closeNav()"><div class="nb"><button class="nc" onclick="closeNav()">&times;</button><div class="nt">📍 Navigation</div><div class="ng" id="navG"></div></div></div>
 
-  <!-- STATUS CARDS -->
-  <div class="status-bar">
-    <div class="status-card off" id="scState">
-      <div class="sc-icon">🛡️</div>
-      <div class="sc-label">État</div>
-      <div class="sc-value muted" id="scStateVal">Inactif</div>
-    </div>
-    <div class="status-card off" id="scFolder">
-      <div class="sc-icon">📂</div>
-      <div class="sc-label">Dossier OneDrive</div>
-      <div class="sc-value muted" id="scFolderVal">Non configuré</div>
-    </div>
-    <div class="status-card off" id="scLast">
-      <div class="sc-icon">🕐</div>
-      <div class="sc-label">Dernière sauvegarde</div>
-      <div class="sc-value muted" id="scLastVal">Jamais</div>
-    </div>
-    <div class="status-card off" id="scNext">
-      <div class="sc-icon">⏰</div>
-      <div class="sc-label">Prochaine planifiée</div>
-      <div class="sc-value muted" id="scNextVal">—</div>
-    </div>
+<div class="pg" id="pg" style="display:none;">
+  <div class="onoff-wrap"><button class="onoff-btn off" id="onoff" onclick="toggleBkp()">OFF</button></div>
+  <div class="folder-row"><span style="font-size:8px;">📂</span><span class="fn empty" id="fN">Aucun dossier</span><button class="fb" onclick="pickFolder()">Choisir</button></div>
+  <div class="sched">
+    <div class="si"><span class="sd wait" id="sdO"></span> Ouv.</div>
+    <div class="si"><span class="sd wait" id="sd11"></span> 11h</div>
+    <div class="si"><span class="sd wait" id="sd14"></span> 14h</div>
+    <span class="sep"></span>
+    <span class="last">📅 <b id="slD">Jamais</b></span>
   </div>
-
-  <!-- SCHEDULE BAR -->
-  <div class="sched-bar" id="schedBar">
-    <span style="font-size:11px;font-weight:700;color:var(--gold);">📅 Aujourd'hui:</span>
-    <div class="sched-item"><span class="dot wait" id="schedDotOpen"></span> Ouverture</div>
-    <div class="sched-item"><span class="dot wait" id="schedDot11"></span> 11h00</div>
-    <div class="sched-item"><span class="dot wait" id="schedDot14"></span> 14h00</div>
-    <span style="font-size:10px;color:var(--muted);margin-left:auto;" id="schedInfo"></span>
-  </div>
-
-  <!-- CONTROLS -->
-  <div class="controls-row">
-    <button class="btn btn-primary" id="btnStart" onclick="startBackup()">▶️ Démarrer</button>
-    <button class="btn btn-stop" id="btnStop" onclick="stopBackup()" style="display:none;">⏸️ Arrêter</button>
-    <button class="btn btn-folder" onclick="changeFolder()">📂 Choisir dossier</button>
-    <button class="btn btn-primary" id="btnForce" onclick="forceBackup()" disabled>🔄 Forcer une sauvegarde</button>
-    <button class="btn btn-restore" onclick="startRestore()">📥 Restaurer</button>
-  </div>
-
-  <!-- MODULES GRID -->
-  <div class="modules-title">📦 Modules sauvegardés</div>
-  <div class="modules-grid" id="modulesGrid"></div>
-
-  <!-- LOG -->
-  <div class="log-title">📋 Journal</div>
-  <div class="log-box" id="logBox"><div class="log-line time">En attente de connexion...</div></div>
+  <div class="br"><button class="bt bt-t" id="bF" onclick="forceBackup()" disabled>🔄 Forcer</button><button class="bt bt-o" onclick="doRestore()">📥 Restaurer</button></div>
+  <div class="mt">📦 Modules</div>
+  <div class="ml" id="mL"></div>
+  <div class="lt">📋 Journal</div>
+  <div class="log" id="logBox"><div class="l-t">En attente...</div></div>
 </div>
-
 <div class="toast" id="toast"></div>
 
 <script>
-// ═══ FIREBASE CONFIG ═══
+(function(){try{var w=Math.round(screen.availWidth/10);if(w<260)w=260;if(w>320)w=320;var h=Math.round(screen.availHeight*0.7);window.resizeTo(w,h);window.moveTo(screen.availWidth-w-5,Math.round((screen.availHeight-h)/2));}catch(e){}})();
+
 var _k=['AIza','SyCk','7bqV','nx08','Kz1f','Vq1W','24Au','W854','KY9j','Pno'];
-firebase.initializeApp({
-  apiKey:_k.join(''),
-  authDomain:"liste-des-moulages-physipro.firebaseapp.com",
-  databaseURL:"https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",
-  projectId:"liste-des-moulages-physipro",
-  storageBucket:"liste-des-moulages-physipro.firebasestorage.app"
-});
-var db = firebase.database();
-var auth = firebase.auth();
-var user = null;
+firebase.initializeApp({apiKey:_k.join(''),authDomain:"liste-des-moulages-physipro.firebaseapp.com",databaseURL:"https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",projectId:"liste-des-moulages-physipro",storageBucket:"liste-des-moulages-physipro.firebasestorage.app"});
+var fbDb=firebase.database(),fbAuth=firebase.auth(),fbUser=null;
 
-// ═══ MODULES TO BACKUP ═══
-var MODULES = {
-  'Moulages':           { icon:'🏭', paths:{ cartes_actives:{path:'moulages',label:'Cartes'}, associations:{path:'moulageAssociations',label:'Associations'}, listes:{path:'listes',label:'Listes'}, listes_history:{path:'listes_history',label:'Historique'}, logs:{path:'moulageLogs',label:'Logs'}, notifications:{path:'moulageNotifications',label:'Notifications'}, photos:{path:'photoArchives',label:'Photos'} }},
-  'Questionnement':     { icon:'❓', paths:{ jobs:{path:'jobs',label:'Jobs'}, commandesAttente:{path:'commandesAttente',label:'Attente'}, materiauxBO:{path:'materiauxBO',label:'Matériaux BO'}, notifications:{path:'jobNotifications',label:'Notifications'} }},
-  'PSM':                { icon:'🔧', paths:{ cartes:{path:'psm',label:'Cartes'}, materiaux_custom:{path:'psm_materiaux_custom',label:'Custom'}, notifications:{path:'psmNotifications',label:'Notifications'} }},
-  'Inspection_Atelier': { icon:'☑️', paths:{ donnees:{path:'inspectionData',label:'Données'}, listes:{path:'inspectionLists',label:'Listes'}, config:{path:'inspectionColCfg',label:'Config'}, largeurs:{path:'inspectionColWidths',label:'Largeurs'} }},
-  'Production_Couture': { icon:'🧵', paths:{ donnees:{path:'inspectionCoutureData',label:'Données'}, couture:{path:'coutureData',label:'Couture'}, listes:{path:'coutureLists',label:'Listes'} }},
-  'Serie':              { icon:'📋', paths:{ commandes:{path:'serieCommandes',label:'Commandes'}, supprimees:{path:'serieDeletedCards',label:'Supprimées'}, recettes:{path:'customRecettes',label:'Recettes'}, recettes_del:{path:'deletedRecettes',label:'Rec. supp.'} }},
-  'Entrepot':           { icon:'📦', paths:{ comm:{path:'magentComm',label:'Communications'}, inventaire:{path:'magentInventaire',label:'Inventaire'}, commandes:{path:'magentOrders',label:'Commandes'}, logs:{path:'magentLog',label:'Logs'}, chat:{path:'magentChat',label:'Chat'} }},
-  'Archives':           { icon:'🗄️', paths:{ archives:{path:'archives',label:'Archives'}, logs:{path:'archiveLogs',label:'Logs'} }},
-  'Chat_InterApp':      { icon:'💬', paths:{ messages:{path:'crossAppChat',label:'Messages'} }}
+var HA={'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','archives','backup'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','archives','backup'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','archives','backup'],'c3JveUBwaHlzaXByby5jb20=':['moulage','jobs','inspection','inspcouture','serie','psm','archives'],'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['moulage','jobs'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['moulage','jobs'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['moulage','jobs'],'bWFnYXNpbmF0cDFAcGh5c2lwcm8uY29t':['entrepot'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['entrepot'],'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':['entrepot']};
+var NM={moulage:{i:'🏭',l:'Moulage',f:'Physipro_moulage.html',c:'#3b82f6'},jobs:{i:'❓',l:'Question.',f:'PhysiPro_Questionnement.html',c:'#f59e0b'},inspection:{i:'☑️',l:'Inspection',f:'PhysiPro_Inspection_Atelier.html',c:'#22c55e'},inspcouture:{i:'🧵',l:'Couture',f:'PhysiPro_Production_Couture.html',c:'#a855f7'},serie:{i:'📋',l:'Série+',f:'PhysiPro_Serie_.html',c:'#f97316'},psm:{i:'🔧',l:'PSM',f:'PhysiPro_PSM.html',c:'#ef4444'},entrepot:{i:'📦',l:'Entrepôt',f:'PhysiPro_Entrepot.html',c:'#8b5cf6'},archives:{i:'🗄️',l:'Archives',f:'PhysiPro_Archives.html',c:'#6366f1'},backup:{i:'🛡️',l:'Sauvegarde',f:'PhysiPro_BackupStation.html',c:'#22c55e'}};
+function initNav(){var g=document.getElementById('navG');if(!g)return;var a=HA[btoa((fbUser?fbUser.email:'').toLowerCase().trim())]||[];g.innerHTML='';['moulage','inspection','inspcouture','serie','jobs','psm','entrepot','archives','backup'].forEach(function(k){if(a.indexOf(k)<0)return;var m=NM[k];if(!m)return;var el=document.createElement('a');el.className='ni'+(k==='backup'?' cur':'');el.href=m.f;el.innerHTML='<span class="ic">'+m.i+'</span><span class="la" style="color:'+m.c+'">'+m.l+'</span>';g.appendChild(el);});}
+function openNav(){document.getElementById('navOv').classList.add('v');}
+function closeNav(){document.getElementById('navOv').classList.remove('v');}
+
+var M={
+  Moulages:{i:'🏭',c:'#3b82f6',p:{a:{r:'moulages'},b:{r:'moulageAssociations'},c:{r:'listes'},d:{r:'listes_history'},e:{r:'moulageLogs'},f:{r:'moulageNotifications'},g:{r:'photoArchives'}}},
+  Questionnement:{i:'❓',c:'#f59e0b',p:{a:{r:'jobs'},b:{r:'commandesAttente'},c:{r:'materiauxBO'},d:{r:'jobNotifications'}}},
+  PSM:{i:'🔧',c:'#ef4444',p:{a:{r:'psm'},b:{r:'psm_materiaux_custom'},c:{r:'psmNotifications'}}},
+  Inspection:{i:'☑️',c:'#22c55e',p:{a:{r:'inspectionData'},b:{r:'inspectionLists'},c:{r:'inspectionColCfg'},d:{r:'inspectionColWidths'}}},
+  Couture:{i:'🧵',c:'#a855f7',p:{a:{r:'inspectionCoutureData'},b:{r:'coutureData'},c:{r:'coutureLists'}}},
+  Serie:{i:'📋',c:'#f97316',p:{a:{r:'serieCommandes'},b:{r:'serieDeletedCards'},c:{r:'customRecettes'},d:{r:'deletedRecettes'}}},
+  Entrepot:{i:'📦',c:'#8b5cf6',p:{a:{r:'magentComm'},b:{r:'magentInventaire'},c:{r:'magentOrders'},d:{r:'magentLog'},e:{r:'magentChat'}}},
+  Archives:{i:'🗄️',c:'#6366f1',p:{a:{r:'archives'},b:{r:'archiveLogs'}}},
+  Chat:{i:'💬',c:'#06b6d4',p:{a:{r:'crossAppChat'}}}
 };
+var isOn=false,dirH=null,ckT=null,scT=null,lastH={},mS={},mZ={},logs=[];
 
-// ═══ STATE ═══
-var isRunning = false;
-var directoryHandle = null;
-var checkTimer = null;
-var scheduleTimer = null;
-var lastHashes = {};
-var moduleStatus = {};
-var backupLog = [];
-var stats = { filesWritten:0, lastBackup:null, todayBackups:[] };
+function odb(){return new Promise(function(r,j){var q=indexedDB.open('PBkp',1);q.onupgradeneeded=function(e){e.target.result.createObjectStore('s');};q.onsuccess=function(e){r(e.target.result);};q.onerror=function(){j();};})}
+async function sDir(h){var d=await odb();return new Promise(function(r){var t=d.transaction('s','readwrite');t.objectStore('s').put(h,'d');t.oncomplete=r;})}
+async function lDir(){try{var d=await odb();return new Promise(function(r){var t=d.transaction('s','readonly');var q=t.objectStore('s').get('d');q.onsuccess=function(){r(q.result||null);};q.onerror=function(){r(null);};});}catch(e){return null;}}
 
-// ═══ IDB for folder handle persistence ═══
-var IDB_NAME = 'PhysiProBackupStation';
-var IDB_STORE = 'folder';
+function doLogin(){var e=document.getElementById('lEmail').value.trim(),p=document.getElementById('lPass').value;document.getElementById('lErr').textContent='';document.getElementById('lBtn').disabled=true;fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(function(){return fbAuth.signInWithEmailAndPassword(e,p);}).catch(function(err){document.getElementById('lErr').textContent='Erreur';document.getElementById('lBtn').disabled=false;});}
+function doLogout(){fbAuth.signOut();}
+fbAuth.onAuthStateChanged(function(u){fbUser=u;if(u){document.getElementById('loginOv').classList.add('h');document.getElementById('topbar').style.display='';document.getElementById('pg').style.display='';document.getElementById('uB').textContent=u.email.split('@')[0];document.getElementById('sDot').classList.add('on');initNav();renderM();lg('✅ '+u.email,'ok');tryAuto();}else{document.getElementById('loginOv').classList.remove('h');document.getElementById('topbar').style.display='none';document.getElementById('pg').style.display='none';stopB();}});
 
-function openIDB() {
-  return new Promise(function(resolve, reject) {
-    var req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = function(e) { e.target.result.createObjectStore(IDB_STORE); };
-    req.onsuccess = function(e) { resolve(e.target.result); };
-    req.onerror = function() { reject(req.error); };
-  });
-}
-async function saveFolderHandle(handle) {
-  var idb = await openIDB();
-  return new Promise(function(resolve, reject) {
-    var tx = idb.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(handle, 'dirHandle');
-    tx.oncomplete = function() { resolve(); };
-    tx.onerror = function() { reject(tx.error); };
-  });
-}
-async function loadFolderHandle() {
-  var idb = await openIDB();
-  return new Promise(function(resolve, reject) {
-    var tx = idb.transaction(IDB_STORE, 'readonly');
-    var req = tx.objectStore(IDB_STORE).get('dirHandle');
-    req.onsuccess = function() { resolve(req.result || null); };
-    req.onerror = function() { reject(req.error); };
-  });
-}
+function renderM(){var h='';Object.keys(M).forEach(function(n){var m=M[n],st=mS[n]||'wait',sz=mZ[n]||'';var s=st==='ok'?'<span class="ms ok">OK</span>':st==='run'?'<span class="ms run">⏳</span>':st==='err'?'<span class="ms err">ERR</span>':'<span class="ms wait">—</span>';h+='<div class="mr"><span class="mi">'+m.i+'</span><span class="mn" style="color:'+m.c+'">'+n+'</span>'+s+'<span class="mz">'+sz+'</span></div>';});document.getElementById('mL').innerHTML=h;}
 
-// ═══ AUTH ═══
-function doLogin() {
-  var email = document.getElementById('loginEmail').value.trim();
-  var pass = document.getElementById('loginPass').value;
-  document.getElementById('loginErr').textContent = '';
-  document.getElementById('loginBtn').disabled = true;
-  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(function() {
-    return auth.signInWithEmailAndPassword(email, pass);
-  }).catch(function(err) {
-    var msg = 'Erreur de connexion';
-    if (err.code === 'auth/wrong-password') msg = 'Mot de passe incorrect';
-    if (err.code === 'auth/user-not-found') msg = 'Compte introuvable';
-    document.getElementById('loginErr').textContent = msg;
-    document.getElementById('loginBtn').disabled = false;
-  });
-}
-function doLogout() { auth.signOut(); }
+function lg(msg,type){var t=new Date().toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',second:'2-digit'});logs.unshift({t:t,m:msg,c:type||'info'});if(logs.length>60)logs.length=60;document.getElementById('logBox').innerHTML=logs.map(function(l){return '<div class="l-'+l.c+'">['+l.t+'] '+l.m+'</div>';}).join('');}
+function toast(msg,type){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show '+(type||'info');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2500);}
 
-auth.onAuthStateChanged(function(u) {
-  user = u;
-  if (u) {
-    document.getElementById('loginOverlay').classList.add('hidden');
-    document.getElementById('topbar').style.display = '';
-    document.getElementById('mainContent').style.display = '';
-    document.getElementById('userLabel').textContent = u.email;
-    renderModulesGrid();
-    log('✅ Connecté: ' + u.email, 'ok');
-    tryAutoStart();
-  } else {
-    document.getElementById('loginOverlay').classList.remove('hidden');
-    document.getElementById('topbar').style.display = 'none';
-    document.getElementById('mainContent').style.display = 'none';
-    stopBackup();
+async function pickFolder(){if(!window.showDirectoryPicker){toast('Chrome/Edge requis','err');return false;}try{dirH=await window.showDirectoryPicker({id:'physipro-bkp',mode:'readwrite'});await sDir(dirH);upUI();lg('📂 '+dirH.name,'ok');return true;}catch(e){if(e.name!=='AbortError')lg('❌ '+e.message,'err');return false;}}
+async function vP(){if(!dirH)return false;try{var q=await dirH.queryPermission({mode:'readwrite'});if(q==='granted')return true;var p=await dirH.requestPermission({mode:'readwrite'});return p==='granted';}catch(e){return false;}}
+
+async function toggleBkp(){if(isOn){stopB();}else{if(!dirH){if(!await pickFolder())return;}if(!await vP()){if(!await pickFolder())return;}await startB();}}
+async function tryAuto(){try{var s=await lDir();if(s)dirH=s;}catch(e){}if(localStorage.getItem('bk')==='1'&&dirH){try{if(await vP()){await startB();return;}}catch(e){}lg('⚠️ Permission expirée','warn');}upUI();}
+async function startB(){isOn=true;localStorage.setItem('bk','1');document.getElementById('bF').disabled=false;lg('🛡️ ON','ok');toast('🛡️ ON','ok');setTimeout(function(){runC('Ouverture');},800);if(ckT)clearInterval(ckT);ckT=setInterval(function(){if(isOn)runC('Auto');},5*60*1000);if(scT)clearInterval(scT);scT=setInterval(function(){if(!isOn)return;var n=new Date(),h=n.getHours(),m=n.getMinutes(),d=n.toISOString().substring(0,10);if((h===11||h===14)&&m<2){var k='bk_'+d+'_'+h;if(!localStorage.getItem(k)){localStorage.setItem(k,'1');runC(h+'h');}}},60*1000);upUI();upS();}
+function stopB(){isOn=false;localStorage.setItem('bk','0');if(ckT){clearInterval(ckT);ckT=null;}if(scT){clearInterval(scT);scT=null;}document.getElementById('bF').disabled=true;lg('⏸️ OFF','warn');upUI();}
+function forceBackup(){if(!isOn)return;lastH={};lg('🔄 Forcée','info');runC('Forcée');}
+
+async function runC(trig){
+  if(!dirH||!isOn)return;if(!await vP()){lg('⚠️ Perm','err');return;}
+  var day=new Date().toISOString().substring(0,10),ts=new Date().toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}).replace(':','h');
+  lg('═ ['+trig+'] ═','info');
+  var root;try{root=await dirH.getDirectoryHandle('PhysiPro_Backups',{create:true});}catch(e){lg('❌ '+e.message,'err');return;}
+  var tf=0,tb=0,mk=Object.keys(M);
+  for(var i=0;i<mk.length;i++){
+    var n=mk[i],mod=M[n],md={},pk=Object.keys(mod.p);mS[n]='run';renderM();
+    for(var j=0;j<pk.length;j++){try{var s=await fbDb.ref(mod.p[pk[j]].r).once('value');var v=s.val();if(v!==null)md[pk[j]]=v;}catch(e){}}
+    var h=sH(JSON.stringify(md));if(h===lastH[n]&&trig!=='Forcée'){mS[n]='ok';renderM();continue;}lastH[n]=h;
+    try{var mf=await root.getDirectoryHandle(n,{create:true});var fn=day+'_'+ts+'.json';var c=JSON.stringify({module:n,backup:{date:day,heure:ts,trigger:trig,user:fbUser?fbUser.email:'?'},data:md},null,2);var fh=await mf.getFileHandle(fn,{create:true});var w=await fh.createWritable();await w.write(new Blob([c],{type:'application/json'}));await w.close();var mb=(c.length/(1024*1024)).toFixed(1);tf++;tb+=c.length;mS[n]='ok';mZ[n]=mb+'M';lg('  ✅ '+n+' '+mb+'M','ok');}catch(e){mS[n]='err';lg('  ❌ '+n,'err');}renderM();
   }
-});
-
-// ═══ MODULES GRID ═══
-function renderModulesGrid() {
-  var grid = document.getElementById('modulesGrid');
-  var h = '';
-  Object.keys(MODULES).forEach(function(modName) {
-    var mod = MODULES[modName];
-    var st = moduleStatus[modName] || 'idle';
-    var stClass = st === 'ok' ? 'synced' : st === 'changed' ? 'changed' : st === 'error' ? 'error' : '';
-    var stLabel = st === 'ok' ? '<span class="mod-status ok">✅ OK</span>' :
-                  st === 'changed' ? '<span class="mod-status pending">🔄 Modifié</span>' :
-                  st === 'error' ? '<span class="mod-status err">❌ Erreur</span>' :
-                  '<span class="mod-status idle">⏳ Attente</span>';
-    var pathsList = Object.keys(mod.paths).map(function(k) {
-      return '<span>' + mod.paths[k].label + '</span>';
-    }).join(', ');
-    var sizeStr = moduleStatus[modName + '_size'] ? '<div class="mod-size">' + moduleStatus[modName + '_size'] + '</div>' : '';
-    h += '<div class="mod-card ' + stClass + '" id="mod_' + modName + '">' +
-      '<div class="mod-header"><div class="mod-name">' + mod.icon + ' ' + modName.replace(/_/g, ' ') + '</div>' + stLabel + '</div>' +
-      '<div class="mod-paths">' + pathsList + '</div>' + sizeStr + '</div>';
-  });
-  grid.innerHTML = h;
+  if(tf>0){localStorage.setItem('bk_last',new Date().toISOString());lg('✅ '+tf+' mod ('+(tb/(1024*1024)).toFixed(1)+'M)','ok');toast('✅ '+tf+' sauvegardés','ok');var tk='bk_td_'+day;var td=JSON.parse(localStorage.getItem(tk)||'[]');td.push(ts);localStorage.setItem(tk,JSON.stringify(td));}else{lg('— Aucun chang.','t');}upUI();upS();
 }
+function sH(s){var h=0;for(var i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}return h.toString(36);}
 
-// ═══ LOG ═══
-function log(msg, type) {
-  var time = new Date().toLocaleTimeString('fr-CA', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  backupLog.unshift({ time:time, msg:msg, type:type||'info' });
-  if (backupLog.length > 200) backupLog.length = 200;
-  var box = document.getElementById('logBox');
-  box.innerHTML = backupLog.map(function(l) {
-    return '<div class="log-line ' + l.type + '"><span class="time">[' + l.time + ']</span> ' + l.msg + '</div>';
-  }).join('');
+async function doRestore(){if(!confirm('⚠️ RESTAURER?\nÉcrasera Firebase.'))return;if(!window.showDirectoryPicker)return;try{var dir=await window.showDirectoryPicker({id:'pr',mode:'read'});var bD;try{bD=await dir.getDirectoryHandle('PhysiPro_Backups');}catch(e){bD=dir;}lg('📥 Restauration','info');var c=0;for await(var en of bD.values()){if(en.kind!=='directory')continue;var mod=M[en.name];if(!mod)continue;var la=null,ln='';for await(var f of en.values()){if(f.kind==='file'&&f.name.endsWith('.json')&&f.name>ln){la=f;ln=f.name;}}if(!la)continue;var o=await la.getFile();var d=JSON.parse(await o.text()).data||{};for(var k of Object.keys(mod.p)){if(d[k]!==undefined){await fbDb.ref(mod.p[k].r).set(d[k]);c++;}}lg('  ✅ '+en.name,'ok');}lg('📥 '+c+' sections','ok');toast('📥 Restauré','ok');}catch(e){lg('❌ '+e.message,'err');}}
+
+function upUI(){
+  var btn=document.getElementById('onoff');
+  if(isOn){btn.className='onoff-btn on';btn.textContent='ON';}else{btn.className='onoff-btn off';btn.textContent='OFF';}
+  var fn=document.getElementById('fN'),fb=document.querySelector('.fb');
+  if(dirH){fn.textContent=dirH.name;fn.className='fn';fb.textContent='Changer';}else{fn.textContent='Aucun dossier';fn.className='fn empty';fb.textContent='Choisir';}
+  var last=localStorage.getItem('bk_last'),sl=document.getElementById('slD');
+  if(last){var d=new Date(last);sl.textContent=d.toLocaleDateString('fr-CA')+' '+d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});}else{sl.textContent='Jamais';}
 }
-
-// ═══ TOAST ═══
-function showToast(msg, type) {
-  var t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast show ' + (type || 'info');
-  clearTimeout(t._timer);
-  t._timer = setTimeout(function() { t.classList.remove('show'); }, 4000);
-}
-
-// ═══ FOLDER SELECTION ═══
-async function selectFolder() {
-  if (!window.showDirectoryPicker) {
-    showToast('❌ Utilisez Chrome ou Edge pour la sauvegarde', 'error');
-    return false;
-  }
-  try {
-    directoryHandle = await window.showDirectoryPicker({ id:'physipro-backup-station', mode:'readwrite' });
-    await saveFolderHandle(directoryHandle);
-    updateStatusCards();
-    log('📂 Dossier sélectionné: ' + directoryHandle.name, 'ok');
-    showToast('📂 ' + directoryHandle.name, 'success');
-    return true;
-  } catch(e) {
-    if (e.name !== 'AbortError') log('❌ Erreur sélection dossier: ' + e.message, 'err');
-    return false;
-  }
-}
-async function changeFolder() { await selectFolder(); }
-
-async function verifyPermission() {
-  if (!directoryHandle) return false;
-  try {
-    var q = await directoryHandle.queryPermission({ mode:'readwrite' });
-    if (q === 'granted') return true;
-    var p = await directoryHandle.requestPermission({ mode:'readwrite' });
-    return p === 'granted';
-  } catch(e) { return false; }
-}
-
-// ═══ START / STOP ═══
-async function tryAutoStart() {
-  try {
-    var saved = await loadFolderHandle();
-    if (saved) {
-      directoryHandle = saved;
-      log('📂 Dossier mémorisé: ' + saved.name, 'info');
-    }
-  } catch(e) {}
-  
-  var savedState = localStorage.getItem('bkpStation_state');
-  if (savedState === 'on' && directoryHandle) {
-    try {
-      var q = await directoryHandle.queryPermission({ mode:'readwrite' });
-      if (q === 'granted') {
-        log('🔄 Auto-reprise de la sauvegarde', 'info');
-        await finishStart();
-        return;
-      }
-    } catch(e) {}
-    log('⚠️ Permission expirée — cliquez Démarrer', 'warn');
-  }
-  updateStatusCards();
-}
-
-async function startBackup() {
-  if (isRunning) return;
-  if (!directoryHandle) {
-    var selected = await selectFolder();
-    if (!selected) return;
-  }
-  var hasPerm = await verifyPermission();
-  if (!hasPerm) {
-    var selected = await selectFolder();
-    if (!selected) return;
-  }
-  await finishStart();
-}
-
-async function finishStart() {
-  isRunning = true;
-  localStorage.setItem('bkpStation_state', 'on');
-  document.getElementById('btnStart').style.display = 'none';
-  document.getElementById('btnStop').style.display = '';
-  document.getElementById('btnForce').disabled = false;
-  
-  log('🛡️ Sauvegarde activée → ' + directoryHandle.name, 'ok');
-  showToast('🛡️ Sauvegarde activée', 'success');
-  
-  // Run immediately
-  setTimeout(function() { runBackupCycle('Ouverture'); }, 1500);
-  
-  // Check every 5 min for changes
-  if (checkTimer) clearInterval(checkTimer);
-  checkTimer = setInterval(function() {
-    if (isRunning) runBackupCycle('Auto');
-  }, 5 * 60 * 1000);
-  
-  // Schedule 11h and 14h
-  if (scheduleTimer) clearInterval(scheduleTimer);
-  scheduleTimer = setInterval(function() {
-    if (!isRunning) return;
-    var now = new Date(), h = now.getHours(), m = now.getMinutes();
-    var today = now.toISOString().substring(0,10);
-    if ((h === 11 || h === 14) && m < 2) {
-      var key = 'bkpStation_sched_' + today + '_' + h;
-      if (!localStorage.getItem(key)) {
-        localStorage.setItem(key, 'done');
-        log('⏰ Sauvegarde planifiée ' + h + 'h00', 'info');
-        runBackupCycle('Planifiée ' + h + 'h');
-      }
-    }
-  }, 60 * 1000);
-  
-  updateStatusCards();
-  updateSchedule();
-}
-
-function stopBackup() {
-  isRunning = false;
-  localStorage.setItem('bkpStation_state', 'off');
-  if (checkTimer) { clearInterval(checkTimer); checkTimer = null; }
-  if (scheduleTimer) { clearInterval(scheduleTimer); scheduleTimer = null; }
-  document.getElementById('btnStart').style.display = '';
-  document.getElementById('btnStop').style.display = 'none';
-  document.getElementById('btnForce').disabled = true;
-  log('⏸️ Sauvegarde arrêtée', 'warn');
-  showToast('⏸️ Sauvegarde arrêtée', 'info');
-  updateStatusCards();
-}
-
-function forceBackup() {
-  if (!isRunning) return;
-  lastHashes = {};
-  log('🔄 Sauvegarde forcée...', 'info');
-  runBackupCycle('Forcée');
-}
-
-// ═══ BACKUP CYCLE ═══
-async function runBackupCycle(trigger) {
-  if (!directoryHandle || !isRunning) return;
-  var hasPerm = await verifyPermission();
-  if (!hasPerm) {
-    log('⚠️ Permission dossier perdue', 'err');
-    return;
-  }
-  
-  var today = new Date().toISOString().substring(0, 10);
-  var timeStr = new Date().toLocaleTimeString('fr-CA', {hour:'2-digit',minute:'2-digit'}).replace(':', 'h');
-  
-  log('═══ Cycle [' + (trigger||'Auto') + '] ═══', 'info');
-  
-  // Check Firebase connection
-  var firebaseOK = false;
-  try {
-    var testSnap = await Promise.race([
-      db.ref('.info/connected').once('value'),
-      new Promise(function(_, rej) { setTimeout(function() { rej(new Error('timeout')); }, 5000); })
-    ]);
-    firebaseOK = true;
-  } catch(e) {
-    log('⚠️ Firebase inaccessible', 'warn');
-  }
-  
-  if (!firebaseOK) {
-    log('⏭️ Cycle annulé (pas de connexion)', 'warn');
-    return;
-  }
-  
-  // Get root folder
-  var rootFolder;
-  try {
-    rootFolder = await directoryHandle.getDirectoryHandle('PhysiPro_Backups', { create: true });
-  } catch(e) {
-    log('❌ Erreur dossier: ' + e.message, 'err');
-    return;
-  }
-  
-  var totalFiles = 0, totalSize = 0, changedModules = [];
-  var moduleKeys = Object.keys(MODULES);
-  
-  for (var m = 0; m < moduleKeys.length; m++) {
-    var modName = moduleKeys[m];
-    var mod = MODULES[modName];
-    var moduleData = {};
-    var pathKeys = Object.keys(mod.paths);
-    
-    // Fetch all paths
-    for (var p = 0; p < pathKeys.length; p++) {
-      var pKey = pathKeys[p];
-      var pCfg = mod.paths[pKey];
-      try {
-        var snap = await db.ref(pCfg.path).once('value');
-        var val = snap.val();
-        if (val !== null && val !== undefined) moduleData[pKey] = val;
-      } catch(e) {
-        log('  ⚠️ ' + modName + '/' + pCfg.label + ': ' + e.message, 'warn');
-      }
-    }
-    
-    // Hash check
-    var hash = simpleHash(JSON.stringify(moduleData));
-    if (hash === lastHashes[modName] && trigger !== 'Forcée') {
-      moduleStatus[modName] = 'ok';
-      continue;
-    }
-    
-    // Changed — write file
-    lastHashes[modName] = hash;
-    changedModules.push(modName);
-    
-    try {
-      var modFolder = await rootFolder.getDirectoryHandle(modName, { create: true });
-      var fileName = today + '_' + timeStr + '.json';
-      var fileContent = {
-        module: modName,
-        sauvegarde: { date: today, heure: timeStr, declencheur: trigger || 'Auto', utilisateur: user ? user.email : '?' },
-        donnees: moduleData
-      };
-      var jsonStr = JSON.stringify(fileContent, null, 2);
-      var fileHandle = await modFolder.getFileHandle(fileName, { create: true });
-      var writable = await fileHandle.createWritable();
-      await writable.write(new Blob([jsonStr], { type: 'application/json' }));
-      await writable.close();
-      
-      var sizeMB = (jsonStr.length / (1024 * 1024)).toFixed(2);
-      totalFiles++;
-      totalSize += jsonStr.length;
-      moduleStatus[modName] = 'ok';
-      moduleStatus[modName + '_size'] = sizeMB + ' MB';
-      log('  ✅ ' + modName + '/' + fileName + ' (' + sizeMB + ' MB)', 'ok');
-    } catch(e) {
-      moduleStatus[modName] = 'error';
-      log('  ❌ ' + modName + ': ' + e.message, 'err');
-    }
-  }
-  
-  if (changedModules.length > 0) {
-    stats.filesWritten += totalFiles;
-    stats.lastBackup = new Date().toISOString();
-    localStorage.setItem('bkpStation_last', stats.lastBackup);
-    var totalMB = (totalSize / (1024 * 1024)).toFixed(2);
-    log('✅ ' + totalFiles + ' fichiers écrits (' + totalMB + ' MB) — ' + changedModules.join(', '), 'ok');
-    showToast('✅ ' + totalFiles + ' modules sauvegardés', 'success');
-    
-    // Track today's backups
-    var todayKey = 'bkpStation_today_' + today;
-    var todayList = JSON.parse(localStorage.getItem(todayKey) || '[]');
-    todayList.push(timeStr);
-    localStorage.setItem(todayKey, JSON.stringify(todayList));
-  } else {
-    log('— Aucun changement détecté', 'time');
-  }
-  
-  renderModulesGrid();
-  updateStatusCards();
-  updateSchedule();
-}
-
-function simpleHash(str) {
-  var hash = 0;
-  for (var i = 0; i < str.length; i++) {
-    var chr = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + chr;
-    hash |= 0;
-  }
-  return hash.toString(36);
-}
-
-// ═══ RESTORE ═══
-async function startRestore() {
-  if (!confirm('⚠️ Restaurer les données depuis OneDrive?\n\nCela écrasera les données actuelles dans Firebase.\nUtilisez cette option seulement en cas de problème grave.')) return;
-  
-  if (!window.showDirectoryPicker) {
-    showToast('❌ Utilisez Chrome ou Edge', 'error');
-    return;
-  }
-  
-  try {
-    var dir = await window.showDirectoryPicker({ id:'physipro-restore', mode:'read' });
-    var backupsDir;
-    try {
-      backupsDir = await dir.getDirectoryHandle('PhysiPro_Backups');
-    } catch(e) {
-      backupsDir = dir;
-    }
-    
-    log('📥 Restauration depuis: ' + dir.name, 'info');
-    var restored = 0;
-    
-    for await (var entry of backupsDir.values()) {
-      if (entry.kind !== 'directory') continue;
-      var modName = entry.name;
-      var mod = MODULES[modName];
-      if (!mod) { log('  ⏭️ Dossier ignoré: ' + modName, 'time'); continue; }
-      
-      // Find latest file
-      var latest = null, latestName = '';
-      for await (var file of entry.values()) {
-        if (file.kind === 'file' && file.name.endsWith('.json')) {
-          if (!latest || file.name > latestName) {
-            latest = file;
-            latestName = file.name;
-          }
-        }
-      }
-      
-      if (!latest) continue;
-      
-      var fileObj = await latest.getFile();
-      var text = await fileObj.text();
-      var data = JSON.parse(text);
-      var donnees = data.donnees || data.data || {};
-      
-      var pathKeys = Object.keys(mod.paths);
-      for (var p = 0; p < pathKeys.length; p++) {
-        var pKey = pathKeys[p];
-        var pCfg = mod.paths[pKey];
-        if (donnees[pKey] !== undefined) {
-          await db.ref(pCfg.path).set(donnees[pKey]);
-          log('  ✅ ' + modName + '/' + pCfg.label + ' restauré', 'ok');
-          restored++;
-        }
-      }
-    }
-    
-    log('📥 Restauration terminée: ' + restored + ' sections', 'ok');
-    showToast('📥 ' + restored + ' sections restaurées', 'success');
-  } catch(e) {
-    log('❌ Erreur restauration: ' + e.message, 'err');
-    showToast('❌ ' + e.message, 'error');
-  }
-}
-
-// ═══ UI UPDATES ═══
-function updateStatusCards() {
-  var scState = document.getElementById('scState');
-  var scStateVal = document.getElementById('scStateVal');
-  if (isRunning) {
-    scState.className = 'status-card ok';
-    scStateVal.className = 'sc-value green';
-    scStateVal.textContent = '🟢 Actif';
-  } else {
-    scState.className = 'status-card off';
-    scStateVal.className = 'sc-value muted';
-    scStateVal.textContent = '🔴 Inactif';
-  }
-  
-  var scFolder = document.getElementById('scFolder');
-  var scFolderVal = document.getElementById('scFolderVal');
-  if (directoryHandle) {
-    scFolder.className = 'status-card ok';
-    scFolderVal.className = 'sc-value green';
-    scFolderVal.textContent = directoryHandle.name;
-  } else {
-    scFolder.className = 'status-card err';
-    scFolderVal.className = 'sc-value red';
-    scFolderVal.textContent = 'Non configuré';
-  }
-  
-  var scLast = document.getElementById('scLast');
-  var scLastVal = document.getElementById('scLastVal');
-  var last = stats.lastBackup || localStorage.getItem('bkpStation_last');
-  if (last) {
-    var d = new Date(last);
-    scLast.className = 'status-card ok';
-    scLastVal.className = 'sc-value green';
-    scLastVal.textContent = d.toLocaleDateString('fr-CA') + ' ' + d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
-  } else {
-    scLast.className = 'status-card warn';
-    scLastVal.className = 'sc-value gold';
-    scLastVal.textContent = 'Jamais';
-  }
-  
-  var scNext = document.getElementById('scNext');
-  var scNextVal = document.getElementById('scNextVal');
-  if (isRunning) {
-    var h = new Date().getHours();
-    var next = h < 11 ? '11h00' : h < 14 ? '14h00' : 'Demain';
-    scNext.className = 'status-card ok';
-    scNextVal.className = 'sc-value green';
-    scNextVal.textContent = next;
-  } else {
-    scNext.className = 'status-card off';
-    scNextVal.className = 'sc-value muted';
-    scNextVal.textContent = '—';
-  }
-}
-
-function updateSchedule() {
-  var today = new Date().toISOString().substring(0,10);
-  var todayKey = 'bkpStation_today_' + today;
-  var done = JSON.parse(localStorage.getItem(todayKey) || '[]');
-  var h = new Date().getHours();
-  
-  var openDot = document.getElementById('schedDotOpen');
-  var d11 = document.getElementById('schedDot11');
-  var d14 = document.getElementById('schedDot14');
-  
-  openDot.className = 'dot ' + (done.length > 0 ? 'done' : (isRunning ? 'next' : 'wait'));
-  
-  var has11 = done.some(function(t) { return t.startsWith('11'); });
-  d11.className = 'dot ' + (has11 ? 'done' : (isRunning && h < 11 ? 'next' : (isRunning && h >= 11 ? 'next' : 'wait')));
-  
-  var has14 = done.some(function(t) { return t.startsWith('14'); });
-  d14.className = 'dot ' + (has14 ? 'done' : (isRunning && h < 14 && has11 ? 'next' : 'wait'));
-  
-  document.getElementById('schedInfo').textContent = done.length + ' sauvegarde' + (done.length !== 1 ? 's' : '') + ' aujourd\'hui';
-}
-
-// ═══ OFFLINE DETECTION ═══
-window.addEventListener('online', function() {
-  document.getElementById('offlineBanner').style.display = 'none';
-  document.getElementById('statusDot').style.background = 'var(--green)';
-  log('✅ Internet rétabli', 'ok');
-});
-window.addEventListener('offline', function() {
-  document.getElementById('offlineBanner').style.display = 'block';
-  document.getElementById('statusDot').style.background = 'var(--red)';
-  log('⚠️ Connexion perdue', 'err');
-});
-
-// ═══ INIT ═══
-updateSchedule();
+function upS(){var day=new Date().toISOString().substring(0,10),done=JSON.parse(localStorage.getItem('bk_td_'+day)||'[]'),h=new Date().getHours();document.getElementById('sdO').className='sd '+(done.length>0?'done':(isOn?'next':'wait'));document.getElementById('sd11').className='sd '+(done.some(function(t){return t.startsWith('11');})?'done':(isOn&&h<11?'next':'wait'));document.getElementById('sd14').className='sd '+(done.some(function(t){return t.startsWith('14');})?'done':(isOn&&h<14?'next':'wait'));}
+window.addEventListener('online',function(){document.getElementById('offBar').style.display='none';});
+window.addEventListener('offline',function(){document.getElementById('offBar').style.display='block';});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeNav();});
+upS();
 </script>
 </body>
 </html>
