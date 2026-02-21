@@ -3493,9 +3493,12 @@ function magentUpdateBell() {
   const bell = document.getElementById('magentBellBtn');
   const bellText = document.getElementById('magentBellText');
   if (!bell) return;
-  if (magentUnreadCount > 0) {
+  var xchatCount = 0;
+  try { if (typeof XChat !== 'undefined' && XChat.getUnreadCount) xchatCount = XChat.getUnreadCount(); } catch(e) {}
+  var totalCount = magentUnreadCount + xchatCount;
+  if (totalCount > 0) {
     bell.classList.add('has-notifs');
-    if (bellText) bellText.textContent = magentUnreadCount + ' notif' + (magentUnreadCount > 1 ? 's' : '');
+    if (bellText) bellText.textContent = totalCount + ' notif' + (totalCount > 1 ? 's' : '');
   } else {
     bell.classList.remove('has-notifs');
     if (bellText) bellText.textContent = '0 notif';
@@ -3521,24 +3524,53 @@ function closeMagentNotifPopup() {
 function magentRenderNotifPopup() {
   const list = document.getElementById('magentNotifList');
   if (!list) return;
-  if (magentChatMessages.length === 0) {
+  
+  var xchatUnreads = [];
+  try { if (typeof XChat !== 'undefined' && XChat.getUnreadMessages) xchatUnreads = XChat.getUnreadMessages(); } catch(e) {}
+  
+  if (magentChatMessages.length === 0 && xchatUnreads.length === 0) {
     list.innerHTML = '<div class="notif-empty">Aucune notification</div>';
     return;
   }
-  const recent = magentChatMessages.slice().reverse().slice(0, 20);
-  list.innerHTML = recent.map(function(msg) {
-    const icon = msg.type === 'order-created' ? '🟠' : msg.type === 'order-confirmed' ? '✅' : msg.type === 'order-delivered' ? '📦' : '💬';
-    const dateStr = msg.date || '';
-    const timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('fr-CA', {hour:'2-digit',minute:'2-digit'}) : '';
-    return '<div class="notif-item">' +
-      '<div class="notif-item-header">' +
-        '<span class="notif-item-from">' + icon + ' ' + (msg.author || 'Système') + '</span>' +
-        '<span class="notif-item-time">' + dateStr + ' ' + timeStr + '</span>' +
-      '</div>' +
-      '<div class="notif-item-content">' + ((msg.content || msg.text || '').substring(0,100)) + '</div>' +
-      (msg.orderNumber ? '<span class="notif-item-card">Cmd #' + msg.orderNumber + '</span>' : '') +
-    '</div>';
-  }).join('');
+  
+  var html = '';
+  
+  // Native Entrepot notifications
+  if (magentChatMessages.length > 0) {
+    html += '<div style="font-size:9px;font-weight:700;color:#60a5fa;padding:6px 12px 4px;text-transform:uppercase;border-bottom:1px solid rgba(96,165,250,.2);">📦 Entrepôt</div>';
+    const recent = magentChatMessages.slice().reverse().slice(0, 20);
+    html += recent.map(function(msg) {
+      const icon = msg.type === 'order-created' ? '🟠' : msg.type === 'order-confirmed' ? '✅' : msg.type === 'order-delivered' ? '📦' : '💬';
+      const dateStr = msg.date || '';
+      const timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('fr-CA', {hour:'2-digit',minute:'2-digit'}) : '';
+      return '<div class="notif-item">' +
+        '<div class="notif-item-header">' +
+          '<span class="notif-item-from">' + icon + ' ' + (msg.author || 'Système') + '</span>' +
+          '<span class="notif-item-time">' + dateStr + ' ' + timeStr + '</span>' +
+        '</div>' +
+        '<div class="notif-item-content">' + ((msg.content || msg.text || '').substring(0,100)) + '</div>' +
+        (msg.orderNumber ? '<span class="notif-item-card">Cmd #' + msg.orderNumber + '</span>' : '') +
+      '</div>';
+    }).join('');
+  }
+  
+  // XChat notifications
+  if (xchatUnreads.length > 0) {
+    var PAGE_NAMES_NOTIF = {moulage:'Moulage',psm:'PSM',questionnement:'Questionnement',serie:'Série+',inspection:'Inspection',couture:'Couture',archives:'Archives',entrepot:'Entrepôt'};
+    html += '<div style="font-size:9px;font-weight:700;color:#a78bfa;padding:6px 12px 4px;text-transform:uppercase;border-bottom:1px solid rgba(167,139,250,.2);">💬 Chat Inter-App</div>';
+    xchatUnreads.forEach(function(e) {
+      var msg = e[1];
+      var srcName = PAGE_NAMES_NOTIF[msg.sourcePage] || msg.sourcePage || '';
+      var time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}) : '';
+      var typeIcons = {problem:'❓',normal:'💬',pinned:'📌'};
+      html += '<div class="notif-item unread" onclick="if(typeof XChat!==\'undefined\')XChat.openFromNotif(\'' + e[0] + '\')">' +
+        '<div class="notif-item-header"><span class="notif-item-from">' + (typeIcons[msg.type]||'💬') + ' ' + (msg.authorName||'Utilisateur') + '</span><span class="notif-item-time">' + time + '</span></div>' +
+        '<div class="notif-item-content">' + ((msg.content||'').substring(0,60)) + ((msg.content||'').length>60?'...':'') + '</div>' +
+        '<div class="notif-item-card">📍 ' + srcName + '</div></div>';
+    });
+  }
+  
+  list.innerHTML = html;
 }
 
 function magentMarkAllRead() {
@@ -4389,7 +4421,7 @@ var XChat=(function(){
   var PAGE_URLS={moulage:'Physipro_moulage.html',psm:'PhysiPro_PSM.html',questionnement:'PhysiPro_Questionnement.html',serie:'PhysiPro_Serie_.html',inspection:'PhysiPro_Inspection_Atelier.html',couture:'PhysiPro_Production_Couture.html',archives:'PhysiPro_Archives.html',entrepot:'PhysiPro_Entrepot.html'};
   var messages=[],isOpen=false,composeType='normal',replyToThread=null,selectedDest=[],firstLoad=true,lastCount=0;
   function _E(b){try{return atob(b)}catch(e){return b}}
-  var TEAM=[{name:'Daniel Roy',email:_E('YXRlbGllcmF0cEBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Valérie Caron',email:_E('dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ=='),dept:'Atelier'},{name:'Cassie Simard',email:_E('c3JveUBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Stéphanie Dutremble',email:_E('c2ltZHV0QHBoeXNpcHJvLmNvbQ=='),dept:'Atelier'},{name:'Simone Bouchard',email:_E('bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t'),dept:'Atelier'},{name:'Nadia Gagne',email:_E('bmdhZ25lQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Sonia Boulanger',email:_E('c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Fabrys Frechette',email:_E('ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20='),dept:'Admin'},{name:'Mario Ouellette',email:_E('bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Roxanne Valois',email:_E('cmhAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Pierre Caron',email:_E('cGV0ZXJiYXNzNzZAZ21haWwuY29t'),dept:'Direction'},{name:'Élyse Bolduc',email:_E('ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Éric Poirier',email:_E('ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Patrick Bouchard',email:_E('cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'}];
+  var TEAM=[{name:'Daniel Charest',email:_E('YXRlbGllcmF0cEBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Valérie Caron',email:_E('dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ=='),dept:'Atelier'},{name:'Cassie Simard',email:_E('c3JveUBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Stéphanie Dutremble',email:_E('c2ltZHV0QHBoeXNpcHJvLmNvbQ=='),dept:'Atelier'},{name:'Simone Bouchard',email:_E('bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t'),dept:'Atelier'},{name:'Nadia Gagne',email:_E('bmdhZ25lQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Sonia Boulanger',email:_E('c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Fabrys Frechette',email:_E('ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20='),dept:'Admin'},{name:'Mario Ouellette',email:_E('bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Roxanne Valois',email:_E('cmhAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Pierre Caron',email:_E('cGV0ZXJiYXNzNzZAZ21haWwuY29t'),dept:'Atelier'},{name:'Élyse Bolduc',email:_E('ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Éric Poirier',email:_E('ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Patrick Bouchard',email:_E('cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'}];
   function getDb(){return(typeof fbDb!=='undefined'&&fbDb)?fbDb:(typeof db!=='undefined'&&db)?db:(typeof firebaseDb!=='undefined'&&firebaseDb)?firebaseDb:null;}
   function getUser(){return(typeof fbUser!=='undefined'&&fbUser)?fbUser:(typeof currentUser!=='undefined'&&currentUser)?currentUser:null;}
   function getUserName(e){if(!e)return'Utilisateur';var el=e.toLowerCase();for(var i=0;i<TEAM.length;i++){if(TEAM[i].email.toLowerCase()===el)return TEAM[i].name;}if(typeof getDisplayName==='function')return getDisplayName(e);if(typeof getUserDisplayName==='function')return getUserDisplayName(e);return e.split('@')[0];}
@@ -4435,7 +4467,7 @@ var XChat=(function(){
   var PAGE_URLS={moulage:'Physipro_moulage.html',psm:'PhysiPro_PSM.html',questionnement:'PhysiPro_Questionnement.html',serie:'PhysiPro_Serie_.html',inspection:'PhysiPro_Inspection.html',couture:'PhysiPro_Couture.html',archives:'PhysiPro_Archives.html',entrepot:'PhysiPro_Entrepot.html'};
   var messages=[],isOpen=false,composeType='normal',replyToThread=null,selectedDest=[],firstLoad=true,lastCount=0;
   function _E(b){try{return atob(b)}catch(e){return b}}
-  var TEAM=[{name:'Daniel Roy',email:_E('YXRlbGllcmF0cEBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Valérie Caron',email:_E('dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ=='),dept:'Atelier'},{name:'Cassie Simard',email:_E('c3JveUBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Stéphanie Dutremble',email:_E('c2ltZHV0QHBoeXNpcHJvLmNvbQ=='),dept:'Atelier'},{name:'Simone Bouchard',email:_E('bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t'),dept:'Atelier'},{name:'Nadia Gagne',email:_E('bmdhZ25lQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Sonia Boulanger',email:_E('c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Fabrys Frechette',email:_E('ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20='),dept:'Admin'},{name:'Mario Ouellette',email:_E('bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Roxanne Valois',email:_E('cmhAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Pierre Caron',email:_E('cGV0ZXJiYXNzNzZAZ21haWwuY29t'),dept:'Direction'},{name:'Élyse Bolduc',email:_E('ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Éric Poirier',email:_E('ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Patrick Bouchard',email:_E('cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'}];
+  var TEAM=[{name:'Daniel Charest',email:_E('YXRlbGllcmF0cEBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Valérie Caron',email:_E('dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ=='),dept:'Atelier'},{name:'Cassie Simard',email:_E('c3JveUBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Stéphanie Dutremble',email:_E('c2ltZHV0QHBoeXNpcHJvLmNvbQ=='),dept:'Atelier'},{name:'Simone Bouchard',email:_E('bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t'),dept:'Atelier'},{name:'Nadia Gagne',email:_E('bmdhZ25lQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Sonia Boulanger',email:_E('c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Fabrys Frechette',email:_E('ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20='),dept:'Admin'},{name:'Mario Ouellette',email:_E('bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Roxanne Valois',email:_E('cmhAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Pierre Caron',email:_E('cGV0ZXJiYXNzNzZAZ21haWwuY29t'),dept:'Atelier'},{name:'Élyse Bolduc',email:_E('ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Éric Poirier',email:_E('ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Patrick Bouchard',email:_E('cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'}];
   function esc(s){if(!s)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
   function fmtTime(ts){if(!ts)return'';var d=new Date(ts);return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
   function getUserName(e){if(!e)return'Utilisateur';var el=e.toLowerCase();for(var i=0;i<TEAM.length;i++){if(TEAM[i].email.toLowerCase()===el)return TEAM[i].name;}if(typeof getPhysiproDisplayName==='function')return getPhysiproDisplayName(e);return e.split('@')[0];}
@@ -4459,7 +4491,7 @@ var XChat=(function(){
   function deleteMsg(id){if(db)db.ref('crossAppChat/'+id).remove();}
   function markRead(){if(!db||!currentUser)return;var my=(currentUser.email||'').toLowerCase(),ek=my.replace(/\./g,'_'),u={};messages.forEach(function(e){var m=e[1];if(m.authorEmail&&m.authorEmail.toLowerCase()===my)return;if(m.readBy&&m.readBy[ek])return;u['crossAppChat/'+e[0]+'/readBy/'+ek]=true;});if(Object.keys(u).length>0)db.ref().update(u).catch(function(){});}
   var att=0;function tryInit(){att++;if(db&&currentUser)init();else if(att<30)setTimeout(tryInit,1000);}setTimeout(tryInit,1500);
-  return{toggle:toggle,openCompose:openCompose,closeCompose:closeCompose,openDestModal:openDestModal,closeDestModal:closeDestModal,toggleDest:toggleDest,sendMessage:sendMessage,deleteMsg:deleteMsg,replyToThread:replyFn};
+  return{toggle:toggle,openCompose:openCompose,closeCompose:closeCompose,openDestModal:openDestModal,closeDestModal:closeDestModal,toggleDest:toggleDest,sendMessage:sendMessage,deleteMsg:deleteMsg,replyToThread:replyFn,getUnreadCount:function(){var user=currentUser;if(!user)return 0;var my=(user.email||'').toLowerCase(),ek=my.replace(/\./g,'_'),c=0;messages.forEach(function(e){var m=e[1];if(m.authorEmail&&m.authorEmail.toLowerCase()===my)return;if(m.readBy&&m.readBy[ek])return;if(m.recipients&&m.recipients.length>0){if(!m.recipients.some(function(r){return r.email&&r.email.toLowerCase()===my;}))return;}c++;});return c;},getUnreadMessages:function(){var user=currentUser;if(!user)return[];var my=(user.email||'').toLowerCase(),ek=my.replace(/\./g,'_');return messages.filter(function(e){var m=e[1];if(m.authorEmail&&m.authorEmail.toLowerCase()===my)return false;if(m.readBy&&m.readBy[ek])return false;if(m.recipients&&m.recipients.length>0){if(!m.recipients.some(function(r){return r.email&&r.email.toLowerCase()===my;}))return false;}return true;}).reverse().slice(0,20);},openFromNotif:function(id){var panel=document.getElementById('xchatPanel');if(!panel.classList.contains('active'))panel.classList.add('active');markRead();}};
 })();
 </script>
 </body>

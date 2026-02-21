@@ -4309,7 +4309,7 @@
       ['Fabrys Frechette', 'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=', 'Administration'],
       ['Mario Ouellette', 'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t', 'Administration'],
       ['Roxanne Valois', 'cmhAcGh5c2lwcm8uY29t', 'Administration'],
-      ['Pierre Caron', 'cGV0ZXJiYXNzNzZAZ21haWwuY29t', 'Direction'],
+      ['Pierre Caron', 'cGV0ZXJiYXNzNzZAZ21haWwuY29t', 'Atelier'],
       ['Élyse Bolduc', 'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==', 'ATM'],
       ['Éric Poirier', 'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==', 'ATM'],
       ['Patrick Bouchard', 'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==', 'ATM']
@@ -13503,7 +13503,9 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       const mobileNotifBtn = document.getElementById('mobileNotifBtn');
       const mobileNotifBadge = document.getElementById('mobileNotifBadge');
       
-      const count = firebaseNotifications.length;
+      var xchatCount = 0;
+      try { if (typeof XChat !== 'undefined' && XChat.getUnreadCount) xchatCount = XChat.getUnreadCount(); } catch(e) {}
+      const count = firebaseNotifications.length + xchatCount;
       
       // Desktop
       if (bellBtn && bellText) {
@@ -13543,29 +13545,54 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     function renderNotifPopup() {
       const list = document.getElementById('notifPopupList');
       
-      if (firebaseNotifications.length === 0) {
+      // Get XChat unreads
+      var xchatUnreads = [];
+      try { if (typeof XChat !== 'undefined' && XChat.getUnreadMessages) xchatUnreads = XChat.getUnreadMessages(); } catch(e) {}
+      
+      if (firebaseNotifications.length === 0 && xchatUnreads.length === 0) {
         list.innerHTML = '<div class="notif-empty">🔔 Aucune notification<br><span style="font-size:11px;color:#6b7280;">Vous êtes à jour!</span></div>';
         return;
       }
       
       let html = '';
-      firebaseNotifications.slice(0, 15).forEach((notif, idx) => {
-        const timeAgo = getTimeAgo(notif.timestamp);
-        const typeIcons = { problem: '❓', solution: '✅', reply: '💬', normal: '💬', pinned: '📌' };
-        const typeLabels = { problem: 'Question', solution: 'Réponse', reply: 'Réponse', normal: 'Message', pinned: 'Épinglé' };
-        const icon = typeIcons[notif.messageType] || '💬';
-        const label = typeLabels[notif.messageType] || 'Message';
-        
-        html += `
-          <div class="notif-item unread" onclick="openNotifDetail(${idx})">
-            <div class="notif-item-header">
-              <span class="notif-item-from">${icon} ${notif.fromName || 'Utilisateur'}</span>
-              <span class="notif-item-time">${timeAgo}</span>
-            </div>
-            <div class="notif-item-content">${label}: ${(notif.messageContent || 'Nouveau message').substring(0, 60)}${(notif.messageContent || '').length > 60 ? '...' : ''}</div>
-            <div class="notif-item-card">📋 ${notif.cardName || 'Moulage'} <span class="notif-item-arrow">→</span></div>
-          </div>`;
-      });
+      
+      // Native Moulage notifications
+      if (firebaseNotifications.length > 0) {
+        html += '<div style="font-size:9px;font-weight:700;color:#60a5fa;padding:6px 12px 4px;text-transform:uppercase;border-bottom:1px solid rgba(96,165,250,.2);">📋 Moulage</div>';
+        firebaseNotifications.slice(0, 15).forEach((notif, idx) => {
+          const timeAgo = getTimeAgo(notif.timestamp);
+          const typeIcons = { problem: '❓', solution: '✅', reply: '💬', normal: '💬', pinned: '📌' };
+          const typeLabels = { problem: 'Question', solution: 'Réponse', reply: 'Réponse', normal: 'Message', pinned: 'Épinglé' };
+          const icon = typeIcons[notif.messageType] || '💬';
+          const label = typeLabels[notif.messageType] || 'Message';
+          
+          html += `
+            <div class="notif-item unread" onclick="openNotifDetail(${idx})">
+              <div class="notif-item-header">
+                <span class="notif-item-from">${icon} ${notif.fromName || 'Utilisateur'}</span>
+                <span class="notif-item-time">${timeAgo}</span>
+              </div>
+              <div class="notif-item-content">${label}: ${(notif.messageContent || 'Nouveau message').substring(0, 60)}${(notif.messageContent || '').length > 60 ? '...' : ''}</div>
+              <div class="notif-item-card">📋 ${notif.cardName || 'Moulage'} <span class="notif-item-arrow">→</span></div>
+            </div>`;
+        });
+      }
+      
+      // XChat notifications
+      if (xchatUnreads.length > 0) {
+        var PAGE_NAMES_NOTIF = {moulage:'Moulage',psm:'PSM',questionnement:'Questionnement',serie:'Série+',inspection:'Inspection',couture:'Couture',archives:'Archives',entrepot:'Entrepôt'};
+        html += '<div style="font-size:9px;font-weight:700;color:#a78bfa;padding:6px 12px 4px;text-transform:uppercase;border-bottom:1px solid rgba(167,139,250,.2);">💬 Chat Inter-App</div>';
+        xchatUnreads.forEach(function(e) {
+          var msg = e[1];
+          var srcName = PAGE_NAMES_NOTIF[msg.sourcePage] || msg.sourcePage || '';
+          var time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}) : '';
+          var typeIcons = {problem:'❓',normal:'💬',pinned:'📌'};
+          html += '<div class="notif-item unread" onclick="if(typeof XChat!==\'undefined\')XChat.openFromNotif(\'' + e[0] + '\')">' +
+            '<div class="notif-item-header"><span class="notif-item-from">' + (typeIcons[msg.type]||'💬') + ' ' + (msg.authorName||'Utilisateur') + '</span><span class="notif-item-time">' + time + '</span></div>' +
+            '<div class="notif-item-content">' + ((msg.content||'').substring(0,60)) + ((msg.content||'').length>60?'...':'') + '</div>' +
+            '<div class="notif-item-card">📍 ' + srcName + '</div></div>';
+        });
+      }
       
       list.innerHTML = html;
     }
@@ -16013,7 +16040,7 @@ var XChat=(function(){
   var messages=[],isOpen=false,composeType='normal',replyToThread=null,selectedDest=[],unreadCount=0,firstLoad=true,lastCount=0;
   function _E(b){try{return atob(b)}catch(e){return b}}
   var TEAM=[
-    {name:'Daniel Roy',email:_E('YXRlbGllcmF0cEBwaHlzaXByby5jb20='),dept:'Atelier'},
+    {name:'Daniel Charest',email:_E('YXRlbGllcmF0cEBwaHlzaXByby5jb20='),dept:'Atelier'},
     {name:'Valérie Caron',email:_E('dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ=='),dept:'Atelier'},
     {name:'Cassie Simard',email:_E('c3JveUBwaHlzaXByby5jb20='),dept:'Atelier'},
     {name:'Stéphanie Dutremble',email:_E('c2ltZHV0QHBoeXNpcHJvLmNvbQ=='),dept:'Atelier'},
@@ -16023,7 +16050,7 @@ var XChat=(function(){
     {name:'Fabrys Frechette',email:_E('ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20='),dept:'Administration'},
     {name:'Mario Ouellette',email:_E('bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t'),dept:'Administration'},
     {name:'Roxanne Valois',email:_E('cmhAcGh5c2lwcm8uY29t'),dept:'Administration'},
-    {name:'Pierre Caron',email:_E('cGV0ZXJiYXNzNzZAZ21haWwuY29t'),dept:'Direction'},
+    {name:'Pierre Caron',email:_E('cGV0ZXJiYXNzNzZAZ21haWwuY29t'),dept:'Atelier'},
     {name:'Élyse Bolduc',email:_E('ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},
     {name:'Éric Poirier',email:_E('ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},
     {name:'Patrick Bouchard',email:_E('cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'}
@@ -16042,6 +16069,7 @@ var XChat=(function(){
       var myEmail=(user.email||'').toLowerCase(),emailKey=myEmail.replace(/\./g,'_');unreadCount=0;
       entries.forEach(function(e){var msg=e[1];if(msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail)return;if(msg.readBy&&msg.readBy[emailKey])return;if(msg.recipients&&msg.recipients.length>0){var isForMe=msg.recipients.some(function(r){return r.email&&r.email.toLowerCase()===myEmail;});if(!isForMe)return;}unreadCount++;});
       renderMessages();
+      if(typeof updateNotifBadge==='function')updateNotifBadge();
       if(!firstLoad&&entries.length>lastCount){var newest=entries[entries.length-1];if(newest&&newest[1].authorEmail&&newest[1].authorEmail.toLowerCase()!==myEmail){if(typeof showToast==='function')showToast('💬 Nouveau message de '+(newest[1].authorName||''),'info');}}
       firstLoad=false;lastCount=entries.length;
     });
@@ -16087,7 +16115,7 @@ var XChat=(function(){
 
   var attempts=0;function tryInit(){attempts++;if(getDb()&&getUser()){init();}else if(attempts<30){setTimeout(tryInit,1000);}}
   setTimeout(tryInit,1500);
-  return{toggle:toggle,openCompose:openCompose,closeCompose:closeCompose,openDestModal:openDestModal,closeDestModal:closeDestModal,toggleDest:toggleDest,sendMessage:sendMessage,deleteMsg:deleteMsg,replyToThread:replyToThreadFn,markAllRead:function(){markVisibleRead();}};
+  return{toggle:toggle,openCompose:openCompose,closeCompose:closeCompose,openDestModal:openDestModal,closeDestModal:closeDestModal,toggleDest:toggleDest,sendMessage:sendMessage,deleteMsg:deleteMsg,replyToThread:replyToThreadFn,markAllRead:function(){markVisibleRead();},getUnreadCount:function(){return unreadCount;},getUnreadMessages:function(){var user=getUser();if(!user)return[];var myEmail=(user.email||'').toLowerCase(),emailKey=myEmail.replace(/\./g,'_');return messages.filter(function(e){var msg=e[1];if(msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail)return false;if(msg.readBy&&msg.readBy[emailKey])return false;if(msg.recipients&&msg.recipients.length>0){if(!msg.recipients.some(function(r){return r.email&&r.email.toLowerCase()===myEmail;}))return false;}return true;}).reverse().slice(0,20);},openFromNotif:function(id){var panel=document.getElementById('xchatPanel');if(!panel.classList.contains('active')){isOpen=true;panel.classList.add('active');}markVisibleRead();}};
 })();
 </script>
 </body>
