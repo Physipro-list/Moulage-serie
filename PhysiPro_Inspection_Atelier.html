@@ -2151,13 +2151,34 @@ function reopenSerieModal(dept,idx){
   if(fbDb){
     fbDb.ref('serieCommandes').once('value').then(function(snap){
       var fbCards=snap.val()||{};
-      safeLSSet(SK,JSON.stringify(fbCards));
-      var n=String(bon).trim();var found=null;
-      for(var cid in fbCards){if(fbCards[cid].order===n||fbCards[cid].numeroPO===n){found={cardId:cid,card:fbCards[cid]};break;}}
+      // Merge FB into local (don't overwrite local inspection/couture progress)
+      var local=getSerieCards();
+      Object.keys(fbCards).forEach(function(cid){
+        if(!local[cid]){local[cid]=fbCards[cid];return;}
+        var lCard=local[cid],fbCard=fbCards[cid];
+        if(fbCard.client)lCard.client=fbCard.client;
+        if(fbCard.order)lCard.order=fbCard.order;
+        if(fbCard.numeroPO)lCard.numeroPO=fbCard.numeroPO;
+        if(fbCard.items){
+          if(!lCard.items)lCard.items=[];
+          fbCard.items.forEach(function(fItem,ii){
+            if(!lCard.items[ii]){lCard.items[ii]=fItem;return;}
+            if(fItem.name)lCard.items[ii].name=fItem.name;
+            if(!lCard.items[ii].grandeurs)lCard.items[ii].grandeurs=[];
+            (fItem.grandeurs||[]).forEach(function(fG,gi){
+              if(!lCard.items[ii].grandeurs[gi]){lCard.items[ii].grandeurs[gi]=fG;return;}
+              var lG=lCard.items[ii].grandeurs[gi];
+              if(fG.qty)lG.qty=fG.qty;if(fG.name)lG.name=fG.name;
+            });
+          });
+        }
+      });
+      safeLSSet(SK,JSON.stringify(local));
+      // Use flexible matching
+      var found=findSerie(bon);
       if(found){openSerieModal(bon,found,dept);}
       else{showToast('Carte Série+ introuvable pour '+bon,'error');}
     }).catch(function(){
-      // Fallback to local
       var m=findSerie(bon);
       if(m){openSerieModal(bon,m,dept);}
       else{showToast('Carte Série+ introuvable pour '+bon,'error');}
