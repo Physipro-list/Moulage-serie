@@ -3107,6 +3107,71 @@ function searchMatBOCommande(query) {
   }
 }
 
+function importVR10342Jobs() {
+  if (!db) { showToast('Erreur: base de données non connectée', 'error'); return; }
+  if (writeBlocked()) return;
+  
+  // All 47 job numbers from the handwritten list
+  var allJobs = [
+    '291269','291210','291231','291106','291047','290789','290259','290913',
+    '290863','290689','290829','290235','290698','290757','290810','290423',
+    '290598','290441','290920','291013','290894','290967','291104','291409',
+    '290440','290784','290976','290917','291177','290388','291033','291242',
+    '290744','291079','291032','290730','290408','290651','290761','290607',
+    '290733','290599','289569','290711','291082','290918','290333'
+  ];
+  
+  // Find VR10342 entry in matBOData
+  var targetId = null;
+  Object.entries(matBOData).forEach(function([id, mat]) {
+    if ((mat.code || '').indexOf('VR10342') !== -1 || (mat.code || '').indexOf('VR 10342') !== -1 ||
+        (mat.nom || '').indexOf('VR10342') !== -1 || (mat.nom || '').indexOf('VR 10342') !== -1 ||
+        (mat.code || '').indexOf('10342') !== -1) {
+      targetId = id;
+    }
+  });
+  
+  if (!targetId) {
+    showToast('VR10342 non trouvé dans Matériaux BO', 'error');
+    return;
+  }
+  
+  // Get existing orders to keep ones that have values (like 291200)
+  var existingOrders = matBOData[targetId].orders || {};
+  var existingValues = {};
+  Object.entries(existingOrders).forEach(function([oid, val]) {
+    if (val && val.trim()) existingValues[val.trim()] = true;
+  });
+  
+  // Build new orders: keep existing filled ones, add all new ones
+  var newOrders = {};
+  var count = 0;
+  
+  allJobs.forEach(function(job) {
+    if (!existingValues[job]) {
+      var orderId = 'ord_import_' + Date.now() + '_' + count;
+      newOrders[orderId] = job;
+      count++;
+    }
+  });
+  
+  // Also keep existing filled orders
+  Object.entries(existingOrders).forEach(function([oid, val]) {
+    if (val && val.trim()) {
+      newOrders[oid] = val;
+    }
+  });
+  
+  // Replace all orders at once
+  db.ref('materiauxBO/' + targetId + '/orders').set(newOrders)
+    .then(function() {
+      showToast('✅ ' + count + ' commandes importées pour VR10342!', 'success');
+    })
+    .catch(function(e) {
+      showToast('❌ Erreur: ' + e.message, 'error');
+    });
+}
+
 function exportMatBOJson() {
   var data = JSON.stringify(matBOData, null, 2);
   var blob = new Blob([data], {type: 'application/json'});

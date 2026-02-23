@@ -6626,7 +6626,7 @@ if(localStorage.getItem('physipro_last_email')){
                     <input type="text" class="serie-cmd-search" id="globalSearch" placeholder="🔍 Rechercher..." onclick="event.stopPropagation();" oninput="handleGlobalSearch(this.value)">
                   </div>
                   <div class="serie-collapsable-line2">
-                    <button class="serie-collapsable-add-btn" onclick="event.stopPropagation(); openAddSerieCommandeModal()">+ Commande</button>
+                    <button class="serie-collapsable-add-btn" onclick="event.stopPropagation(); openAddSerieCommandeModal()">+ Créer commande</button>
                   </div>
                 </div>
                 <div class="serie-collapsable-body" id="serieCollapsableBody">
@@ -8147,7 +8147,25 @@ function loadSerieDataFromLocalStorage() {
   try {
     const saved = localStorage.getItem('physipro_serie_data');
     if (saved) {
-      serieCardsData = JSON.parse(saved);
+      var rawData = JSON.parse(saved);
+      
+      // 🛡️ Filtrer les cartes invalides/test/corrompues AVANT de les charger
+      serieCardsData = {};
+      var filtered = 0;
+      Object.keys(rawData).forEach(function(cardId) {
+        var d = rawData[cardId];
+        // Rejeter: IDs système, IDs sans données, cartes demo, entrées corrompues
+        if (!d || typeof d !== 'object') { filtered++; return; }
+        if (cardId === 'timestamp' || cardId === 'date' || cardId === 'undefined' || cardId === 'null') { filtered++; return; }
+        if (cardId.startsWith('demo-') || cardId.startsWith('test-') || cardId.startsWith('sample-')) { filtered++; return; }
+        // Rejeter les cartes sans client ET sans items (données vides/corrompues)
+        if (!d.client && !d.items && !d.order && !d.commande) { filtered++; return; }
+        serieCardsData[cardId] = d;
+      });
+      if (filtered > 0) {
+        console.warn('🧹 Filtré ' + filtered + ' carte(s) invalide(s)/test du localStorage');
+        localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
+      }
       console.log('📂 Série+: Données chargées', Object.keys(serieCardsData).length, 'commandes');
 
       // v776: Recréer les cartes HTML si elles n'existent pas dans le DOM
@@ -8171,24 +8189,41 @@ function loadSerieDataFromLocalStorage() {
   // Firebase = SOURCE DE VÉRITÉ
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
     // Charger les IDs de cartes supprimées d'abord
+    // 🛡️ SAFE DELETE LISTENER v3: Triple protection
+    // 1) Ne supprime que les cartes marquées dans les 5 dernières minutes
+    // 2) Bloque si > 50% des cartes seraient supprimées
+    // 3) Ignore les entrées qui ne sont pas des timestamps valides
     firebaseDb.ref('serieDeletedCards').on('value', function(dSnap) {
       var delData = dSnap.exists() ? dSnap.val() : {};
-      try {
-        var local = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
-        Object.keys(delData).forEach(function(k){ if(!local[k]) local[k] = delData[k]; });
-        localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(local));
-      } catch(e) {}
-      // Nettoyer les cartes supprimées des données locales
-      var cleaned = false;
+      // Ne PAS propager vers localStorage — c'est la source du bug!
+      // On ne garde plus les deleted IDs en local pour éviter la contamination
+      
+      // 🛡️ PROTECTION: Ne supprimer que les cartes marquées dans les 5 dernières minutes
+      var now = Date.now();
+      var FIVE_MIN = 5 * 60 * 1000;
+      var toDelete = [];
       Object.keys(serieCardsData).forEach(function(cid) {
-        if (delData[cid] || delData[cid.replace(/[.#$\/\[\]]/g, '_')]) {
+        var safeKey = cid.replace(/[.#$\/\[\]]/g, '_');
+        var delTime = delData[cid] || delData[safeKey];
+        // Ignorer les entrées non-numériques (données corrompues)
+        if (!delTime || typeof delTime !== 'number') return;
+        // Ignorer les vieilles entrées (> 5 min = pas une suppression récente)
+        if ((now - delTime) >= FIVE_MIN) return;
+        toDelete.push(cid);
+      });
+      // 🛡️ ANTI-MASS-DELETE: Si > 50% des cartes seraient supprimées, BLOQUER
+      var totalCards = Object.keys(serieCardsData).length;
+      if (totalCards > 0 && toDelete.length > Math.max(1, totalCards * 0.5)) {
+        console.error('🛡️ BLOCAGE: serieDeletedCards tente de supprimer ' + toDelete.length + '/' + totalCards + ' cartes — BLOQUÉ!');
+        return;
+      }
+      if (toDelete.length > 0) {
+        toDelete.forEach(function(cid) {
+          console.log('🗑️ Suppression carte récente:', cid);
           delete serieCardsData[cid];
           var el = document.querySelector('.mcard[data-id="'+cid+'"]') || document.querySelector('.mcard[data-card-id="'+cid+'"]');
           if(el) el.remove();
-          cleaned = true;
-        }
-      });
-      if(cleaned) {
+        });
         try{localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));}catch(e){}
         updateSerieCounters();
       }
@@ -8200,8 +8235,20 @@ function loadSerieDataFromLocalStorage() {
       if (_serieIsSyncing) return;
 
       const fbData = snapshot.exists() ? snapshot.val() : {};
-      const demoKeys = Object.keys(fbData).filter(id => id.startsWith('demo-'));
-      if (demoKeys.length > 0) { const p={}; demoKeys.forEach(k=>{p[k]=null;}); firebaseDb.ref('serieCommandes').update(p); demoKeys.forEach(k=>{delete fbData[k];}); }
+      // 🧹 Nettoyer TOUTES les cartes invalides de Firebase
+      const invalidKeys = Object.keys(fbData).filter(id => {
+        if (id.startsWith('demo-') || id.startsWith('test-') || id.startsWith('sample-')) return true;
+        if (id === 'timestamp' || id === 'date' || id === 'undefined' || id === 'null') return true;
+        var d = fbData[id];
+        if (!d || typeof d !== 'object') return true;
+        if (!d.client && !d.items && !d.order && !d.commande) return true;
+        return false;
+      });
+      if (invalidKeys.length > 0) { 
+        const p={}; invalidKeys.forEach(k=>{p['serieCommandes/'+k]=null;}); 
+        firebaseDb.ref().update(p).then(function(){ console.log('🧹 Nettoyé ' + invalidKeys.length + ' carte(s) invalide(s) de Firebase:', invalidKeys); });
+        invalidKeys.forEach(k=>{delete fbData[k];}); 
+      }
 
       // 🛡️ SAFETY: If Firebase returns EMPTY but we have local data, DON'T wipe local — Firebase may have been corrupted
       const localCount = Object.keys(serieCardsData).length;
@@ -8215,24 +8262,47 @@ function loadSerieDataFromLocalStorage() {
       const oldIds = new Set(Object.keys(serieCardsData));
       const newIds = new Set(Object.keys(fbData));
 
-      // Remove cards deleted from Firebase
-      oldIds.forEach(oid => {
-        if(!newIds.has(oid)){
+      // 🛡️ PROTECTION: Compter combien de cartes seraient supprimées
+      var wouldDelete = [];
+      oldIds.forEach(oid => { if(!newIds.has(oid)) wouldDelete.push(oid); });
+      
+      // 🛡️ ANTI-MASS-DELETE: Si Firebase a perdu > 30% des cartes, NE PAS supprimer — re-push local
+      if (localCount > 2 && wouldDelete.length > (localCount * 0.3)) {
+        console.error('🛡️ BLOCAGE MERGE: Firebase a perdu ' + wouldDelete.length + '/' + localCount + ' cartes — on REFUSE et on re-push vers Firebase');
+        // Re-push les cartes manquantes vers Firebase
+        var rescue = {};
+        wouldDelete.forEach(function(oid) {
+          if (serieCardsData[oid]) rescue['serieCommandes/' + oid] = serieCardsData[oid];
+        });
+        if (Object.keys(rescue).length > 0) {
+          _serieIsSyncing = true;
+          firebaseDb.ref().update(rescue)
+            .then(function() { console.log('🛡️ Re-push de ' + Object.keys(rescue).length + ' cartes manquantes vers Firebase'); setTimeout(function(){ _serieIsSyncing = false; }, 1000); })
+            .catch(function(e) { console.error('Re-push error:', e); _serieIsSyncing = false; });
+        }
+      } else {
+        // Suppression normale (1-2 cartes max, ou aucune)
+        wouldDelete.forEach(oid => {
+          console.log('☁️ Carte ' + oid + ' supprimée de Firebase → supprimée du local');
           const s=document.querySelector('.mcard[data-id="'+oid+'"]')||document.querySelector('.mcard[data-card-id="'+oid+'"]');
           if(s) s.remove();
           delete serieCardsData[oid];
-        }
-      });
+        });
+      }
 
       // Merge each card intelligently
       newIds.forEach(cid => {
-        if (cid.startsWith('demo-')) return;
+        if (cid.startsWith('demo-') || cid.startsWith('test-') || cid.startsWith('sample-')) return;
+        if (cid === 'timestamp' || cid === 'date' || cid === 'undefined' || cid === 'null') return;
+        var fd = fbData[cid];
+        if (!fd || typeof fd !== 'object') return;
+        if (!fd.client && !fd.items && !fd.order && !fd.commande) return; // Carte vide/corrompue
         if (!serieCardsData[cid]) {
           // Brand new card from another app or device
-          serieCardsData[cid] = fbData[cid];
+          serieCardsData[cid] = fd;
         } else {
           // Existing card — merge with protection
-          _mergeSerieCard(serieCardsData[cid], fbData[cid]);
+          _mergeSerieCard(serieCardsData[cid], fd);
         }
       });
 
@@ -8986,6 +9056,12 @@ Génère UNIQUEMENT le JSON brut, sans explications, sans backticks markdown.
 
 // === CRÉER UNE CARTE SÉRIE DEPUIS LES DONNÉES ===
 function createSerieCardFromData(cardId, data) {
+  // 🛡️ Rejeter les cartes invalides/test
+  if (!data || typeof data !== 'object') { console.warn('⛔ Carte rejetée (données invalides):', cardId); return false; }
+  if (cardId === 'timestamp' || cardId === 'date' || cardId === 'undefined' || cardId === 'null') { console.warn('⛔ Carte rejetée (ID système):', cardId); delete serieCardsData[cardId]; return false; }
+  if (cardId.startsWith('demo-') || cardId.startsWith('test-') || cardId.startsWith('sample-')) { console.warn('⛔ Carte test rejetée:', cardId); delete serieCardsData[cardId]; return false; }
+  if (!data.client && !data.items && !data.order && !data.commande) { console.warn('⛔ Carte vide rejetée:', cardId); delete serieCardsData[cardId]; return false; }
+
   let container = document.getElementById('serieCollapsableCards');
   if (!container) container = document.getElementById('serieCardsList');
   if (!container) container = document.getElementById('serieCardsContent');
@@ -9190,6 +9266,8 @@ window.closeDeleteConfirmModal = closeDeleteConfirmModal;
 function deleteSerieCard(cardId) {
   if (!hasPermission('S')) { showToast('🔒 Permission insuffisante (Supprimer)', 'error'); return; }
   if (writeBlocked()) return;
+  // 🛡️ Backup automatique avant suppression
+  if (typeof serieCreateBackup === 'function') { try { serieCreateBackup(); } catch(e) {} }
   delete serieCardsData[cardId];
 
   const card = document.querySelector(`.mcard[data-id="${cardId}"]`);
@@ -12355,6 +12433,40 @@ document.addEventListener('DOMContentLoaded', function() {
 
     console.log('✅ Série+ initialisé');
     console.log('✅ Inventaire initialisé');
+    
+    // 🛡️ Nettoyage auto des entrées serieDeletedCards (> 10 min)
+    // + Suppression des IDs zombies qui matchent des cartes ACTIVES
+    if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
+      firebaseDb.ref('serieDeletedCards').once('value', function(snap) {
+        var data = snap.val();
+        if (!data) return;
+        var now = Date.now();
+        var TEN_MIN = 10 * 60 * 1000;
+        var toClean = {};
+        var activeIds = new Set(Object.keys(serieCardsData));
+        Object.keys(data).forEach(function(k) {
+          // Nettoyer les vieilles entrées (> 10 min)
+          if (typeof data[k] === 'number' && (now - data[k]) > TEN_MIN) {
+            toClean[k] = null;
+          }
+          // 🛡️ Supprimer les IDs zombies qui matchent des cartes ACTIVES
+          if (activeIds.has(k)) {
+            console.warn('🛡️ serieDeletedCards contient une carte ACTIVE: ' + k + ' — suppression de l\'entrée zombie');
+            toClean[k] = null;
+          }
+        });
+        if (Object.keys(toClean).length > 0) {
+          firebaseDb.ref('serieDeletedCards').update(toClean)
+            .then(function() { console.log('🧹 Nettoyé ' + Object.keys(toClean).length + ' entrées serieDeletedCards (anciennes + zombies)'); })
+            .catch(function(e) { console.error('Erreur nettoyage:', e); });
+        }
+      });
+      // Aussi nettoyer le localStorage
+      try {
+        localStorage.removeItem('physipro_serie_deleted_cards');
+        console.log('🧹 localStorage physipro_serie_deleted_cards vidé');
+      } catch(e) {}
+    }
   }, 200);
 });
 

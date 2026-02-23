@@ -296,6 +296,11 @@ body {
 .psm-card-fiche-btn { background:rgba(255,255,255,0.1); border:1.5px solid #000; font-size:7px; font-weight:700; cursor:pointer; padding:1px 5px; flex-shrink:0; border-radius:3px; transition:all 0.15s; color:#fff; display:inline-flex; align-items:center; gap:2px; }
 .psm-card-fiche-btn:hover { background:rgba(59,130,246,0.3); border-color:#3b82f6; transform:scale(1.05); }
 
+/* Card sub-lines: PSM type + Questionnement par */
+.psm-card-sublines { padding:0 5px 2px; }
+.psm-card-type { font-size:7px; font-weight:700; color:rgba(255,255,255,0.6); text-transform:uppercase; letter-spacing:0.5px; line-height:1.3; }
+.psm-card-questby { font-size:7px; font-weight:600; color:#fde68a; line-height:1.3; }
+
 /* Voir PDF button row */
 .psm-card-actions { padding:2px 5px 3px 5px; }
 .psm-card-pill { display:flex; border:1.5px solid #000; border-radius:4px; overflow:hidden; }
@@ -320,16 +325,16 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 1px 6px;
+  padding: 2px 6px;
   background: transparent;
-  height: 15px;
   overflow: hidden;
+  border-radius: 0 0 6px 6px;
 }
 .psm-card-quest-badge .quest-badge-text {
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 800;
-  letter-spacing: 0.5px;
-  line-height: 15px;
+  letter-spacing: 0.3px;
+  line-height: 1.3;
   animation: questBlink 2.5s ease-in-out infinite;
 }
 @keyframes questBlink {
@@ -5296,6 +5301,7 @@ function confirmQuestSend(assignee) {
   psmData[currentCardId].questionnementJobId = jobId;
   psmData[currentCardId].questionnementAssignee = assignee;
   psmData[currentCardId].questionnementSentAt = new Date().toISOString();
+  psmData[currentCardId].questionnementBy = currentUser ? getPhysiproDisplayName(typeof currentUser === 'string' ? currentUser : (currentUser.email || '')) : '';
   
   var db2 = firebase.database();
   var updates = {};
@@ -5303,6 +5309,7 @@ function confirmQuestSend(assignee) {
   updates['psm/' + currentCardId + '/questionnementSent'] = true;
   updates['psm/' + currentCardId + '/questionnementJobId'] = jobId;
   updates['psm/' + currentCardId + '/questionnementAssignee'] = assignee;
+  updates['psm/' + currentCardId + '/questionnementBy'] = psmData[currentCardId].questionnementBy;
   updates['psm/' + currentCardId + '/questionnementSentAt'] = new Date().toISOString();
   
   db2.ref().update(updates).then(function() {
@@ -5912,6 +5919,22 @@ function renderCards() {
     // Quest overrides complete: if in quest, don't show complete
     const finalCompleteCls = isInQuest ? '' : completeCls;
     
+    // Determine PSM/Prix majoré type
+    const isPrixMajore = ['mousse','metal','couture','assemblage','finition','atelier'].some(d => card[d] && card[d].prixMajore);
+    const typeLabel = isPrixMajore ? 'PSM / Prix majoré' : 'PSM';
+    
+    // Quest sent info
+    const questSentAt = card.questionnementSentAt ? new Date(card.questionnementSentAt) : null;
+    let questDaysLabel = '';
+    if (isInQuest && questSentAt && !isNaN(questSentAt.getTime())) {
+      const diffMs = Date.now() - questSentAt.getTime();
+      const diffDays = Math.floor(diffMs / 86400000);
+      questDaysLabel = diffDays === 0 ? "aujourd'hui" : 'il y a ' + diffDays + ' jour' + (diffDays > 1 ? 's' : '');
+    }
+    
+    // Get sender name from chat if available
+    const questBy = card.questionnementBy || (currentUser && typeof currentUser === 'string' ? getPhysiproDisplayName(currentUser) : (currentUser && currentUser.email ? getPhysiproDisplayName(currentUser.email) : ''));
+    
     return `
       <div class="psm-card ${region} ${selected} ${finalCompleteCls} ${questCls}" data-card-id="${id}" onclick="selectCard('${id}')">
         <span style="display:none;">${escapeHtml(card.order || '')}</span>
@@ -5921,6 +5944,10 @@ function renderCards() {
           </div>
           <button class="psm-card-fiche-btn" onclick="event.stopPropagation();openFicheOverlay('${id}')" title="Ouvrir fiche">Fiche</button>
         </div>
+        <div class="psm-card-sublines">
+          <div class="psm-card-type">${escapeHtml(typeLabel)}</div>
+          ${isInQuest && questBy ? '<div class="psm-card-questby">Questionnement par ' + escapeHtml(questBy) + '</div>' : ''}
+        </div>
         <div class="psm-card-actions">
           <div class="psm-card-pill">
             <span class="psm-card-pill-date ${dateInfo.cls}" title="${dateInfo.title}">${dateInfo.daysLabel || dateInfo.display}</span>
@@ -5928,7 +5955,7 @@ function renderCards() {
           </div>
         </div>
         <div class="psm-card-dept-bar">${deptBarHtml}</div>
-        <div class="psm-card-quest-badge"><span class="quest-badge-text">❓ QUESTIONNEMENT</span></div>
+        <div class="psm-card-quest-badge"><span class="quest-badge-text">❓ Questionnement envoyé${questDaysLabel ? ' ' + questDaysLabel : ''}</span></div>
         <div class="psm-card-complete-badge"><span class="complete-text">✓ COMPLET</span><span class="print-pill" onclick="event.stopPropagation();printCompletedCard('${id}')" title="Imprimer">🖨️ Imprimer</span></div>
       </div>
     `;
@@ -9510,12 +9537,21 @@ var PChat = (function() {
     h += '<div style="height:1px;background:#cbd5e1;margin:0 44px;"></div>';
     
     // ───── Patient info + intro ─────
+    // Determine type label
+    var card = psmData[_cardId] || {};
+    var isPrixMajore = false;
+    ['mousse','metal','couture','assemblage','finition','atelier'].forEach(function(d) {
+      if (card[d] && card[d].prixMajore) isPrixMajore = true;
+    });
+    var typeLabel = isPrixMajore ? 'PSM / Prix majoré' : 'PSM';
+    
     h += '<div style="padding:14px 44px 0;">';
-    h += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:8px;">';
+    h += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:4px;">';
     h += '<span style="font-size:13px;color:#0a2a52;font-weight:800;">'+esc(cardName)+'</span>';
     h += '<span style="font-size:11px;color:#64748b;">Commande <b style="color:#0a2a52;">#'+esc(orderNum||'\u2014')+'</b></span>';
     h += '</div>';
-    h += '<div style="font-size:11px;color:#475569;margin-bottom:20px;line-height:1.5;">Questionnement par l\u2019\u00e9quipe ATP \u2014 Voici les points en questionnement</div>';
+    h += '<div style="font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">'+esc(typeLabel)+'</div>';
+    h += '<div style="font-size:11px;color:#475569;margin-bottom:20px;line-height:1.5;">Voici les points en questionnement de l\u2019\u00e9quipe de l\u2019ATP</div>';
     h += '</div>';
     
     // ───── QUESTIONS ─────
