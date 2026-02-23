@@ -1212,6 +1212,13 @@ body.devis-open .dept-form-main-devis { display: flex; }
   border: 2px solid #3b82f6;
   border-radius: 8px;
   overflow: hidden;
+  transition: width 0.3s ease, min-width 0.3s ease, max-width 0.3s ease;
+}
+/* Shrink right window when conversation is open */
+.psm-window-right.quest-active {
+  width: 500px;
+  min-width: 500px;
+  max-width: 500px;
 }
 
 /* Window headers - unified height for all 3 panels */
@@ -1555,7 +1562,19 @@ body.devis-open .dept-form-main-devis { display: flex; }
 .pchat-reply-btn:hover { color:#3b82f6; text-decoration:underline; }
 .pchat-split-layout { display:flex; gap:8px; margin-top:4px; align-items:flex-start; }
 .pchat-split-images { flex:0 0 55%; max-width:55%; display:flex; flex-direction:column; gap:4px; border-right:1px solid #e2e8f0; padding-right:8px; }
-.pchat-split-images img { width:100%; border-radius:4px; border:1px solid #e2e8f0; cursor:pointer; }
+.pchat-split-images img { width:100%; border-radius:4px; border:1px solid #e2e8f0; cursor:pointer; -webkit-user-drag:none; user-select:none; pointer-events:auto; }
+.pchat-split-images img.pchat-img-selected { border:3px solid #3b82f6; box-shadow:0 0 8px rgba(59,130,246,0.5); }
+.pchat-img-wrap { position:relative; display:inline-block; }
+/* Zoom overlay for annotation */
+.pchat-zoom-overlay { position:fixed; inset:0; z-index:99998; background:rgba(0,0,0,0.8); display:flex; flex-direction:column; backdrop-filter:blur(3px); }
+.pchat-zoom-bar { display:flex; align-items:center; gap:6px; padding:8px 16px; background:#0a1e3d; flex-shrink:0; }
+.pchat-zoom-bar button { padding:3px 8px; border:1px solid rgba(148,163,184,0.3); border-radius:4px; background:none; color:#93c5fd; font-size:11px; cursor:pointer; }
+.pchat-zoom-bar button:hover { background:rgba(59,130,246,0.2); }
+.pchat-zoom-bar button.active { background:rgba(59,130,246,0.4); }
+.pchat-zoom-body { flex:1; display:flex; align-items:center; justify-content:center; overflow:auto; padding:20px; }
+.pchat-zoom-img-wrap { position:relative; display:inline-block; max-width:90vw; max-height:80vh; }
+.pchat-zoom-img-wrap img { max-width:90vw; max-height:80vh; border-radius:6px; display:block; }
+.pchat-zoom-img-wrap canvas { position:absolute; top:0; left:0; width:100%; height:100%; border-radius:6px; }
 .pchat-split-text { flex:1; font-size:12px; color:#334155; white-space:pre-wrap; word-wrap:break-word; line-height:1.5; }
 .pchat-empty { text-align:center; color:#94a3b8; font-size:11px; padding:40px 20px; font-style:italic; }
 .pchat-compose { display:none; max-width:95%; padding:8px 12px; border-radius:8px; position:relative; margin:8px; background:#eff6ff; border:2px solid #93c5fd; }
@@ -3475,6 +3494,8 @@ if(localStorage.getItem('physipro_last_email')){
                       <button class="nrt-btn nrt-annot pchat-at" data-tool="text" onclick="PChat.annotTool('text')" title="Texte" style="padding:1px 4px;border:1px solid rgba(148,163,184,0.3);border-radius:3px;background:none;color:#93c5fd;font-size:10px;cursor:pointer;">A</button>
                       <input type="color" id="pchatAnnotColor" value="#ff0000" style="width:16px;height:14px;border:1px solid rgba(148,163,184,0.3);border-radius:3px;cursor:pointer;padding:0;">
                       <button onclick="PChat.annotUndo()" title="Annuler" style="padding:1px 4px;border:1px solid rgba(148,163,184,0.3);border-radius:3px;background:none;color:#f59e0b;font-size:10px;cursor:pointer;">↩</button>
+                      <span style="width:1px;height:14px;background:rgba(148,163,184,0.3);margin:0 2px;"></span>
+                      <button onclick="PChat.zoomSelected()" title="Zoom image sélectionnée" style="padding:1px 4px;border:1px solid rgba(148,163,184,0.3);border-radius:3px;background:none;color:#60a5fa;font-size:10px;cursor:pointer;">🔍</button>
                     </span>
                     <button class="pchat-dest-btn" id="pchatDestBtn" onclick="PChat.showDestPicker()" title="Changer destinataire">Sonia ▾</button>
                     <div class="pchat-dest-picker" id="pchatDestPicker" style="display:none;"></div>
@@ -5300,6 +5321,9 @@ function toggleSection(section) {
     if (togQuest) { togQuest.querySelector('input').checked = true; togQuest.className = 'psm-section-toggle active'; }
     // Collapse cards to give more room
     if (cardsCol) cardsCol.classList.add('collapsed');
+    // Shrink right window to give conversation more space
+    var rightWin = document.querySelector('.psm-window-right');
+    if (rightWin) rightWin.classList.add('quest-active');
     // Load quest chat for current card
     if (currentCardId) PChat.loadForCard();
   } else {
@@ -5309,6 +5333,9 @@ function toggleSection(section) {
     if (togQuest) { togQuest.querySelector('input').checked = false; togQuest.className = 'psm-section-toggle'; }
     // Re-open cards
     if (cardsCol) cardsCol.classList.remove('collapsed');
+    // Restore right window size
+    var rightWin = document.querySelector('.psm-window-right');
+    if (rightWin) rightWin.classList.remove('quest-active');
   }
 }
 
@@ -8727,8 +8754,8 @@ var PChat = (function() {
       html += '<div class="pchat-split-layout">';
       html += '<div class="pchat-split-images" id="msgImg_' + id + '">';
       allImages.forEach(function(src, imgIdx) {
-        html += '<div style="position:relative;display:inline-block;">';
-        html += '<img src="' + src + '" onclick="PChat.annotClickImg(this,' + imgIdx + ',\'' + id + '\')" data-msgid="' + id + '" data-imgidx="' + imgIdx + '">';
+        html += '<div class="pchat-img-wrap" style="position:relative;display:inline-block;">';
+        html += '<img src="' + src + '" onclick="PChat.selectImg(this,\'' + id + '\',' + imgIdx + ')" data-msgid="' + id + '" data-imgidx="' + imgIdx + '" draggable="false" ondragstart="return false" style="cursor:pointer;-webkit-user-drag:none;user-select:none;">';
         html += '<canvas class="pchat-annot-canvas" id="pchatAnnotCanvas_' + id + '_' + imgIdx + '" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;border-radius:4px;"></canvas>';
         html += '</div>';
       });
@@ -9366,31 +9393,38 @@ var PChat = (function() {
   // ═══ CONVERSATION IMAGE ANNOTATION ═══
   var _pchatAnnotTool = null;
   var _pchatAnnotDrawings = {};
+  var _pchatSelectedImg = null; // { msgId, imgIdx, imgEl }
 
-  function annotTool(tool) {
-    _pchatAnnotTool = (_pchatAnnotTool === tool) ? null : tool;
-    document.querySelectorAll('.pchat-at').forEach(function(b) {
-      b.style.background = (b.getAttribute('data-tool') === _pchatAnnotTool) ? 'rgba(59,130,246,0.4)' : 'none';
-    });
-    // Toggle pointer-events on all conversation canvases
-    document.querySelectorAll('.pchat-annot-canvas').forEach(function(c) {
-      c.style.pointerEvents = _pchatAnnotTool ? 'auto' : 'none';
-    });
+  function selectImg(imgEl, msgId, imgIdx) {
+    // Deselect previous
+    document.querySelectorAll('.pchat-img-selected').forEach(function(i) { i.classList.remove('pchat-img-selected'); });
+    // Select this one
+    imgEl.classList.add('pchat-img-selected');
+    _pchatSelectedImg = { msgId: msgId, imgIdx: imgIdx, imgEl: imgEl };
+    // Init canvas for this image
+    initCanvasForImg(msgId, imgIdx, imgEl);
+    // If a tool is active, enable canvas pointer events on the selected image's canvas
+    if (_pchatAnnotTool) {
+      var canvasId = 'pchatAnnotCanvas_' + msgId + '_' + imgIdx;
+      var canvas = document.getElementById(canvasId);
+      if (canvas) canvas.style.pointerEvents = 'auto';
+    }
   }
 
-  function annotClickImg(imgEl, imgIdx, msgId) {
-    if (!_pchatAnnotTool) { window.open(imgEl.src); return; }
+  function initCanvasForImg(msgId, imgIdx, imgEl) {
     var canvasId = 'pchatAnnotCanvas_' + msgId + '_' + imgIdx;
     var canvas = document.getElementById(canvasId);
     if (!canvas) return;
     canvas.width = imgEl.naturalWidth || imgEl.offsetWidth;
     canvas.height = imgEl.naturalHeight || imgEl.offsetHeight;
-    canvas.style.pointerEvents = 'auto';
     var key = msgId + '_' + imgIdx;
     if (!_pchatAnnotDrawings[key]) _pchatAnnotDrawings[key] = [];
     if (canvas._hasListeners) return;
     canvas._hasListeners = true;
-    canvas._shapes = _pchatAnnotDrawings[key];
+    bindCanvasEvents(canvas, key);
+  }
+
+  function bindCanvasEvents(canvas, key) {
     var ctx = canvas.getContext('2d');
     var drawing = false, sx = 0, sy = 0;
     function getPos(e) {
@@ -9399,23 +9433,23 @@ var PChat = (function() {
     }
     canvas.addEventListener('mousedown', function(e) {
       if (!_pchatAnnotTool) return;
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
       var p = getPos(e); sx = p.x; sy = p.y; drawing = true;
       if (_pchatAnnotTool === 'text') {
         drawing = false;
         var txt = prompt('Texte:');
         if (txt) {
-          var color = (document.getElementById('pchatAnnotColor') || {}).value || '#ff0000';
+          var color = (document.getElementById('pchatAnnotColor') || document.getElementById('zoomAnnotColor') || {}).value || '#ff0000';
           _pchatAnnotDrawings[key].push({type:'text', x:sx, y:sy, text:txt, color:color});
-          redrawPchatAnnot(key, canvas);
+          redrawAllCanvases(key);
         }
       }
     });
     canvas.addEventListener('mousemove', function(e) {
       if (!drawing || !_pchatAnnotTool) return;
       var p = getPos(e);
-      redrawPchatAnnot(key, canvas);
-      var color = (document.getElementById('pchatAnnotColor') || {}).value || '#ff0000';
+      redrawAllCanvases(key);
+      var color = (document.getElementById('pchatAnnotColor') || document.getElementById('zoomAnnotColor') || {}).value || '#ff0000';
       drawAnnotShape(ctx, { tool: _pchatAnnotTool, color: color, x1: sx, y1: sy, x2: p.x, y2: p.y });
     });
     canvas.addEventListener('mouseup', function(e) {
@@ -9423,10 +9457,24 @@ var PChat = (function() {
       drawing = false;
       if (!_pchatAnnotTool || _pchatAnnotTool === 'text') return;
       var p = getPos(e);
-      var color = (document.getElementById('pchatAnnotColor') || {}).value || '#ff0000';
+      var color = (document.getElementById('pchatAnnotColor') || document.getElementById('zoomAnnotColor') || {}).value || '#ff0000';
       _pchatAnnotDrawings[key].push({ tool: _pchatAnnotTool, color: color, x1: sx, y1: sy, x2: p.x, y2: p.y });
-      redrawPchatAnnot(key, canvas);
+      redrawAllCanvases(key);
     });
+  }
+
+  function annotTool(tool) {
+    _pchatAnnotTool = (_pchatAnnotTool === tool) ? null : tool;
+    // Highlight active tool in both header and zoom
+    document.querySelectorAll('.pchat-at, .zoom-at').forEach(function(b) {
+      b.style.background = (b.getAttribute('data-tool') === _pchatAnnotTool) ? 'rgba(59,130,246,0.4)' : 'none';
+    });
+    // Enable canvas pointer events on selected image
+    document.querySelectorAll('.pchat-annot-canvas').forEach(function(c) {
+      c.style.pointerEvents = _pchatAnnotTool ? 'auto' : 'none';
+    });
+    var zc = document.getElementById('zoomAnnotCanvas');
+    if (zc) zc.style.pointerEvents = _pchatAnnotTool ? 'auto' : 'none';
   }
 
   function drawAnnotShape(ctx, s) {
@@ -9452,28 +9500,97 @@ var PChat = (function() {
     }
   }
 
-  function redrawPchatAnnot(key, canvas) {
+  function redrawCanvas(canvas, key) {
     if (!canvas) return;
     var ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    var shapes = _pchatAnnotDrawings[key] || [];
-    shapes.forEach(function(s) { drawAnnotShape(ctx, s); });
+    (_pchatAnnotDrawings[key] || []).forEach(function(s) { drawAnnotShape(ctx, s); });
+  }
+
+  function redrawAllCanvases(key) {
+    // Redraw inline canvas
+    var parts = key.split('_');
+    var inlineCanvas = document.getElementById('pchatAnnotCanvas_' + key);
+    redrawCanvas(inlineCanvas, key);
+    // Redraw zoom canvas if open and same key
+    var zc = document.getElementById('zoomAnnotCanvas');
+    if (zc && zc._key === key) redrawCanvas(zc, key);
   }
 
   function annotUndo() {
-    var keys = Object.keys(_pchatAnnotDrawings);
-    for (var i = keys.length - 1; i >= 0; i--) {
-      var arr = _pchatAnnotDrawings[keys[i]];
-      if (arr && arr.length > 0) {
-        arr.pop();
-        var canvas = document.getElementById('pchatAnnotCanvas_' + keys[i].replace('_', '_'));
-        // Find canvas by iterating
-        document.querySelectorAll('.pchat-annot-canvas').forEach(function(c) {
-          if (c.id === 'pchatAnnotCanvas_' + keys[i]) redrawPchatAnnot(keys[i], c);
-        });
-        break;
-      }
+    // Undo on selected image
+    if (!_pchatSelectedImg) return;
+    var key = _pchatSelectedImg.msgId + '_' + _pchatSelectedImg.imgIdx;
+    var arr = _pchatAnnotDrawings[key];
+    if (arr && arr.length > 0) {
+      arr.pop();
+      redrawAllCanvases(key);
     }
+  }
+
+  // ═══ ZOOM OVERLAY ═══
+  function zoomSelected() {
+    if (!_pchatSelectedImg) {
+      showToast('⚠️ Sélectionnez une image d\'abord (cliquez dessus)', 'warning');
+      return;
+    }
+    var sel = _pchatSelectedImg;
+    var key = sel.msgId + '_' + sel.imgIdx;
+    if (!_pchatAnnotDrawings[key]) _pchatAnnotDrawings[key] = [];
+
+    var old = document.getElementById('pchatZoomOverlay');
+    if (old) old.remove();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'pchatZoomOverlay';
+    overlay.className = 'pchat-zoom-overlay';
+
+    // Toolbar
+    var bar = '<div class="pchat-zoom-bar">';
+    bar += '<button class="zoom-at" data-tool="rect" onclick="PChat.annotTool(\'rect\')" title="Rectangle">▢ Rectangle</button>';
+    bar += '<button class="zoom-at" data-tool="circle" onclick="PChat.annotTool(\'circle\')" title="Cercle">○ Cercle</button>';
+    bar += '<button class="zoom-at" data-tool="arrow" onclick="PChat.annotTool(\'arrow\')" title="Flèche">↗ Flèche</button>';
+    bar += '<button class="zoom-at" data-tool="text" onclick="PChat.annotTool(\'text\')" title="Texte">A Texte</button>';
+    bar += '<input type="color" id="zoomAnnotColor" value="' + ((document.getElementById('pchatAnnotColor') || {}).value || '#ff0000') + '" style="width:24px;height:22px;border:1px solid rgba(148,163,184,0.3);border-radius:4px;cursor:pointer;padding:0;">';
+    bar += '<button onclick="PChat.annotUndo()" style="color:#f59e0b;" title="Annuler">↩ Annuler</button>';
+    bar += '<span style="flex:1;"></span>';
+    bar += '<button onclick="PChat.closeZoom()" style="background:#ef4444;color:#fff;border-color:#ef4444;font-weight:700;">✕ Fermer</button>';
+    bar += '</div>';
+
+    // Image + canvas
+    var body = '<div class="pchat-zoom-body">';
+    body += '<div class="pchat-zoom-img-wrap">';
+    body += '<img src="' + sel.imgEl.src + '" id="zoomImg">';
+    body += '<canvas id="zoomAnnotCanvas" style="pointer-events:' + (_pchatAnnotTool ? 'auto' : 'none') + ';"></canvas>';
+    body += '</div></div>';
+
+    overlay.innerHTML = bar + body;
+    document.body.appendChild(overlay);
+
+    // Highlight current tool in zoom bar
+    document.querySelectorAll('.zoom-at').forEach(function(b) {
+      b.style.background = (b.getAttribute('data-tool') === _pchatAnnotTool) ? 'rgba(59,130,246,0.4)' : 'none';
+    });
+
+    // Init zoom canvas after image loads
+    var zImg = document.getElementById('zoomImg');
+    var zCanvas = document.getElementById('zoomAnnotCanvas');
+    function initZoomCanvas() {
+      zCanvas.width = zImg.naturalWidth || zImg.offsetWidth;
+      zCanvas.height = zImg.naturalHeight || zImg.offsetHeight;
+      zCanvas._key = key;
+      if (!zCanvas._hasListeners) {
+        zCanvas._hasListeners = true;
+        bindCanvasEvents(zCanvas, key);
+      }
+      redrawCanvas(zCanvas, key);
+    }
+    if (zImg.complete) { initZoomCanvas(); } else { zImg.onload = initZoomCanvas; }
+  }
+
+  function closeZoom() {
+    var ov = document.getElementById('pchatZoomOverlay');
+    if (ov) ov.remove();
   }
 
   return {
@@ -9507,8 +9624,10 @@ var PChat = (function() {
     startAnnotOnForm: startAnnotOnForm,
     formAnnotUndo: formAnnotUndo,
     annotTool: annotTool,
-    annotClickImg: annotClickImg,
-    annotUndo: annotUndo
+    annotUndo: annotUndo,
+    selectImg: selectImg,
+    zoomSelected: zoomSelected,
+    closeZoom: closeZoom
   };
 })();
 
