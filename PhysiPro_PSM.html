@@ -3782,6 +3782,10 @@ if(localStorage.getItem('physipro_last_email')){
           <button class="quest-assignee-btn" onclick="confirmQuestSend('Nadia')" style="background:linear-gradient(135deg,#2563eb,#3b82f6);">Nadia</button>
           <button class="quest-assignee-btn" onclick="confirmQuestSend('Sonia')" style="background:linear-gradient(135deg,#16a34a,#22c55e);">Sonia</button>
           <button class="quest-assignee-btn" onclick="confirmQuestSend('Jonathan')" style="background:linear-gradient(135deg,#7c3aed,#9333ea);">Jonathan</button>
+          <button class="quest-assignee-btn" onclick="confirmQuestSend('Marie-Soleil')" style="background:linear-gradient(135deg,#d97706,#f59e0b);">M-Soleil</button>
+          <button class="quest-assignee-btn" onclick="confirmQuestSend('Marie-Pier')" style="background:linear-gradient(135deg,#db2777,#ec4899);">M-Pier</button>
+          <button class="quest-assignee-btn" onclick="confirmQuestSend('Daniel')" style="background:linear-gradient(135deg,#c2410c,#f97316);">Daniel</button>
+          <button class="quest-assignee-btn" onclick="confirmQuestSend('Fabrys')" style="background:linear-gradient(135deg,#059669,#34d399);">Fabrys</button>
         </div>
       </div>
     </div>
@@ -5331,6 +5335,10 @@ function confirmQuestSend(assignee) {
   updates['psm/' + currentCardId + '/questionnementAssignee'] = assignee;
   updates['psm/' + currentCardId + '/questionnementBy'] = psmData[currentCardId].questionnementBy;
   updates['psm/' + currentCardId + '/questionnementSentAt'] = new Date().toISOString();
+  // Clear any previous resolved state
+  updates['psm/' + currentCardId + '/questionnementResolved'] = null;
+  updates['psm/' + currentCardId + '/questionnementResolvedAt'] = null;
+  updates['psm/' + currentCardId + '/questionnementResolvedBy'] = null;
   
   db2.ref().update(updates).then(function() {
     showToast('✅ Questionnement envoyé à ' + assignee + '! #' + orderNum, 'success');
@@ -5367,11 +5375,11 @@ function createQuestCardFromPSM() {
   var typeLabel = isPrixMajore ? 'Prix majoré' : 'PSM';
   
   // Choose assignee — show picker
-  var assignees = ['Jacynthe','Nadia','Sonia','Jonathan'];
-  var pick = prompt('Assigner la carte Questionnement à:\n\n1. Jacynthe\n2. Nadia\n3. Sonia\n4. Jonathan\n\nEntrez le numéro (1-4):');
+  var assignees = ['Jacynthe','Nadia','Sonia','Jonathan','Marie-Soleil','Marie-Pier','Daniel','Fabrys'];
+  var pick = prompt('Assigner la carte Questionnement à:\n\n1. Jacynthe\n2. Nadia\n3. Sonia\n4. Jonathan\n5. Marie-Soleil\n6. Marie-Pier\n7. Daniel\n8. Fabrys\n\nEntrez le numéro (1-8):');
   if (!pick) return;
   var idx = parseInt(pick) - 1;
-  if (idx < 0 || idx > 3) { showToast('⚠️ Choix invalide', 'error'); return; }
+  if (idx < 0 || idx > 7) { showToast('⚠️ Choix invalide', 'error'); return; }
   var assignee = assignees[idx];
   
   var jobId = 'psm_card_' + Date.now();
@@ -5402,10 +5410,15 @@ function createQuestCardFromPSM() {
   updates['psm/' + currentCardId + '/questionnementJobId'] = jobId;
   updates['psm/' + currentCardId + '/questionnementAssignee'] = assignee;
   updates['psm/' + currentCardId + '/questionnementSentAt'] = new Date().toISOString();
+  // Clear any previous resolved state
+  updates['psm/' + currentCardId + '/questionnementResolved'] = null;
+  updates['psm/' + currentCardId + '/questionnementResolvedAt'] = null;
+  updates['psm/' + currentCardId + '/questionnementResolvedBy'] = null;
   
   psmData[currentCardId].questionnementSent = true;
   psmData[currentCardId].questionnementJobId = jobId;
   psmData[currentCardId].questionnementAssignee = assignee;
+  psmData[currentCardId].questionnementResolved = false;
   
   db2.ref().update(updates).then(function() {
     showToast('✅ Carte ' + typeLabel + ' créée dans Questionnement → ' + assignee + ' #' + orderNum, 'success');
@@ -8917,7 +8930,37 @@ var PChat = (function() {
     detach();
     _cardId = typeof currentCardId !== 'undefined' ? currentCardId : null;
     if (!_cardId) return;
+    
+    // Verify questionnement job still exists - clear stale flags if job was deleted
+    _verifyQuestState();
+    
     open(_targetName);
+  }
+  
+  function _verifyQuestState() {
+    if (!_cardId || !psmData[_cardId] || !db) return;
+    var c = psmData[_cardId];
+    if (!c.questionnementSent || !c.questionnementJobId) return;
+    if (c.questionnementResolved) return; // resolved is a known terminal state
+    
+    // Check if the referenced job still exists
+    db.ref('jobs/' + c.questionnementJobId).once('value').then(function(snap) {
+      if (!snap.exists()) {
+        // Job was deleted but PSM flags were never cleared — fix it now
+        console.log('PSM: Stale questionnement detected for card', _cardId, '- job', c.questionnementJobId, 'no longer exists. Clearing flags.');
+        psmData[_cardId].questionnementSent = false;
+        psmData[_cardId].questionnementJobId = null;
+        // Clean Firebase too
+        var cleanUpdates = {};
+        cleanUpdates['psm/' + _cardId + '/questionnementSent'] = false;
+        cleanUpdates['psm/' + _cardId + '/questionnementJobId'] = null;
+        db.ref().update(cleanUpdates).catch(function(e) { console.error('Cleanup error:', e); });
+        // Refresh UI
+        _updateUIMode();
+        if (typeof updateQuestStatusPill === 'function') updateQuestStatusPill();
+        if (typeof renderCards === 'function') renderCards();
+      }
+    }).catch(function() { /* ignore read errors */ });
   }
   
   function open(targetName) {
@@ -9001,7 +9044,11 @@ var PChat = (function() {
   }
   
   function _isQuestSent() {
-    return _cardId && psmData[_cardId] && psmData[_cardId].questionnementSent && psmData[_cardId].questionnementJobId;
+    if (!_cardId || !psmData[_cardId]) return false;
+    var c = psmData[_cardId];
+    // If resolved, treat as NOT sent so user can create a new quest
+    if (c.questionnementResolved) return false;
+    return c.questionnementSent && c.questionnementJobId;
   }
   
   function _updateUIMode() {
@@ -9340,12 +9387,17 @@ var PChat = (function() {
   }
   
   function send() {
-    if (!db || !_cardId) return;
+    if (!db || !_cardId) {
+      console.error('PChat.send: no db or no card', {db: !!db, cardId: _cardId});
+      return;
+    }
     var ta = document.getElementById('pchatComposeText');
     var content = (ta.value || '').trim();
     if (!content && _pendingImages.length === 0) return;
     
     var wasAlreadySent = _isQuestSent();
+    console.log('PChat.send: wasAlreadySent =', wasAlreadySent, '| target =', _targetName, '| cardId =', _cardId);
+    
     var myEmail = getMyEmail();
     var emailKey = myEmail.replace(/\./g,'_');
     
@@ -9369,6 +9421,7 @@ var PChat = (function() {
         clearImage();
         if (!wasAlreadySent) {
           // First time — auto-create Questionnement card for service client
+          console.log('PChat.send: FIRST MESSAGE — creating quest card for', _targetName);
           _autoCreateQuestCard();
           if (typeof showToast === 'function') showToast('✅ Questionnement envoyé à ' + _targetName + ' au service client', 'success');
         } else {
@@ -9378,13 +9431,27 @@ var PChat = (function() {
         // Switch UI to discussion mode now
         _updateUIMode();
       })
-      .catch(function(e) { if (typeof showToast === 'function') showToast('❌ Erreur: ' + e.message, 'error'); });
+      .catch(function(e) {
+        console.error('PChat.send: FIREBASE ERROR writing message:', e);
+        if (typeof showToast === 'function') showToast('❌ Erreur: ' + e.message, 'error');
+      });
   }
   
   function _autoCreateQuestCard() {
-    if (!_cardId || !psmData[_cardId]) return;
-    // Skip if card already sent to questionnement
-    if (psmData[_cardId].questionnementSent && psmData[_cardId].questionnementJobId) return;
+    if (!_cardId || !psmData[_cardId]) {
+      console.error('PChat._autoCreateQuestCard: no card selected');
+      return;
+    }
+    if (!db) {
+      console.error('PChat._autoCreateQuestCard: no db connection');
+      return;
+    }
+    var c = psmData[_cardId];
+    // Skip ONLY if card has an active (non-resolved) questionnement
+    if (c.questionnementSent && c.questionnementJobId && !c.questionnementResolved) {
+      console.log('PChat._autoCreateQuestCard: skipped — active quest exists:', c.questionnementJobId);
+      return;
+    }
     
     var card = psmData[_cardId];
     var orderNum = card.order || card.name || _cardId;
@@ -9425,16 +9492,27 @@ var PChat = (function() {
     updates['psm/' + _cardId + '/questionnementJobId'] = jobId;
     updates['psm/' + _cardId + '/questionnementAssignee'] = _targetName;
     updates['psm/' + _cardId + '/questionnementSentAt'] = new Date().toISOString();
+    updates['psm/' + _cardId + '/questionnementBy'] = creatorName;
+    // Clear any previous resolved state
+    updates['psm/' + _cardId + '/questionnementResolved'] = null;
+    updates['psm/' + _cardId + '/questionnementResolvedAt'] = null;
+    updates['psm/' + _cardId + '/questionnementResolvedBy'] = null;
     
     psmData[_cardId].questionnementSent = true;
     psmData[_cardId].questionnementJobId = jobId;
     psmData[_cardId].questionnementAssignee = _targetName;
+    psmData[_cardId].questionnementResolved = false;
+    psmData[_cardId]._resolvedUnread = false;
+    
+    console.log('PChat._autoCreateQuestCard: creating job', jobId, 'for card', _cardId, '→', _targetName);
     
     db.ref().update(updates).then(function() {
+      console.log('PChat._autoCreateQuestCard: SUCCESS — job created:', jobId);
       if (typeof updateQuestStatusPill === 'function') updateQuestStatusPill();
       if (typeof renderCards === 'function') renderCards();
     }).catch(function(e) {
-      console.error('Erreur auto-création carte questionnement:', e);
+      console.error('PChat._autoCreateQuestCard: FIREBASE ERROR:', e);
+      if (typeof showToast === 'function') showToast('❌ Erreur création questionnement: ' + e.message, 'error');
     });
   }
   

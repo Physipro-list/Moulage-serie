@@ -805,6 +805,21 @@ body {
 .fiche-logo img { height: 26px; filter: brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
 .fiche-delete-btn { padding: 6px 10px; background: linear-gradient(135deg, #ef4444, #dc2626); border: 2px solid #b91c1c; border-radius: 6px; color: #fff; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
 .fiche-delete-btn:hover { filter: brightness(1.1); }
+.fiche-resolve-btn { padding: 6px 12px; background: linear-gradient(135deg, #059669, #10b981); border: 2px solid #047857; border-radius: 6px; color: #fff; font-size: 10px; font-weight: 700; cursor: pointer; display: none; align-items: center; gap: 4px; line-height: 1.1; }
+.fiche-resolve-btn:hover { filter: brightness(1.15); transform: scale(1.02); }
+.fiche-resolve-btn.visible { display: flex; }
+/* Resolve confirmation modal */
+.resolve-modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.6); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.resolve-modal-overlay.hidden { display: none; }
+.resolve-modal { background: linear-gradient(135deg, #0f172a, #1e3a5f); border: 2px solid #3b82f6; border-radius: 12px; padding: 24px; min-width: 340px; max-width: 420px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+.resolve-modal h3 { color: #fff; margin: 0 0 8px; font-size: 16px; }
+.resolve-modal p { color: #94a3b8; margin: 0 0 20px; font-size: 12px; }
+.resolve-modal-btns { display: flex; gap: 12px; justify-content: center; }
+.resolve-modal-btns button { padding: 10px 28px; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+.resolve-modal-btns .btn-resolve-yes { background: linear-gradient(135deg, #059669, #10b981); color: #fff; }
+.resolve-modal-btns .btn-resolve-yes:hover { filter: brightness(1.2); }
+.resolve-modal-btns .btn-resolve-no { background: rgba(255,255,255,0.1); color: #94a3b8; border: 1px solid rgba(255,255,255,0.2); }
+.resolve-modal-btns .btn-resolve-no:hover { background: rgba(255,255,255,0.2); color: #fff; }
 
 .fiche-status-pill { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; font-size: 14px; font-weight: 800; text-align: center; text-transform: uppercase; letter-spacing: 1px; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%); border-bottom: 3px solid #1e3a8a; color: #fff; text-shadow: 1px 1px 0 rgba(0,0,0,0.3); box-shadow: 0 4px 15px rgba(59,130,246,0.4); }
 
@@ -1783,6 +1798,7 @@ body {
     <div class="fiche-info-zone">
       <div class="fiche-header">
         <div class="fiche-logo"><img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro"></div>
+        <button type="button" class="fiche-resolve-btn" id="ficheResolveBtn" onclick="openResolveModal()">✅ Questionnement réglé</button>
         <button type="button" class="fiche-delete-btn" onclick="deleteCurrentJob()"><span>🗑️</span><span>Supprimer</span></button>
       </div>
       <!-- status pill removed - info already in card header -->
@@ -1850,6 +1866,18 @@ body {
           <button class="qchat-add-btn conversation" onclick="QuestChat.openCompose('conversation')">💬 Conversation</button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- RESOLVE QUEST MODAL -->
+<div class="resolve-modal-overlay hidden" id="resolveQuestModal" onclick="closeResolveModal(event)">
+  <div class="resolve-modal" onclick="event.stopPropagation()">
+    <h3>✅ Ce questionnement est réglé?</h3>
+    <p id="resolveModalInfo">Commande #— • Patient —</p>
+    <div class="resolve-modal-btns">
+      <button class="btn-resolve-no" onclick="closeResolveModal()">Non</button>
+      <button class="btn-resolve-yes" onclick="confirmResolveQuest()">Oui, c'est réglé</button>
     </div>
   </div>
 </div>
@@ -3873,6 +3901,16 @@ function openFiche(jobId) {
   // Render rappel section
   renderRappelSection(jobId, d);
   
+  // Show/hide resolve button for PSM cards only
+  var resolveBtn = document.getElementById('ficheResolveBtn');
+  if (resolveBtn) {
+    if (d.fromPSM) {
+      resolveBtn.classList.add('visible');
+    } else {
+      resolveBtn.classList.remove('visible');
+    }
+  }
+  
   // PSM info now shows as first message in chat, hide static block
   var psmInfoEl = document.getElementById('fichePsmInfo');
   if (psmInfoEl) {
@@ -4016,7 +4054,7 @@ function archiveJobThenDelete(jobId, source) {
   };
   db.ref().update(updates).then(function() {
     // 4. If this was a PSM questionnement, mark it resolved and send chat message
-    if (job.fromPSM && job.psmCardId) {
+    if (job.fromPSM && job.psmCardId && !job._alreadyResolved) {
       var resolverName = getCurrentUserName ? getCurrentUserName() : (currentUser ? (currentUser.displayName || currentUser.email) : 'Questionnement');
       var resolverEmail = currentUser ? currentUser.email.toLowerCase() : '';
       var psmUpdates = {};
@@ -4070,6 +4108,60 @@ function deleteCurrentJob() {
   if (writeBlocked()) return;
   if (!confirm('Supprimer ce job?\n\n📦 Un fichier archive sera téléchargé automatiquement.')) return;
   archiveJobThenDelete(currentJobId, 'desktop');
+}
+
+// ===== PSM RESOLVE QUEST FLOW =====
+function openResolveModal() {
+  if (!currentJobId) return;
+  var job = jobsData[currentJobId];
+  if (!job || !job.fromPSM) return;
+  var info = document.getElementById('resolveModalInfo');
+  if (info) info.textContent = 'Commande #' + (job.order || '?') + ' • ' + (job.client || job.psmName || 'Patient');
+  document.getElementById('resolveQuestModal').classList.remove('hidden');
+}
+function closeResolveModal(e) {
+  if (e && e.target !== document.getElementById('resolveQuestModal')) return;
+  document.getElementById('resolveQuestModal').classList.add('hidden');
+}
+function confirmResolveQuest() {
+  document.getElementById('resolveQuestModal').classList.add('hidden');
+  if (!currentJobId) return;
+  var job = jobsData[currentJobId];
+  if (!job || !job.fromPSM) return;
+  
+  var resolverName = typeof getCurrentUserName === 'function' ? getCurrentUserName() : (currentUser ? (currentUser.displayName || currentUser.email) : 'Questionnement');
+  var resolverEmail = currentUser ? currentUser.email.toLowerCase() : '';
+  
+  // Mark as resolved in PSM BEFORE archiving (so archiveJobThenDelete won't duplicate)
+  var psmUpdates = {};
+  if (job.psmCardId) {
+    psmUpdates['psm/' + job.psmCardId + '/questionnementResolved'] = true;
+    psmUpdates['psm/' + job.psmCardId + '/questionnementResolvedAt'] = new Date().toISOString();
+    psmUpdates['psm/' + job.psmCardId + '/questionnementResolvedBy'] = resolverName;
+    
+    // Send resolved message into psmChat so PSM user sees it
+    var resolvedMsgKey = 'resolved_' + Date.now();
+    psmUpdates['psmChat/' + job.psmCardId + '/messages/' + resolvedMsgKey] = {
+      content: '✅ Questionnement réglé par ' + resolverName + ' pour #' + (job.order || job.psmName || ''),
+      authorEmail: resolverEmail,
+      authorName: resolverName,
+      targetName: job.psmSentBy || job.createdByName || '',
+      timestamp: Date.now(),
+      type: 'quest-resolved',
+      readBy: {}
+    };
+  }
+  
+  // Mark the job locally so archiveJobThenDelete won't send duplicate resolved message
+  job._alreadyResolved = true;
+  
+  db.ref().update(psmUpdates).then(function() {
+    showToast('✅ Questionnement réglé! Notification envoyée au PSM.', 'success');
+    // Auto-archive and delete the job
+    archiveJobThenDelete(currentJobId, 'desktop');
+  }).catch(function(e) {
+    showToast('❌ Erreur: ' + e.message, 'error');
+  });
 }
 
 // ===== QUEST CHAT MODULE (Firebase Realtime) =====
