@@ -5310,7 +5310,7 @@ function confirmQuestSend(assignee) {
   var deptData = card[dept] || {};
   
   var orderNum = card.order || card.name || currentCardId;
-  var clientName = card.region || '';
+  var clientName = card.name || '';
   var psmName = card.name || orderNum;
   var creatorEmail = currentUser ? currentUser.email : '';
   var creatorName = currentUser ? getPhysiproDisplayName(currentUser.email) : 'PSM';
@@ -5318,15 +5318,17 @@ function confirmQuestSend(assignee) {
   // Detect PSM vs Prix majoré
   var isPrixMajore = deptData.prixMajore || false;
   if (!isPrixMajore) {
-    ['mousse','metal','couture','assemblage','finition','atelier'].forEach(function(d) {
+    ['atelier','mousse','metal','couture','assemblage','finition'].forEach(function(d) {
       if (card[d] && card[d].prixMajore) isPrixMajore = true;
     });
   }
   var typeLabel = isPrixMajore ? 'Prix majoré' : 'PSM';
   
+  // Collect temps
+  var psmTemps = deptData.temps || '';
+  
   // Extract images from notes HTML (base64 inline images)
   var psmImages = _extractImagesFromHtml(deptData.notesHtml || '');
-  // Also grab from right panel
   psmImages = psmImages.concat(_extractImagesFromHtml(deptData.notesRightHtml || ''));
   
   var jobId = 'psm_quest_' + Date.now();
@@ -5339,12 +5341,14 @@ function confirmQuestSend(assignee) {
     dateRecue: new Date().toISOString().split('T')[0],
     dateLivraison: '',
     createdBy: creatorEmail,
+    createdByName: creatorName,
     createdAt: new Date().toISOString(),
     fromPSM: true,
     psmCardId: currentCardId,
     psmName: psmName,
     psmDept: dept,
     psmType: typeLabel,
+    psmTemps: psmTemps,
     psmQuestText: (deptData.questionnement || deptData.question || '').trim(),
     psmQuestHtml: (deptData.questionnementHtml || deptData.questionHtml || '').trim(),
     psmSentBy: creatorName,
@@ -5402,10 +5406,17 @@ function createQuestCardFromPSM() {
   // Determine type: PSM or Prix majoré
   // Check all depts for prixMajore flag
   var isPrixMajore = false;
-  ['mousse','metal','couture','assemblage','finition'].forEach(function(d) {
+  ['atelier','mousse','metal','couture','assemblage','finition'].forEach(function(d) {
     if (card[d] && card[d].prixMajore) isPrixMajore = true;
   });
   var typeLabel = isPrixMajore ? 'Prix majoré' : 'PSM';
+  
+  // Collect temps and quest text from active dept
+  var activeDept = typeof currentDept !== 'undefined' ? currentDept : 'atelier';
+  var activeDeptData = card[activeDept] || {};
+  var psmTemps = activeDeptData.temps || '';
+  var psmQuestText = (activeDeptData.questionnement || activeDeptData.question || '').trim();
+  var psmQuestHtml = (activeDeptData.questionnementHtml || activeDeptData.questionHtml || '').trim();
   
   // Extract images from notes
   var psmImages = [];
@@ -5438,7 +5449,11 @@ function createQuestCardFromPSM() {
     fromPSM: true,
     psmCardId: currentCardId,
     psmName: psmName,
+    psmDept: activeDept,
     psmType: typeLabel,
+    psmTemps: psmTemps,
+    psmQuestText: psmQuestText,
+    psmQuestHtml: psmQuestHtml,
     psmSentBy: creatorName,
     psmImages: psmImages.length > 0 ? psmImages : null,
     cardStyle: 'psm',
@@ -8930,8 +8945,11 @@ var PChat = (function() {
   var _pendingImages = [];
   var _allCardsListeners = {}; // listeners per card for notification tracking
   
+  // Valid Questionnement assignees (must match Questionnement columns)
+  var QUEST_ASSIGNEES = ['Jacynthe','Nadia','Sonia','Jonathan','Marie-Soleil','Marie-Pier','Daniel','Fabrys'];
+  
   var DEST_LIST = [
-    'Sonia','Jonathan','Jacynthe','Nadia','Fabrys','Daniel',
+    'Sonia','Jonathan','Jacynthe','Nadia','Marie-Soleil','Marie-Pier','Fabrys','Daniel',
     'Stéphane D.','Stéphane Du.','Sylvain','Valérie','Pierre',
     'Stéphanie','Cassie','Michelle','Mario','Sina','Roxanne'
   ];
@@ -9507,11 +9525,23 @@ var PChat = (function() {
     });
     var typeLabel = isPrixMajore ? 'Prix majoré' : 'PSM';
     
+    // Validate assignee — must be a valid Questionnement column
+    var assignee = _targetName;
+    if (QUEST_ASSIGNEES.indexOf(assignee) < 0) {
+      // Target is not a valid Questionnement assignee — ask user to pick
+      console.warn('PChat._autoCreateQuestCard: target "' + assignee + '" is not a valid Questionnement assignee. Defaulting to Sonia.');
+      assignee = 'Sonia'; // Safe default
+    }
+    
+    // Collect temps from active department
+    var psmTemps = '';
+    var activeDeptData = card[typeof currentDept !== 'undefined' ? currentDept : 'atelier'] || {};
+    psmTemps = activeDeptData.temps || '';
+    
     var jobId = 'psm_card_' + Date.now();
     
     // Extract images from PSM notes (all departments)
     var psmImages = [];
-    var activeDept = typeof currentDept !== 'undefined' ? currentDept : 'atelier';
     ['atelier','couture','metal'].forEach(function(d) {
       var dd = card[d] || {};
       if (typeof _extractImagesFromHtml === 'function') {
@@ -9520,10 +9550,12 @@ var PChat = (function() {
       }
     });
     
+    var activeDept = typeof currentDept !== 'undefined' ? currentDept : 'atelier';
+    
     var jobData = {
       order: orderNum,
       client: clientName || psmName,
-      assignee: _targetName,
+      assignee: assignee,
       numeroPO: '',
       representant: '',
       dateRecue: new Date().toISOString().split('T')[0],
@@ -9534,7 +9566,11 @@ var PChat = (function() {
       fromPSM: true,
       psmCardId: _cardId,
       psmName: psmName,
+      psmDept: activeDept,
       psmType: typeLabel,
+      psmTemps: psmTemps,
+      psmQuestText: (activeDeptData.questionnement || activeDeptData.question || '').trim(),
+      psmQuestHtml: (activeDeptData.questionnementHtml || activeDeptData.questionHtml || '').trim(),
       psmSentBy: creatorName,
       psmImages: psmImages.length > 0 ? psmImages : null,
       cardStyle: 'psm',
