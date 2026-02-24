@@ -330,6 +330,24 @@ body {
   overflow: hidden;
   border-radius: 0 0 6px 6px;
 }
+/* Resolved questionnement card */
+.psm-card.card-quest-resolved { background: linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%) !important; border-color: #34d399 !important; }
+.psm-card.card-quest-resolved .psm-card-dept-bar { display: none; }
+.psm-card.card-quest-resolved .psm-card-complete-badge { display: none !important; }
+.psm-card.card-quest-resolved .psm-card-quest-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 2px 6px;
+  background: transparent;
+  overflow: hidden;
+  border-radius: 0 0 6px 6px;
+}
+.psm-card.card-quest-resolved .quest-badge-text {
+  color: #6ee7b7;
+  animation: none;
+}
 .psm-card-quest-badge .quest-badge-text {
   font-size: 8px;
   font-weight: 800;
@@ -5411,7 +5429,19 @@ function updateQuestStatusPill() {
   var card = psmData[currentCardId];
   pill.style.display = 'inline-block';
   
-  if (card.questionnementSent || card.questionnementJobId) {
+  // Check resolved state first (highest priority)
+  if (card.questionnementResolved) {
+    var resolvedBy = card.questionnementResolvedBy || '';
+    pill.textContent = '✅ Réglé' + (resolvedBy ? ' par ' + resolvedBy : '');
+    pill.style.background = 'linear-gradient(135deg,#059669,#10b981)';
+    pill.style.color = '#fff';
+    pill.style.border = '1px solid #34d399';
+    pill.style.animation = 'none';
+    // Blink if not yet seen
+    if (card._resolvedUnread) {
+      pill.style.animation = 'newCardBlink 0.8s ease-in-out infinite';
+    }
+  } else if (card.questionnementSent || card.questionnementJobId) {
     if (card._hasReply && card._replyUnread) {
       // Got unread reply
       pill.textContent = '💬 Réponse reçue';
@@ -5918,9 +5948,10 @@ function renderCards() {
     const pdfBtnCls = hasDevisImages ? 'psm-card-viewpdf has-pdf card-devis-drop' : 'psm-card-viewpdf card-devis-drop';
     
     const isInQuest = card.questionnementSent === true;
-    const questCls = isInQuest ? 'card-in-quest' : '';
-    // Quest overrides complete: if in quest, don't show complete
-    const finalCompleteCls = isInQuest ? '' : completeCls;
+    const isQuestResolved = card.questionnementResolved === true;
+    const questCls = isQuestResolved ? 'card-quest-resolved' : (isInQuest ? 'card-in-quest' : '');
+    // Quest overrides complete: if in quest or resolved, don't show complete
+    const finalCompleteCls = (isInQuest || isQuestResolved) ? '' : completeCls;
     
     // Determine PSM/Prix majoré type
     const isPrixMajore = ['mousse','metal','couture','assemblage','finition','atelier'].some(d => card[d] && card[d].prixMajore);
@@ -5958,7 +5989,7 @@ function renderCards() {
           </div>
         </div>
         <div class="psm-card-dept-bar">${deptBarHtml}</div>
-        <div class="psm-card-quest-badge"><span class="quest-badge-text">❓ Questionnement envoyé${questDaysLabel ? ' ' + questDaysLabel : ''}</span></div>
+        <div class="psm-card-quest-badge"><span class="quest-badge-text">${isQuestResolved ? '✅ Questionnement réglé' + (card.questionnementResolvedBy ? ' par ' + escapeHtml(card.questionnementResolvedBy) : '') : '❓ Questionnement envoyé' + (questDaysLabel ? ' ' + questDaysLabel : '')}</span></div>
         <div class="psm-card-complete-badge"><span class="complete-text">✓ COMPLET</span><span class="print-pill" onclick="event.stopPropagation();printCompletedCard('${id}')" title="Imprimer">🖨️ Imprimer</span></div>
       </div>
     `;
@@ -9495,30 +9526,38 @@ var PChat = (function() {
         var msgs = allChats[cardId].messages || {};
         var iSent = false;
         var gotReply = false;
+        var gotResolved = false;
+        var myEmailKey = myEmail.replace(/\./g, '_');
+        var resolvedUnread = false;
+        
         Object.values(msgs).forEach(function(msg) {
           if (msg.authorEmail && msg.authorEmail.toLowerCase() === myEmail) iSent = true;
           if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail) gotReply = true;
+          // Detect quest-resolved messages
+          if (msg.type === 'quest-resolved') {
+            gotResolved = true;
+            if (!msg.readBy || !msg.readBy[myEmailKey]) resolvedUnread = true;
+          }
         });
         
+        // If resolved message found, mark card as resolved
+        if (gotResolved) {
+          psmData[cardId].questionnementResolved = true;
+          psmData[cardId]._resolvedUnread = resolvedUnread;
+        }
+        
         if (iSent && !gotReply) {
-          // I sent but no reply yet — questionnement state
           psmData[cardId].questionnementSent = true;
           psmData[cardId]._hasReply = false;
         } else if (iSent && gotReply) {
-          // Got a reply — check if all read
-          var myEmailKey = myEmail.replace(/\./g, '_');
           var allRead = true;
           Object.values(msgs).forEach(function(msg) {
-            if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail) {
+            if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail && msg.type !== 'quest-resolved') {
               if (!msg.readBy || !msg.readBy[myEmailKey]) allRead = false;
             }
           });
           psmData[cardId]._hasReply = true;
           psmData[cardId]._replyUnread = !allRead;
-          if (allRead) {
-            // Reply read — can clear questionnement
-            psmData[cardId].questionnementSent = false;
-          }
         }
       });
       renderCards();
