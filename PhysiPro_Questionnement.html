@@ -4114,12 +4114,18 @@ var QuestChat = (function() {
   function getMyName() { return typeof getCurrentUserName==='function' ? getCurrentUserName() : getMyEmail().split('@')[0]; }
   
   // ---- Load / Detach ----
+  var _psmListener = null;
+  var _psmCardId = null;
+  var _psmMessages = [];
+  
   function loadForJob(jobId) {
     detach();
     _currentJobId = jobId;
     _selectedImgSrc = null;
     _replyToId = null;
     _extraDests = [];
+    _psmMessages = [];
+    _psmCardId = null;
     if (!jobId) return;
     
     // Set dest from job creator (the person who created the questionnement)
@@ -4143,21 +4149,38 @@ var QuestChat = (function() {
     var database = getDb();
     if (!database) return;
     
+    // Listen to questChat messages (normal questionnement chat)
     _listener = database.ref('questChat/' + jobId + '/messages').orderByChild('timestamp').on('value', function(snap) {
       var data = snap.val() || {};
       _messages = Object.entries(data).sort(function(a,b){ return (a[1].timestamp||0)-(b[1].timestamp||0); });
       render();
     });
+    
+    // If this job came from PSM, also listen to psmChat messages
+    if (job && job.fromPSM && job.psmCardId) {
+      _psmCardId = job.psmCardId;
+      _psmListener = database.ref('psmChat/' + job.psmCardId + '/messages').orderByChild('timestamp').on('value', function(snap) {
+        var data = snap.val() || {};
+        _psmMessages = Object.entries(data).sort(function(a,b){ return (a[1].timestamp||0)-(b[1].timestamp||0); });
+        render();
+      });
+    }
   }
   
   function detach() {
-    if (_listener && _currentJobId) {
-      var database = getDb();
-      if (database) database.ref('questChat/' + _currentJobId + '/messages').off('value', _listener);
+    var database = getDb();
+    if (_listener && _currentJobId && database) {
+      database.ref('questChat/' + _currentJobId + '/messages').off('value', _listener);
+    }
+    if (_psmListener && _psmCardId && database) {
+      database.ref('psmChat/' + _psmCardId + '/messages').off('value', _psmListener);
     }
     _listener = null;
+    _psmListener = null;
     _currentJobId = null;
+    _psmCardId = null;
     _messages = [];
+    _psmMessages = [];
     closeCompose();
   }
   
@@ -4169,9 +4192,40 @@ var QuestChat = (function() {
     
     var h = '';
     
-    // Show PSM origin message if applicable
+    // Show PSM chat messages (from psmChat/{cardId}/messages) if any
     var job = _currentJobId ? jobsData[_currentJobId] : null;
-    if (job && job.fromPSM && job.psmQuestText) {
+    if (job && job.fromPSM && _psmMessages.length > 0) {
+      h += '<div class="qchat-section-label" style="text-align:center;font-size:9px;font-weight:700;color:#60a5fa;padding:6px 0 4px;text-transform:uppercase;letter-spacing:0.5px;">── Conversation PSM ──</div>';
+      _psmMessages.forEach(function(e) {
+        var msg = e[1];
+        var imgs = '';
+        var imgArr = [];
+        if (msg.image) imgArr.push(msg.image);
+        if (msg.images) imgArr = imgArr.concat(msg.images);
+        if (imgArr.length > 0) {
+          imgs = imgArr.map(function(src) {
+            return '<div class="qchat-msg-img-wrap" data-src="'+src+'"><img class="qchat-msg-img" src="'+src+'" draggable="false" ondragstart="return false" onclick="QuestChat.clickImage(event,this)"><canvas class="annot-canvas"></canvas></div>';
+          }).join('');
+        }
+        // Parse HTML content if present
+        var content = '';
+        if (msg.contentHtml) {
+          content = msg.contentHtml;
+        } else {
+          content = esc(msg.content || msg.text || '').replace(/\n/g, '<br>');
+        }
+        h += '<div class="qchat-msg psm-origin">' +
+          '<div class="qmsg-type">📋 PSM <span class="qmsg-time">' + fmtTime(msg.timestamp || msg.createdAt) + '</span></div>' +
+          '<div class="qmsg-author">' + esc(msg.authorName || msg.author || 'PSM') + (msg.targetName ? ' → ' + esc(msg.targetName) : '') + '</div>' +
+          '<div class="qmsg-content">' + content + '</div>' +
+          imgs +
+        '</div>';
+      });
+      if (_messages.length > 0) {
+        h += '<div class="qchat-section-label" style="text-align:center;font-size:9px;font-weight:700;color:#f59e0b;padding:6px 0 4px;text-transform:uppercase;letter-spacing:0.5px;">── Questionnement ──</div>';
+      }
+    } else if (job && job.fromPSM && job.psmQuestText && _psmMessages.length === 0) {
+      // Fallback: show static psmQuestText if no live psmChat messages found
       var psmDate = job.createdAt || job.dateRecue || '';
       var psmAuthor = job.psmSentBy || 'PSM';
       var psmDept = job.psmDept ? ' (' + job.psmDept + ')' : '';
