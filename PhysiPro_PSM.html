@@ -5287,6 +5287,22 @@ function sendToQuestionnement(dept) {
   document.getElementById('questSendModal').classList.remove('hidden');
 }
 function closeQuestSendModal() { document.getElementById('questSendModal').classList.add('hidden'); }
+
+// Extract base64 image sources from HTML string
+function _extractImagesFromHtml(html) {
+  if (!html) return [];
+  var imgs = [];
+  var tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  var imgEls = tempDiv.querySelectorAll('img');
+  imgEls.forEach(function(img) {
+    var src = img.getAttribute('src') || '';
+    if (src && src.indexOf('data:image') === 0) {
+      imgs.push(src);
+    }
+  });
+  return imgs;
+}
 function confirmQuestSend(assignee) {
   closeQuestSendModal();
   var dept = _questSendDept;
@@ -5298,6 +5314,20 @@ function confirmQuestSend(assignee) {
   var psmName = card.name || orderNum;
   var creatorEmail = currentUser ? currentUser.email : '';
   var creatorName = currentUser ? getPhysiproDisplayName(currentUser.email) : 'PSM';
+  
+  // Detect PSM vs Prix majoré
+  var isPrixMajore = deptData.prixMajore || false;
+  if (!isPrixMajore) {
+    ['mousse','metal','couture','assemblage','finition','atelier'].forEach(function(d) {
+      if (card[d] && card[d].prixMajore) isPrixMajore = true;
+    });
+  }
+  var typeLabel = isPrixMajore ? 'Prix majoré' : 'PSM';
+  
+  // Extract images from notes HTML (base64 inline images)
+  var psmImages = _extractImagesFromHtml(deptData.notesHtml || '');
+  // Also grab from right panel
+  psmImages = psmImages.concat(_extractImagesFromHtml(deptData.notesRightHtml || ''));
   
   var jobId = 'psm_quest_' + Date.now();
   var jobData = {
@@ -5314,9 +5344,12 @@ function confirmQuestSend(assignee) {
     psmCardId: currentCardId,
     psmName: psmName,
     psmDept: dept,
-    psmQuestText: (deptData.questionnement || '').trim(),
-    psmQuestHtml: (deptData.questionnementHtml || '').trim(),
+    psmType: typeLabel,
+    psmQuestText: (deptData.questionnement || deptData.question || '').trim(),
+    psmQuestHtml: (deptData.questionnementHtml || deptData.questionHtml || '').trim(),
     psmSentBy: creatorName,
+    psmImages: psmImages.length > 0 ? psmImages : null,
+    cardStyle: 'psm',
     seen: {}
   };
   
@@ -5374,6 +5407,14 @@ function createQuestCardFromPSM() {
   });
   var typeLabel = isPrixMajore ? 'Prix majoré' : 'PSM';
   
+  // Extract images from notes
+  var psmImages = [];
+  ['atelier','couture','metal'].forEach(function(d) {
+    var dd = card[d] || {};
+    psmImages = psmImages.concat(_extractImagesFromHtml(dd.notesHtml || ''));
+    psmImages = psmImages.concat(_extractImagesFromHtml(dd.notesRightHtml || ''));
+  });
+  
   // Choose assignee — show picker
   var assignees = ['Jacynthe','Nadia','Sonia','Jonathan','Marie-Soleil','Marie-Pier','Daniel','Fabrys'];
   var pick = prompt('Assigner la carte Questionnement à:\n\n1. Jacynthe\n2. Nadia\n3. Sonia\n4. Jonathan\n5. Marie-Soleil\n6. Marie-Pier\n7. Daniel\n8. Fabrys\n\nEntrez le numéro (1-8):');
@@ -5399,6 +5440,7 @@ function createQuestCardFromPSM() {
     psmName: psmName,
     psmType: typeLabel,
     psmSentBy: creatorName,
+    psmImages: psmImages.length > 0 ? psmImages : null,
     cardStyle: 'psm',
     seen: {}
   };
@@ -9466,6 +9508,18 @@ var PChat = (function() {
     var typeLabel = isPrixMajore ? 'Prix majoré' : 'PSM';
     
     var jobId = 'psm_card_' + Date.now();
+    
+    // Extract images from PSM notes (all departments)
+    var psmImages = [];
+    var activeDept = typeof currentDept !== 'undefined' ? currentDept : 'atelier';
+    ['atelier','couture','metal'].forEach(function(d) {
+      var dd = card[d] || {};
+      if (typeof _extractImagesFromHtml === 'function') {
+        psmImages = psmImages.concat(_extractImagesFromHtml(dd.notesHtml || ''));
+        psmImages = psmImages.concat(_extractImagesFromHtml(dd.notesRightHtml || ''));
+      }
+    });
+    
     var jobData = {
       order: orderNum,
       client: clientName || psmName,
@@ -9482,6 +9536,7 @@ var PChat = (function() {
       psmName: psmName,
       psmType: typeLabel,
       psmSentBy: creatorName,
+      psmImages: psmImages.length > 0 ? psmImages : null,
       cardStyle: 'psm',
       seen: {}
     };

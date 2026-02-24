@@ -734,6 +734,7 @@ body {
 .job-card.psm-card { background: linear-gradient(to bottom, #0a1628 0%, #1e3a5f 100%); border-color: rgba(59,130,246,0.5); }
 .job-card.psm-card:hover { box-shadow: 0 6px 20px rgba(59,130,246,0.4); border-color: rgba(59,130,246,0.8); }
 .psm-card-badge { display:inline-block; background:linear-gradient(135deg,#1e3a8a,#3b82f6); color:#fff; font-size:7px; font-weight:800; padding:2px 5px; border-radius:4px; letter-spacing:0.5px; vertical-align:middle; margin-right:2px; text-transform:uppercase; }
+.psm-card-badge.prix-majore { background:linear-gradient(135deg,#92400e,#f59e0b); color:#fff; }
 .new-psm-badge { display:none; }
 .new-card-badge { display:inline-block; background:linear-gradient(135deg,#ef4444,#f97316); color:#fff; font-size:8px; font-weight:900; padding:1px 5px; border-radius:3px; animation:newCardBlink 0.6s ease-in-out infinite; letter-spacing:0.5px; vertical-align:middle; text-shadow:0 1px 2px rgba(0,0,0,0.5); }
 @keyframes newCardBlink { 0%,100%{ opacity:1; transform:scale(1); box-shadow:0 0 8px rgba(239,68,68,0.8); } 50%{ opacity:0.2; transform:scale(1.1); box-shadow:0 0 20px rgba(249,115,22,1); } }
@@ -2708,7 +2709,7 @@ function renderJobs() {
           <div class="job-card${job.fromPSM ? ' psm-card' : ''}" draggable="true" data-job-id="${job.id}" onclick="openFiche('${job.id}')" ondragstart="dragJobStart(event,'${job.id}')" ondragend="dragJobEnd(event)">
             ${rappelHtml}
             ${job.fromPSM ? `<div class="job-card-client" style="font-weight:800;">${escapeHtml(job.psmName || job.client || 'Patient')}</div>
-            <div class="job-card-creator" style="display:flex;align-items:center;justify-content:center;gap:6px;"><span class="psm-card-badge">PSM / Prix majoré</span>${isNewPsm ? '<span class="new-card-badge">NEW</span>' : ''}</div>
+            <div class="job-card-creator" style="display:flex;align-items:center;justify-content:center;gap:6px;"><span class="psm-card-badge${(job.psmType||'').toLowerCase().indexOf('prix') >= 0 ? ' prix-majore' : ''}">${escapeHtml(job.psmType || 'PSM')}</span>${isNewPsm ? '<span class="new-card-badge">NEW</span>' : ''}</div>
             <div class="job-card-creator">Questionnement de ${escapeHtml((job.psmSentBy || job.createdByName || '').split(' ')[0] || 'PSM')}</div>` : 
             `<div class="job-card-order">#${escapeHtml(job.order || '---')}</div>
             <div class="job-card-client">${escapeHtml(job.client || 'Client')}</div>`}
@@ -4284,6 +4285,19 @@ var QuestChat = (function() {
     var job = _currentJobId ? jobsData[_currentJobId] : null;
     if (job && job.fromPSM && _psmMessages.length > 0) {
       h += '<div class="qchat-section-label" style="text-align:center;font-size:9px;font-weight:700;color:#60a5fa;padding:6px 0 4px;text-transform:uppercase;letter-spacing:0.5px;">── Conversation PSM ──</div>';
+      
+      // Show PSM notes images if present (from dept panel, not from chat)
+      if (job.psmImages && job.psmImages.length > 0) {
+        var noteImgs = job.psmImages.map(function(src) {
+          return '<div class="qchat-msg-img-wrap" data-src="'+src+'"><img class="qchat-msg-img" src="'+src+'" draggable="false" ondragstart="return false" onclick="QuestChat.clickImage(event,this)"><canvas class="annot-canvas"></canvas></div>';
+        }).join('');
+        h += '<div class="qchat-msg psm-origin">' +
+          '<div class="qmsg-type">📷 Images PSM <span class="qmsg-time">' + (job.createdAt ? new Date(job.createdAt).toLocaleString('fr-CA') : '') + '</span></div>' +
+          '<div class="qmsg-author">' + esc(job.psmSentBy || 'PSM') + '</div>' +
+          noteImgs +
+        '</div>';
+      }
+      
       _psmMessages.forEach(function(e) {
         var msg = e[1];
         var imgs = '';
