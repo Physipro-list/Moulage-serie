@@ -652,7 +652,7 @@ body.col-resizing *{cursor:col-resize!important;}
     <span class="zoom-btn" onclick="adjustZoom(-10)" title="Réduire">−</span><span id="zoomValue" style="font-size:9px;color:rgba(255,255,255,.7);min-width:30px;text-align:center;">90%</span><span class="zoom-btn" onclick="adjustZoom(10)" title="Agrandir">+</span>
     <div class="divider"></div>
     <select id="monthSelect" class="month-select" onchange="changeMonth()"></select>
-    <div style="margin-left:auto;display:flex;align-items:center;gap:6px;position:relative;"><button class="btn-sep" id="resetAllBtn" onclick="nuclearWipe()" style="background:#dc2626;color:#fff;display:none;">🗑️ Réinitialiser</button><button class="btn-sep" id="statsToggleBtn" onclick="toggleStats()">📊 Stats</button><button class="col-gear-btn" onclick="toggleColPanel()">⚙️ Colonnes</button><div class="col-panel" id="colPanel"></div></div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:6px;position:relative;"><button class="btn-sep" id="statsToggleBtn" onclick="toggleStats()">📊 Stats</button><button class="col-gear-btn" onclick="toggleColPanel()">⚙️ Colonnes</button><div class="col-panel" id="colPanel"></div></div>
   </div>
   <div id="statsPanel" style="display:none;padding:16px;overflow-y:auto;max-height:calc(100vh - 140px);"></div>
   <div id="tablePanel">
@@ -815,7 +815,7 @@ if(grid){var parent=grid.parentElement;var newH=buildMiGrid(_miItemsList,_miSelM
 function miQuickAdd(span){var row=span.closest('.mi-row');if(!row)return;var input=row.querySelector('.mi-qty');if(!input)return;var v=parseInt(input.value)||0;v++;input.value=v;miQtyChanged(input);}
 function miQtyChanged(input){var v=parseInt(input.value)||0;if(v<0)v=0;input.value=v;var row=input.closest('.mi-row');if(v>0){row.style.background='rgba(168,85,247,0.15)';input.style.background='rgba(168,85,247,0.2)';input.style.color='#d8b4fe';row.querySelector('span').style.color='#e2e8f0';}else{row.style.background='';input.style.background='rgba(255,255,255,0.04)';input.style.color='rgba(255,255,255,0.3)';row.querySelector('span').style.color='rgba(255,255,255,0.4)';}}
 function clearMultiItems(){document.querySelectorAll('.mi-qty').forEach(function(q){q.value='0';miQtyChanged(q);});}
-function confirmMultiItems(){var items=[];document.querySelectorAll('.mi-qty').forEach(function(q){var v=parseInt(q.value)||0;if(v>0){var name=q.getAttribute('data-item');items.push(v>1?name+' x'+v:name);}});if(_ddCallback)_ddCallback(items.join('\n'));document.getElementById('dropdownOverlay').classList.remove('active');_ddCallback=null;}
+function confirmMultiItems(){if(writeBlocked())return;if(!hasPermission('M')){showToast('Permission refusée','error');return;}var items=[];document.querySelectorAll('.mi-qty').forEach(function(q){var v=parseInt(q.value)||0;if(v>0){var name=q.getAttribute('data-item');items.push(v>1?name+' x'+v:name);}});if(_ddCallback)_ddCallback(items.join('\n'));document.getElementById('dropdownOverlay').classList.remove('active');_ddCallback=null;}
 
 function _getVisibleColOrder(){
   var s=localStorage.getItem('physipro_couture_colorder');
@@ -1024,7 +1024,7 @@ function filterDropdownPicker(){var f=(document.getElementById('dropdownPickerSe
 function openCellDropdown(idx,field,title,listKey){var row=(data[currentMonth]||[])[idx];if(!row)return;openDropdownPicker(title,getList(listKey),row[field]||'',function(val){updateCell(idx,field,val);renderTable();});}
 
 function scrollToRow(idx){setTimeout(function(){var tr=document.querySelector('tr[data-idx="'+idx+'"]');if(tr){tr.scrollIntoView({behavior:'smooth',block:'center'});tr.style.background='rgba(74,142,245,0.15)';setTimeout(function(){tr.style.background='';},1500);}},100);}
-function addRowFromSerie(bonCmd,client,items){if(!data[currentMonth])data[currentMonth]=[];var newIdx=data[currentMonth].length;data[currentMonth].push({id:generateId(),bonCmd:bonCmd||'',fauteuil:'',rush:false,client:client||'',dateLiv:'',dateEntree:todayStr(),items:items||'',nom:'',dateSortie:'',autreNo:'',erreur:'',serieLinked:true});saveData();renderTable();scrollToRow(newIdx);}
+function addRowFromSerie(bonCmd,client,items){if(writeBlocked())return;if(!hasPermission('A')){showToast('Permission refusée','error');return;}if(!data[currentMonth])data[currentMonth]=[];var newIdx=data[currentMonth].length;data[currentMonth].push({id:generateId(),bonCmd:bonCmd||'',fauteuil:'',rush:false,client:client||'',dateLiv:'',dateEntree:todayStr(),items:items||'',nom:'',dateSortie:'',autreNo:'',erreur:'',serieLinked:true});saveData();renderTable();scrollToRow(newIdx);}
 
 /* ═══ SCAN BAR → ENTRY MODAL ═══ */
 function scanBonBar(){var input=document.getElementById('scanBonInput');var bon=input.value.trim();if(!bon){showToast('Entrez un #','error');return;}
@@ -1185,7 +1185,7 @@ emUpdateSummary();
 }
 
 function closeEntryModal(e){if(e&&e.target&&e.target.id!=='entryModalOverlay'&&e.target!==e.currentTarget)return;document.getElementById('entryModalOverlay').classList.remove('active');_emIdx=null;}
-function confirmEntryModal(){if(_emIdx===null)return;var row=(data[currentMonth]||[])[_emIdx];if(!row)return;
+function confirmEntryModal(){if(writeBlocked())return;if(!hasPermission('A')){showToast('Permission refusée','error');return;}if(_emIdx===null)return;var row=(data[currentMonth]||[])[_emIdx];if(!row)return;
 row.client=document.getElementById('em-client').value;
 row.dateEntree=document.getElementById('em-dateEntree').value;
 row.dateLiv=document.getElementById('em-dateLiv').value;
@@ -1276,7 +1276,7 @@ function uSPQ(pi,total){var ctx=_sCtx;if(!ctx)return;var pq=document.getElementB
 function tgSN(pi){var a=document.getElementById('sgna_'+pi);if(!a)return;a.style.display=a.style.display==='none'?'block':'none';if(a.style.display==='block'){var ta=document.getElementById('sgnt_'+pi);if(ta)ta.focus();}}
 function uSN(pi){var ctx=_sCtx;if(!ctx)return;var ta=document.getElementById('sgnt_'+pi);var btn=document.getElementById('sgnb_'+pi);if(!ta)return;ctx.cnotes[pi]=ta.value.trim();if(btn){btn.style.borderColor=ctx.cnotes[pi]?'#22c55e':'rgba(255,255,255,0.2)';btn.style.color=ctx.cnotes[pi]?'#22c55e':'rgba(255,255,255,0.6)';}}
 
-function confirmSI(){var ctx=_sCtx;if(!ctx||!ctx.cg.length){showToast('Sélectionnez des grandeurs','error');return;}
+function confirmSI(){if(writeBlocked())return;if(!hasPermission('M')){showToast('Permission refusée','error');return;}var ctx=_sCtx;if(!ctx||!ctx.cg.length){showToast('Sélectionnez des grandeurs','error');return;}
 ctx.cg.forEach(function(gpi){var ta=document.getElementById('sgnt_'+gpi);if(ta)ctx.cnotes[gpi]=ta.value.trim();});
 var card=serieCardsCache[ctx.cid];if(!card){showToast('Erreur carte','error');return;}
 var tq=0;var fbU={};var itemLines=[];
@@ -1302,7 +1302,7 @@ var itemsStr=itemLines.join('\n');
 if(ctx.rowIdx!==undefined&&ctx.rowIdx!==null){updateExistingRow(ctx.rowIdx,card.client||'',itemsStr);}else{addRowFromSerie(ctx.bon,card.client||'',itemsStr);}
 closeSerieModal();showToast('✅ Couture + Série+ sync','success');}
 function updateExistingRow(rowIdx,client,items){if(rowIdx===undefined||rowIdx===null)return;var row=(data[currentMonth]||[])[rowIdx];if(!row)return;if(client)row.client=client;if(items)row.items=items;row.serieLinked=true;saveData();renderTable();}
-function updateCell(idx,field,value){if(!data[currentMonth]||!data[currentMonth][idx])return;data[currentMonth][idx][field]=value;saveData();if(field.indexOf('date')!==-1)renderTable();}
+function updateCell(idx,field,value){if(writeBlocked())return;if(!hasPermission('M'))return;if(!data[currentMonth]||!data[currentMonth][idx])return;data[currentMonth][idx][field]=value;saveData();if(field.indexOf('date')!==-1)renderTable();}
 /* ═══ DELETED IDS BLACKLIST (anti-resurrection) ═══ */
 var COUTURE_DELETED_KEY='physipro_couture_deleted_ids';
 function getCoutureDeletedIds(){try{return JSON.parse(localStorage.getItem(COUTURE_DELETED_KEY))||{};}catch(e){return {};}}
@@ -1310,11 +1310,11 @@ function markCoutureIdDeleted(id){var d=getCoutureDeletedIds();d[id]=Date.now();
 function isCoutureIdDeleted(id){return !!getCoutureDeletedIds()[id];}
 function cleanOldCoutureDeletedIds(){var d=getCoutureDeletedIds();var cutoff=Date.now()-90*24*60*60*1000;var changed=false;for(var k in d){if(d[k]<cutoff){delete d[k];changed=true;}}if(changed)localStorage.setItem(COUTURE_DELETED_KEY,JSON.stringify(d));}
 
-function deleteRow(idx){if(!confirm('Supprimer?'))return;var row=(data[currentMonth]||[])[idx];if(row&&row.id)markCoutureIdDeleted(row.id);data[currentMonth].splice(idx,1);saveData();renderTable();showToast('Supprimé','success');}
+function deleteRow(idx){if(writeBlocked())return;if(!hasPermission('S')){showToast('Permission refusée','error');return;}if(!confirm('Supprimer?'))return;var row=(data[currentMonth]||[])[idx];if(row&&row.id)markCoutureIdDeleted(row.id);data[currentMonth].splice(idx,1);saveData();renderTable();showToast('Supprimé','success');}
 
 function loadListsFromFB(){if(!fbDb||!fbUser)return;fbDb.ref('coutureLists').once('value').then(function(snap){var fbLists=snap.val();if(!fbLists)return;['clients','noms','items','erreurs'].forEach(function(k){if(fbLists[k]&&Array.isArray(fbLists[k])){localStorage.setItem('physipro_couture_'+k,JSON.stringify(fbLists[k]));}});console.log('[Couture] Lists loaded from Firebase');}).catch(function(e){console.error('[Couture] List load error:',e);});}
 
-function saveData(){if(!hasPermission("M"))return;
+function saveData(){if(writeBlocked())return;if(!hasPermission("M"))return;
   // Filter out _empty ready rows before persisting
   var cleanData=(data[currentMonth]||[]).filter(function(r){return !r._empty;});
   try{localStorage.setItem('physipro_couture_data_'+currentMonth,JSON.stringify(cleanData));}catch(e){console.error('localStorage save error:',e);}
@@ -1322,17 +1322,18 @@ function saveData(){if(!hasPermission("M"))return;
   if(!fbDb||!fbUser){setSyncBadge('offline');return;}
   _syncMonth(currentMonth);
 }
-function _syncMonth(month){
+function _syncMonth(month,retryN){
+  retryN=retryN||0;
   setSyncBadge('saving');
   var monthData;
   try{monthData=JSON.parse(localStorage.getItem('physipro_couture_data_'+month)||'[]');}catch(e){monthData=(data[month]||[]).filter(function(r){return !r._empty;});}
   fbDb.ref('inspectionCoutureData/'+month).set(monthData).then(function(){
     setSyncBadge('online');
-    // Remove from pending
     try{var pending=JSON.parse(localStorage.getItem('physipro_couture_pending')||'{}');delete pending[month];localStorage.setItem('physipro_couture_pending',JSON.stringify(pending));}catch(e){}
   }).catch(function(e){
-    console.error('Sync error for',month,e);
-    setSyncBadge('offline');
+    console.error('Sync error for',month,'attempt',retryN,e);
+    if(retryN<2){setTimeout(function(){_syncMonth(month,retryN+1);},(retryN+1)*2000);}
+    else{setSyncBadge('offline');}
   });
 }
 function syncAllPending(){
@@ -1602,7 +1603,7 @@ function doLogin(event){if(event)event.preventDefault();var email=document.getEl
 
 function doLogout(){if(!confirm('Déconnexion?'))return;fbAuth.signOut();}
 
-fbAuth.onAuthStateChanged(function(user){fbUser=user;var overlay=document.getElementById('loginOverlay');if(user){overlay.classList.add('hidden');document.getElementById('userBadge').textContent=getDisplayName(user.email);document.getElementById('statusDot').style.background='#22c55e';localStorage.setItem('physipro_last_email',user.email);setSyncBadge('online');checkAppVersion();initMonthSelector();loadData();loadZoom();loadSerieCards();loadListsFromFB();checkOldMonths();setTimeout(function(){syncAllPending();},2000);if(hasPermission('S')){var rb=document.getElementById('resetAllBtn');if(rb)rb.style.display='';}}else{var saved=localStorage.getItem('physipro_last_email');if(saved)document.getElementById('loginEmail').value=saved;overlay.classList.remove('hidden');document.getElementById('userBadge').textContent='—';document.getElementById('statusDot').style.background='#ef4444';setSyncBadge('offline');document.getElementById('loginBtn').disabled=false;document.getElementById('loginBtn').textContent='Se connecter';}});
+fbAuth.onAuthStateChanged(function(user){fbUser=user;var overlay=document.getElementById('loginOverlay');if(user){overlay.classList.add('hidden');document.getElementById('userBadge').textContent=getDisplayName(user.email);document.getElementById('statusDot').style.background='#22c55e';localStorage.setItem('physipro_last_email',user.email);setSyncBadge('online');checkAppVersion();initMonthSelector();loadData();loadZoom();loadSerieCards();loadListsFromFB();checkOldMonths();setTimeout(function(){syncAllPending();},2000);}else{var saved=localStorage.getItem('physipro_last_email');if(saved)document.getElementById('loginEmail').value=saved;overlay.classList.remove('hidden');document.getElementById('userBadge').textContent='—';document.getElementById('statusDot').style.background='#ef4444';setSyncBadge('offline');document.getElementById('loginBtn').disabled=false;document.getElementById('loginBtn').textContent='Se connecter';}});
 
 document.addEventListener('DOMContentLoaded',function(){cleanOldCoutureDeletedIds();initMonthSelector();buildTableHeaders();initColumnResize();loadZoom();
 // Offline/Online detection
@@ -1633,35 +1634,7 @@ function coutureCreateBackup(){
 setInterval(function(){coutureCreateBackup();},30*60*1000);
 window.addEventListener('beforeunload',function(){coutureCreateBackup();});
 
-// ===== RÉINITIALISATION COMPLÈTE =====
-function nuclearWipe(){
-  if(!fbDb||!fbUser)return showToast('Non connecté','error');
-  if(!hasPermission('S'))return showToast('Permission refusée','error');
-  if(!confirm('⚠️ ATTENTION ⚠️\n\nCeci va EFFACER TOUTES les données de Production Couture :\n- Toutes les commandes (tous les mois)\n- Tous les backups automatiques\n- Tout le cache local\n\nLes listes (clients, items, noms) seront conservées.\n\nÊtes-vous sûr?'))return;
-  if(!confirm('🔴 DERNIÈRE CONFIRMATION 🔴\n\nCette action est IRRÉVERSIBLE.\nToutes les données seront perdues définitivement.\n\nTaper OK pour confirmer.'))return;
-  // 1. Clear Firebase data (all months)
-  var updates={};
-  updates['inspectionCoutureData']=null;
-  updates['coutureBackups']=null;
-  fbDb.ref().update(updates).then(function(){
-    // 2. Clear ALL localStorage couture data keys
-    var keysToRemove=[];
-    for(var i=0;i<localStorage.length;i++){
-      var k=localStorage.key(i);
-      if(k&&(k.indexOf('physipro_couture_data_')===0||k===COUTURE_DELETED_KEY||k==='physipro_couture_pending')){
-        keysToRemove.push(k);
-      }
-    }
-    keysToRemove.forEach(function(k){localStorage.removeItem(k);});
-    // 3. Reset local memory
-    data={};
-    showToast('✅ Données effacées. Rechargement...','success');
-    setTimeout(function(){location.reload(true);},1500);
-  }).catch(function(e){
-    console.error('Nuclear wipe error:',e);
-    showToast('❌ Erreur: '+e.message,'error');
-  });
-}
+
 
 
 // ===== XCHAT - CROSS-APP UNIFIED CHAT =====
