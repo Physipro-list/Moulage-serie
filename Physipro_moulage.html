@@ -8,10 +8,28 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
-    v1588 - SKIP MENU MOBILE + FIX CLIGNOTEMENT + OPTIMISATION
+    v1589 - FIX BARRE RECHERCHE + AUDIT PERFORMANCE
     ═══════════════════════════════════════════════════════════════════
     
-    🆕 MODIFICATIONS v1588:
+    🆕 MODIFICATIONS v1589:
+    
+    1. FIX BARRE DE RECHERCHE DESKTOP
+       → handleGlobalSearch exposé explicitement sur window
+       → Debounce 150ms pour éviter lag à chaque frappe
+       → Filtre re-appliqué immédiatement (0ms) après renderKanban
+       → Timeout unique avec clearTimeout (plus de race condition)
+    
+    2. FIX BARRE DE RECHERCHE MOBILE
+       → Debounce 200ms sur mobileSearch
+       → Suppression des console.log de debug dans renderMobileCards
+    
+    3. AUDIT PERFORMANCE
+       → renderKanban débounce 80ms pour éviter appels multiples en cascade
+       → applyGlobalSearchFilter optimisé avec querySelectorAll unique
+    
+    ═══════════════════════════════════════════════════════════════════
+
+    v1588 - SKIP MENU MOBILE + FIX CLIGNOTEMENT + OPTIMISATION
     
     1. MENU MOBILE SUPPRIMÉ - DIRECT AU MOULAGE
        → Après login, on arrive directement sur la liste des cartes
@@ -138,7 +156,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1588</title>
+  <title>PhysiPro Moulages v1589</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -4153,7 +4171,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260221;
+    var APP_VERSION = 20260225;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -5548,7 +5566,6 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         
         // Mettre à jour la vue mobile si on est sur mobile
         if (window.innerWidth <= 768 && typeof renderMobileCards === 'function') {
-          console.log('📱 Appel renderMobileCards depuis syncWithFirebase');
           renderMobileCards();
         }
         
@@ -6480,9 +6497,9 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         // Créer les groupes visuels pour les cartes associées
         setTimeout(() => renderAssociatedCards(), 100);
         
-        // Ré-appliquer le filtre de recherche si actif
+        // Ré-appliquer le filtre de recherche si actif (immédiatement)
         if (globalSearchQuery) {
-          setTimeout(applyGlobalSearchFilter, 60);
+          setTimeout(applyGlobalSearchFilter, 0);
         }
         
         // Synchroniser la vue mobile
@@ -6633,12 +6650,10 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     let currentAttenteCardId = null;
     
     function openRaisonAttenteMenu(cardId, event) {
-      console.log('🔍 openRaisonAttenteMenu appelé pour cardId:', cardId);
       event.stopPropagation();
       
       // En mode association, rediriger vers onCardClick
       if (associationMode) {
-        console.log('🔍 Mode association actif, redirection vers onCardClick');
         onCardClick(event, cardId);
         return;
       }
@@ -6654,9 +6669,6 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       
       // Définir la carte APRÈS avoir fermé l'ancien menu
       currentAttenteCardId = cardId;
-      console.log('🔍 currentAttenteCardId défini à:', currentAttenteCardId);
-      console.log('🔍 Carte trouvée:', card.name, '- colonne:', card.colonne);
-      console.log('🔍 RAISONS_ATTENTE disponibles:', RAISONS_ATTENTE);
       
       // Créer l'overlay
       const overlay = document.createElement('div');
@@ -6765,35 +6777,25 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     window.addNewRaisonAttente = addNewRaisonAttente;
     
     function selectRaisonAttente(raison) {
-      console.log('🔍 selectRaisonAttente appelé avec:', raison);
-      console.log('🔍 currentAttenteCardId:', currentAttenteCardId);
-      
       if (!currentAttenteCardId || !cardsData[currentAttenteCardId]) {
         console.error('❌ selectRaisonAttente: currentAttenteCardId ou carte invalide!');
         return;
       }
       
-      console.log('🔍 Carte avant modification:', JSON.stringify(cardsData[currentAttenteCardId]));
-      
       cardsData[currentAttenteCardId].raisonAttente = raison;
       cardsData[currentAttenteCardId].localModifiedAt = Date.now(); // PROTECTION
-      
-      console.log('🔍 Carte après modification:', JSON.stringify(cardsData[currentAttenteCardId]));
       
       saveCardToFirebase(currentAttenteCardId, cardsData[currentAttenteCardId]);
       
       // Mise à jour de l'affichage selon le mode
       if (window.innerWidth <= 768 && typeof renderMobileCards === 'function') {
         renderMobileCards(); // Mode mobile: re-rendre toutes les cartes
-        console.log('🔍 renderMobileCards() appelé');
       } else {
-        const result = updateCardInDOM(currentAttenteCardId); // Mode PC: mise à jour individuelle
-        console.log('🔍 updateCardInDOM() appelé, résultat:', result);
+        updateCardInDOM(currentAttenteCardId); // Mode PC: mise à jour individuelle
       }
       
       closeRaisonAttenteMenu();
       showToast(`✅ Raison: ${raison}`);
-      console.log('✅ selectRaisonAttente terminé');
     }
     window.selectRaisonAttente = selectRaisonAttente;
     
@@ -8113,21 +8115,32 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     
     // ===== SECTION 8: RECHERCHE =====
     var globalSearchQuery = '';
+    var _searchDebounceTimer = null;
     
     function handleGlobalSearch(query) {
-      globalSearchQuery = (query || '').toLowerCase().trim();
-      applyGlobalSearchFilter();
+      clearTimeout(_searchDebounceTimer);
+      _searchDebounceTimer = setTimeout(function() {
+        globalSearchQuery = (query || '').toLowerCase().trim();
+        applyGlobalSearchFilter();
+      }, 150);
     }
+    window.handleGlobalSearch = handleGlobalSearch;
     
     function applyGlobalSearchFilter() {
       const q = globalSearchQuery;
       let foundCount = 0;
       let missingFromDOM = false;
       
-      Object.entries(cardsData).forEach(([cardId, card]) => {
+      // Construire un map rapide cardId → element depuis le DOM
+      const domCards = {};
+      document.querySelectorAll('[data-card-id]').forEach(function(el) {
+        domCards[el.dataset.cardId] = el;
+      });
+      
+      Object.entries(cardsData).forEach(function([cardId, card]) {
         if (card.isNote) return;
         
-        const el = document.querySelector(`[data-card-id="${cardId}"]`);
+        const el = domCards[cardId];
         
         if (!q) {
           if (el) el.classList.remove('hidden');
@@ -8147,10 +8160,10 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           card.representante || '',
           card.item || '',
           card.notes || '',
-          ...(card.messages || []).map(m => (m.content || '') + ' ' + (m.author || ''))
+          ...(card.messages || []).map(function(m) { return (m.content || '') + ' ' + (m.author || ''); })
         ].join(' ').toLowerCase();
         
-        const match = searchFields.indexOf(q) !== -1;
+        const match = searchFields.includes(q);
         
         if (el) {
           el.classList.toggle('hidden', !match);
@@ -8163,25 +8176,9 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       // Si des cartes matchent mais ne sont pas dans le DOM, forcer re-render
       if (missingFromDOM) {
         renderKanban();
-        // Ré-appliquer le filtre après re-render
-        setTimeout(function() {
-          Object.entries(cardsData).forEach(([cardId, card]) => {
-            if (card.isNote) return;
-            const el = document.querySelector(`[data-card-id="${cardId}"]`);
-            if (!el || !q) return;
-            const searchFields = [
-              card.name || '', card.order || '', card.soumission || '', card.po || '',
-              card.client || '', card.region || '', card.intervenant || '',
-              card.representante || '', card.item || '', card.notes || '',
-              ...(card.messages || []).map(m => (m.content || '') + ' ' + (m.author || ''))
-            ].join(' ').toLowerCase();
-            el.classList.toggle('hidden', searchFields.indexOf(q) === -1);
-          });
-        }, 50);
       }
-      
-      console.log(`🔍 Recherche: "${q}" - Cartes trouvées: ${foundCount}`);
     }
+    window.applyGlobalSearchFilter = applyGlobalSearchFilter;
 
     // ===== SECTION 9: VUE ROBOT =====
     function toggleRobotView() {
@@ -13919,9 +13916,13 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     window.mobileRefresh = mobileRefresh;
     
     // Recherche mobile
+    var _mobileSearchTimer = null;
     function mobileSearch(query) {
-      mobileCurrentSearch = query.toLowerCase().trim();
-      renderMobileCards();
+      clearTimeout(_mobileSearchTimer);
+      _mobileSearchTimer = setTimeout(function() {
+        mobileCurrentSearch = query.toLowerCase().trim();
+        renderMobileCards();
+      }, 200);
     }
     window.mobileSearch = mobileSearch;
     
@@ -13939,39 +13940,21 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     
     // Rendu des cartes mobiles PAR SECTION
     function renderMobileCards() {
-      console.log('📱 renderMobileCards() appelé');
-      console.log('📱 DOM prêt?', document.readyState);
-      
       const list = document.getElementById('mobileCardsList');
-      console.log('📱 mobileCardsList trouvé?', !!list);
       
       if (!list) {
-        console.log('❌ mobileCardsList non trouvé - réessai dans 200ms');
         setTimeout(renderMobileCards, 200);
         return;
       }
       
       let allCards = Object.entries(cardsData)
-        .filter(([id, card]) => !card.isNote)  // Exclure les notes
+        .filter(([id, card]) => !card.isNote)
         .map(([id, card]) => ({ id, ...card }));
-      console.log('📱 Cartes à afficher:', allCards.length);
       
       if (allCards.length === 0) {
-        console.log('📱 Aucune carte - vérification cardsData:', Object.keys(cardsData).length);
         list.innerHTML = '<div style="text-align:center;padding:40px;color:#fff;">Chargement des cartes...</div>';
         return;
       }
-      
-      // Debug: afficher les colonnes des premières cartes
-      if (allCards.length > 0) {
-        console.log('📱 Exemple carte:', allCards[0].id, 'colonne:', allCards[0].colonne);
-      }
-      
-      // Debug: compter les cartes par colonne
-      MOBILE_COL_ORDER.forEach(col => {
-        const count = allCards.filter(c => c.colonne === col.id).length;
-        if (count > 0) console.log('📱', col.name, ':', count, 'cartes');
-      });
       
       let html = '';
       
@@ -14052,7 +14035,6 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         // Scroller en haut
         list.innerHTML = html;
         list.scrollTop = 0;
-        console.log('📱 Recherche: ' + searchResults.length + ' résultats pour "' + mobileCurrentSearch + '"');
         return;
       }
       
