@@ -8,6 +8,95 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
+    v1592 - AUDIT LVL12: PERTE DE DONNÉES MERGE + DROP FANTÔME + EXPEDIE ASSOCIÉES
+    ═══════════════════════════════════════════════════════════════════
+    
+    🆕 MODIFICATIONS v1592:
+    
+    1. FIX CRITIQUE: mergeCardData PERTE DE DONNÉES SUR SYNC CONCURRENT
+       → fieldsToPreserve manquait: name, order, soumission, po, client, region,
+         intervenant, representante, item, notes, dateRecue, expand*, expanded
+       → Pendant la fenêtre debounce 500ms, un sync d'un autre utilisateur
+         pouvait écraser ces champs avec l'ancienne valeur Firebase
+       → Fix: TOUS les champs éditables sont maintenant dans fieldsToPreserve
+    
+    2. FIX: checkForRealChanges ne détectait pas les changements expand
+       → expandDeadline, expandMessage, expandPositif, expandPositifNum, expanded
+         manquaient dans criticalProps → pas de re-render quand modifiés
+    
+    3. FIX: DROP SUR SOI-MÊME ENVOIE LA CARTE EN FIN DE COLONNE
+       → Drag une carte et la relâcher au même endroit → carte saute en bas
+       → Cause: onCardDragOver skip quand draggedCard === targetCardId,
+         donc currentDropTarget reste null → appendChild en fin de colonne
+       → Fix: early return si pas de cible ET même colonne
+    
+    4. FIX: moveCardToColumn ne clearait pas expedie pour les cartes associées
+       → Expédition → autre colonne via moveCardToColumn:
+         carte principale clearée mais associées gardaient les champs expedie
+    
+    ═══════════════════════════════════════════════════════════════════
+
+    v1591 - AUDIT LVL11: TRACKING CORROMPU + ATTENTE/EXPÉDITION SANS TRACKING
+    ═══════════════════════════════════════════════════════════════════
+    
+    🆕 MODIFICATIONS v1591:
+    
+    1. FIX CRITIQUE: RÉORDONNANCEMENT MÊME COLONNE CORROMPT LE TRACKING
+       → Avant: réordonner dans la même colonne écrivait sortie=today
+       → Le tracking croyait que la carte avait quitté le département
+       → Fix: guard `if (oldColonne !== colId)` autour du bloc tracking
+    
+    2. FIX: confirmAttente / confirmAttenteLater SANS TRACKING
+       → Aucune mise à jour tracking quand carte mise en attente via modal
+       → Ni pour la carte principale, ni pour les cartes associées
+       → Fix: tracking sortie ajouté pour l'ancien département
+    
+    3. FIX: confirmAttente / confirmAttenteLater NE CLEARENT PAS expedie
+       → Drag Expédition → Attente gardait expedie/dateExpedition
+       → La carte gardait "Envoyé au shipping" en mémoire
+       → Fix: clearing conditionnel avec `previousColonne === 'colExpedition'`
+    
+    4. FIX: confirmExped SANS TRACKING
+       → Même problème que #2 pour le flux d'expédition
+       → Fix: tracking entree/sortie ajouté pour carte + associées
+    
+    5. CODE MORT: moveCardInDOM jamais appelé (marqué pour référence)
+    
+    ═══════════════════════════════════════════════════════════════════
+
+    v1590 - FIX DRAG & DROP CARTES - CORRUPTION VISUELLE + AUDIT COMPLET
+    ═══════════════════════════════════════════════════════════════════
+    
+    🆕 MODIFICATIONS v1590:
+    
+    1. FIX CRITIQUE: RECONSTRUCTION COMPLÈTE APRÈS DÉPLACEMENT
+       → updateCardInDOM() remplace updateCardVisual() après chaque drop
+       → La carte est entièrement reconstruite (HTML, classes, événements)
+       → Élimine le bug où seul le texte centré reste visible après drag
+    
+    2. FIX CRITIQUE: renderAssociatedCards() TOUJOURS appelé après drop
+       → Avant: sauté pour les wrappers de groupe existants
+       → Maintenant: TOUJOURS reconstruit les groupes visuels
+       → Élimine les incohérences wrapper/cartes après déplacement
+    
+    3. FIX: PERMISSION DE DÉPLACEMENT
+       → hasPermission('M') vérifié au DÉBUT de onColDrop
+       → Avant: aucune vérification (seul moveCardToColumn vérifiait)
+    
+    4. FIX: SORTORDER COLONNE SOURCE
+       → Après déplacement, sortOrder recalculé dans la colonne TARGET ET SOURCE
+       → Avant: seule la colonne target était mise à jour
+    
+    5. FIX: SÉCURITÉ insertBefore DANS WRAPPER
+       → Vérifie que insertBefore n'est pas un descendant du wrapper déplacé
+       → Évite erreur DOM "cannot insert before own child"
+    
+    6. FIX: NETTOYAGE GHOST DE DRAG ROBUSTE
+       → Suppression par variable ET par querySelectorAll('#dragGhostGroup')
+       → Élimine les ghosts fantômes après drag annulé
+    
+    ═══════════════════════════════════════════════════════════════════
+
     v1589 - FIX BARRE RECHERCHE + AUDIT PERFORMANCE
     ═══════════════════════════════════════════════════════════════════
     
@@ -4171,7 +4260,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260225;
+    var APP_VERSION = 20260228;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -5792,9 +5881,23 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       const firebaseModTime = firebaseCard.updatedAt || 0;
       
       if (localModTime > firebaseModTime) {
+        // ═══ FIX v1592: TOUTES les propriétés éditables doivent être préservées ═══
+        // Sinon, pendant la fenêtre de debounce (500ms), un sync Firebase d'un autre
+        // utilisateur écraserait les modifications locales non encore sauvegardées
         const fieldsToPreserve = [
-          'colonne', 'sortOrder', 'priority', 'raisonAttente', 'dateExpedition',
-          'expedie', 'rush', 'tracking', 'dateEssayage', 'dateLivraison'
+          // Champs de positionnement
+          'colonne', 'sortOrder',
+          // Champs de la fiche (modifiables via updateField)
+          'name', 'order', 'soumission', 'po', 'client', 'region',
+          'intervenant', 'representante', 'item', 'notes',
+          'dateRecue', 'dateLivraison', 'dateEssayage',
+          // Champs d'état
+          'priority', 'rush', 'raisonAttente', 'dateExpedition', 'expedie',
+          'attenteReminderTime',
+          // Tracking
+          'tracking',
+          // Expand (checkbox vert)
+          'expandDeadline', 'expandMessage', 'expandPositif', 'expandPositifNum', 'expanded'
         ];
         fieldsToPreserve.forEach(field => {
           if (localCard[field] !== undefined) {
@@ -5856,10 +5959,12 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     // Vérifier si les changements affectent visuellement les cartes (pas juste timestamps)
     function checkForRealChanges(oldData, newData) {
       // Comparer les propriétés visuelles ET fonctionnelles importantes
+      // ═══ FIX v1592: Ajout des expand fields et notes qui affectent l'affichage ═══
       const criticalProps = [
         'colonne', 'name', 'order', 'priority', 'region', 'raisonAttente',
         'sortOrder', 'dateExpedition', 'expedie', 'rush', 'item',
-        'client', 'intervenant', 'representante', 'dateLivraison', 'dateEssayage'
+        'client', 'intervenant', 'representante', 'dateLivraison', 'dateEssayage',
+        'expandDeadline', 'expandMessage', 'expandPositif', 'expandPositifNum', 'expanded'
       ];
       
       // Vérifier les cartes supprimées
@@ -6514,6 +6619,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     
     // === DÉPLACEMENT DOM SANS CLIGNOTEMENT ===
     
+    // ═══ NOTE v1591: moveCardInDOM est du code mort (jamais appelé). Conservé pour compatibilité future ═══
     // Déplacer une carte dans le DOM sans reconstruire tout le kanban
     function moveCardInDOM(cardId, targetColId, targetCardId, position) {
       const cardEl = document.querySelector(`[data-card-id="${cardId}"]`);
@@ -7655,6 +7761,12 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     }
 
     function onCardDragEnd(e) {
+      // ═══ FIX v1590: Si dropEffect est 'none', le drag a été annulé ═══
+      // Dans ce cas, la carte n'a pas été déplacée par onColDrop, 
+      // mais son état visuel peut être corrompu
+      if (e.dataTransfer && e.dataTransfer.dropEffect === 'none') {
+        console.log('⚠️ Drag annulé - nettoyage sans déplacement');
+      }
       cleanupDragState();
     }
 
@@ -7725,6 +7837,13 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       console.log('🎯 DROP:', { draggedCard, colId, currentDropTarget, currentDropPosition });
       
       if (!draggedCard || !cardsData[draggedCard]) {
+        cleanupDragState();
+        return;
+      }
+      
+      // ═══ FIX v1590: Vérification de permission AVANT tout déplacement ═══
+      if (!hasPermission('M')) {
+        showToast('⛔ Vous n\'avez pas la permission de déplacer les cartes', 'error');
         cleanupDragState();
         return;
       }
@@ -7811,6 +7930,13 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       
       console.log('📍 insertBefore final:', insertBefore ? 'trouvé' : 'fin de colonne');
       
+      // ═══ FIX v1592: Si pas de cible d'insertion et même colonne = drop sur soi-même → annuler ═══
+      if (!insertBefore && !currentDropTarget && cardsData[draggedCard].colonne === colId) {
+        console.log('⚠️ Drop sans cible dans la même colonne - annulé (pas de mouvement)');
+        cleanupDragState();
+        return;
+      }
+      
       const oldColonne = cardsData[draggedCard].colonne;
       const today = formatDateISO(new Date());
       
@@ -7827,13 +7953,22 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         // DÉPLACER LE WRAPPER ENTIER - pas les cartes individuellement
         console.log('🔗 Déplacement du wrapper entier');
         
+        // ═══ FIX v1590: Vérifier que insertBefore n'est PAS un descendant du wrapper qu'on déplace ═══
+        if (insertBefore && existingWrapper.contains(insertBefore)) {
+          console.warn('⚠️ insertBefore est dans le wrapper - utilisation nextSibling');
+          insertBefore = existingWrapper.nextElementSibling;
+        }
+        
         if (insertBefore) {
           // Si insertBefore est dans un wrapper, insérer avant le wrapper
           const targetWrapper = insertBefore.closest('.associated-group');
-          if (targetWrapper) {
+          if (targetWrapper && targetWrapper !== existingWrapper) {
             targetCol.insertBefore(existingWrapper, targetWrapper);
-          } else {
+          } else if (!targetWrapper) {
             targetCol.insertBefore(existingWrapper, insertBefore);
+          } else {
+            // targetWrapper === existingWrapper → fallback: fin de colonne
+            targetCol.appendChild(existingWrapper);
           }
         } else {
           targetCol.appendChild(existingWrapper);
@@ -7857,24 +7992,27 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             cardData.dateExpedition = '';
           }
           
-          // Tracking
+          // Tracking - ═══ FIX v1591: SEULEMENT si la carte change de colonne ═══
           if (!cardData.tracking) cardData.tracking = {};
           
-          if (oldDept && oldColonne !== 'colAttente') {
-            if (!cardData.tracking[oldDept.id]) cardData.tracking[oldDept.id] = {};
-            if (cardData.tracking[oldDept.id].entree && !cardData.tracking[oldDept.id].sortie) {
-              cardData.tracking[oldDept.id].sortie = today;
+          if (oldColonne !== colId) {
+            if (oldDept && oldColonne !== 'colAttente') {
+              if (!cardData.tracking[oldDept.id]) cardData.tracking[oldDept.id] = {};
+              if (cardData.tracking[oldDept.id].entree && !cardData.tracking[oldDept.id].sortie) {
+                cardData.tracking[oldDept.id].sortie = today;
+              }
+            }
+            
+            if (newDept && colId !== 'colAttente') {
+              if (!cardData.tracking[newDept.id]) cardData.tracking[newDept.id] = {};
+              if (!cardData.tracking[newDept.id].entree) {
+                cardData.tracking[newDept.id].entree = today;
+              }
             }
           }
           
-          if (newDept && colId !== 'colAttente') {
-            if (!cardData.tracking[newDept.id]) cardData.tracking[newDept.id] = {};
-            if (!cardData.tracking[newDept.id].entree) {
-              cardData.tracking[newDept.id].entree = today;
-            }
-          }
-          
-          updateCardVisual(cid);
+          // ═══ FIX v1590: Reconstruire la carte ENTIÈRE (pas juste le pill) ═══
+          updateCardInDOM(cid);
         });
         
       } else {
@@ -7907,21 +8045,25 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           
           if (!cardData.tracking) cardData.tracking = {};
           
-          if (oldDept && oldColonne !== 'colAttente') {
-            if (!cardData.tracking[oldDept.id]) cardData.tracking[oldDept.id] = {};
-            if (cardData.tracking[oldDept.id].entree && !cardData.tracking[oldDept.id].sortie) {
-              cardData.tracking[oldDept.id].sortie = today;
+          // ═══ FIX v1591: SEULEMENT si la carte change de colonne ═══
+          if (oldColonne !== colId) {
+            if (oldDept && oldColonne !== 'colAttente') {
+              if (!cardData.tracking[oldDept.id]) cardData.tracking[oldDept.id] = {};
+              if (cardData.tracking[oldDept.id].entree && !cardData.tracking[oldDept.id].sortie) {
+                cardData.tracking[oldDept.id].sortie = today;
+              }
+            }
+            
+            if (newDept && colId !== 'colAttente') {
+              if (!cardData.tracking[newDept.id]) cardData.tracking[newDept.id] = {};
+              if (!cardData.tracking[newDept.id].entree) {
+                cardData.tracking[newDept.id].entree = today;
+              }
             }
           }
           
-          if (newDept && colId !== 'colAttente') {
-            if (!cardData.tracking[newDept.id]) cardData.tracking[newDept.id] = {};
-            if (!cardData.tracking[newDept.id].entree) {
-              cardData.tracking[newDept.id].entree = today;
-            }
-          }
-          
-          updateCardVisual(cid);
+          // ═══ FIX v1590: Reconstruire la carte ENTIÈRE après déplacement ═══
+          updateCardInDOM(cid);
         });
       }
       
@@ -7941,6 +8083,25 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           }
         }
       });
+      
+      // ═══ FIX v1590: Mettre à jour aussi le sortOrder de la colonne SOURCE ═══
+      if (oldColonne !== colId) {
+        const sourceCol = document.getElementById(oldColonne);
+        if (sourceCol) {
+          const sourceCards = Array.from(sourceCol.querySelectorAll('.mcard'));
+          sourceCards.forEach((cardEl, index) => {
+            const cid = cardEl.dataset.cardId;
+            if (cardsData[cid]) {
+              const newSortOrder = index * 10;
+              if (cardsData[cid].sortOrder !== newSortOrder) {
+                cardsData[cid].sortOrder = newSortOrder;
+                cardsData[cid].localModifiedAt = Date.now();
+                cardsWithChangedOrder.add(cid);
+              }
+            }
+          });
+        }
+      }
       
       // === LOG ET NOTIFICATIONS ===
       const oldColName = COLONNES.find(c => c.id === oldColonne)?.name || oldColonne;
@@ -7981,11 +8142,10 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       // Nettoyer l'état de drag
       cleanupDragState();
       
-      // Re-créer les groupes visuels seulement si on n'a pas déplacé un wrapper existant
-      // (pour éviter de le recréer inutilement)
-      if (!existingWrapper || cardsToMove.length === 1) {
-        setTimeout(() => renderAssociatedCards(), 50);
-      }
+      // ═══ FIX v1590: TOUJOURS reconstruire les groupes visuels après un drop ═══
+      // L'ancien code sautait renderAssociatedCards pour les wrappers existants,
+      // causant des incohérences visuelles (texte déplacé, structure corrompue)
+      setTimeout(() => renderAssociatedCards(), 50);
     }
     
     // Fonction de nettoyage centralisée
@@ -8006,9 +8166,13 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         g.classList.remove('dragging');
       });
       
-      // Nettoyer le ghost s'il existe encore
-      const ghost = document.getElementById('dragGhostGroup');
-      if (ghost) ghost.remove();
+      // ═══ FIX v1590: Nettoyage agressif de TOUS les ghosts (par ID et variable) ═══
+      if (dragGhostGroup) {
+        try { dragGhostGroup.remove(); } catch(e) {}
+        dragGhostGroup = null;
+      }
+      // Aussi chercher par ID au cas où la variable a été perdue
+      document.querySelectorAll('#dragGhostGroup').forEach(g => g.remove());
       
       // Nettoyer les indicateurs de drop
       document.querySelectorAll('.moulages-col').forEach(col => col.classList.remove('drag-over'));
@@ -8086,6 +8250,12 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             cardsData[cid].localModifiedAt = Date.now(); // IMPORTANT: Marquer comme modifié localement
             if (colId !== 'colAttente') {
               cardsData[cid].raisonAttente = '';
+            }
+            
+            // ═══ FIX v1592: Clearing expedie pour associées aussi ═══
+            if (oldColonne === 'colExpedition' && colId !== 'colExpedition') {
+              cardsData[cid].expedie = '';
+              cardsData[cid].dateExpedition = '';
             }
             
             // Tracking pour les associées
@@ -10135,9 +10305,28 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       
       if (pendingAttenteCardId && cardsData[pendingAttenteCardId]) {
         const card = cardsData[pendingAttenteCardId];
+        const oldColonne = card.colonne; // ═══ FIX v1591: Capturer avant de changer ═══
         cardsData[pendingAttenteCardId].colonne = 'colAttente';
         cardsData[pendingAttenteCardId].raisonAttente = raison;
         cardsData[pendingAttenteCardId].localModifiedAt = Date.now(); // PROTECTION
+        
+        // ═══ FIX v1591: Clearing expedie si from Expédition ═══
+        if (oldColonne === 'colExpedition') {
+          cardsData[pendingAttenteCardId].expedie = '';
+          cardsData[pendingAttenteCardId].dateExpedition = '';
+        }
+        
+        // ═══ FIX v1591: Tracking pour carte principale ═══
+        const today = formatDateISO(new Date());
+        if (!card.tracking) card.tracking = {};
+        const oldDept = TRACKING_DEPTS.find(d => d.colId === oldColonne);
+        if (oldDept && oldColonne !== 'colAttente') {
+          if (!card.tracking[oldDept.id]) card.tracking[oldDept.id] = {};
+          if (card.tracking[oldDept.id].entree && !card.tracking[oldDept.id].sortie) {
+            card.tracking[oldDept.id].sortie = today;
+          }
+        }
+        
         saveCardToFirebase(pendingAttenteCardId, cardsData[pendingAttenteCardId]);
         
         // Log de mise en attente
@@ -10155,6 +10344,22 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
               cardsData[cid].colonne = 'colAttente';
               cardsData[cid].raisonAttente = raison;
               cardsData[cid].localModifiedAt = Date.now(); // PROTECTION
+              
+              // ═══ FIX v1591: Clearing expedie pour associées ═══
+              if (oldColonne === 'colExpedition') {
+                cardsData[cid].expedie = '';
+                cardsData[cid].dateExpedition = '';
+              }
+              
+              // ═══ FIX v1591: Tracking pour cartes associées ═══
+              if (!cardsData[cid].tracking) cardsData[cid].tracking = {};
+              if (oldDept && oldColonne !== 'colAttente') {
+                if (!cardsData[cid].tracking[oldDept.id]) cardsData[cid].tracking[oldDept.id] = {};
+                if (cardsData[cid].tracking[oldDept.id].entree && !cardsData[cid].tracking[oldDept.id].sortie) {
+                  cardsData[cid].tracking[oldDept.id].sortie = today;
+                }
+              }
+              
               saveCardToFirebase(cid, cardsData[cid]);
             }
           });
@@ -10172,10 +10377,29 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     function confirmAttenteLater() {
       if (pendingAttenteCardId && cardsData[pendingAttenteCardId]) {
         const card = cardsData[pendingAttenteCardId];
+        const oldColonne = card.colonne; // ═══ FIX v1591: Capturer avant de changer ═══
         cardsData[pendingAttenteCardId].colonne = 'colAttente';
         cardsData[pendingAttenteCardId].raisonAttente = ''; // Pas de raison
         cardsData[pendingAttenteCardId].attenteReminderTime = Date.now(); // Pour le rappel
         cardsData[pendingAttenteCardId].localModifiedAt = Date.now();
+        
+        // ═══ FIX v1591: Clearing expedie si from Expédition ═══
+        if (oldColonne === 'colExpedition') {
+          cardsData[pendingAttenteCardId].expedie = '';
+          cardsData[pendingAttenteCardId].dateExpedition = '';
+        }
+        
+        // ═══ FIX v1591: Tracking pour carte principale ═══
+        const today = formatDateISO(new Date());
+        if (!card.tracking) card.tracking = {};
+        const oldDept = TRACKING_DEPTS.find(d => d.colId === oldColonne);
+        if (oldDept && oldColonne !== 'colAttente') {
+          if (!card.tracking[oldDept.id]) card.tracking[oldDept.id] = {};
+          if (card.tracking[oldDept.id].entree && !card.tracking[oldDept.id].sortie) {
+            card.tracking[oldDept.id].sortie = today;
+          }
+        }
+        
         saveCardToFirebase(pendingAttenteCardId, cardsData[pendingAttenteCardId]);
         
         addLog(LOG_TYPES.MOVE, `"${card.name}" mis en attente (raison à préciser)`, {
@@ -10193,6 +10417,22 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
               cardsData[cid].raisonAttente = '';
               cardsData[cid].attenteReminderTime = Date.now();
               cardsData[cid].localModifiedAt = Date.now();
+              
+              // ═══ FIX v1591: Clearing expedie pour associées ═══
+              if (oldColonne === 'colExpedition') {
+                cardsData[cid].expedie = '';
+                cardsData[cid].dateExpedition = '';
+              }
+              
+              // ═══ FIX v1591: Tracking pour cartes associées ═══
+              if (!cardsData[cid].tracking) cardsData[cid].tracking = {};
+              if (oldDept && oldColonne !== 'colAttente') {
+                if (!cardsData[cid].tracking[oldDept.id]) cardsData[cid].tracking[oldDept.id] = {};
+                if (cardsData[cid].tracking[oldDept.id].entree && !cardsData[cid].tracking[oldDept.id].sortie) {
+                  cardsData[cid].tracking[oldDept.id].sortie = today;
+                }
+              }
+              
               saveCardToFirebase(cid, cardsData[cid]);
             }
           });
@@ -10402,10 +10642,30 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         const timeStr = now.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
         
         const card = cardsData[pendingExpedCardId];
+        const oldColonne = card.colonne; // ═══ FIX v1591: Capturer avant de changer ═══
         cardsData[pendingExpedCardId].colonne = 'colExpedition';
         cardsData[pendingExpedCardId].dateExpedition = `${dateStr} ${timeStr}`;
         cardsData[pendingExpedCardId].raisonAttente = '';
         cardsData[pendingExpedCardId].localModifiedAt = Date.now(); // PROTECTION
+        
+        // ═══ FIX v1591: Tracking pour carte principale ═══
+        const today = formatDateISO(new Date());
+        if (!card.tracking) card.tracking = {};
+        const oldDept = TRACKING_DEPTS.find(d => d.colId === oldColonne);
+        const newDept = TRACKING_DEPTS.find(d => d.colId === 'colExpedition');
+        if (oldDept && oldColonne !== 'colAttente') {
+          if (!card.tracking[oldDept.id]) card.tracking[oldDept.id] = {};
+          if (card.tracking[oldDept.id].entree && !card.tracking[oldDept.id].sortie) {
+            card.tracking[oldDept.id].sortie = today;
+          }
+        }
+        if (newDept) {
+          if (!card.tracking[newDept.id]) card.tracking[newDept.id] = {};
+          if (!card.tracking[newDept.id].entree) {
+            card.tracking[newDept.id].entree = today;
+          }
+        }
+        
         saveCardToFirebase(pendingExpedCardId, cardsData[pendingExpedCardId]);
         
         // Log d'expédition
@@ -10424,6 +10684,22 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
               cardsData[cid].dateExpedition = `${dateStr} ${timeStr}`;
               cardsData[cid].raisonAttente = '';
               cardsData[cid].localModifiedAt = Date.now(); // PROTECTION
+              
+              // ═══ FIX v1591: Tracking pour cartes associées ═══
+              if (!cardsData[cid].tracking) cardsData[cid].tracking = {};
+              if (oldDept && oldColonne !== 'colAttente') {
+                if (!cardsData[cid].tracking[oldDept.id]) cardsData[cid].tracking[oldDept.id] = {};
+                if (cardsData[cid].tracking[oldDept.id].entree && !cardsData[cid].tracking[oldDept.id].sortie) {
+                  cardsData[cid].tracking[oldDept.id].sortie = today;
+                }
+              }
+              if (newDept) {
+                if (!cardsData[cid].tracking[newDept.id]) cardsData[cid].tracking[newDept.id] = {};
+                if (!cardsData[cid].tracking[newDept.id].entree) {
+                  cardsData[cid].tracking[newDept.id].entree = today;
+                }
+              }
+              
               saveCardToFirebase(cid, cardsData[cid]);
             }
           });
