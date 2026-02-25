@@ -467,6 +467,58 @@ body {
 }
 .matbo-topbar-btn:hover { background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%); }
 
+/* ===== COLUMN SELECTOR BUTTON & DROPDOWN ===== */
+.colsel-topbar-btn {
+  padding: 6px 16px; border: none;
+  border-radius: 8px 8px 0 0;
+  font-size: 10px; font-weight: 800; cursor: pointer; color: #fff;
+  background: linear-gradient(180deg, #7c3aed 0%, #5b21b6 100%);
+  transition: all 0.2s;
+  white-space: nowrap;
+  box-shadow: 0 -2px 6px rgba(124,58,237,0.3); letter-spacing: 0.3px;
+}
+.colsel-topbar-btn:hover { background: linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%); }
+.colsel-topbar-btn.active { background: linear-gradient(180deg, #a78bfa 0%, #7c3aed 100%); }
+
+.colsel-dropdown {
+  position: absolute; top: 100%; left: 0;
+  background: linear-gradient(180deg, #1e1b4b 0%, #1e293b 100%);
+  border: 2px solid rgba(139,92,246,0.5);
+  border-radius: 0 12px 12px 12px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  padding: 10px 12px; min-width: 200px;
+  z-index: 99990; display: none;
+  animation: calendarPop 0.15s ease-out;
+}
+.colsel-dropdown.active { display: block; }
+.colsel-dropdown-title {
+  font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.5);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin-bottom: 8px; padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.colsel-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer;
+  transition: background 0.15s;
+}
+.colsel-item:hover { background: rgba(139,92,246,0.15); }
+.colsel-item input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: #8b5cf6;
+  cursor: pointer; flex-shrink: 0;
+}
+.colsel-item label {
+  font-size: 12px; font-weight: 700; cursor: pointer;
+  user-select: none; -webkit-user-select: none;
+}
+.colsel-item .colsel-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+/* Column hidden state */
+.header-cell.agent.col-hidden { display: none !important; }
+.col.col-hidden { display: none !important; }
+.panel-left.col-hidden { display: none !important; }
+
 /* ===== MATÉRIAUX BO MODAL (horizontal layout) ===== */
 .matbo-modal-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -806,9 +858,16 @@ body {
 .fiche-logo img { height: 26px; filter: brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
 .fiche-delete-btn { padding: 6px 10px; background: linear-gradient(135deg, #ef4444, #dc2626); border: 2px solid #b91c1c; border-radius: 6px; color: #fff; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
 .fiche-delete-btn:hover { filter: brightness(1.1); }
-.fiche-resolve-btn { padding: 6px 12px; background: linear-gradient(135deg, #059669, #10b981); border: 2px solid #047857; border-radius: 6px; color: #fff; font-size: 10px; font-weight: 700; cursor: pointer; display: none; align-items: center; gap: 4px; line-height: 1.1; }
-.fiche-resolve-btn:hover { filter: brightness(1.15); transform: scale(1.02); }
-.fiche-resolve-btn.visible { display: flex; }
+/* Resolve button — now in right panel qchat-actions */
+.qchat-resolve-btn {
+  padding: 4px 12px; border: none; border-radius: 5px;
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #fff; font-size: 10px; font-weight: 800;
+  cursor: pointer; white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(16,185,129,0.4);
+  transition: all 0.2s; letter-spacing: 0.3px;
+}
+.qchat-resolve-btn:hover { filter: brightness(1.15); transform: scale(1.03); box-shadow: 0 3px 12px rgba(16,185,129,0.5); }
 /* Resolve confirmation modal */
 .resolve-modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.6); z-index: 9999; display: flex; align-items: center; justify-content: center; }
 .resolve-modal-overlay.hidden { display: none; }
@@ -1527,6 +1586,13 @@ body {
       </div>
     </div>
     <button class="matbo-topbar-btn" onclick="openMatBOModal()" title="Matériaux BO">📦 Matériaux BO</button>
+    <div style="position:absolute;bottom:0;left:340px;z-index:10;">
+      <button class="colsel-topbar-btn" onclick="toggleColSelector(event)" title="Sélectionner les colonnes">📊 Colonnes</button>
+      <div class="colsel-dropdown" id="colselDropdown">
+        <div class="colsel-dropdown-title">Colonnes visibles</div>
+        <div id="colselList"></div>
+      </div>
+    </div>
   </div>
   <div class="tb-center"><span class="top-title">Questionnements</span></div>
   <div class="tb-right">
@@ -1578,7 +1644,7 @@ body {
       <div class="panel-left">
         <div class="panel-left-header">
           <div class="header-cell left-section" style="flex:1;">
-            <div class="agent-header-row"><span class="header-cell-label">🔎 Outils</span><button class="col-collapse-toggle" id="collapseOutils" onclick="toggleColumnCollapse('outils')" title="Réduire/Agrandir"><span class="toggle-arrow">▼</span></button></div>
+            <div class="agent-header-row"><span class="header-cell-label">🔎 Outils</span></div>
           </div>
         </div>
         <div class="panel-left-body" style="flex-direction:column;">
@@ -1662,51 +1728,43 @@ body {
         <div class="panel-right-header">
           <div class="header-cell agent" id="headerJacynthe">
             <div class="notif-pref-wrap"><div class="notif-pref-switch" data-mode="chat" data-agent="Jacynthe" id="npSwitch_Jacynthe" title="Mode de notification"><div class="nps-zone" onclick="setNotifPref('Jacynthe','both')">Les 2</div><div class="nps-zone" onclick="setNotifPref('Jacynthe','email')">Email</div><div class="nps-zone" onclick="setNotifPref('Jacynthe','chat')">Chat</div><div class="nps-thumb"></div></div></div>
-            <div class="agent-name-row"><span class="header-cell-label jacynthe">Jacynthe</span><span class="hdr-count" id="countJacynthe" style="display:none;">0</span><button class="col-collapse-toggle" id="collapseJacynthe" onclick="event.stopPropagation();toggleColumnCollapse('Jacynthe')" title="Réduire/Agrandir"><span class="toggle-arrow">▼</span></button></div>
+            <div class="agent-name-row"><span class="header-cell-label jacynthe">Jacynthe</span><span class="hdr-count" id="countJacynthe" style="display:none;">0</span></div>
             <button class="header-cell-btn btn-agent" onclick="openJobModal('Jacynthe')">+ Job</button>
-            <span class="col-collapsed-name" style="display:none;">Jacynthe</span>
           </div>
           <div class="header-cell agent" id="headerNadia">
             <div class="notif-pref-wrap"><div class="notif-pref-switch" data-mode="chat" data-agent="Nadia" id="npSwitch_Nadia" title="Mode de notification"><div class="nps-zone" onclick="setNotifPref('Nadia','both')">Les 2</div><div class="nps-zone" onclick="setNotifPref('Nadia','email')">Email</div><div class="nps-zone" onclick="setNotifPref('Nadia','chat')">Chat</div><div class="nps-thumb"></div></div></div>
-            <div class="agent-name-row"><span class="header-cell-label nadia">Nadia</span><span class="hdr-count" id="countNadia" style="display:none;">0</span><button class="col-collapse-toggle" id="collapseNadia" onclick="event.stopPropagation();toggleColumnCollapse('Nadia')" title="Réduire/Agrandir"><span class="toggle-arrow">▼</span></button></div>
+            <div class="agent-name-row"><span class="header-cell-label nadia">Nadia</span><span class="hdr-count" id="countNadia" style="display:none;">0</span></div>
             <button class="header-cell-btn btn-agent" onclick="openJobModal('Nadia')">+ Job</button>
-            <span class="col-collapsed-name" style="display:none;">Nadia</span>
           </div>
           <div class="header-cell agent" id="headerSonia">
             <div class="notif-pref-wrap"><div class="notif-pref-switch" data-mode="chat" data-agent="Sonia" id="npSwitch_Sonia" title="Mode de notification"><div class="nps-zone" onclick="setNotifPref('Sonia','both')">Les 2</div><div class="nps-zone" onclick="setNotifPref('Sonia','email')">Email</div><div class="nps-zone" onclick="setNotifPref('Sonia','chat')">Chat</div><div class="nps-thumb"></div></div></div>
-            <div class="agent-name-row"><span class="header-cell-label sonia">Sonia</span><span class="hdr-count" id="countSonia" style="display:none;">0</span><button class="col-collapse-toggle" id="collapseSonia" onclick="event.stopPropagation();toggleColumnCollapse('Sonia')" title="Réduire/Agrandir"><span class="toggle-arrow">▼</span></button></div>
+            <div class="agent-name-row"><span class="header-cell-label sonia">Sonia</span><span class="hdr-count" id="countSonia" style="display:none;">0</span></div>
             <button class="header-cell-btn btn-agent" onclick="openJobModal('Sonia')">+ Job</button>
-            <span class="col-collapsed-name" style="display:none;">Sonia</span>
           </div>
           <div class="header-cell agent" id="headerJonathan">
             <div class="notif-pref-wrap"><div class="notif-pref-switch" data-mode="chat" data-agent="Jonathan" id="npSwitch_Jonathan" title="Mode de notification"><div class="nps-zone" onclick="setNotifPref('Jonathan','both')">Les 2</div><div class="nps-zone" onclick="setNotifPref('Jonathan','email')">Email</div><div class="nps-zone" onclick="setNotifPref('Jonathan','chat')">Chat</div><div class="nps-thumb"></div></div></div>
-            <div class="agent-name-row"><span class="header-cell-label jonathan">Jonathan</span><span class="hdr-count" id="countJonathan" style="display:none;">0</span><button class="col-collapse-toggle" id="collapseJonathan" onclick="event.stopPropagation();toggleColumnCollapse('Jonathan')" title="Réduire/Agrandir"><span class="toggle-arrow">▼</span></button></div>
+            <div class="agent-name-row"><span class="header-cell-label jonathan">Jonathan</span><span class="hdr-count" id="countJonathan" style="display:none;">0</span></div>
             <button class="header-cell-btn btn-agent" onclick="openJobModal('Jonathan')">+ Job</button>
-            <span class="col-collapsed-name" style="display:none;">Jonathan</span>
           </div>
           <div class="header-cell agent" id="headerMarie-Soleil">
             <div class="notif-pref-wrap"><div class="notif-pref-switch" data-mode="chat" data-agent="Marie-Soleil" id="npSwitch_Marie-Soleil" title="Mode de notification"><div class="nps-zone" onclick="setNotifPref('Marie-Soleil','both')">Les 2</div><div class="nps-zone" onclick="setNotifPref('Marie-Soleil','email')">Email</div><div class="nps-zone" onclick="setNotifPref('Marie-Soleil','chat')">Chat</div><div class="nps-thumb"></div></div></div>
-            <div class="agent-name-row"><span class="header-cell-label marie-soleil">M-Soleil</span><span class="hdr-count" id="countMarie-Soleil" style="display:none;">0</span><button class="col-collapse-toggle" id="collapseMarie-Soleil" onclick="event.stopPropagation();toggleColumnCollapse('Marie-Soleil')" title="Réduire/Agrandir"><span class="toggle-arrow">▼</span></button></div>
+            <div class="agent-name-row"><span class="header-cell-label marie-soleil">M-Soleil</span><span class="hdr-count" id="countMarie-Soleil" style="display:none;">0</span></div>
             <button class="header-cell-btn btn-agent" onclick="openJobModal('Marie-Soleil')">+ Job</button>
-            <span class="col-collapsed-name" style="display:none;">M-Soleil</span>
           </div>
           <div class="header-cell agent" id="headerMarie-Pier">
             <div class="notif-pref-wrap"><div class="notif-pref-switch" data-mode="chat" data-agent="Marie-Pier" id="npSwitch_Marie-Pier" title="Mode de notification"><div class="nps-zone" onclick="setNotifPref('Marie-Pier','both')">Les 2</div><div class="nps-zone" onclick="setNotifPref('Marie-Pier','email')">Email</div><div class="nps-zone" onclick="setNotifPref('Marie-Pier','chat')">Chat</div><div class="nps-thumb"></div></div></div>
-            <div class="agent-name-row"><span class="header-cell-label marie-pier">M-Pier</span><span class="hdr-count" id="countMarie-Pier" style="display:none;">0</span><button class="col-collapse-toggle" id="collapseMarie-Pier" onclick="event.stopPropagation();toggleColumnCollapse('Marie-Pier')" title="Réduire/Agrandir"><span class="toggle-arrow">▼</span></button></div>
+            <div class="agent-name-row"><span class="header-cell-label marie-pier">M-Pier</span><span class="hdr-count" id="countMarie-Pier" style="display:none;">0</span></div>
             <button class="header-cell-btn btn-agent" onclick="openJobModal('Marie-Pier')">+ Job</button>
-            <span class="col-collapsed-name" style="display:none;">M-Pier</span>
           </div>
           <div class="header-cell agent" id="headerDaniel">
             <div class="notif-pref-wrap"><div class="notif-pref-switch" data-mode="chat" data-agent="Daniel" id="npSwitch_Daniel" title="Mode de notification"><div class="nps-zone" onclick="setNotifPref('Daniel','both')">Les 2</div><div class="nps-zone" onclick="setNotifPref('Daniel','email')">Email</div><div class="nps-zone" onclick="setNotifPref('Daniel','chat')">Chat</div><div class="nps-thumb"></div></div></div>
-            <div class="agent-name-row"><span class="header-cell-label daniel">Daniel</span><span class="hdr-count" id="countDaniel" style="display:none;">0</span><button class="col-collapse-toggle" id="collapseDaniel" onclick="event.stopPropagation();toggleColumnCollapse('Daniel')" title="Réduire/Agrandir"><span class="toggle-arrow">▼</span></button></div>
+            <div class="agent-name-row"><span class="header-cell-label daniel">Daniel</span><span class="hdr-count" id="countDaniel" style="display:none;">0</span></div>
             <button class="header-cell-btn btn-agent" onclick="openJobModal('Daniel')">+ Job</button>
-            <span class="col-collapsed-name" style="display:none;">Daniel</span>
           </div>
           <div class="header-cell agent" id="headerFabrys">
             <div class="notif-pref-wrap"><div class="notif-pref-switch" data-mode="chat" data-agent="Fabrys" id="npSwitch_Fabrys" title="Mode de notification"><div class="nps-zone" onclick="setNotifPref('Fabrys','both')">Les 2</div><div class="nps-zone" onclick="setNotifPref('Fabrys','email')">Email</div><div class="nps-zone" onclick="setNotifPref('Fabrys','chat')">Chat</div><div class="nps-thumb"></div></div></div>
-            <div class="agent-name-row"><span class="header-cell-label fabrys">Fabrys</span><span class="hdr-count" id="countFabrys" style="display:none;">0</span><button class="col-collapse-toggle" id="collapseFabrys" onclick="event.stopPropagation();toggleColumnCollapse('Fabrys')" title="Réduire/Agrandir"><span class="toggle-arrow">▼</span></button></div>
+            <div class="agent-name-row"><span class="header-cell-label fabrys">Fabrys</span><span class="hdr-count" id="countFabrys" style="display:none;">0</span></div>
             <button class="header-cell-btn btn-agent" onclick="openJobModal('Fabrys')">+ Job</button>
-            <span class="col-collapsed-name" style="display:none;">Fabrys</span>
           </div>
           <span id="newBadgeJacynthe" style="display:none!important;"></span><span id="newBadgeNadia" style="display:none!important;"></span><span id="newBadgeSonia" style="display:none!important;"></span><span id="newBadgeJonathan" style="display:none!important;"></span><span id="newBadgeDaniel" style="display:none!important;"></span><span id="newBadgeFabrys" style="display:none!important;"></span>
         </div>
@@ -1799,7 +1857,6 @@ body {
     <div class="fiche-info-zone">
       <div class="fiche-header">
         <div class="fiche-logo"><img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro"></div>
-        <button type="button" class="fiche-resolve-btn" id="ficheResolveBtn" onclick="openResolveModal()">✅ Questionnement réglé</button>
         <button type="button" class="fiche-delete-btn" onclick="deleteCurrentJob()"><span>🗑️</span><span>Supprimer</span></button>
       </div>
       <!-- status pill removed - info already in card header -->
@@ -1827,6 +1884,7 @@ body {
             <div class="qchat-extra-dests" id="qchatExtraDests"></div>
           </div>
           <div class="qchat-actions">
+            <button class="qchat-resolve-btn" id="ficheResolveBtn" onclick="openResolveModal()" style="display:none;">✅ Questionnement réglé</button>
             <button class="qchat-action-btn" onclick="QuestChat.openEmailForm()" title="Email / PDF">✉️</button>
             <button class="qchat-action-btn" onclick="QuestChat.printChat()" title="Imprimer">🖨️</button>
           </div>
@@ -2171,7 +2229,7 @@ function hasPermission(perm) {
 }
 
 // ===== VERSION PROTECTION =====
-var APP_VERSION = 20260220;
+var APP_VERSION = 20260225;
 var APP_MODULE = 'questionnement';
 var _versionOK = true;
 var _versionBanner = null;
@@ -2400,7 +2458,7 @@ function initLogoMenu(currentMod){
     var m=NAV_MODULES[mod];if(!m)return;
     var a=document.createElement('a');
     a.className='nav-modal-item'+(mod===currentMod?' current':'');
-    a.href=m.file;
+    a.href=m.file+'?v='+APP_VERSION+'&t='+Date.now();
     a.innerHTML='<span class="nav-modal-icon">'+m.icon+'</span><span class="nav-modal-label" style="color:'+m.color+'">'+m.label+'</span>';
     grid.appendChild(a);
   });
@@ -2661,6 +2719,7 @@ function renderJobs() {
     const count = document.getElementById('count' + name);
     const jobs = lists[name].sort((a, b) => new Date(a.dateRecue || 0) - new Date(b.dateRecue || 0));
     count.textContent = jobs.length;
+    count.style.display = jobs.length > 0 ? '' : 'none';
     
     if (jobs.length === 0) {
       container.innerHTML = '<div class="empty-state">Aucun job</div>';
@@ -3241,7 +3300,7 @@ function saveJob() {
 var _agentNotifPrefs = { Jacynthe: 'chat', Nadia: 'chat', Sonia: 'chat', Jonathan: 'chat', 'Marie-Soleil': 'chat', 'Marie-Pier': 'chat', Daniel: 'chat', Fabrys: 'chat' };
 
 function setNotifPref(agent, mode) {
-  event.stopPropagation();
+  if (window.event) window.event.stopPropagation();
   var el = document.getElementById('npSwitch_' + agent);
   if (el) el.setAttribute('data-mode', mode);
   _agentNotifPrefs[agent] = mode;
@@ -3287,112 +3346,115 @@ function applyNotifPrefSwitches() {
   });
 }
 
-// ===== COLUMN COLLAPSE TOGGLE =====
-var _collapsedCols = {};
-var MIN_COLLAPSED = 2;
-
-// Agent columns only (outils is separate, doesn't count)
+// ===== COLUMN SELECTOR SYSTEM =====
+var _visibleCols = {};
+var _ALL_COLS = [
+  { key: 'outils', label: 'Outils', color: '#60a5fa' },
+  { key: 'Jacynthe', label: 'Jacynthe', color: '#fca5a5' },
+  { key: 'Nadia', label: 'Nadia', color: '#93c5fd' },
+  { key: 'Sonia', label: 'Sonia', color: '#86efac' },
+  { key: 'Jonathan', label: 'Jonathan', color: '#d8b4fe' },
+  { key: 'Marie-Soleil', label: 'Marie-Soleil', color: '#fbbf24' },
+  { key: 'Marie-Pier', label: 'Marie-Pier', color: '#f9a8d4' },
+  { key: 'Daniel', label: 'Daniel', color: '#f97316' },
+  { key: 'Fabrys', label: 'Fabrys', color: '#34d399' }
+];
 var _AGENT_COLS = ['Jacynthe','Nadia','Sonia','Jonathan','Marie-Soleil','Marie-Pier','Daniel','Fabrys'];
 
-function getCollapsedAgentCount() {
-  var count = 0;
-  _AGENT_COLS.forEach(function(n) { if (_collapsedCols[n]) count++; });
-  return count;
-}
-
-function loadCollapsedCols() {
+function loadVisibleCols() {
   var hasState = false;
   try {
-    var saved = localStorage.getItem('questCollapsedCols');
+    var saved = localStorage.getItem('questVisibleCols');
     if (saved) {
-      _collapsedCols = JSON.parse(saved);
+      _visibleCols = JSON.parse(saved);
       hasState = true;
     }
   } catch(e) {}
-  // First time: default Daniel + Fabrys collapsed
   if (!hasState) {
-    _collapsedCols['Daniel'] = true;
-    _collapsedCols['Fabrys'] = true;
-    saveCollapsedCols();
+    // Default: all visible except Daniel & Fabrys
+    _ALL_COLS.forEach(function(c) {
+      _visibleCols[c.key] = (c.key !== 'Daniel' && c.key !== 'Fabrys');
+    });
+    saveVisibleCols();
   }
-  // Enforce minimum on load
-  if (getCollapsedAgentCount() < MIN_COLLAPSED) {
-    // Auto-collapse from the end of the list until we hit minimum
-    for (var i = _AGENT_COLS.length - 1; i >= 0 && getCollapsedAgentCount() < MIN_COLLAPSED; i--) {
-      if (!_collapsedCols[_AGENT_COLS[i]]) {
-        _collapsedCols[_AGENT_COLS[i]] = true;
+  applyVisibleCols();
+  buildColSelectorUI();
+}
+
+function saveVisibleCols() {
+  try { localStorage.setItem('questVisibleCols', JSON.stringify(_visibleCols)); } catch(e) {}
+}
+
+function applyVisibleCols() {
+  _ALL_COLS.forEach(function(c) {
+    var isVisible = _visibleCols[c.key] !== false;
+    if (c.key === 'outils') {
+      var panelLeft = document.querySelector('.panel-left');
+      if (panelLeft) {
+        panelLeft.classList.toggle('col-hidden', !isVisible);
       }
+    } else {
+      var header = document.getElementById('header' + c.key);
+      var col = document.getElementById('col' + c.key);
+      if (header) header.classList.toggle('col-hidden', !isVisible);
+      if (col) col.classList.toggle('col-hidden', !isVisible);
     }
-    saveCollapsedCols();
-  }
-  // Apply all saved states
-  Object.keys(_collapsedCols).forEach(function(name) {
-    if (_collapsedCols[name]) applyCollapseState(name, true);
   });
 }
 
-function saveCollapsedCols() {
-  try { localStorage.setItem('questCollapsedCols', JSON.stringify(_collapsedCols)); } catch(e) {}
+function buildColSelectorUI() {
+  var list = document.getElementById('colselList');
+  if (!list) return;
+  var html = '';
+  _ALL_COLS.forEach(function(c) {
+    var checked = _visibleCols[c.key] !== false ? 'checked' : '';
+    html += '<div class="colsel-item" onclick="toggleColVisibility(\'' + c.key + '\',event)">';
+    html += '<input type="checkbox" id="colsel_' + c.key + '" ' + checked + '>';
+    html += '<span class="colsel-dot" style="background:' + c.color + ';"></span>';
+    html += '<label>' + c.label + '</label>';
+    html += '</div>';
+  });
+  list.innerHTML = html;
 }
 
-function toggleColumnCollapse(name) {
-  var isCollapsed = !!_collapsedCols[name];
-  // Trying to OPEN a column — check minimum
-  if (isCollapsed) {
-    var agentCount = (name !== 'outils') ? getCollapsedAgentCount() : getCollapsedAgentCount();
-    if (name !== 'outils' && agentCount <= MIN_COLLAPSED) {
-      showToast('⚠️ Minimum ' + MIN_COLLAPSED + ' colonnes doivent rester réduites. Réduisez une autre colonne d\'abord.', 'warning');
-      return;
-    }
+function toggleColVisibility(key, e) {
+  var cb = document.getElementById('colsel_' + key);
+  if (!cb) return;
+  // If click was NOT directly on the checkbox, toggle it manually
+  if (!e || e.target !== cb) {
+    cb.checked = !cb.checked;
   }
-  _collapsedCols[name] = !isCollapsed;
-  applyCollapseState(name, !isCollapsed);
-  saveCollapsedCols();
+  _visibleCols[key] = cb.checked;
+  saveVisibleCols();
+  applyVisibleCols();
 }
 
-function applyCollapseState(name, collapsed) {
-  if (name === 'outils') {
-    var panelLeft = document.querySelector('.panel-left');
-    var toggleBtn = document.getElementById('collapseOutils');
-    if (!panelLeft) return;
-    if (collapsed) {
-      panelLeft.classList.add('col-collapsed');
-      if (toggleBtn) toggleBtn.classList.add('collapsed');
-      if (!panelLeft.querySelector('.outils-collapsed-name')) {
-        var vName = document.createElement('div');
-        vName.className = 'outils-collapsed-name';
-        vName.textContent = 'Outils';
-        panelLeft.querySelector('.panel-left-header').appendChild(vName);
-      }
-    } else {
-      panelLeft.classList.remove('col-collapsed');
-      if (toggleBtn) toggleBtn.classList.remove('collapsed');
-      var vn = panelLeft.querySelector('.outils-collapsed-name');
-      if (vn) vn.remove();
-    }
-  } else {
-    var header = document.getElementById('header' + name);
-    var col = document.getElementById('col' + name);
-    var toggleBtn = document.getElementById('collapse' + name);
-    if (collapsed) {
-      if (header) header.classList.add('col-collapsed');
-      if (col) col.classList.add('col-collapsed');
-      if (toggleBtn) toggleBtn.classList.add('collapsed');
-      if (header) {
-        var vn = header.querySelector('.col-collapsed-name');
-        if (vn) vn.style.display = '';
-      }
-    } else {
-      if (header) header.classList.remove('col-collapsed');
-      if (col) col.classList.remove('col-collapsed');
-      if (toggleBtn) toggleBtn.classList.remove('collapsed');
-      if (header) {
-        var vn = header.querySelector('.col-collapsed-name');
-        if (vn) vn.style.display = 'none';
-      }
-    }
-  }
+function toggleColSelector(e) {
+  if (e) e.stopPropagation();
+  var dd = document.getElementById('colselDropdown');
+  var btn = e ? e.currentTarget : document.querySelector('.colsel-topbar-btn');
+  if (!dd) return;
+  var isOpen = dd.classList.contains('active');
+  dd.classList.toggle('active', !isOpen);
+  if (btn) btn.classList.toggle('active', !isOpen);
 }
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  var dd = document.getElementById('colselDropdown');
+  if (!dd || !dd.classList.contains('active')) return;
+  var btn = document.querySelector('.colsel-topbar-btn');
+  if (dd.contains(e.target) || (btn && btn.contains(e.target))) return;
+  dd.classList.remove('active');
+  if (btn) btn.classList.remove('active');
+});
+
+// Legacy compat stubs (in case any code still references old collapse functions)
+var _collapsedCols = {};
+function toggleColumnCollapse() {}
+function applyCollapseState() {}
+function loadCollapsedCols() { loadVisibleCols(); }
+function saveCollapsedCols() {}
 
 // ===== EMAIL CONFIRMATION FLOW =====
 function triggerEmailConfirmFlow(assignee, orderNum, clientName, jobId) {
@@ -3905,11 +3967,7 @@ function openFiche(jobId) {
   // Show/hide resolve button for PSM cards only
   var resolveBtn = document.getElementById('ficheResolveBtn');
   if (resolveBtn) {
-    if (d.fromPSM) {
-      resolveBtn.classList.add('visible');
-    } else {
-      resolveBtn.classList.remove('visible');
-    }
+    resolveBtn.style.display = d.fromPSM ? '' : 'none';
   }
   
   // PSM info now shows as first message in chat, hide static block
@@ -4121,7 +4179,7 @@ function openResolveModal() {
   document.getElementById('resolveQuestModal').classList.remove('hidden');
 }
 function closeResolveModal(e) {
-  if (e && e.target !== document.getElementById('resolveQuestModal')) return;
+  if (e && e.target && e.target !== document.getElementById('resolveQuestModal')) return;
   document.getElementById('resolveQuestModal').classList.add('hidden');
 }
 function confirmResolveQuest() {
