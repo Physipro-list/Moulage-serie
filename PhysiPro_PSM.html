@@ -3979,7 +3979,7 @@ let currentCardId = null;
 let activeTab = 'atelier';
 
 // ===== PERMISSIONS PSM: V=View, A=Add, M=Modify, S=Supprimer, N=Notifications =====
-var _P={'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['N'],'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':['V','N'],'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':['V','N'],'cmhAcGh5c2lwcm8uY29t':['V','N'],'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':['V','N'],'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':['V','N'],'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['V','A','M','S','N'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['V','A','M','S','N'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['N'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['N'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['V','A','M','S','N'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['N'],'c3JveUBwaHlzaXByby5jb20=':['V','A','M','S','N'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['N'],'c2VydmljZTNAcGh5c2lwcm8uY29t':['N'],'c2VydmljZTFAcGh5c2lwcm8uY29t':['N'],'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':['N'],'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':['N'],'b3JkZXJzQHBoeXNpcHJvLmNvbQ==':['N'],'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':['V','N'],'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':['V','N']};
+var _P={'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['N'],'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':['V','N'],'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':['V','N'],'cmhAcGh5c2lwcm8uY29t':['V','N'],'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':['V','N'],'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':['V','N'],'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['V','A','M','S','N'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['V','A','M','S','N'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['N'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['N'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['V','A','M','S','N'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['N'],'c3JveUBwaHlzaXByby5jb20=':['V','A','M','S','N'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['N'],'c2VydmljZTNAcGh5c2lwcm8uY29t':['V','A','M','S','N'],'c2VydmljZTFAcGh5c2lwcm8uY29t':['V','A','M','S','N'],'c2VydmljZTJAcGh5c2lwcm8uY29t':['V','A','M','S','N'],'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':['N'],'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':['N'],'b3JkZXJzQHBoeXNpcHJvLmNvbQ==':['V','A','M','S','N'],'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':['V','N'],'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':['V','N']};
 function hasPermission(perm) {
   if (!currentUser || !currentUser.email) return false;
   try { var k = btoa(currentUser.email.toLowerCase()); var p = _P[k]; return p ? p.indexOf(perm) !== -1 : false; } catch(e) { return false; }
@@ -5889,20 +5889,40 @@ function filterCards(val) {
 
 // ═══ PSM INIT ═══
 var _skipNextSync = false;
+var _pendingSave = false; // TRUE when local changes exist that haven't been written to Firebase yet
+var _deletedCardIds = []; // Track cards deleted locally so _doSaveToFirebase can remove them from Firebase
 var _deepLinkHandled = false;
+var _psmMainListener = null; // Track main PSM listener to prevent duplicates
+var _psmChatListener = null;
+
 function initPSM() {
   loadCustomMateriaux();
   
+  // CRITICAL: Detach old listeners before attaching new ones (prevents duplicates on re-login)
+  if (_psmMainListener) {
+    db.ref('psm').off('value', _psmMainListener);
+    _psmMainListener = null;
+  }
+  if (_psmChatListener) {
+    db.ref('psmChat').off('child_added', _psmChatListener);
+    _psmChatListener = null;
+  }
+  
   // Listen for questionnement resolution chat messages
-  db.ref('psmChat').orderByChild('timestamp').limitToLast(1).on('child_added', function(snap) {
+  _psmChatListener = db.ref('psmChat').orderByChild('timestamp').limitToLast(1).on('child_added', function(snap) {
     var msg = snap.val();
     if (msg && msg.type === 'quest-resolved') {
       showToast('💬 ' + (msg.author || '') + ': Questionnement réglé pour #' + (msg.psmCardId || '').substring(0, 10), 'success');
     }
   });
   
-  db.ref('psm').on('value', function(snap) {
+  _psmMainListener = db.ref('psm').on('value', function(snap) {
     if (_skipNextSync) { _skipNextSync = false; return; }
+    // CRITICAL: Don't overwrite local changes that haven't been saved to Firebase yet
+    if (_pendingSave) {
+      console.log('PSM: skipping remote sync — local save pending');
+      return;
+    }
     psmData = snap.val() || {};
     renderCards();
     
@@ -7157,13 +7177,14 @@ function updateCompleteBtn(dept) {
 var _saveTimer = null;
 function saveToFirebase() {
   if (writeBlocked(true)) return;
+  _pendingSave = true; // Protect local data from being overwritten by Firebase sync
   // Debounce: batch rapid saves into one write (300ms)
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(_doSaveToFirebase, 300);
 }
 function _doSaveToFirebase() {
   _saveTimer = null;
-  if (writeBlocked(true)) return;
+  if (writeBlocked(true)) { _pendingSave = false; return; }
   // Check data size before saving
   var dataStr = JSON.stringify(psmData);
   var sizeMB = (dataStr.length / (1024 * 1024)).toFixed(2);
@@ -7185,12 +7206,29 @@ function _doSaveToFirebase() {
     }
   });
   
+  // CRITICAL FIX: Include deleted cards in the update (set to null to remove from Firebase)
+  if (_deletedCardIds.length > 0) {
+    _deletedCardIds.forEach(function(deletedId) {
+      updates['psm/' + deletedId] = null;
+    });
+    _deletedCardIds = []; // Clear after including in update
+  }
+  
   _skipNextSync = true;
-  db.ref().update(updates).catch(function(e) { 
+  db.ref().update(updates).then(function() {
     _skipNextSync = false;
+    _pendingSave = false; // Write succeeded — local and Firebase are now in sync
+    console.log('PSM: saved to Firebase OK (' + Object.keys(psmData).length + ' cards)');
+  }).catch(function(e) { 
+    _skipNextSync = false;
+    _pendingSave = false; // Allow remote sync to recover
     console.error('PSM save error:', e);
     if (e.message && e.message.indexOf('size') !== -1) {
       showToast('❌ ERREUR: Données trop volumineuses! Supprimez des fichiers.', 'error');
+    } else if (e.code === 'PERMISSION_DENIED') {
+      showToast('❌ ERREUR: Permission refusée par Firebase. Contactez l\'administrateur.', 'error');
+    } else {
+      showToast('❌ Erreur de sauvegarde: ' + (e.message || e.code || 'inconnu'), 'error');
     }
   });
 }
@@ -7669,17 +7707,36 @@ function saveCard() {
   var creatorName = currentUser ? getPhysiproDisplayName(currentUser.email) : 'Inconnu';
   
   const id = 'psm_' + Date.now();
-  psmData[id] = {
+  var newCard = {
     name, order, region,
     atelier: { enabled: true, complete: false, psm: true, prixMajore: false, materiaux: [{ name: '', qty: 1 }] },
     couture: { enabled: true, complete: false, psm: true, prixMajore: false, materiaux: [{ name: '', qty: 1 }] },
     metal: { enabled: true, complete: false, psm: true, prixMajore: false, materiaux: [{ name: '', qty: 1 }] },
     createdAt: new Date().toISOString(),
     createdByEmail: creatorEmail,
-    createdByName: creatorName
+    createdByName: creatorName,
+    _appVersion: APP_VERSION,
+    _lastModifiedAt: new Date().toISOString(),
+    _lastModifiedBy: creatorEmail
   };
   
-  saveToFirebase();
+  // Write to Firebase IMMEDIATELY (no debounce) to prevent card loss
+  _pendingSave = true;
+  _skipNextSync = true;
+  db.ref('psm/' + id).set(newCard).then(function() {
+    _skipNextSync = false;
+    _pendingSave = false;
+    console.log('PSM: new card saved immediately:', id);
+  }).catch(function(e) {
+    _skipNextSync = false;
+    _pendingSave = false;
+    console.error('PSM save new card error:', e);
+    showToast('❌ Erreur création carte: ' + (e.message || e.code || 'inconnu'), 'error');
+  });
+  
+  // Update local data immediately for instant UI
+  psmData[id] = newCard;
+  
   closeAddModal();
   selectCard(id);
   showToast('Carte créée!', 'success');
@@ -7795,6 +7852,7 @@ function archivePsmThenDelete(cardId) {
   downloadArchiveFile(filename, html);
   
   // 4. Delete locally IMMEDIATELY for instant UI
+  _deletedCardIds.push(cardId); // Track for _doSaveToFirebase
   delete psmData[cardId];
   if (currentCardId === cardId) {
     currentCardId = null;
@@ -7803,8 +7861,9 @@ function archivePsmThenDelete(cardId) {
   }
   renderCards();
   
-  // 5. Save archive + sync Firebase (async)
+  // 5. Save archive + delete card from Firebase (atomic)
   var updates = {};
+  updates['psm/' + cardId] = null; // CRITICAL: explicitly delete card from Firebase
   updates['archives/psm/' + month + '/' + cardId] = archiveData;
   updates['archiveLogs/archLog_' + Date.now() + '_psm'] = {
     module: 'psm',
@@ -7816,12 +7875,21 @@ function archivePsmThenDelete(cardId) {
     archivedBy: currentUser ? currentUser.email : 'unknown'
   };
   
+  _pendingSave = true;
+  _skipNextSync = true;
   db.ref().update(updates).then(function() {
-    saveToFirebase();
+    _skipNextSync = false;
+    _pendingSave = false;
+    // Remove from _deletedCardIds since we already handled it
+    _deletedCardIds = _deletedCardIds.filter(function(id) { return id !== cardId; });
     showToast('📦 PSM archivé + supprimé', 'success');
+    console.log('PSM: card archived and deleted:', cardId);
   }).catch(function(e) {
+    _skipNextSync = false;
+    _pendingSave = false;
     console.error('PSM archive error:', e);
     showToast('⚠️ Archive Firebase échouée, fichier téléchargé', 'error');
+    // Fallback: try to sync remaining data
     saveToFirebase();
   });
 }
@@ -8655,6 +8723,8 @@ function saveServiceNotes() {
 }
 
 function saveFicheEdit() {
+  if (!hasPermission('M')) { showToast('🔒 Permission insuffisante (Modifier)', 'error'); return; }
+  if (writeBlocked()) return;
   if (!currentCardId || !psmData[currentCardId]) { showToast('❌ Aucune carte sélectionnée', 'error'); return; }
   var name = document.getElementById('ficheEditName').value.trim();
   var order = document.getElementById('ficheEditOrder').value.trim();
@@ -8928,7 +8998,14 @@ function psmCreateBackup() {
   }).catch(function(err) { console.error('❌ PSM backup error:', err.message); });
 }
 setInterval(function() { psmCreateBackup(); }, 30 * 60 * 1000);
-window.addEventListener('beforeunload', function() { psmCreateBackup(); });
+window.addEventListener('beforeunload', function() {
+  // CRITICAL: If there's a pending save, flush it immediately before page closes
+  if (_pendingSave && _saveTimer) {
+    clearTimeout(_saveTimer);
+    _doSaveToFirebase();
+  }
+  psmCreateBackup();
+});
 
 
 // ===== XCHAT - CROSS-APP UNIFIED CHAT =====
