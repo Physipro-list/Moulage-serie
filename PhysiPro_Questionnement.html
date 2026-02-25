@@ -2222,14 +2222,36 @@ let jobsData = {};
 let matBOData = {};
 
 // ===== PERMISSIONS: V=View, A=Add, M=Modify, S=Supprimer, N=Notifications/Chat =====
+// FIX: Superadmin emails - always get ALL permissions regardless of _P table
+var _SUPERADMINS = [
+  'atelieratp@physipro.com',
+  'valerie18@videotron.ca',
+  'simdut@physipro.com'
+];
 var _P={'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['N'],'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':['V','N'],'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':['V','N'],'cmhAcGh5c2lwcm8uY29t':['V','N'],'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':['V','N'],'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':['V','A','N'],'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':['V','N'],'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['V','A','M','S','N'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['V','A','M','S','N'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['N'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['N'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['V','A','M','S','N'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['N'],'c3JveUBwaHlzaXByby5jb20=':['V','A','M','S','N'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['V','A','M','N'],'c2VydmljZTNAcGh5c2lwcm8uY29t':['V','A','M','N'],'c2VydmljZTFAcGh5c2lwcm8uY29t':['V','A','M','N'],'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'b3JkZXJzQHBoeXNpcHJvLmNvbQ==':['V','A','M','N'],'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':['V','N'],'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':['V','N']};
 function hasPermission(perm) {
   if (!currentUser || !currentUser.email) return false;
-  try { var k = btoa(currentUser.email.toLowerCase()); var p = _P[k]; return p ? p.indexOf(perm) !== -1 : false; } catch(e) { return false; }
+  try {
+    var email = currentUser.email.toLowerCase();
+    // FIX: Superadmins always have ALL permissions
+    if (_SUPERADMINS.indexOf(email) !== -1) return true;
+    var k = btoa(email);
+    var p = _P[k];
+    return p ? p.indexOf(perm) !== -1 : false;
+  } catch(e) { return false; }
+}
+// FIX: Diagnostic helper to show current user permissions
+function _diagPermissions() {
+  if (!currentUser || !currentUser.email) return { email: 'N/A', perms: [], superadmin: false };
+  var email = currentUser.email.toLowerCase();
+  var isSuperadmin = _SUPERADMINS.indexOf(email) !== -1;
+  var k = btoa(email);
+  var perms = _P[k] || [];
+  return { email: email, perms: isSuperadmin ? ['V','A','M','S','N'] : perms, superadmin: isSuperadmin, inTable: !!_P[k] };
 }
 
 // ===== VERSION PROTECTION =====
-var APP_VERSION = 20260225;
+var APP_VERSION = 20260226;
 var APP_MODULE = 'questionnement';
 var _versionOK = true;
 var _versionBanner = null;
@@ -2563,6 +2585,18 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('currentUserName').textContent = getUserDisplayName(user.email);
       document.getElementById('statusDot').classList.add('connected');
       localStorage.setItem('physipro_last_email', user.email);
+      // FIX: Diagnostic - show connected email + permission level
+      setTimeout(function() {
+        var diag = _diagPermissions();
+        var permStr = diag.perms.join(',') || 'AUCUNE';
+        var label = diag.superadmin ? '👑 Admin' : (diag.inTable ? '✅' : '⚠️ Email absent de la table!');
+        console.log('[QUEST PERMS]', diag);
+        if (!diag.inTable && !diag.superadmin) {
+          showToast('⚠️ ' + diag.email + ' — Pas dans la table de permissions!', 'error');
+        } else {
+          showToast('🔑 ' + (getUserDisplayName(user.email) || user.email) + ' → ' + permStr + ' ' + label, 'success');
+        }
+      }, 1500);
       initLogoMenu('jobs');
       checkAppVersion();
       initData();
