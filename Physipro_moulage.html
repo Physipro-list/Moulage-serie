@@ -1982,7 +1982,7 @@
     .notif-item-card { font-size: 11px; color: #60a5fa; font-weight: 600; }
     .notif-item-arrow { float: right; color: #60a5fa; font-size: 14px; }
     .notif-empty { padding: 40px; text-align: center; color: #6b7280; font-size: 13px; }
-    .notif-popup-footer { padding: 12px 16px; background: #111827; border-top: 1px solid #374151; }
+    .notif-popup-footer { padding: 12px 16px; background: #111827; border-top: 1px solid #374151; display:flex; gap:8px; }
     .notif-mark-all { width: 100%; padding: 10px; background: transparent; border: 1px solid #374151; color: #9ca3af; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
     .notif-mark-all:hover { background: #374151; color: white; }
     
@@ -4040,7 +4040,7 @@
       <div class="notif-empty">Aucune notification</div>
     </div>
     <div class="notif-popup-footer">
-      <button class="notif-mark-all" onclick="markAllNotifsRead()">✓ Tout marquer comme lu</button>
+      <button class="notif-mark-all" onclick="markAllNotifsRead()" style="flex:1;">✓ Tout marquer lu</button><button class="notif-mark-all" onclick="clearAllNotifs()" style="flex:1;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);">🗑️ Tout effacer</button>
     </div>
   </div>
   
@@ -13845,13 +13845,16 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           const label = typeLabels[notif.messageType] || 'Message';
           
           html += `
-            <div class="notif-item unread" onclick="openNotifDetail(${idx})">
+            <div class="notif-item unread" style="position:relative;">
+              <button onclick="event.stopPropagation();deleteNotifItem(${idx})" style="position:absolute;top:6px;right:6px;width:20px;height:20px;background:rgba(239,68,68,0.2);border:none;border-radius:50%;color:#ef4444;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;" title="Supprimer">✕</button>
+              <div onclick="openNotifDetail(${idx})" style="cursor:pointer;">
               <div class="notif-item-header">
                 <span class="notif-item-from">${icon} ${notif.fromName || 'Utilisateur'}</span>
                 <span class="notif-item-time">${timeAgo}</span>
               </div>
               <div class="notif-item-content">${label}: ${(notif.messageContent || 'Nouveau message').substring(0, 60)}${(notif.messageContent || '').length > 60 ? '...' : ''}</div>
               <div class="notif-item-card">📋 ${notif.cardName || 'Moulage'} <span class="notif-item-arrow">→</span></div>
+              </div>
             </div>`;
         });
       }
@@ -13865,10 +13868,12 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           var srcName = PAGE_NAMES_NOTIF[msg.sourcePage] || msg.sourcePage || '';
           var time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}) : '';
           var typeIcons = {problem:'❓',normal:'💬',pinned:'📌'};
-          html += '<div class="notif-item unread" onclick="if(typeof XChat!==\'undefined\')XChat.openFromNotif(\'' + e[0] + '\')">' +
+          html += '<div class="notif-item unread" style="position:relative;">' +
+            '<button onclick="event.stopPropagation();if(typeof XChat!==\'undefined\')XChat.deleteMsg(\'' + e[0] + '\')" style="position:absolute;top:6px;right:6px;width:20px;height:20px;background:rgba(239,68,68,0.2);border:none;border-radius:50%;color:#ef4444;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;" title="Supprimer">✕</button>' +
+            '<div onclick="if(typeof XChat!==\'undefined\')XChat.openFromNotif(\'' + e[0] + '\')" style="cursor:pointer;">' +
             '<div class="notif-item-header"><span class="notif-item-from">' + (typeIcons[msg.type]||'💬') + ' ' + (msg.authorName||'Utilisateur') + '</span><span class="notif-item-time">' + time + '</span></div>' +
             '<div class="notif-item-content">' + ((msg.content||'').substring(0,60)) + ((msg.content||'').length>60?'...':'') + '</div>' +
-            '<div class="notif-item-card">📍 ' + srcName + '</div></div>';
+            '<div class="notif-item-card">📍 ' + srcName + '</div></div></div>';
         });
       }
       
@@ -13982,6 +13987,23 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     window.toggleNotifPopup = toggleNotifPopup;
     window.closeNotifPopup = closeNotifPopup;
     window.openNotifCard = openNotifCard;
+    function deleteNotifItem(idx) {
+      const notif = firebaseNotifications[idx];
+      if (!notif) return;
+      if (notif.firebaseKey && firebaseDb) {
+        firebaseDb.ref('moulageNotifications/' + notif.firebaseKey).update({ read: true });
+      }
+      firebaseNotifications.splice(idx, 1);
+      updateNotifBadge();
+      renderNotifPopup();
+    }
+    function clearAllNotifs() {
+      markAllNotifsRead();
+      if (typeof XChat !== 'undefined' && XChat.markAllRead) XChat.markAllRead();
+      renderNotifPopup();
+    }
+    window.deleteNotifItem = deleteNotifItem;
+    window.clearAllNotifs = clearAllNotifs;
     window.markAllNotifsRead = markAllNotifsRead;
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -16352,13 +16374,13 @@ var XChat=(function(){
     var id=e[0],msg=e[1],isMe=msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail;
     var srcName=PAGE_NAMES[msg.sourcePage]||msg.sourcePage||'';
     var labels={problem:'❓ Question',normal:'💬 Discussion',pinned:'📌 Épinglé'};
-    var del=isMe?'<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>':'';
+    var del='<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>';
     var ci='';if(msg.sourceCardName||msg.sourceCardId)ci='<div style="font-size:8px;color:#60a5fa;margin-top:1px;font-style:italic;">📋 '+esc(msg.sourceCardName||msg.sourceCardId)+'</div>';
     var dl='';if(msg.sourcePage&&msg.sourcePage!==PAGE_ID&&PAGE_URLS[msg.sourcePage]){var u=PAGE_URLS[msg.sourcePage];if(msg.sourceCardId)u+='?card='+encodeURIComponent(msg.sourceCardId);dl='<a style="display:inline-block;margin-top:4px;padding:2px 8px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:4px;color:#93c5fd;font-size:8px;font-weight:600;cursor:pointer;text-decoration:none;" href="'+u+'" target="_blank">🔗 Ouvrir dans '+esc(srcName)+'</a>';}
     return'<div class="xchat-msg '+typeClass+'">'+del+'<div class="xmsg-type">'+(labels[msg.type]||'💬 Discussion')+' <span class="xmsg-time">'+fmtTime(msg.timestamp)+'</span></div><div class="xmsg-author">'+esc(msg.authorName||'Utilisateur')+(isMe?' (moi)':'')+'</div><div class="xmsg-content">'+esc(msg.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(srcName)+'</div>'+ci+dl+'<div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+id+'\')">↩️ Répondre</button></div></div>';
   }
-  function renderQ(e,myEmail,hasR){var id=e[0],msg=e[1],isMe=msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail,srcName=PAGE_NAMES[msg.sourcePage]||'';var del=isMe?'<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>':'';return'<div class="xthread-question'+(hasR?' has-replies':'')+'">'+del+'<div class="xmsg-type">❓ Question <span class="xmsg-time" style="float:right;font-weight:400;color:#94a3b8;">'+fmtTime(msg.timestamp)+'</span></div><div class="xmsg-author">'+esc(msg.authorName||'')+(isMe?' (moi)':'')+'</div><div class="xmsg-content">'+esc(msg.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(srcName)+'</div><div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+id+'\')">↩️ Répondre</button></div></div>';}
-  function renderR(e,myEmail){var id=e[0],msg=e[1],isMe=msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail,srcName=PAGE_NAMES[msg.sourcePage]||'';var del=isMe?'<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>':'';return'<div class="xthread-discussion">'+del+'<div class="xmsg-type">↩️ Réponse <span style="float:right;font-weight:400;color:#94a3b8;font-size:8px;">'+fmtTime(msg.timestamp)+'</span></div><div class="xmsg-author">'+esc(msg.authorName||'')+(isMe?' (moi)':'')+'</div><div class="xmsg-content">'+esc(msg.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(srcName)+'</div><div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+(msg.threadId||id)+'\')">↩️ Répondre</button></div></div>';}
+  function renderQ(e,myEmail,hasR){var id=e[0],msg=e[1],isMe=msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail,srcName=PAGE_NAMES[msg.sourcePage]||'';var del='<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>';return'<div class="xthread-question'+(hasR?' has-replies':'')+'">'+del+'<div class="xmsg-type">❓ Question <span class="xmsg-time" style="float:right;font-weight:400;color:#94a3b8;">'+fmtTime(msg.timestamp)+'</span></div><div class="xmsg-author">'+esc(msg.authorName||'')+(isMe?' (moi)':'')+'</div><div class="xmsg-content">'+esc(msg.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(srcName)+'</div><div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+id+'\')">↩️ Répondre</button></div></div>';}
+  function renderR(e,myEmail){var id=e[0],msg=e[1],isMe=msg.authorEmail&&msg.authorEmail.toLowerCase()===myEmail,srcName=PAGE_NAMES[msg.sourcePage]||'';var del='<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>';return'<div class="xthread-discussion">'+del+'<div class="xmsg-type">↩️ Réponse <span style="float:right;font-weight:400;color:#94a3b8;font-size:8px;">'+fmtTime(msg.timestamp)+'</span></div><div class="xmsg-author">'+esc(msg.authorName||'')+(isMe?' (moi)':'')+'</div><div class="xmsg-content">'+esc(msg.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(srcName)+'</div><div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+(msg.threadId||id)+'\')">↩️ Répondre</button></div></div>';}
 
   function openCompose(type){composeType=type;replyToThread=null;var z=document.getElementById('xchatCompose'),t=document.getElementById('xchatComposeType'),a=document.getElementById('xchatComposeAuthor'),ta=document.getElementById('xchatComposeText');z.className='xchat-compose active';t.textContent='💬 DISCUSSION';var u=getUser();a.textContent=u?getUserName(u.email):'Utilisateur';ta.value='';ta.focus();}
   function closeCompose(){document.getElementById('xchatCompose').classList.remove('active');replyToThread=null;}
