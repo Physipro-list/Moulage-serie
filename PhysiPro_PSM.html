@@ -8468,6 +8468,10 @@ function deleteInlineImg(btn) {
   const wrapper = btn.closest('.psm-img-resize-wrapper');
   if (!wrapper) return;
   
+  // Determine which zone this image is in BEFORE removing it
+  var zone = wrapper.closest('.notes-split-text, .notes-split-right, .psm-textarea-lg');
+  var zoneId = zone ? zone.id : '';
+  
   // Clean up Firebase Storage if the image is a Storage URL
   var img = wrapper.querySelector('img');
   if (img && img.src && img.src.indexOf('firebasestorage') !== -1) {
@@ -8479,25 +8483,68 @@ function deleteInlineImg(btn) {
   if (next && next.nodeName === 'BR') next.remove();
   wrapper.remove();
   
-  // CRITICAL: Read DOM and save IMMEDIATELY (no debounce) — deletion must persist
-  if (currentCardId && psmData[currentCardId]) {
-    ['atelier', 'couture', 'metal'].forEach(function(dept) {
-      if (!psmData[currentCardId][dept]) return;
-      var rightEl = document.getElementById('notes' + capitalize(dept) + 'Right');
-      if (rightEl) psmData[currentCardId][dept].notesRightHtml = rightEl.innerHTML;
-      var nEl = document.getElementById('notes' + capitalize(dept));
-      if (nEl) {
-        psmData[currentCardId][dept].notesHtml = nEl.innerHTML;
-        psmData[currentCardId][dept].notes = nEl.innerText || '';
-      }
-      var qEl = document.getElementById('question' + capitalize(dept));
-      if (qEl) {
-        psmData[currentCardId][dept].questionHtml = qEl.innerHTML;
-        psmData[currentCardId][dept].question = qEl.innerText || '';
-      }
-    });
-    saveToFirebaseNow();
+  // CRITICAL: Write ONLY the affected field directly to Firebase (fast targeted write)
+  if (!currentCardId || !psmData[currentCardId] || !db) {
+    showToast('🗑️ Photo supprimée (local)', 'info');
+    return;
   }
+  
+  // Determine dept and field from the zone element ID
+  var updates = {};
+  var cardPath = 'psm/' + currentCardId;
+  
+  ['atelier', 'couture', 'metal'].forEach(function(dept) {
+    if (!psmData[currentCardId][dept]) psmData[currentCardId][dept] = {};
+    var data = psmData[currentCardId][dept];
+    
+    var rightEl = document.getElementById('notes' + capitalize(dept) + 'Right');
+    if (rightEl) {
+      var newHtml = rightEl.innerHTML;
+      if (data.notesRightHtml !== newHtml) {
+        data.notesRightHtml = newHtml;
+        updates[cardPath + '/' + dept + '/notesRightHtml'] = newHtml;
+      }
+    }
+    var nEl = document.getElementById('notes' + capitalize(dept));
+    if (nEl) {
+      var newNotesHtml = nEl.innerHTML;
+      if (data.notesHtml !== newNotesHtml) {
+        data.notesHtml = newNotesHtml;
+        data.notes = nEl.innerText || '';
+        updates[cardPath + '/' + dept + '/notesHtml'] = newNotesHtml;
+        updates[cardPath + '/' + dept + '/notes'] = data.notes;
+      }
+    }
+    var qEl = document.getElementById('question' + capitalize(dept));
+    if (qEl) {
+      var newQHtml = qEl.innerHTML;
+      if (data.questionHtml !== newQHtml) {
+        data.questionHtml = newQHtml;
+        data.question = qEl.innerText || '';
+        updates[cardPath + '/' + dept + '/questionHtml'] = newQHtml;
+        updates[cardPath + '/' + dept + '/question'] = data.question;
+      }
+    }
+  });
+  
+  updates[cardPath + '/_lastModifiedAt'] = new Date().toISOString();
+  updates[cardPath + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+  
+  if (Object.keys(updates).length > 0) {
+    _skipNextSync = true;
+    _pendingSave = true;
+    db.ref().update(updates).then(function() {
+      _skipNextSync = false;
+      _pendingSave = false;
+      console.log('PSM: image deletion saved to Firebase (' + Object.keys(updates).length + ' fields)');
+    }).catch(function(e) {
+      _skipNextSync = false;
+      _pendingSave = false;
+      console.error('PSM: image deletion save error:', e);
+      showToast('❌ Erreur sauvegarde suppression: ' + (e.message || ''), 'error');
+    });
+  }
+  
   showToast('🗑️ Photo supprimée', 'info');
 }
 
@@ -8602,7 +8649,25 @@ function removeDevisFromViewer(idx) {
   
   images.splice(idx, 1);
   psmData[currentCardId].devisImages = images;
-  saveToFirebaseNow(); // CRITICAL: deletion must persist immediately
+  
+  // TARGETED write — only the devisImages array, not all cards
+  _skipNextSync = true;
+  _pendingSave = true;
+  var updates = {};
+  updates['psm/' + currentCardId + '/devisImages'] = images.length > 0 ? images : null;
+  updates['psm/' + currentCardId + '/_lastModifiedAt'] = new Date().toISOString();
+  updates['psm/' + currentCardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+  db.ref().update(updates).then(function() {
+    _skipNextSync = false;
+    _pendingSave = false;
+    console.log('PSM: devis image deletion saved');
+  }).catch(function(e) {
+    _skipNextSync = false;
+    _pendingSave = false;
+    console.error('PSM: devis delete error:', e);
+    showToast('❌ Erreur suppression: ' + (e.message || ''), 'error');
+  });
+  
   renderCards();
   
   if (images.length === 0) {
