@@ -3634,7 +3634,7 @@ if(localStorage.getItem('physipro_last_email')){
               <button class="psm-type-btn" id="headerPrixBtn" onclick="togglePsmTypeFromHeader('prix')">Prix majoré</button>
             </span>
             <span class="header-sep"></span>
-            <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;color:#94a3b8;">⏱️ <input type="text" class="psm-temps-input" id="headerTempsInput" placeholder="min" style="width:50px;" onblur="saveCurrentCard()"></span>
+            <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;color:#94a3b8;">⏱️ <input type="text" class="psm-temps-input" id="headerTempsInput" placeholder="min" style="width:50px;"></span>
             <button class="psm-print-btn-sm" onclick="printPSM()" style="margin-left:auto;">🖨️ Imprimer</button>
             <button class="dept-switch-btn switch-complete" id="btnCompleteActive" onclick="toggleComplete(currentDept)">☐ Compléter</button>
           </div>
@@ -3677,11 +3677,11 @@ if(localStorage.getItem('physipro_last_email')){
             <div class="psm-notes-panel active" id="notesPanel_atelier">
               <div class="notes-zone">
                 <div class="notes-split-container" id="notesSplit_atelier">
-                  <div class="notes-split-text" contenteditable="true" id="notesAtelier" data-placeholder="📷 Coller ou glisser des images ici..." onblur="saveCurrentCard()"></div>
+                  <div class="notes-split-text" contenteditable="true" id="notesAtelier" data-placeholder="📷 Coller ou glisser des images ici..."></div>
                   <div class="notes-split-divider" data-split="atelier" onmousedown="startSplitDrag(event,'atelier')"></div>
                   <div class="notes-toolbar-wrap">
 
-                    <div class="notes-split-right" contenteditable="true" id="notesAtelierRight" data-placeholder="Instructions et notes..." onblur="saveCurrentCard()"></div>
+                    <div class="notes-split-right" contenteditable="true" id="notesAtelierRight" data-placeholder="Instructions et notes..."></div>
                   </div>
                   <div class="notes-pair-rows" id="pairRows_atelier"></div>
                 </div>
@@ -3690,11 +3690,11 @@ if(localStorage.getItem('physipro_last_email')){
             <div class="psm-notes-panel" id="notesPanel_couture">
               <div class="notes-zone">
                 <div class="notes-split-container" id="notesSplit_couture">
-                  <div class="notes-split-text" contenteditable="true" id="notesCouture" data-placeholder="📷 Coller ou glisser des images ici..." onblur="saveCurrentCard()"></div>
+                  <div class="notes-split-text" contenteditable="true" id="notesCouture" data-placeholder="📷 Coller ou glisser des images ici..."></div>
                   <div class="notes-split-divider" data-split="couture" onmousedown="startSplitDrag(event,'couture')"></div>
                   <div class="notes-toolbar-wrap">
 
-                    <div class="notes-split-right" contenteditable="true" id="notesCoutureRight" data-placeholder="Instructions et notes..." onblur="saveCurrentCard()"></div>
+                    <div class="notes-split-right" contenteditable="true" id="notesCoutureRight" data-placeholder="Instructions et notes..."></div>
                   </div>
                   <div class="notes-pair-rows" id="pairRows_couture"></div>
                 </div>
@@ -3703,11 +3703,11 @@ if(localStorage.getItem('physipro_last_email')){
             <div class="psm-notes-panel" id="notesPanel_metal">
               <div class="notes-zone">
                 <div class="notes-split-container" id="notesSplit_metal">
-                  <div class="notes-split-text" contenteditable="true" id="notesMetal" data-placeholder="📷 Coller ou glisser des images ici..." onblur="saveCurrentCard()"></div>
+                  <div class="notes-split-text" contenteditable="true" id="notesMetal" data-placeholder="📷 Coller ou glisser des images ici..."></div>
                   <div class="notes-split-divider" data-split="metal" onmousedown="startSplitDrag(event,'metal')"></div>
                   <div class="notes-toolbar-wrap">
 
-                    <div class="notes-split-right" contenteditable="true" id="notesMetalRight" data-placeholder="Instructions et notes..." onblur="saveCurrentCard()"></div>
+                    <div class="notes-split-right" contenteditable="true" id="notesMetalRight" data-placeholder="Instructions et notes..."></div>
                   </div>
                   <div class="notes-pair-rows" id="pairRows_metal"></div>
                 </div>
@@ -4036,7 +4036,7 @@ function hasPermission(perm) {
 }
 
 // ===== VERSION PROTECTION =====
-var APP_VERSION = 20260220;
+var APP_VERSION = 20260226;
 var APP_MODULE = 'psm';
 var _versionOK = true;
 var _versionBanner = null;
@@ -4985,25 +4985,114 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Auto-save on blur for textareas and inputs
   document.querySelectorAll('.psm-textarea-lg, .psm-temps-input').forEach(el => {
-    el.addEventListener('blur', saveCurrentCard);
+    el.addEventListener('blur', function() { window._markDirty(); saveCurrentCard(); });
   });
   document.querySelectorAll('.psm-eval-select').forEach(el => {
-    el.addEventListener('change', saveCurrentCard);
+    el.addEventListener('change', function() { window._markDirty(); saveCurrentCard(); });
   });
   
-  // CRITICAL FIX: Auto-save on input (debounced) for contenteditable notes fields.
-  // This ensures changes are flushed to psmData frequently, not just on blur.
-  // Without this, Firebase on('value') events can wipe out unsaved notes.
-  var _notesInputTimer = null;
-  function _debouncedNotesSave() {
-    if (_notesInputTimer) clearTimeout(_notesInputTimer);
-    _notesInputTimer = setTimeout(function() {
+  // ═══ ROBUST SAVE ENGINE v4 — FAST SAVE (250ms total) + multiple safety nets ═══
+  // Total latency: 150ms (input debounce) + 100ms (Firebase debounce) = 250ms
+  // Blur = INSTANT save (0ms). visibilitychange = INSTANT save.
+  // Auto-save every 2s as safety net. beforeunload = emergency synchronous save.
+  window._notesInputTimer = null;
+  window._dirty = false; // TRUE = user has unsaved DOM changes
+  window._dirtyCardId = null; // Which card has the dirty changes
+  window._loadingCard = false; // TRUE while loadCard is writing to DOM — suppresses input/blur handlers
+  window._lastSaveTime = 0; // Timestamp of last successful save
+  
+  // GLOBAL functions — must be accessible outside DOMContentLoaded
+  window._markDirty = function() {
+    if (window._loadingCard) return; // Suppress false dirty flags from loadCard innerHTML writes
+    window._dirty = true;
+    window._dirtyCardId = currentCardId;
+    _pendingSave = true; // Block Firebase sync immediately
+  };
+  
+  window._debouncedNotesSave = function() {
+    if (window._loadingCard) return; // Suppress false saves from loadCard
+    window._markDirty();
+    if (window._notesInputTimer) clearTimeout(window._notesInputTimer);
+    window._notesInputTimer = setTimeout(function() {
+      window._notesInputTimer = null;
+      if (window._loadingCard) return; // Double-check guard
+      _flushDomToData();
+      saveToFirebase(); // 100ms debounce inside
+    }, 150); // Flush 150ms after last keystroke (was 500ms — now 3x faster)
+  };
+  
+  // On blur: IMMEDIATE save (no debounce) — this is the most reliable trigger
+  window._immediateNoteSave = function() {
+    if (window._loadingCard) return; // Suppress false saves from loadCard
+    window._markDirty();
+    // Cancel any pending debounce — we're saving NOW
+    if (window._notesInputTimer) { clearTimeout(window._notesInputTimer); window._notesInputTimer = null; }
+    _flushDomToData();
+    saveToFirebaseNow(); // Bypasses debounce entirely
+  };
+  
+  // EMERGENCY SAVE — used by beforeunload and visibilitychange
+  // Cancels all pending timers and forces immediate write
+  window._emergencySave = function() {
+    if (!window._dirty && !_pendingSave) return;
+    if (!currentCardId || !psmData[currentCardId]) return;
+    // Cancel ALL pending timers
+    if (window._notesInputTimer) { clearTimeout(window._notesInputTimer); window._notesInputTimer = null; }
+    if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+    // Flush DOM to data
+    _flushDomToData();
+    // Direct Firebase write — no debounce, no timer
+    try {
+      var updates = {};
+      updates['psm/' + currentCardId] = psmData[currentCardId];
+      updates['psm/' + currentCardId + '/_lastModifiedAt'] = new Date().toISOString();
+      updates['psm/' + currentCardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+      _skipSyncUntil = Date.now() + 2000;
+      db.ref().update(updates).then(function() {
+        _pendingSave = false;
+        window._dirty = false;
+        window._dirtyCardId = null;
+        console.log('✅ [PSM] Emergency save OK for ' + currentCardId);
+      });
+      console.log('🚨 [PSM] Emergency save fired for ' + currentCardId);
+    } catch(err) {
+      console.error('Emergency save error:', err);
+    }
+  };
+  
+  document.querySelectorAll('.notes-split-text, .notes-split-right, .psm-textarea-lg').forEach(function(el) {
+    el.addEventListener('input', window._debouncedNotesSave);
+    // CRITICAL: blur = immediate save, not debounced
+    el.removeAttribute('onblur'); // Remove HTML onblur to avoid double-fire
+    el.addEventListener('blur', window._immediateNoteSave);
+  });
+  
+  // ═══ PERIODIC AUTO-SAVE (safety net every 2s) ═══
+  setInterval(function() {
+    if (window._loadingCard) return; // Don't auto-save while loadCard is writing
+    if (window._dirty && currentCardId && psmData[currentCardId]) {
+      console.log('🔄 [PSM] Auto-save safety net — flushing dirty card ' + currentCardId);
       _flushDomToData();
       saveToFirebase();
-    }, 1500); // Save 1.5s after user stops typing
-  }
-  document.querySelectorAll('.notes-split-text, .notes-split-right, .psm-textarea-lg').forEach(function(el) {
-    el.addEventListener('input', _debouncedNotesSave);
+    }
+  }, 2000);
+  
+  // ═══ VISIBILITYCHANGE — Save when user switches tabs/minimizes ═══
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'hidden') {
+      window._emergencySave();
+    }
+  });
+  
+  // ═══ BEFOREUNLOAD — Last resort save on page close/refresh ═══
+  window.addEventListener('beforeunload', function(e) {
+    // Always flush and attempt save, regardless of _dirty flag
+    window._emergencySave();
+    if (window._dirty || _pendingSave) {
+      e.preventDefault();
+      e.returnValue = 'Des changements non sauvegardés peuvent être perdus.';
+      return e.returnValue;
+    }
   });
   
   // ═══ LEFT PANEL (Photos/Images) — IMAGE ONLY, NO TEXT ═══
@@ -5040,7 +5129,8 @@ document.addEventListener('DOMContentLoaded', function() {
             img.style.cursor = 'pointer';
             img.onclick = function() { openLightbox(this.src); };
             el.appendChild(img);
-            _debouncedNotesSave();
+            window._markDirty();
+            window._debouncedNotesSave();
           };
           reader.readAsDataURL(blob);
           break;
@@ -5053,20 +5143,31 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     // Strip any raw text that might get typed (safety net for input event)
     el.addEventListener('input', function() {
+      if (window._loadingCard) return; // Don't clean up during loadCard
       // Remove any text nodes that aren't inside images
       var childNodes = Array.from(el.childNodes);
+      var cleaned = false;
       childNodes.forEach(function(node) {
         if (node.nodeType === 3 && node.textContent.trim() !== '') {
           // Text node — remove it
           node.textContent = '';
+          cleaned = true;
         }
         if (node.nodeType === 1 && node.tagName !== 'IMG' && node.tagName !== 'BR' && node.tagName !== 'DIV') {
           // If it's an element but not img/br/div, check if it contains an img
           if (!node.querySelector('img')) {
             node.remove();
+            cleaned = true;
           }
         }
       });
+      // CRITICAL FIX: If we cleaned anything, ensure it gets saved
+      // The general input handler already started a debounced save, but the cleanup
+      // may have changed the DOM AFTER that handler read it. Force a new save cycle.
+      if (cleaned) {
+        window._markDirty();
+        window._debouncedNotesSave();
+      }
     });
   });
   
@@ -5314,8 +5415,12 @@ var currentDept = 'atelier';
 function switchDept(dept) {
   // CRITICAL FIX: Flush current DOM state before switching department
   if (currentCardId && psmData[currentCardId]) {
+    // Cancel any pending debounced notes save — we flush NOW
+    if (window._notesInputTimer) { clearTimeout(window._notesInputTimer); window._notesInputTimer = null; }
     _flushDomToData();
-    saveToFirebase();
+    saveToFirebaseNow(); // IMMEDIATE save on dept switch
+    window._dirty = false;
+    window._dirtyCardId = null;
   }
   
   currentDept = dept;
@@ -6070,47 +6175,85 @@ function initPSM() {
     _skipSyncUntil = 0;
     
     // CRITICAL: Don't overwrite local changes that haven't been saved to Firebase yet
-    if (_pendingSave) {
-      console.log('PSM: skipping remote sync — local save pending');
+    // Check BOTH _pendingSave (write in progress) AND _dirty (user has unsaved edits in DOM)
+    if (_pendingSave || window._dirty) {
+      console.log('PSM: skipping remote sync — ' + (_pendingSave ? 'save pending' : 'dirty DOM edits'));
       return;
     }
     
-    // CRITICAL FIX: Before overwriting psmData, flush any unsaved DOM changes into psmData.
-    // Then after loading remote data, merge back the local DOM state for the current card.
+    // Don't interfere if loadCard is currently writing to DOM
+    if (window._loadingCard) { return; }
+    
+    // CRITICAL FIX: Capture current card's DOM state BEFORE any replacement.
+    // We save this into a separate variable so it survives psmData = remoteData.
     var localCardSnapshot = null;
     if (currentCardId && psmData[currentCardId]) {
       _flushDomToData();
-      // Snapshot the local card data (deep copy) so we can detect if remote differs
-      localCardSnapshot = JSON.parse(JSON.stringify(psmData[currentCardId]));
+      // Deep-clone the current card's data so it's not lost when psmData is replaced
+      try { localCardSnapshot = JSON.parse(JSON.stringify(psmData[currentCardId])); } catch(e) {}
     }
     
     var remoteData = snap.val() || {};
     
-    // If we had local unsaved DOM changes, merge them back for the current card.
-    // This prevents notes/images from being wiped out by a remote sync triggered by
-    // another user's write to a DIFFERENT card.
-    if (localCardSnapshot && currentCardId && remoteData[currentCardId]) {
-      var remoteCopy = remoteData[currentCardId];
+    // Check if the CURRENT card's data actually changed on the remote side
+    var needReload = false;
+    if (currentCardId && localCardSnapshot) {
+      if (!remoteData[currentCardId]) {
+        needReload = true; // Card deleted remotely
+      } else {
+        var remote = remoteData[currentCardId];
+        ['atelier', 'couture', 'metal'].forEach(function(dept) {
+          var ld = localCardSnapshot[dept] || {};
+          var rd = remote[dept] || {};
+          // Check if content fields changed remotely (another user edited THIS card)
+          if (ld.notesHtml !== rd.notesHtml || 
+              ld.notesRightHtml !== rd.notesRightHtml ||
+              ld.questionHtml !== rd.questionHtml ||
+              ld.complete !== rd.complete ||
+              ld.temps !== rd.temps ||
+              ld.evalBy !== rd.evalBy ||
+              ld.psm !== rd.psm) {
+            needReload = true;
+          }
+        });
+        // Check card-level fields
+        if (localCardSnapshot.name !== remote.name || localCardSnapshot.order !== remote.order ||
+            localCardSnapshot.questionnementSent !== remote.questionnementSent ||
+            localCardSnapshot.questionnementResolved !== remote.questionnementResolved) {
+          needReload = true;
+        }
+      }
+    } else if (currentCardId && !localCardSnapshot && remoteData[currentCardId]) {
+      needReload = true; // Card appeared remotely
+    }
+    
+    // Replace psmData with remote data for card list, counts, etc.
+    psmData = remoteData;
+    
+    // CRITICAL FIX: If we had local DOM data for the current card and the remote data
+    // didn't change for that card, MERGE local DOM state back into psmData.
+    // This prevents the _flushDomToData data from being lost by the replacement.
+    if (currentCardId && localCardSnapshot && psmData[currentCardId] && !needReload) {
+      // Remote didn't change our card's content — keep local DOM state authoritative
       ['atelier', 'couture', 'metal'].forEach(function(dept) {
-        var localDept = localCardSnapshot[dept];
-        var remoteDept = remoteCopy[dept];
-        if (!localDept) return;
-        if (!remoteDept) remoteDept = remoteCopy[dept] = {};
-        // Preserve local notes if they differ from remote (user was editing)
-        if (localDept.notesHtml !== undefined) remoteDept.notesHtml = localDept.notesHtml;
-        if (localDept.notes !== undefined) remoteDept.notes = localDept.notes;
-        if (localDept.notesRightHtml !== undefined) remoteDept.notesRightHtml = localDept.notesRightHtml;
-        if (localDept.questionHtml !== undefined) remoteDept.questionHtml = localDept.questionHtml;
-        if (localDept.question !== undefined) remoteDept.question = localDept.question;
-        // Preserve local materials (user may have added/removed)
-        if (localDept.materiaux !== undefined) remoteDept.materiaux = localDept.materiaux;
-        // Preserve temps, evalBy, complete, psm/prixMajore
-        if (localDept.temps !== undefined) remoteDept.temps = localDept.temps;
-        if (localDept.evalBy !== undefined) remoteDept.evalBy = localDept.evalBy;
+        if (localCardSnapshot[dept]) {
+          if (!psmData[currentCardId][dept]) psmData[currentCardId][dept] = {};
+          // Merge content fields from local snapshot (DOM is source of truth for current card)
+          psmData[currentCardId][dept].notesHtml = localCardSnapshot[dept].notesHtml;
+          psmData[currentCardId][dept].notes = localCardSnapshot[dept].notes;
+          psmData[currentCardId][dept].notesRightHtml = localCardSnapshot[dept].notesRightHtml;
+          psmData[currentCardId][dept].questionHtml = localCardSnapshot[dept].questionHtml;
+          psmData[currentCardId][dept].question = localCardSnapshot[dept].question;
+          psmData[currentCardId][dept].hasQuestion = localCardSnapshot[dept].hasQuestion;
+          psmData[currentCardId][dept].evalBy = localCardSnapshot[dept].evalBy;
+          psmData[currentCardId][dept].temps = localCardSnapshot[dept].temps;
+          psmData[currentCardId][dept].psm = localCardSnapshot[dept].psm;
+          psmData[currentCardId][dept].prixMajore = localCardSnapshot[dept].prixMajore;
+          psmData[currentCardId][dept].complete = localCardSnapshot[dept].complete;
+        }
       });
     }
     
-    psmData = remoteData;
     renderCards();
     
     // Deep link: check URL for ?card=XXX on first load
@@ -6128,7 +6271,11 @@ function initPSM() {
     }
     
     if (currentCardId && psmData[currentCardId]) {
-      loadCard(currentCardId);
+      // Only reload DOM if the current card's data actually changed on the server
+      if (needReload) {
+        console.log('PSM: remote data changed for current card — reloading');
+        loadCard(currentCardId);
+      }
     } else {
       const firstId = Object.keys(psmData)[0];
       if (firstId) {
@@ -6701,6 +6848,11 @@ function saveEditCard() {
   var name = document.getElementById('editCardName').value.trim();
   var order = document.getElementById('editCardOrder').value.trim();
   if (!name) { showToast('Nom requis', 'error'); return; }
+  // CRITICAL: Flush notes from DOM before saving, so metadata save includes notes
+  if (_editCardId === currentCardId) {
+    if (window._notesInputTimer) { clearTimeout(window._notesInputTimer); window._notesInputTimer = null; }
+    _flushDomToData();
+  }
   psmData[_editCardId].name = name;
   psmData[_editCardId].order = order;
   saveToFirebaseNow();
@@ -6808,11 +6960,17 @@ function toggleCardDeptInclusion(cardId, dept) {
     });
   }
   
+  // CRITICAL: Flush notes DOM before saving, so dept inclusion save includes notes
+  if (cardId === currentCardId) {
+    if (window._notesInputTimer) { clearTimeout(window._notesInputTimer); window._notesInputTimer = null; }
+    _flushDomToData();
+  }
   saveToFirebaseNow(); // Dept inclusion change must persist immediately
   renderCards();
   
   // Reload the card details so all Compléter buttons reflect the change
   if (cardId === currentCardId) {
+    // Flush DOM notes into psmData first (they're already flushed above via saveToFirebaseNow path)
     loadCard(cardId);
   }
 }
@@ -6824,8 +6982,12 @@ function selectCard(id) {
   
   // CRITICAL FIX: Save current card's DOM state before switching to another card
   if (currentCardId && currentCardId !== id && psmData[currentCardId]) {
+    // Cancel any pending debounced notes save — we flush NOW
+    if (window._notesInputTimer) { clearTimeout(window._notesInputTimer); window._notesInputTimer = null; }
     _flushDomToData();
-    saveToFirebase();
+    saveToFirebaseNow(); // IMMEDIATE save — don't risk debounce losing data
+    window._dirty = false;
+    window._dirtyCardId = null;
   }
   
   currentCardId = id;
@@ -6963,11 +7125,31 @@ function loadCard(id) {
   const card = psmData[id];
   if (!card) return;
   
+  // CRITICAL: Suppress input/blur handlers while we write to DOM
+  // Setting innerHTML on contenteditable triggers input events in some browsers,
+  // which would mark dirty and start false save cycles.
+  window._loadingCard = true;
+  
   // Update info bar
   const infoEl = document.getElementById('detailCardInfo');
   if(infoEl) infoEl.textContent = (card.name||'Patient') + '  —  #' + (card.order||'---');
   
-  // Départements
+  // CRITICAL FIX: Clear ALL department fields FIRST to prevent cross-card contamination
+  // Then load the new card's data. This ensures no stale data from a previous card survives.
+  ['atelier', 'couture', 'metal'].forEach(dept => {
+    const qEl = document.getElementById('question' + capitalize(dept));
+    const nEl = document.getElementById('notes' + capitalize(dept));
+    const nElDevis = document.getElementById('notes' + capitalize(dept) + 'Devis');
+    const rightEl = document.getElementById('notes' + capitalize(dept) + 'Right');
+    const evalEl = document.getElementById('eval' + capitalize(dept));
+    if (qEl) qEl.innerHTML = '';
+    if (nEl) nEl.innerHTML = '';
+    if (nElDevis) nElDevis.innerHTML = '';
+    if (rightEl) rightEl.innerHTML = '';
+    if (evalEl) evalEl.value = '';
+  });
+  
+  // Départements — load new card data
   ['atelier', 'couture', 'metal'].forEach(dept => {
     const data = card[dept] || {};
     
@@ -7041,6 +7223,11 @@ function loadCard(id) {
     renderPsmPhotos(dept, 'question', data.photosQuestion || []);
     renderPsmPhotos(dept, 'notes', data.photosNotes || []);
   });
+  
+  // CRITICAL: Release the guard — DOM writes are complete.
+  // Use setTimeout(0) to ensure all browser-triggered input events from innerHTML
+  // assignments are processed BEFORE we allow saves again.
+  setTimeout(function() { window._loadingCard = false; }, 0);
 }
 
 // ═══ MATERIALS (per department) ═══
@@ -7372,6 +7559,7 @@ function saveCurrentCard() {
   if (!hasPermission('M')) { showToast('🔒 Permission insuffisante (Modifier)', 'error'); return; }
   if (writeBlocked()) return;
   if (!currentCardId || !psmData[currentCardId]) return;
+  window._markDirty();
   var isDevisMode = document.body.classList.contains('devis-open');
   
   ['atelier', 'couture', 'metal'].forEach(dept => {
@@ -7604,9 +7792,9 @@ var _saveTimer = null;
 function saveToFirebase() {
   if (writeBlocked(true)) return;
   _pendingSave = true; // Protect local data from being overwritten by Firebase sync
-  // Debounce: batch rapid saves into one write (300ms)
+  // Debounce: batch rapid saves into one write (100ms — fast!)
   if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(_doSaveToFirebase, 300);
+  _saveTimer = setTimeout(_doSaveToFirebase, 100);
 }
 
 // IMMEDIATE save — bypasses debounce for critical operations (deletions, card creation)
@@ -7652,8 +7840,17 @@ function _doSaveToFirebase() {
   _skipSyncUntil = Date.now() + 2000;
   db.ref().update(updates).then(function() {
     _pendingSave = false;
+    window._dirty = false;
+    window._dirtyCardId = null;
     _psmRetryCount = 0;
-    console.log('PSM: saved to Firebase OK (' + Object.keys(psmData).length + ' cards)');
+    console.log('✅ [PSM] Saved to Firebase (' + Object.keys(psmData).length + ' cards)');
+    // Visual save indicator — brief green flash on the detail panel header
+    var infoEl = document.getElementById('detailCardInfo');
+    if (infoEl) {
+      infoEl.style.transition = 'color 0.3s';
+      infoEl.style.color = '#22c55e';
+      setTimeout(function() { infoEl.style.color = ''; }, 800);
+    }
   }).catch(function(e) { 
     console.error('PSM save error:', e);
     _psmRetryCount++;
@@ -7663,15 +7860,26 @@ function _doSaveToFirebase() {
       setTimeout(function() { _doSaveToFirebase(); }, delay);
     } else {
       _skipSyncUntil = 0;
-      _pendingSave = false;
+      // CRITICAL FIX: Do NOT clear _dirty on failure!
+      // Keep _pendingSave true so on('value') doesn't overwrite local changes.
+      // The user's data is still in psmData and in the DOM — don't let Firebase erase it.
+      // _pendingSave stays true → on('value') will skip → data is safe
+      // We schedule a retry in 10 seconds as a last resort
       _psmRetryCount = 0;
       if (e.message && e.message.indexOf('size') !== -1) {
         showToast('❌ ERREUR: Données trop volumineuses! Supprimez des fichiers.', 'error');
       } else if (e.code === 'PERMISSION_DENIED') {
         showToast('❌ ERREUR: Permission refusée par Firebase. Contactez l\'administrateur.', 'error');
       } else {
-        showToast('❌ Erreur de sauvegarde: ' + (e.message || e.code || 'inconnu'), 'error');
+        showToast('❌ Erreur de sauvegarde — nouvelle tentative dans 10s...', 'error');
       }
+      // Last-resort retry after 10 seconds
+      setTimeout(function() {
+        if (_pendingSave) {
+          console.log('🔄 [PSM] Last-resort retry after total failure');
+          _doSaveToFirebase();
+        }
+      }, 10000);
     }
   });
 }
@@ -7691,14 +7899,18 @@ function saveCardToFirebase(cardId) {
     updates['psm/' + cardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
     db.ref().update(updates).then(function() {
       _pendingSave = false;
+      window._dirty = false;
+      window._dirtyCardId = null;
       console.log('✅ [PSM] Card ' + cardId + ' saved');
     }).catch(function(e) {
       _skipSyncUntil = 0;
-      _pendingSave = false;
+      // CRITICAL FIX: Don't clear _dirty on failure — keep data protected
+      // _pendingSave stays true so on('value') doesn't overwrite
       console.error('PSM card save error:', e);
-      saveToFirebase(); // Fallback to full save
+      // Fallback to full save (which has its own retry logic)
+      saveToFirebase();
     });
-  }, 300);
+  }, 100);
 }
 
 // ═══ SEND PSM + NOTIFICATIONS ═══
@@ -8857,12 +9069,15 @@ function deleteInlineImg(btn) {
     _pendingSave = true;
     db.ref().update(updates).then(function() {
       _pendingSave = false;
-      console.log('PSM: image deletion saved to Firebase (' + Object.keys(updates).length + ' fields)');
+      window._dirty = false;
+      window._dirtyCardId = null;
+      console.log('✅ [PSM] Image deletion saved (' + Object.keys(updates).length + ' fields)');
     }).catch(function(e) {
       _skipSyncUntil = 0;
-      _pendingSave = false;
+      // Don't clear _dirty/_pendingSave on failure — keep data protected
       console.error('PSM: image deletion save error:', e);
-      showToast('❌ Erreur sauvegarde suppression: ' + (e.message || ''), 'error');
+      showToast('❌ Erreur sauvegarde suppression — retentative...', 'error');
+      saveToFirebase(); // Fallback retry
     });
   }
   
@@ -8877,6 +9092,14 @@ var devisViewerIdx = 0; // current image index being viewed
 
 function openDevisViewer(id) {
   if (id) {
+    // CRITICAL: Flush current card's DOM before switching
+    if (currentCardId && currentCardId !== id && psmData[currentCardId]) {
+      if (window._notesInputTimer) { clearTimeout(window._notesInputTimer); window._notesInputTimer = null; }
+      _flushDomToData();
+      saveToFirebaseNow();
+      window._dirty = false;
+      window._dirtyCardId = null;
+    }
     currentCardId = id;
     document.getElementById('noSelection').style.display = 'none';
     var dc = document.getElementById('detailsContent');
@@ -9270,6 +9493,14 @@ function zoomMagnifier(e) {
 // ═══ FICHE OVERLAY ═══
 function openFicheOverlay(id) {
   if (id) {
+    // CRITICAL: Flush current card's DOM before switching
+    if (currentCardId && currentCardId !== id && psmData[currentCardId]) {
+      if (window._notesInputTimer) { clearTimeout(window._notesInputTimer); window._notesInputTimer = null; }
+      _flushDomToData();
+      saveToFirebaseNow();
+      window._dirty = false;
+      window._dirtyCardId = null;
+    }
     currentCardId = id;
     loadCard(id);
     renderCards();
@@ -9363,6 +9594,9 @@ function saveFicheEdit() {
   var name = document.getElementById('ficheEditName').value.trim();
   var order = document.getElementById('ficheEditOrder').value.trim();
   if (!name) { showToast('⚠️ Nom requis', 'error'); return; }
+  // CRITICAL: Flush notes from DOM before saving, so metadata save includes notes
+  if (window._notesInputTimer) { clearTimeout(window._notesInputTimer); window._notesInputTimer = null; }
+  _flushDomToData();
   psmData[currentCardId].name = name;
   psmData[currentCardId].order = order;
   saveToFirebaseNow();
@@ -9635,16 +9869,8 @@ function psmCreateBackup() {
 }
 setInterval(function() { psmCreateBackup(); }, 30 * 60 * 1000);
 window.addEventListener('beforeunload', function() {
-  // CRITICAL: Flush unsaved DOM changes before page closes
-  _flushDomToData();
-  // CRITICAL: If there's a pending save, flush it immediately before page closes
-  if (_pendingSave && _saveTimer) {
-    clearTimeout(_saveTimer);
-    _doSaveToFirebase();
-  } else if (currentCardId && psmData[currentCardId]) {
-    // Even if no pending save, force one final save to capture any DOM changes
-    _doSaveToFirebase();
-  }
+  // _emergencySave handles: cancel timers, flush DOM, direct Firebase write
+  window._emergencySave();
   psmCreateBackup();
 });
 
