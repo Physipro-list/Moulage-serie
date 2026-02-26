@@ -1228,6 +1228,15 @@ body.devis-open .quest-devis-bar { display: none; }
 body.devis-open .questionnement-overlay { display: none; }
 body.devis-open .dept-form-main-devis { display: flex; }
 
+/* When devis is open: hide left window, let right window take full space */
+body.devis-open .psm-window-left { display: none; }
+body.devis-open .psm-window-right {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: 1;
+}
+
 /* Devis-mode notes area: hidden in normal mode */
 .dept-form-main-devis { display: none; }
 
@@ -1569,6 +1578,7 @@ body.devis-open .dept-form-main-devis { display: flex; }
 
 /* Left content container */
 .psm-left-content { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+.psm-pdf-view { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
 .psm-mat-view { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
 .psm-quest-view { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
 
@@ -3449,7 +3459,8 @@ if(localStorage.getItem('physipro_last_email')){
         <div class="psm-window-left">
           <div class="psm-window-header">
             <span class="psm-section-toggles" id="sectionToggles">
-              <label class="psm-section-toggle active" id="togMat"><input type="checkbox" checked onchange="toggleSection('mat')"> 🔧 Matériaux</label>
+              <label class="psm-section-toggle active" id="togPdf"><input type="checkbox" checked onchange="toggleSection('pdf')"> 📄 PDF</label>
+              <label class="psm-section-toggle" id="togMat"><input type="checkbox" onchange="toggleSection('mat')"> 🔧 Matériaux</label>
               <label class="psm-section-toggle" id="togQuest"><input type="checkbox" onchange="toggleSection('quest')"> 💬 Questionnement</label>
             </span>
           </div>
@@ -3457,8 +3468,24 @@ if(localStorage.getItem('physipro_last_email')){
             <!-- Mat/Quest content switches per department -->
             <div class="psm-left-content" id="leftContent">
               
+              <!-- PDF INLINE VIEW (default) -->
+              <div class="psm-pdf-view" id="pdfView" style="display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden;">
+                <div id="pdfInlineContent" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:0; overflow:hidden; background:#0a0f1a; position:relative;">
+                  <div id="pdfInlineEmpty" style="text-align:center; color:#64748b; font-size:11px; padding:20px;">
+                    📄 Aucun PDF associé à cette carte
+                  </div>
+                  <div id="pdfInlineFrame" style="display:none; position:absolute; inset:0;"></div>
+                  <!-- Thumbnail navigation for multiple files -->
+                  <div id="pdfInlineNav" style="display:none; position:absolute; bottom:0; left:0; right:0; align-items:center; justify-content:center; gap:4px; padding:3px 8px; background:rgba(0,0,0,0.7); flex-shrink:0; flex-wrap:wrap; z-index:5;"></div>
+                </div>
+                <div style="display:flex; gap:4px; padding:4px 6px; background:rgba(15,23,42,0.9); border-top:1px solid rgba(255,255,255,0.1); flex-shrink:0; align-items:center; justify-content:center;">
+                  <button onclick="openDevisViewerFromInline()" style="flex:1; display:flex; align-items:center; justify-content:center; gap:4px; padding:5px 10px; border-radius:6px; cursor:pointer; border:none; font-weight:600; transition:all 0.2s; background:linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; font-size:10px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">🔍 Agrandir PDF</button>
+                  <button onclick="clickToAddFileFromInline()" style="padding:5px 10px; border-radius:6px; cursor:pointer; border:none; font-weight:600; transition:all 0.2s; background:rgba(255,255,255,0.1); color:#fff; font-size:10px;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">📎 Ajouter</button>
+                </div>
+              </div>
+
               <!-- MATÉRIAUX VIEW -->
-              <div class="psm-mat-view" id="matView">
+              <div class="psm-mat-view" id="matView" style="display:none;">
                 <!-- Atelier materials -->
                 <div class="psm-dept-mat active" id="matAtelier">
                   <div class="dept-form-side">
@@ -5683,41 +5710,52 @@ function updateQuestPastille(dept) {
 function toggleSection(section) {
   var matView = document.getElementById('matView');
   var questView = document.getElementById('questView');
+  var pdfView = document.getElementById('pdfView');
   var togMat = document.getElementById('togMat');
   var togQuest = document.getElementById('togQuest');
+  var togPdf = document.getElementById('togPdf');
   var cardsCol = document.getElementById('cardsCol');
   
   // Store current state globally so it persists
   window._currentSection = section;
   
+  // Reset all toggles
+  if (togMat) { togMat.querySelector('input').checked = false; togMat.className = 'psm-section-toggle'; }
+  if (togQuest) { togQuest.querySelector('input').checked = false; togQuest.className = 'psm-section-toggle'; }
+  if (togPdf) { togPdf.querySelector('input').checked = false; togPdf.className = 'psm-section-toggle'; }
+  if (matView) matView.style.display = 'none';
+  if (questView) questView.style.display = 'none';
+  if (pdfView) pdfView.style.display = 'none';
+  
+  // Restore cards and right window by default
+  if (cardsCol) cardsCol.classList.remove('collapsed');
+  var rightWin = document.querySelector('.psm-window-right');
+  if (rightWin) rightWin.classList.remove('quest-active');
+  
   if (section === 'quest') {
-    if (matView) matView.style.display = 'none';
     if (questView) questView.style.display = 'flex';
-    if (togMat) { togMat.querySelector('input').checked = false; togMat.className = 'psm-section-toggle'; }
     if (togQuest) { togQuest.querySelector('input').checked = true; togQuest.className = 'psm-section-toggle active'; }
     // Collapse cards to give more room
     if (cardsCol) cardsCol.classList.add('collapsed');
     // Shrink right window to give conversation more space
-    var rightWin = document.querySelector('.psm-window-right');
     if (rightWin) rightWin.classList.add('quest-active');
     // Load quest chat for current card
     if (currentCardId) PChat.loadForCard();
-  } else {
+  } else if (section === 'mat') {
     if (matView) matView.style.display = 'flex';
-    if (questView) questView.style.display = 'none';
     if (togMat) { togMat.querySelector('input').checked = true; togMat.className = 'psm-section-toggle active'; }
-    if (togQuest) { togQuest.querySelector('input').checked = false; togQuest.className = 'psm-section-toggle'; }
-    // Re-open cards
-    if (cardsCol) cardsCol.classList.remove('collapsed');
-    // Restore right window size
-    var rightWin = document.querySelector('.psm-window-right');
-    if (rightWin) rightWin.classList.remove('quest-active');
+  } else {
+    // pdf (default)
+    if (pdfView) pdfView.style.display = 'flex';
+    if (togPdf) { togPdf.querySelector('input').checked = true; togPdf.className = 'psm-section-toggle active'; }
+    // Refresh inline PDF
+    refreshInlinePdf();
   }
 }
 
 function restoreSectionToggles(dept) {
   // Restore from global UI state, not from Firebase data
-  var section = window._currentSection || 'mat';
+  var section = window._currentSection || 'pdf';
   toggleSection(section);
 }
 
@@ -6625,6 +6663,12 @@ function selectCard(id) {
   loadCard(id);
   PChat.loadForCard();
   updateQuestStatusPill();
+  
+  // Refresh inline PDF if PDF tab is active
+  if (window._currentSection === 'pdf' || !window._currentSection) {
+    pdfInlineIdx = 0;
+    refreshInlinePdf();
+  }
   
   document.getElementById('noSelection').style.display = 'none';
   const dc = document.getElementById('detailsContent');
@@ -8669,6 +8713,7 @@ function removeDevisFromViewer(idx) {
   });
   
   renderCards();
+  if (typeof refreshInlinePdf === 'function') refreshInlinePdf();
   
   if (images.length === 0) {
     document.getElementById('devisModeUpload').style.display = 'flex';
@@ -8693,6 +8738,75 @@ function closeDevisOverlay() {
   document.getElementById('devisOverlay').classList.remove('visible');
   document.body.classList.remove('devis-open');
   // Reset matériaux collapse state
+}
+
+// ═══ INLINE PDF VIEWER (in left panel) ═══
+var pdfInlineIdx = 0;
+
+function refreshInlinePdf() {
+  var emptyEl = document.getElementById('pdfInlineEmpty');
+  var frameEl = document.getElementById('pdfInlineFrame');
+  var navEl = document.getElementById('pdfInlineNav');
+  if (!emptyEl || !frameEl) return;
+  
+  var card = currentCardId ? psmData[currentCardId] : null;
+  var images = (card && card.devisImages) || [];
+  
+  if (images.length === 0) {
+    emptyEl.style.display = 'block';
+    frameEl.style.display = 'none';
+    if (navEl) navEl.style.display = 'none';
+    frameEl.innerHTML = '';
+    return;
+  }
+  
+  emptyEl.style.display = 'none';
+  frameEl.style.display = 'block';
+  
+  // Clamp index
+  if (pdfInlineIdx >= images.length) pdfInlineIdx = 0;
+  var src = images[pdfInlineIdx];
+  
+  var isPdf = src.indexOf('data:application/pdf') === 0 || /\.pdf(\?|$)/i.test(src);
+  if (isPdf) {
+    frameEl.innerHTML = '<iframe style="width:100%;height:100%;border:none;" src="' + src + '#toolbar=0&navpanes=0&scrollbar=1"></iframe>';
+  } else {
+    frameEl.innerHTML = '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#0a0f1a;overflow:auto;"><img src="' + src + '" style="max-width:100%;max-height:100%;object-fit:contain;"></div>';
+  }
+  
+  // Render nav thumbnails if multiple files
+  if (navEl) {
+    if (images.length > 1) {
+      navEl.style.display = 'flex';
+      navEl.innerHTML = images.map(function(s, i) {
+        var active = (i === pdfInlineIdx) ? 'border-color:#fbbf24;box-shadow:0 0 6px rgba(251,191,36,0.5);' : 'border-color:rgba(255,255,255,0.15);';
+        var isPdfThumb = s.indexOf('data:application/pdf') === 0 || /\.pdf(\?|$)/i.test(s);
+        var content = isPdfThumb 
+          ? '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1e293b;color:#94a3b8;font-size:8px;font-weight:700;">PDF</div>'
+          : '<img src="' + s + '" style="width:100%;height:100%;object-fit:cover;">';
+        return '<div onclick="switchInlinePdf(' + i + ')" style="width:30px;height:30px;border:2px solid;border-radius:4px;overflow:hidden;cursor:pointer;flex-shrink:0;' + active + '">' + content + '</div>';
+      }).join('');
+    } else {
+      navEl.style.display = 'none';
+    }
+  }
+}
+
+function switchInlinePdf(idx) {
+  pdfInlineIdx = idx;
+  refreshInlinePdf();
+}
+
+function openDevisViewerFromInline() {
+  if (currentCardId) {
+    openDevisViewer(currentCardId);
+  }
+}
+
+function clickToAddFileFromInline() {
+  if (currentCardId) {
+    clickToAddFile(currentCardId);
+  }
 }
 
 // When user exits fullscreen (Escape or F11), close devis viewer too
@@ -9052,6 +9166,7 @@ function addDevisImage(base64) {
     psmData[currentCardId].devisImages.push(urlOrBase64);
     saveToFirebase();
     renderCards();
+    if (typeof refreshInlinePdf === 'function') refreshInlinePdf();
     
     var overlay = document.getElementById('devisOverlay');
     if (overlay && overlay.classList.contains('visible')) {
@@ -9079,6 +9194,7 @@ function addDevisImageToCard(cardId, base64) {
     renderCards();
     
     if (cardId === currentCardId) {
+      if (typeof refreshInlinePdf === 'function') refreshInlinePdf();
       var overlay = document.getElementById('devisOverlay');
       if (overlay && overlay.classList.contains('visible')) {
         document.getElementById('devisModeUpload').style.display = 'none';
