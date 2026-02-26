@@ -334,6 +334,28 @@ body {
 .psm-card.card-quest-resolved { background: linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%) !important; border-color: #34d399 !important; }
 .psm-card.card-quest-resolved .psm-card-dept-bar { display: none; }
 .psm-card.card-quest-resolved .psm-card-complete-badge { display: none !important; }
+
+/* UNREAD resolved card — bright green pulsing glow */
+.psm-card.card-quest-resolved-unread {
+  animation: resolvedUnreadPulse 1.5s ease-in-out infinite;
+  border-color: #4ade80 !important;
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.6);
+}
+@keyframes resolvedUnreadPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(74, 222, 128, 0.4); border-color: #4ade80; }
+  50% { box-shadow: 0 0 20px rgba(74, 222, 128, 0.9); border-color: #86efac; }
+}
+
+/* UNREAD reply card — blue pulsing glow */
+.psm-card.card-reply-unread {
+  animation: replyUnreadPulse 1.5s ease-in-out infinite;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.6);
+}
+@keyframes replyUnreadPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(96, 165, 250, 0.4); border-color: #60a5fa; }
+  50% { box-shadow: 0 0 20px rgba(96, 165, 250, 0.9); border-color: #93c5fd; }
+}
 .psm-card.card-quest-resolved .psm-card-quest-badge {
   display: flex;
   align-items: center;
@@ -5363,6 +5385,7 @@ function confirmQuestSend(assignee) {
   psmData[currentCardId].questionnementAssignee = assignee;
   psmData[currentCardId].questionnementSentAt = new Date().toISOString();
   psmData[currentCardId].questionnementBy = currentUser ? getPhysiproDisplayName(typeof currentUser === 'string' ? currentUser : (currentUser.email || '')) : '';
+  psmData[currentCardId].questionnementByEmail = currentUser ? currentUser.email : '';
   
   var db2 = firebase.database();
   var updates = {};
@@ -5371,6 +5394,7 @@ function confirmQuestSend(assignee) {
   updates['psm/' + currentCardId + '/questionnementJobId'] = jobId;
   updates['psm/' + currentCardId + '/questionnementAssignee'] = assignee;
   updates['psm/' + currentCardId + '/questionnementBy'] = psmData[currentCardId].questionnementBy;
+  updates['psm/' + currentCardId + '/questionnementByEmail'] = psmData[currentCardId].questionnementByEmail;
   updates['psm/' + currentCardId + '/questionnementSentAt'] = new Date().toISOString();
   // Clear any previous resolved state
   updates['psm/' + currentCardId + '/questionnementResolved'] = null;
@@ -5467,6 +5491,7 @@ function createQuestCardFromPSM() {
   updates['psm/' + currentCardId + '/questionnementJobId'] = jobId;
   updates['psm/' + currentCardId + '/questionnementAssignee'] = assignee;
   updates['psm/' + currentCardId + '/questionnementSentAt'] = new Date().toISOString();
+  updates['psm/' + currentCardId + '/questionnementByEmail'] = creatorEmail;
   // Clear any previous resolved state
   updates['psm/' + currentCardId + '/questionnementResolved'] = null;
   updates['psm/' + currentCardId + '/questionnementResolvedAt'] = null;
@@ -5475,6 +5500,7 @@ function createQuestCardFromPSM() {
   psmData[currentCardId].questionnementSent = true;
   psmData[currentCardId].questionnementJobId = jobId;
   psmData[currentCardId].questionnementAssignee = assignee;
+  psmData[currentCardId].questionnementByEmail = creatorEmail;
   psmData[currentCardId].questionnementResolved = false;
   
   db2.ref().update(updates).then(function() {
@@ -5893,7 +5919,6 @@ var _pendingSave = false; // TRUE when local changes exist that haven't been wri
 var _deletedCardIds = []; // Track cards deleted locally so _doSaveToFirebase can remove them from Firebase
 var _deepLinkHandled = false;
 var _psmMainListener = null; // Track main PSM listener to prevent duplicates
-var _psmChatListener = null;
 
 function initPSM() {
   loadCustomMateriaux();
@@ -5903,18 +5928,11 @@ function initPSM() {
     db.ref('psm').off('value', _psmMainListener);
     _psmMainListener = null;
   }
-  if (_psmChatListener) {
-    db.ref('psmChat').off('child_added', _psmChatListener);
-    _psmChatListener = null;
-  }
   
-  // Listen for questionnement resolution chat messages
-  _psmChatListener = db.ref('psmChat').orderByChild('timestamp').limitToLast(1).on('child_added', function(snap) {
-    var msg = snap.val();
-    if (msg && msg.type === 'quest-resolved') {
-      showToast('💬 ' + (msg.author || '') + ': Questionnement réglé pour #' + (msg.psmCardId || '').substring(0, 10), 'success');
-    }
-  });
+  // Quest-resolved notifications are now handled by:
+  // 1. PChat.startNotifListeners() → detects resolved messages → sets _resolvedUnread flag → card blinks
+  // 2. selectCard() → when clicking a blinking card → shows modal with email button → marks as read
+  // The old psmChat.child_added listener was removed because it fired on EVERY login for existing messages.
   
   _psmMainListener = db.ref('psm').on('value', function(snap) {
     if (_skipNextSync) { _skipNextSync = false; return; }
@@ -6039,7 +6057,10 @@ function renderCards() {
     
     const isInQuest = card.questionnementSent === true;
     const isQuestResolved = card.questionnementResolved === true;
+    const isResolvedUnread = isQuestResolved && card._resolvedUnread === true;
+    const isReplyUnread = isInQuest && !isQuestResolved && card._hasReply && card._replyUnread;
     const questCls = isQuestResolved ? 'card-quest-resolved' : (isInQuest ? 'card-in-quest' : '');
+    const unreadCls = isResolvedUnread ? 'card-quest-resolved-unread' : (isReplyUnread ? 'card-reply-unread' : '');
     // Quest overrides complete: if in quest or resolved, don't show complete
     const finalCompleteCls = (isInQuest || isQuestResolved) ? '' : completeCls;
     
@@ -6060,7 +6081,7 @@ function renderCards() {
     const questBy = card.questionnementBy || (currentUser && typeof currentUser === 'string' ? getPhysiproDisplayName(currentUser) : (currentUser && currentUser.email ? getPhysiproDisplayName(currentUser.email) : ''));
     
     return `
-      <div class="psm-card ${region} ${selected} ${finalCompleteCls} ${questCls}" data-card-id="${id}" onclick="selectCard('${id}')">
+      <div class="psm-card ${region} ${selected} ${finalCompleteCls} ${questCls} ${unreadCls}" data-card-id="${id}" onclick="selectCard('${id}')">
         <span style="display:none;">${escapeHtml(card.order || '')}</span>
         <div class="psm-card-header">
           <div class="psm-card-info">
@@ -6468,7 +6489,7 @@ function saveEditCard() {
   if (!name) { showToast('Nom requis', 'error'); return; }
   psmData[_editCardId].name = name;
   psmData[_editCardId].order = order;
-  saveToFirebase();
+  saveToFirebaseNow();
   renderCards();
   if (_editCardId === currentCardId) loadCard(_editCardId);
   closeEditCardModal();
@@ -6573,7 +6594,7 @@ function toggleCardDeptInclusion(cardId, dept) {
     });
   }
   
-  saveToFirebase();
+  saveToFirebaseNow(); // Dept inclusion change must persist immediately
   renderCards();
   
   // Reload the card details so all Compléter buttons reflect the change
@@ -6583,7 +6604,23 @@ function toggleCardDeptInclusion(cardId, dept) {
 }
 
 function selectCard(id) {
+  var card = psmData[id];
+  var wasResolvedUnread = card && card._resolvedUnread === true;
+  var wasReplyUnread = card && card._hasReply && card._replyUnread === true;
+  
   currentCardId = id;
+  
+  // Mark quest chat messages as read when opening the card
+  if (card && (wasResolvedUnread || wasReplyUnread)) {
+    _markQuestChatRead(id);
+  }
+  
+  // Clear local unread flags immediately for instant UI response
+  if (card) {
+    card._resolvedUnread = false;
+    card._replyUnread = false;
+  }
+  
   renderCards();
   loadCard(id);
   PChat.loadForCard();
@@ -6592,6 +6629,108 @@ function selectCard(id) {
   document.getElementById('noSelection').style.display = 'none';
   const dc = document.getElementById('detailsContent');
   dc.classList.add('visible');
+  
+  // If questionnement was just resolved (unread), offer to email the creator
+  if (wasResolvedUnread && card) {
+    setTimeout(function() {
+      _showQuestResolvedNotif(id);
+    }, 600);
+  }
+}
+
+// Mark all psmChat messages for a card as read by me
+function _markQuestChatRead(cardId) {
+  if (!db || !currentUser) return;
+  var myEmailKey = (currentUser.email || '').toLowerCase().replace(/\./g, '_');
+  db.ref('psmChat/' + cardId + '/messages').once('value').then(function(snap) {
+    var msgs = snap.val();
+    if (!msgs) return;
+    var updates = {};
+    Object.keys(msgs).forEach(function(msgId) {
+      var msg = msgs[msgId];
+      if (msg.authorEmail && msg.authorEmail.toLowerCase() !== (currentUser.email || '').toLowerCase()) {
+        if (!msg.readBy || !msg.readBy[myEmailKey]) {
+          updates['psmChat/' + cardId + '/messages/' + msgId + '/readBy/' + myEmailKey] = true;
+        }
+      }
+    });
+    if (Object.keys(updates).length > 0) {
+      db.ref().update(updates).catch(function(e) { console.error('Mark quest read error:', e); });
+    }
+  });
+}
+
+// Show notification when a resolved questionnement is opened — offer to email the creator
+function _showQuestResolvedNotif(cardId) {
+  var card = psmData[cardId];
+  if (!card) return;
+  
+  var resolvedBy = card.questionnementResolvedBy || 'Quelqu\'un';
+  var questCreator = card.questionnementBy || '';
+  var questCreatorEmail = card.questionnementByEmail || '';
+  var cardName = card.name || 'Patient';
+  var cardOrder = card.order || '';
+  
+  var existing = document.getElementById('questResolvedNotifModal');
+  if (existing) existing.remove();
+  
+  // Build email subject/body for the mailto link
+  var emailSubject = encodeURIComponent('✅ Questionnement réglé — ' + cardName + ' #' + cardOrder);
+  var emailBody = encodeURIComponent(
+    'Bonjour,\n\n' +
+    'Le questionnement pour la carte PSM suivante a été réglé :\n\n' +
+    '👤 Patient : ' + cardName + '\n' +
+    '📋 Commande : #' + cardOrder + '\n' +
+    '✅ Réglé par : ' + resolvedBy + '\n\n' +
+    'Cordialement,\n' +
+    getPhysiproDisplayName(currentUser ? currentUser.email : '')
+  );
+  
+  var mailtoLink = questCreatorEmail ? 
+    'mailto:' + questCreatorEmail + '?subject=' + emailSubject + '&body=' + emailBody :
+    '';
+  
+  var emailBtnHtml = mailtoLink ? 
+    '<a href="' + mailtoLink + '" style="display:inline-block;text-decoration:none;"><button class="modal-btn" style="background:linear-gradient(to bottom,#3b82f6,#2563eb);color:#fff;font-size:12px;padding:9px 20px;font-weight:800;border:none;border-radius:8px;cursor:pointer;">✉️ Aviser ' + escapeHtml(questCreator) + '</button></a>' :
+    '';
+  
+  var html = '<div class="modal-overlay" id="questResolvedNotifModal" style="opacity:0;transition:opacity 0.4s ease;" onclick="if(event.target===this)closeQuestResolvedNotif()">' +
+    '<div class="modal" style="max-width:400px;transform:translateY(30px) scale(0.95);transition:transform 0.4s ease;">' +
+      '<div class="modal-header" style="background:linear-gradient(to bottom,#059669,#047857);">' +
+        '<span class="modal-title">✅ Questionnement réglé</span>' +
+        '<button class="modal-close" onclick="closeQuestResolvedNotif()">✕</button>' +
+      '</div>' +
+      '<div class="modal-body" style="text-align:center;padding:20px 16px;">' +
+        '<div style="font-size:36px;margin-bottom:10px;">🎉</div>' +
+        '<div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:8px;">' + escapeHtml(cardName) + ' — #' + escapeHtml(cardOrder) + '</div>' +
+        '<div style="font-size:12px;color:#a7f3d0;margin-bottom:4px;">Réglé par <strong>' + escapeHtml(resolvedBy) + '</strong></div>' +
+        (questCreator && emailBtnHtml ? '<div style="font-size:12px;color:#94a3b8;margin-top:12px;">Voulez-vous aviser <strong style="color:#93c5fd;">' + escapeHtml(questCreator) + '</strong> par courriel?</div>' : '') +
+      '</div>' +
+      '<div class="modal-footer" style="justify-content:center;gap:12px;">' +
+        emailBtnHtml +
+        '<button class="modal-btn cancel" style="font-size:12px;padding:9px 20px;" onclick="closeQuestResolvedNotif()">Fermer</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  
+  document.body.insertAdjacentHTML('beforeend', html);
+  
+  // Animate in
+  requestAnimationFrame(function() {
+    var modal = document.getElementById('questResolvedNotifModal');
+    if (modal) {
+      modal.style.opacity = '1';
+      modal.querySelector('.modal').style.transform = 'translateY(0) scale(1)';
+    }
+  });
+}
+
+function closeQuestResolvedNotif() {
+  var modal = document.getElementById('questResolvedNotifModal');
+  if (modal) {
+    modal.style.opacity = '0';
+    setTimeout(function() { modal.remove(); }, 300);
+  }
 }
 
 function loadCard(id) {
@@ -7078,7 +7217,7 @@ function toggleComplete(dept) {
     btn.textContent = isComplete ? '✓ Complété' : '☐ Compléter';
   }
   
-  saveToFirebase();
+  saveToFirebaseNow(); // State change must persist immediately
   renderCards();
   showToast(isComplete ? '✓ Marqué complet' : '✗ Marqué incomplet', 'info');
   
@@ -7182,6 +7321,15 @@ function saveToFirebase() {
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(_doSaveToFirebase, 300);
 }
+
+// IMMEDIATE save — bypasses debounce for critical operations (deletions, card creation)
+function saveToFirebaseNow() {
+  if (writeBlocked(true)) return;
+  // Cancel any pending debounced save
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+  _pendingSave = true;
+  _doSaveToFirebase();
+}
 function _doSaveToFirebase() {
   _saveTimer = null;
   if (writeBlocked(true)) { _pendingSave = false; return; }
@@ -7257,7 +7405,7 @@ function sendPsm(cardId) {
     card.psmSentBy = null;
     card.psmSentAt = null;
     card.psmSentTo = null;
-    saveToFirebase();
+    saveToFirebaseNow();
     renderCards();
     showToast('📤 Envoi annulé', 'info');
     return;
@@ -8319,11 +8467,37 @@ function deleteInlineImg(btn) {
   if (writeBlocked()) return;
   const wrapper = btn.closest('.psm-img-resize-wrapper');
   if (!wrapper) return;
+  
+  // Clean up Firebase Storage if the image is a Storage URL
+  var img = wrapper.querySelector('img');
+  if (img && img.src && img.src.indexOf('firebasestorage') !== -1) {
+    deleteFromStorage(img.src);
+  }
+  
   // Remove the wrapper and any adjacent br
   const next = wrapper.nextSibling;
   if (next && next.nodeName === 'BR') next.remove();
   wrapper.remove();
-  saveCurrentCard();
+  
+  // CRITICAL: Read DOM and save IMMEDIATELY (no debounce) — deletion must persist
+  if (currentCardId && psmData[currentCardId]) {
+    ['atelier', 'couture', 'metal'].forEach(function(dept) {
+      if (!psmData[currentCardId][dept]) return;
+      var rightEl = document.getElementById('notes' + capitalize(dept) + 'Right');
+      if (rightEl) psmData[currentCardId][dept].notesRightHtml = rightEl.innerHTML;
+      var nEl = document.getElementById('notes' + capitalize(dept));
+      if (nEl) {
+        psmData[currentCardId][dept].notesHtml = nEl.innerHTML;
+        psmData[currentCardId][dept].notes = nEl.innerText || '';
+      }
+      var qEl = document.getElementById('question' + capitalize(dept));
+      if (qEl) {
+        psmData[currentCardId][dept].questionHtml = qEl.innerHTML;
+        psmData[currentCardId][dept].question = qEl.innerText || '';
+      }
+    });
+    saveToFirebaseNow();
+  }
   showToast('🗑️ Photo supprimée', 'info');
 }
 
@@ -8428,7 +8602,7 @@ function removeDevisFromViewer(idx) {
   
   images.splice(idx, 1);
   psmData[currentCardId].devisImages = images;
-  saveToFirebase();
+  saveToFirebaseNow(); // CRITICAL: deletion must persist immediately
   renderCards();
   
   if (images.length === 0) {
@@ -8731,7 +8905,7 @@ function saveFicheEdit() {
   if (!name) { showToast('⚠️ Nom requis', 'error'); return; }
   psmData[currentCardId].name = name;
   psmData[currentCardId].order = order;
-  saveToFirebase();
+  saveToFirebaseNow();
   renderCards();
   loadCard(currentCardId);
   // Update fiche header
@@ -9661,6 +9835,7 @@ var PChat = (function() {
     updates['psm/' + _cardId + '/questionnementAssignee'] = _targetName;
     updates['psm/' + _cardId + '/questionnementSentAt'] = new Date().toISOString();
     updates['psm/' + _cardId + '/questionnementBy'] = creatorName;
+    updates['psm/' + _cardId + '/questionnementByEmail'] = creatorEmail;
     // Clear any previous resolved state
     updates['psm/' + _cardId + '/questionnementResolved'] = null;
     updates['psm/' + _cardId + '/questionnementResolvedAt'] = null;
@@ -9669,6 +9844,7 @@ var PChat = (function() {
     psmData[_cardId].questionnementSent = true;
     psmData[_cardId].questionnementJobId = jobId;
     psmData[_cardId].questionnementAssignee = _targetName;
+    psmData[_cardId].questionnementByEmail = creatorEmail;
     psmData[_cardId].questionnementResolved = false;
     psmData[_cardId]._resolvedUnread = false;
     
@@ -9727,13 +9903,20 @@ var PChat = (function() {
   }
   
   // ═══ NOTIFICATION: listen for unread replies across all cards ═══
+  var _notifListener = null; // Track to prevent duplicates
   function startNotifListeners() {
     if (!db) return;
     var myEmail = getMyEmail();
     if (!myEmail) return;
     
+    // CRITICAL: Detach old listener before attaching new one (prevents duplicates on re-login)
+    if (_notifListener) {
+      db.ref('psmChat').off('value', _notifListener);
+      _notifListener = null;
+    }
+    
     // Listen to all psmChat for replies to me
-    db.ref('psmChat').on('value', function(snap) {
+    _notifListener = db.ref('psmChat').on('value', function(snap) {
       var allChats = snap.val() || {};
       var unreadCards = [];
       var myEmailKey = myEmail.replace(/\./g, '_');
