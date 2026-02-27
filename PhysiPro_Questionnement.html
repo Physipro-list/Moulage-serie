@@ -5937,6 +5937,15 @@ function openNotifDetail(notifId) {
   // Mark as read
   if (!n.read) db.ref('jobNotifications/' + notifId + '/read').set(true).catch(() => {});
   
+  // PChat notification — open private conversation with sender
+  if (n.jobId && n.jobId.startsWith('pchat_')) {
+    closeNotifPopup();
+    if (typeof PChat !== 'undefined' && PChat.open) {
+      PChat.open(n.fromName || 'Utilisateur');
+    }
+    return;
+  }
+  
   // Go directly to the fiche/conversation
   if (n.jobId && jobsData[n.jobId]) {
     closeNotifPopup();
@@ -6456,13 +6465,29 @@ var PChat = (function() {
   function getMyName() {
     var email = getMyEmail();
     var map = {
-      'atelieratp@physipro.com':'Daniel','jacynthe@physipro.com':'Jacynthe','jonathan@physipro.com':'Jonathan',
-      'nadia@physipro.com':'Nadia','fabrys@physipro.com':'Fabrys','sonia@physipro.com':'Sonia','orders@physipro.com':'Sonia',
-      'stephane.delorme@physipro.com':'Stéphane D.','stephane.duchesneau@physipro.com':'Stéphane Du.',
-      'sylvain@physipro.com':'Sylvain','valerie@physipro.com':'Valérie','valerie18@videotron.ca':'Valérie','pierre.caron@physipro.com':'Pierre',
-      'stephanie@physipro.com':'Stéphanie','cassie@physipro.com':'Cassie',
-      'michelle@physipro.com':'Michelle','mario@physipro.com':'Mario','sina@physipro.com':'Sina',
-      'roxanne@physipro.com':'Roxanne'
+      'atelieratp@physipro.com':'Daniel',
+      'valerie18@videotron.ca':'Valérie',
+      'simdut@physipro.com':'Cassie',
+      'sroy@physipro.com':'Stéphanie',
+      'peterbass76@gmail.com':'Pierre',
+      'mario.jacques@physipro.com':'Mario Jacques',
+      'cncatp@physipro.com':'Sina',
+      'michelle.bouchard@physipro.com':'Michelle',
+      'service3@physipro.com':'Jacynthe',
+      'service1@physipro.com':'Jonathan',
+      'ngagne@physipro.com':'Nadia',
+      'orders@physipro.com':'Sonia',
+      'fabrys.frechette@physipro.com':'Fabrys',
+      'marioouellette@physipro.com':'Mario Ouellette',
+      'rh@physipro.com':'Roxanne',
+      'magasinatp3@physipro.com':'Stéphane D.',
+      'magasinatp1@physipro.com':'Stéphane Du.',
+      'magasinatp2@physipro.com':'Sylvain',
+      'mplanguedoc@physipro.com':'Marie-Pier',
+      'mariesoleilr@physipro.com':'Marie-Soleil',
+      'elyse.bolduc@physipro.com':'Élyse',
+      'eric.poirier@physipro.com':'Éric',
+      'pbouchard@physipro.com':'Patrick'
     };
     return map[email] || email.split('@')[0];
   }
@@ -6629,6 +6654,25 @@ var PChat = (function() {
         closeCompose();
         clearImage();
         if (typeof showToast === 'function') showToast('📤 Envoyé à ' + _targetName, 'success');
+        
+        // Create notification for the target person
+        var targetEmail = '';
+        if (typeof nameToEmail === 'function') targetEmail = nameToEmail(_targetName);
+        if (targetEmail) {
+          if (typeof createNotification === 'function') {
+            createNotification({
+              to: targetEmail,
+              toName: _targetName,
+              from: myEmail,
+              fromName: getMyName(),
+              jobId: 'pchat_' + _target,
+              jobName: '💬 Message privé de ' + getMyName(),
+              messageType: 'normal',
+              messageContent: (content || '(Image)').substring(0, 150),
+              timestamp: Date.now()
+            });
+          }
+        }
       })
       .catch(function(e) { if (typeof showToast === 'function') showToast('❌ Erreur: ' + e.message, 'error'); });
   }
