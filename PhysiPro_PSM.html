@@ -9945,7 +9945,7 @@ var PChat = (function() {
       'atelieratp@physipro.com':'Daniel','jacynthe@physipro.com':'Jacynthe','jonathan@physipro.com':'Jonathan',
       'nadia@physipro.com':'Nadia','fabrys@physipro.com':'Fabrys','sonia@physipro.com':'Sonia',
       'stephane.delorme@physipro.com':'Stéphane D.','stephane.duchesneau@physipro.com':'Stéphane Du.',
-      'sylvain@physipro.com':'Sylvain','valerie@physipro.com':'Valérie','pierre.caron@physipro.com':'Pierre',
+      'sylvain@physipro.com':'Sylvain','valerie@physipro.com':'Valérie','valerie18@videotron.ca':'Valérie','pierre.caron@physipro.com':'Pierre',
       'stephanie@physipro.com':'Stéphanie','cassie@physipro.com':'Cassie',
       'michelle@physipro.com':'Michelle','mario@physipro.com':'Mario','sina@physipro.com':'Sina',
       'roxanne@physipro.com':'Roxanne'
@@ -10470,6 +10470,69 @@ var PChat = (function() {
         }
         // Switch UI to discussion mode now
         _updateUIMode();
+        
+        // === FIX: Send jobNotification to Questionnement assignee ===
+        try {
+          var card = psmData[_cardId];
+          var questJobId = card ? card.questionnementJobId : null;
+          var questAssignee = card ? card.questionnementAssignee : _targetName;
+          if (questJobId) {
+            // Resolve assignee email — try QUEST_ASSIGNEES first
+            var recipEmail = '';
+            var nameMap = {
+              'Sonia':'sonia.boulanger@physipro.com','Jacynthe':'service3@physipro.com',
+              'Jonathan':'service1@physipro.com','Nadia':'ngagne@physipro.com',
+              'Daniel':'atelieratp@physipro.com','Fabrys':'fabrys.frechette@physipro.com',
+              'Marie-Soleil':'mariesoleilr@physipro.com','Marie-Pier':'mplanguedoc@physipro.com'
+            };
+            recipEmail = nameMap[questAssignee] || '';
+            // Also try getPhysiproDisplayName reverse lookup
+            if (!recipEmail && typeof PHYSIPRO_NAME_MAP !== 'undefined') {
+              for (var em in PHYSIPRO_NAME_MAP) {
+                if (PHYSIPRO_NAME_MAP[em] === questAssignee || PHYSIPRO_NAME_MAP[em].split(' ')[0] === questAssignee) {
+                  recipEmail = em; break;
+                }
+              }
+            }
+            if (recipEmail && recipEmail.toLowerCase() !== myEmail) {
+              db.ref('jobNotifications').push().set({
+                to: recipEmail,
+                toName: questAssignee,
+                from: myEmail,
+                fromName: getMyName(),
+                jobId: questJobId,
+                jobName: '#' + (card.order || card.name || _cardId),
+                messageType: 'psmChat',
+                messageContent: (content || '📷 Photo').substring(0, 120),
+                timestamp: Date.now(),
+                read: false
+              }).catch(function(e) { console.error('PChat: jobNotification error:', e); });
+            }
+          }
+          
+          // === FIX: Bridge to crossAppChat so XChat users see it ===
+          var ek = myEmail.replace(/\./g, '_');
+          var crossMsg = {
+            content: content || '📷 Photo',
+            type: 'normal',
+            authorEmail: myEmail,
+            authorName: getMyName(),
+            sourcePage: 'psm',
+            sourceModule: 'PSM',
+            sourceCardId: _cardId,
+            sourceCardName: (card ? (card.name || card.order || _cardId) : _cardId),
+            timestamp: Date.now(),
+            createdAt: firebase.database.ServerValue.TIMESTAMP,
+            recipients: [],
+            readBy: {}
+          };
+          crossMsg.readBy[ek] = true;
+          // Add quest assignee as recipient if known
+          if (recipEmail) {
+            crossMsg.recipients = [{email: recipEmail, name: questAssignee}];
+          }
+          db.ref('crossAppChat').push().set(crossMsg).catch(function(e) { console.error('PChat: crossAppChat bridge error:', e); });
+        } catch(bridgeErr) { console.error('PChat: notification bridge error:', bridgeErr); }
       })
       .catch(function(e) {
         console.error('PChat.send: FIREBASE ERROR writing message:', e);
