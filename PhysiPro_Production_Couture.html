@@ -506,6 +506,8 @@ body.col-resizing *{cursor:col-resize!important;}
 .xnotif-item-source{font-size:10px;color:#60a5fa;font-weight:600;}
 .xnotif-empty{padding:40px;text-align:center;color:#6b7280;font-size:13px;}
 .xnotif-popup-footer{padding:12px 16px;background:#111827;border-top:1px solid #374151;}
+.xnotif-del-btn{position:absolute;top:6px;right:6px;width:20px;height:20px;background:rgba(239,68,68,0.15);border:none;border-radius:50%;color:#ef4444;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;opacity:0;transition:opacity 0.2s;}
+.xnotif-item:hover .xnotif-del-btn{opacity:1;}
 .xnotif-mark-all{width:100%;padding:10px;background:transparent;border:1px solid #374151;color:#9ca3af;border-radius:6px;font-size:12px;cursor:pointer;transition:all 0.2s;}
 .xnotif-mark-all:hover{background:#374151;color:white;}
 
@@ -1816,7 +1818,7 @@ var XChat = (function() {
     {name:'Jacynthe Gaumond',email:_E('c2VydmljZTNAcGh5c2lwcm8uY29t'),dept:'Service'},
     {name:'Jonathan Perreault',email:_E('c2VydmljZTFAcGh5c2lwcm8uY29t'),dept:'Service'},
     {name:'Nadia Gagne',email:_E('bmdhZ25lQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},
-    {name:'Sonia Boulanger',email:_E('c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},
+    {name:'Sonia Boulanger',email:_E('b3JkZXJzQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},
     {name:'Marie-Pier Languedoc',email:_E('bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t'),dept:'Représentante'},
     {name:'Marie-Soleil Riverin',email:_E('bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ=='),dept:'Représentante'},
     {name:'Fabrys Frechette',email:_E('ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20='),dept:'Administration'},
@@ -2301,7 +2303,8 @@ var XChat = (function() {
     list.innerHTML = unread.slice(0,20).map(function(e) {
       var id = e[0], msg = e[1];
       var srcName = PAGE_NAMES[msg.sourcePage] || msg.sourcePage || '';
-      return '<div class="xnotif-item unread" onclick="XChat.openFromNotif(\'' + id + '\')">' +
+      return '<div class="xnotif-item unread" style="position:relative;" onclick="XChat.openFromNotif(\'' + id + '\')">' +
+        '<button class="xnotif-del-btn" onclick="event.stopPropagation();XChat.deleteNotif(\'' + id + '\')" title="Supprimer">✕</button>' +
         '<div class="xnotif-item-header">' +
           '<span class="xnotif-item-from">' + (icons[msg.type]||'💬') + ' ' + esc(msg.authorName||'') + '</span>' +
           '<span class="xnotif-item-time">' + fmtTime(msg.timestamp) + '</span>' +
@@ -2355,6 +2358,18 @@ var XChat = (function() {
     if (typeof showToast === 'function') showToast('✓ Toutes les notifications marquées comme lues', 'info');
   }
   
+  function deleteNotif(id) {
+    var database = getDb();
+    if (!database) return;
+    database.ref('crossAppChat/' + id).remove().catch(function(){});
+  }
+  
+  function clearAllNotifs() {
+    markVisibleRead();
+    closeNotifPopup();
+    if (typeof showToast === 'function') showToast('🗑️ Toutes les notifications effacées', 'info');
+  }
+  
   function hideFlash() {
     var b = document.getElementById('xchatFlash');
     if (b) b.classList.remove('visible');
@@ -2386,6 +2401,8 @@ var XChat = (function() {
     closeNotifPopup: closeNotifPopup,
     openFromNotif: openFromNotif,
     markAllRead: markAllRead,
+    deleteNotif: deleteNotif,
+    clearAllNotifs: clearAllNotifs,
     hideFlash: hideFlash,
     replyToThread: replyToThreadFn
   };
@@ -2582,7 +2599,7 @@ var XChat = (function() {
 <div class="xnotif-popup" id="xnotifPopup">
   <div class="xnotif-popup-header"><span>🔔 Messages</span><button class="xnotif-popup-close" onclick="XChat.closeNotifPopup()">✕</button></div>
   <div class="xnotif-popup-list" id="xnotifList"><div class="xnotif-empty">Aucune notification</div></div>
-  <div class="xnotif-popup-footer"><button class="xnotif-mark-all" onclick="XChat.markAllRead()">✓ Tout marquer comme lu</button></div>
+  <div class="xnotif-popup-footer"><div style="display:flex;gap:8px;"><button class="xnotif-mark-all" onclick="XChat.markAllRead()" style="flex:1;">✓ Tout lu</button><button class="xnotif-mark-all" onclick="XChat.clearAllNotifs()" style="flex:1;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);">🗑️ Effacer tout</button></div></div>
 </div>
 
 <!-- FLASH BANNER -->

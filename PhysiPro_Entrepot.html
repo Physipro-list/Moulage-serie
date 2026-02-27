@@ -1587,6 +1587,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
 .notif-item-arrow { float: right; color: #60a5fa; font-size: 14px; }
 .notif-empty { padding: 40px; text-align: center; color: #6b7280; font-size: 13px; }
 .notif-popup-footer { padding: 12px 16px; background: #111827; border-top: 1px solid #374151; }
+.notif-item:hover button[title="Supprimer"] { opacity: 1 !important; }
 .notif-mark-all { width: 100%; padding: 10px; background: transparent; border: 1px solid #374151; color: #9ca3af; border-radius: 6px; font-size: 12px; cursor: pointer; }
 .notif-mark-all:hover { background: #374151; color: white; }
 
@@ -1899,8 +1900,9 @@ if(localStorage.getItem('physipro_last_email')){
     <div class="notif-popup-list" id="magentNotifList">
       <div class="notif-empty">Aucune notification</div>
     </div>
-    <div class="notif-popup-footer">
-      <button class="notif-mark-all" onclick="magentMarkAllRead()">✓ Tout marquer comme lu</button>
+    <div class="notif-popup-footer" style="display:flex;gap:8px;">
+      <button class="notif-mark-all" onclick="magentMarkAllRead()" style="flex:1;">✓ Tout lu</button>
+      <button class="notif-mark-all" onclick="magentClearAllNotifs()" style="flex:1;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);">🗑️ Effacer tout</button>
     </div>
   </div>
 
@@ -3562,11 +3564,12 @@ function magentRenderNotifPopup() {
     return;
   }
   const recent = magentChatMessages.slice().reverse().slice(0, 20);
-  list.innerHTML = recent.map(function(msg) {
+  list.innerHTML = recent.map(function(msg, i) {
     const icon = msg.type === 'order-created' ? '🟠' : msg.type === 'order-confirmed' ? '✅' : msg.type === 'order-delivered' ? '📦' : '💬';
     const dateStr = msg.date || '';
     const timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('fr-CA', {hour:'2-digit',minute:'2-digit'}) : '';
-    return '<div class="notif-item">' +
+    return '<div class="notif-item" style="position:relative;">' +
+      '<button onclick="event.stopPropagation();magentDeleteNotif(' + i + ')" title="Supprimer" style="position:absolute;top:6px;right:6px;width:20px;height:20px;background:rgba(239,68,68,0.15);border:none;border-radius:50%;color:#ef4444;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;opacity:0;transition:opacity 0.2s;">✕</button>' +
       '<div class="notif-item-header">' +
         '<span class="notif-item-from">' + icon + ' ' + (msg.author || 'Système') + '</span>' +
         '<span class="notif-item-time">' + dateStr + ' ' + timeStr + '</span>' +
@@ -3583,6 +3586,22 @@ function magentMarkAllRead() {
   magentUpdateBell();
   closeMagentNotifPopup();
   showToast('✓ Notifications marquées comme lues', 'info');
+}
+
+function magentDeleteNotif(idx) {
+  magentChatMessages.splice(magentChatMessages.length - 1 - idx, 1);
+  magentRenderNotifPopup();
+  magentUpdateBell();
+}
+
+function magentClearAllNotifs() {
+  magentChatMessages = [];
+  magentUnreadCount = 0;
+  localStorage.setItem('physipro_magent_unread', '0');
+  magentUpdateBell();
+  magentRenderNotifPopup();
+  closeMagentNotifPopup();
+  showToast('🗑️ Toutes les notifications effacées', 'info');
 }
 
 // ===== CHAT COMMUNICATION (pure - identique moulage) =====
@@ -4425,7 +4444,7 @@ var XChat=(function(){
   var PAGE_URLS={moulage:'Physipro_moulage.html',psm:'PhysiPro_PSM.html',questionnement:'PhysiPro_Questionnement.html',serie:'PhysiPro_Serie_.html',inspection:'PhysiPro_Inspection_Atelier.html',couture:'PhysiPro_Production_Couture.html',archives:'PhysiPro_Archives.html',entrepot:'PhysiPro_Entrepot.html'};
   var messages=[],isOpen=false,composeType='normal',replyToThread=null,selectedDest=[],firstLoad=true,lastCount=0;
   function _E(b){try{return atob(b)}catch(e){return b}}
-  var TEAM=[{name:'Daniel Roy',email:_E('YXRlbGllcmF0cEBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Valérie Caron',email:_E('dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ=='),dept:'Atelier'},{name:'Cassie Simard',email:_E('c3JveUBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Stéphanie Dutremble',email:_E('c2ltZHV0QHBoeXNpcHJvLmNvbQ=='),dept:'Atelier'},{name:'Simone Bouchard',email:_E('bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t'),dept:'Atelier'},{name:'Nadia Gagne',email:_E('bmdhZ25lQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Sonia Boulanger',email:_E('c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Fabrys Frechette',email:_E('ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20='),dept:'Admin'},{name:'Mario Ouellette',email:_E('bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Roxanne Valois',email:_E('cmhAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Pierre Caron',email:_E('cGV0ZXJiYXNzNzZAZ21haWwuY29t'),dept:'Direction'},{name:'Élyse Bolduc',email:_E('ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Éric Poirier',email:_E('ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Patrick Bouchard',email:_E('cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'}];
+  var TEAM=[{name:'Daniel Roy',email:_E('YXRlbGllcmF0cEBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Valérie Caron',email:_E('dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ=='),dept:'Atelier'},{name:'Cassie Simard',email:_E('c3JveUBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Stéphanie Dutremble',email:_E('c2ltZHV0QHBoeXNpcHJvLmNvbQ=='),dept:'Atelier'},{name:'Simone Bouchard',email:_E('bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t'),dept:'Atelier'},{name:'Nadia Gagne',email:_E('bmdhZ25lQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Sonia Boulanger',email:_E('b3JkZXJzQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Fabrys Frechette',email:_E('ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20='),dept:'Admin'},{name:'Mario Ouellette',email:_E('bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Roxanne Valois',email:_E('cmhAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Pierre Caron',email:_E('cGV0ZXJiYXNzNzZAZ21haWwuY29t'),dept:'Direction'},{name:'Élyse Bolduc',email:_E('ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Éric Poirier',email:_E('ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Patrick Bouchard',email:_E('cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'}];
   function getDb(){return(typeof fbDb!=='undefined'&&fbDb)?fbDb:(typeof db!=='undefined'&&db)?db:(typeof firebaseDb!=='undefined'&&firebaseDb)?firebaseDb:null;}
   function getUser(){return(typeof fbUser!=='undefined'&&fbUser)?fbUser:(typeof currentUser!=='undefined'&&currentUser)?currentUser:null;}
   function getUserName(e){if(!e)return'Utilisateur';var el=e.toLowerCase();for(var i=0;i<TEAM.length;i++){if(TEAM[i].email.toLowerCase()===el)return TEAM[i].name;}if(typeof getDisplayName==='function')return getDisplayName(e);if(typeof getUserDisplayName==='function')return getUserDisplayName(e);return e.split('@')[0];}
@@ -4471,7 +4490,7 @@ var XChat=(function(){
   var PAGE_URLS={moulage:'Physipro_moulage.html',psm:'PhysiPro_PSM.html',questionnement:'PhysiPro_Questionnement.html',serie:'PhysiPro_Serie_.html',inspection:'PhysiPro_Inspection.html',couture:'PhysiPro_Couture.html',archives:'PhysiPro_Archives.html',entrepot:'PhysiPro_Entrepot.html'};
   var messages=[],isOpen=false,composeType='normal',replyToThread=null,selectedDest=[],firstLoad=true,lastCount=0;
   function _E(b){try{return atob(b)}catch(e){return b}}
-  var TEAM=[{name:'Daniel Roy',email:_E('YXRlbGllcmF0cEBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Valérie Caron',email:_E('dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ=='),dept:'Atelier'},{name:'Cassie Simard',email:_E('c3JveUBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Stéphanie Dutremble',email:_E('c2ltZHV0QHBoeXNpcHJvLmNvbQ=='),dept:'Atelier'},{name:'Simone Bouchard',email:_E('bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t'),dept:'Atelier'},{name:'Nadia Gagne',email:_E('bmdhZ25lQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Sonia Boulanger',email:_E('c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Fabrys Frechette',email:_E('ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20='),dept:'Admin'},{name:'Mario Ouellette',email:_E('bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Roxanne Valois',email:_E('cmhAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Pierre Caron',email:_E('cGV0ZXJiYXNzNzZAZ21haWwuY29t'),dept:'Direction'},{name:'Élyse Bolduc',email:_E('ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Éric Poirier',email:_E('ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Patrick Bouchard',email:_E('cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'}];
+  var TEAM=[{name:'Daniel Roy',email:_E('YXRlbGllcmF0cEBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Valérie Caron',email:_E('dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ=='),dept:'Atelier'},{name:'Cassie Simard',email:_E('c3JveUBwaHlzaXByby5jb20='),dept:'Atelier'},{name:'Stéphanie Dutremble',email:_E('c2ltZHV0QHBoeXNpcHJvLmNvbQ=='),dept:'Atelier'},{name:'Simone Bouchard',email:_E('bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t'),dept:'Atelier'},{name:'Nadia Gagne',email:_E('bmdhZ25lQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Sonia Boulanger',email:_E('b3JkZXJzQHBoeXNpcHJvLmNvbQ=='),dept:'Service'},{name:'Fabrys Frechette',email:_E('ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20='),dept:'Admin'},{name:'Mario Ouellette',email:_E('bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Roxanne Valois',email:_E('cmhAcGh5c2lwcm8uY29t'),dept:'Admin'},{name:'Pierre Caron',email:_E('cGV0ZXJiYXNzNzZAZ21haWwuY29t'),dept:'Direction'},{name:'Élyse Bolduc',email:_E('ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Éric Poirier',email:_E('ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'},{name:'Patrick Bouchard',email:_E('cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ=='),dept:'ATM'}];
   function esc(s){if(!s)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
   function fmtTime(ts){if(!ts)return'';var d=new Date(ts);return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
   function getUserName(e){if(!e)return'Utilisateur';var el=e.toLowerCase();for(var i=0;i<TEAM.length;i++){if(TEAM[i].email.toLowerCase()===el)return TEAM[i].name;}if(typeof getPhysiproDisplayName==='function')return getPhysiproDisplayName(e);return e.split('@')[0];}
