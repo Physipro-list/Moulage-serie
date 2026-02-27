@@ -3672,34 +3672,29 @@ function saveCollapsedCols() {}
 function triggerEmailConfirmFlow(assignee, orderNum, clientName, jobId) {
   var pref = _agentNotifPrefs[assignee] || 'chat';
   
-  // Always create a chat notification for the assignee (for 'chat' and 'both' modes)
-  if (pref === 'chat' || pref === 'both') {
-    var targetEmail = nameToEmail(assignee);
-    if (targetEmail && typeof createNotification === 'function') {
-      createNotification({
-        to: targetEmail,
-        toName: assignee,
-        from: currentUser ? currentUser.email : '',
-        fromName: getCurrentUserName() || '',
-        jobId: jobId,
-        jobName: '#' + orderNum + (clientName ? ' — ' + clientName : ''),
-        messageType: 'normal',
-        messageContent: 'Nouveau questionnement créé par ' + (getCurrentUserName() || 'Utilisateur') + ' pour #' + orderNum,
-        timestamp: Date.now()
-      });
-    }
+  // ALWAYS create a chat notification for the assignee
+  var targetEmail = nameToEmail(assignee);
+  if (targetEmail && typeof createNotification === 'function') {
+    createNotification({
+      to: targetEmail,
+      toName: assignee,
+      from: currentUser ? currentUser.email : '',
+      fromName: getCurrentUserName() || '',
+      jobId: jobId,
+      jobName: '#' + orderNum + (clientName ? ' — ' + clientName : ''),
+      messageType: 'normal',
+      messageContent: 'Nouveau questionnement créé par ' + (getCurrentUserName() || 'Utilisateur') + ' pour #' + orderNum,
+      timestamp: Date.now()
+    });
   }
   
   if (pref === 'email' || pref === 'both') {
-    // Auto-send email immediately (no question)
+    // Auto-send email immediately
     sendJobNotifEmail(assignee, orderNum, clientName, jobId);
-    if (pref === 'both') {
-      showToast('✉️ Courriel envoyé + 💬 Chat notifié', 'success');
-    } else {
-      showToast('✉️ Courriel envoyé à ' + assignee, 'success');
-    }
+    showToast('🔔 Notification + ✉️ Courriel envoyé à ' + assignee, 'success');
   } else {
     // Chat-only mode: ask after 3 seconds if they also want email
+    showToast('🔔 Notification envoyée à ' + assignee, 'success');
     setTimeout(function() {
       showEmailConfirmModal(assignee, orderNum, clientName, jobId);
     }, 3000);
@@ -4884,13 +4879,16 @@ var QuestChat = (function() {
         closeCompose();
         if (typeof showToast === 'function') showToast('\ud83d\udce4 Message envoyé', 'success');
         
-        // Send notifications to dest + extra dests
+        // Send notifications to dest + extra dests + assignee + creator
         var job = jobsData[_currentJobId] || {};
         var orderNum = job.order || '---';
         var myEmail = getMyEmail();
         
-        // Collect all recipients: main dest + extras
-        var recipients = [_destName];
+        // Collect ALL people involved: creator, assignee, dest, extras
+        var recipients = [];
+        if (_destName) recipients.push(_destName);
+        if (job.assignee && recipients.indexOf(job.assignee) === -1) recipients.push(job.assignee);
+        if (job.createdByName && recipients.indexOf(job.createdByName) === -1) recipients.push(job.createdByName);
         if (_extraDests && _extraDests.length > 0) {
           _extraDests.forEach(function(n) {
             if (recipients.indexOf(n) === -1) recipients.push(n);
