@@ -885,9 +885,12 @@ function _safeMerge(fbData, localData) {
       });
     });
   }
-  // Final filter
+  // Final filter — but NEVER remove permanent rows
   Object.keys(merged).forEach(function(month) {
-    merged[month] = merged[month].filter(function(r) { return !r.id || !isIdDeleted(r.id); });
+    merged[month] = merged[month].filter(function(r) { 
+      if (r.permanent) return true; // Permanent rows are NEVER filtered out
+      return !r.id || !isIdDeleted(r.id); 
+    });
   });
   return merged;
 }
@@ -2582,7 +2585,7 @@ function commitFromEmpty(trId,dept){
   rows.push({id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:job,qty:qty,item:item||'',client:client,inspecteur:autoInsp,hasError:hasErr,errorReason:reason||'',errQty:hasErr?1:0,description:'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu'});
   md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');
 }
-function addRow(bon,nom,qty,item,dept,client,notes,errorReason,inspOverride){var md=gmd(dept);var rows=md.rows;var autoInsp=inspOverride||'';if(!autoInsp&&fbUser&&fbUser.email){autoInsp=resolveInspName(fbUser.email);}if(!autoInsp){var il=dept==='inspection'?getList('inspecteurs'):getList('coutureuses');autoInsp=il[0]||'';}var hasErr=!!errorReason;rows.push({id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:1,qty:parseInt(qty)||1,item:item||'',client:client||'Commande client',inspecteur:autoInsp,hasError:hasErr,errorReason:errorReason||'',errQty:hasErr?1:0,description:notes||'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu'});md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');}
+function addRow(bon,nom,qty,item,dept,client,notes,errorReason,inspOverride){var md=gmd(dept);var rows=md.rows;var autoInsp=inspOverride||'';if(!autoInsp&&fbUser&&fbUser.email){autoInsp=resolveInspName(fbUser.email);}if(!autoInsp){var il=dept==='inspection'?getList('inspecteurs'):getList('coutureuses');autoInsp=il[0]||'';}var hasErr=!!errorReason;var newRow={id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:1,qty:parseInt(qty)||1,item:item||'',client:client||'Commande client',inspecteur:autoInsp,hasError:hasErr,errorReason:errorReason||'',errQty:hasErr?1:0,description:notes||'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu',permanent:true,serieSnapshot:{client:client||'',item:item||'',qty:qty,importedAt:new Date().toISOString()}};rows.push(newRow);md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');}
 
 /* ═══ STATS ═══ */
 var statsView='atelier';
