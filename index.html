@@ -307,7 +307,7 @@ var MODULES={
   inspection:{icon:'☑️',label:'Insp. Atelier',desc:'Inspection Atelier',file:'PhysiPro_Inspection_Atelier.html',cls:'t-inspection'},
   inspcouture:{icon:'🧵',label:'Prod. Couture',desc:'Production Couture',file:'PhysiPro_Production_Couture.html',cls:'t-inspcouture'},
   serie:{icon:'📋',label:'Série+',desc:'Commandes de série',file:'PhysiPro_Serie_.html',cls:'t-serie'},
-  jobs:{icon:'❓',label:'Service Client',desc:'Service à la clientèle',file:'PhysiPro_Questionnement.html',cls:'t-jobs'},
+  jobs:{icon:'❓',label:'Questionnement',desc:'Jobs en questionnement',file:'PhysiPro_Questionnement.html',cls:'t-jobs'},
   psm:{icon:'🔧',label:'PSM',desc:'Plan de santé matières',file:'PhysiPro_PSM.html',cls:'t-psm'},
   entrepot:{icon:'📦',label:'Entrepôt',desc:'Magasin & matériaux',file:'PhysiPro_Entrepot.html',cls:'t-entrepot'},
   archives:{icon:'🗄️',label:'Archives',desc:'Historique & archives',file:'PhysiPro_Archives.html',cls:'t-archives'}
@@ -406,17 +406,26 @@ auth.onAuthStateChanged(function(user){
 
   var count=access.length;
   var cols;
-  if(count<=4) cols=2;
+  if(count<=2) cols=2;
+  else if(count<=4) cols=2;
   else if(count<=6) cols=3;
   else cols=Math.min(Math.ceil(count/2),6);
   grid.style.gridTemplateColumns='repeat('+cols+',1fr)';
+  // Bigger tiles when few modules
   if(count<=4){
-    grid.style.maxWidth='600px';grid.style.gap='18px';
-    grid.querySelectorAll('.hub-tile').forEach(function(t){t.style.minHeight='160px';t.style.padding='30px 16px 24px';});
-    grid.querySelectorAll('.hub-tile-icon').forEach(function(i){i.style.width='72px';i.style.height='72px';i.style.fontSize='36px';i.style.borderRadius='18px';});
-    grid.querySelectorAll('.hub-tile-label').forEach(function(l){l.style.fontSize='16px';});
-    grid.querySelectorAll('.hub-tile-desc').forEach(function(d){d.style.fontSize='12px';});
-  } else if(count<=6){grid.style.maxWidth='900px';}
+    grid.style.maxWidth='600px';
+    grid.style.gap='18px';
+    var tiles=grid.querySelectorAll('.hub-tile');
+    tiles.forEach(function(t){t.style.minHeight='160px';t.style.padding='30px 16px 24px';});
+    var icons=grid.querySelectorAll('.hub-tile-icon');
+    icons.forEach(function(i){i.style.width='72px';i.style.height='72px';i.style.fontSize='36px';i.style.borderRadius='18px';});
+    var labels=grid.querySelectorAll('.hub-tile-label');
+    labels.forEach(function(l){l.style.fontSize='16px';});
+    var descs=grid.querySelectorAll('.hub-tile-desc');
+    descs.forEach(function(d){d.style.fontSize='12px';});
+  } else if(count<=6){
+    grid.style.maxWidth='900px';
+  }
 });
 </script>
 <!-- ===== XCHAT TOPBAR INTER-APP ===== -->
@@ -436,7 +445,7 @@ auth.onAuthStateChanged(function(user){
 <script>
 var XChat=(function(){
   var PAGE_ID='index';
-  var PAGE_NAMES={moulage:'Moulage',psm:'PSM',questionnement:'Service Client',serie:'Série+',inspection:'Inspection Atelier',couture:'Production Couture',archives:'Archives',entrepot:'Entrepôt'};
+  var PAGE_NAMES={moulage:'Moulage',psm:'PSM',questionnement:'Questionnement',serie:'Série+',inspection:'Inspection Atelier',couture:'Production Couture',archives:'Archives',entrepot:'Entrepôt'};
   var PAGE_URLS={moulage:'Physipro_moulage.html',psm:'PhysiPro_PSM.html',questionnement:'PhysiPro_Questionnement.html',serie:'PhysiPro_Serie_.html',inspection:'PhysiPro_Inspection_Atelier.html',couture:'PhysiPro_Production_Couture.html',archives:'PhysiPro_Archives.html',entrepot:'PhysiPro_Entrepot.html'};
   var messages=[],isOpen=false,composeType='normal',replyToThread=null,selectedDest=[],firstLoad=true,lastCount=0;
   function _E(b){try{return atob(b)}catch(e){return b}}
@@ -449,9 +458,9 @@ var XChat=(function(){
   function init(){var database=getDb(),user=getUser();if(!database||!user||!user.email){setTimeout(init,2000);return;}database.ref('crossAppChat').orderByChild('timestamp').limitToLast(200).on('value',function(snap){var data=snap.val()||{};var entries=Object.entries(data);entries.sort(function(a,b){return(a[1].timestamp||0)-(b[1].timestamp||0);});messages=entries;renderMessages();if(!firstLoad&&entries.length>lastCount){var n=entries[entries.length-1];if(n&&n[1].authorEmail&&n[1].authorEmail.toLowerCase()!==(user.email||'').toLowerCase()){if(typeof showToast==='function')showToast('💬 '+( n[1].authorName||''),'info');}}firstLoad=false;lastCount=entries.length;});}
   function toggle(){var p=document.getElementById('xchatPanel');isOpen=!p.classList.contains('active');p.classList.toggle('active');if(isOpen)markRead();}
   function renderMessages(){var user=getUser();if(!user)return;var my=(user.email||'').toLowerCase();var pS=document.getElementById('xchatPinned'),qS=document.getElementById('xchatQuestions'),mL=document.getElementById('xchatMessagesList');var pin=[],thr={},reg=[];messages.forEach(function(e){var m=e[1];if(m.type==='pinned')pin.push(e);else if(m.type==='problem'){if(!thr[e[0]])thr[e[0]]={q:e,r:[]};else thr[e[0]].q=e;}else if(m.threadId&&thr[m.threadId])thr[m.threadId].r.push(e);else if(m.threadId){thr[m.threadId]={q:null,r:[e]};}else reg.push(e);});if(pin.length>0){pS.classList.add('has-items');document.getElementById('xchatPinnedList').innerHTML=pin.map(function(e){return rM(e,my,'pinned');}).join('');}else pS.classList.remove('has-items');if(Object.keys(thr).length>0){qS.classList.add('has-items');var h='';Object.keys(thr).forEach(function(k){var t=thr[k];if(!t.q)return;h+='<div class="xthread-block">'+rQ(t.q,my,t.r.length>0);t.r.forEach(function(r){h+=rR(r,my);});h+='<div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+t.q[0]+'\')">↩️ Répondre</button></div></div>';});document.getElementById('xchatQuestionsList').innerHTML=h;}else qS.classList.remove('has-items');if(reg.length>0)mL.innerHTML=reg.map(function(e){return rM(e,my,'normal');}).join('');else if(!pin.length&&!Object.keys(thr).length)mL.innerHTML='<div class="xchat-empty">💬 Aucun message.</div>';else mL.innerHTML='';if(isOpen){var s=document.getElementById('xchatScroll');if(s)s.scrollTop=s.scrollHeight;}}
-  function rM(e,my,tc){var id=e[0],m=e[1],me=m.authorEmail&&m.authorEmail.toLowerCase()===my,sn=PAGE_NAMES[m.sourcePage]||m.sourcePage||'',lb={problem:'❓ Question',normal:'💬 Discussion',pinned:'📌 Épinglé'},dl='<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>',ci='',lk='';if(m.sourceCardName||m.sourceCardId)ci='<div style="font-size:8px;color:#60a5fa;margin-top:1px;font-style:italic;">📋 '+esc(m.sourceCardName||m.sourceCardId)+'</div>';if(m.sourcePage&&m.sourcePage!==PAGE_ID&&PAGE_URLS[m.sourcePage]){var u=PAGE_URLS[m.sourcePage];if(m.sourceCardId)u+='?card='+encodeURIComponent(m.sourceCardId);lk='<a style="display:inline-block;margin-top:4px;padding:2px 8px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:4px;color:#93c5fd;font-size:8px;font-weight:600;text-decoration:none;" href="'+u+'" target="_blank">🔗 Ouvrir dans '+esc(sn)+'</a>';}return'<div class="xchat-msg '+tc+'">'+dl+'<div class="xmsg-type">'+(lb[m.type]||'💬')+' <span class="xmsg-time">'+fmtTime(m.timestamp)+'</span></div><div class="xmsg-author">'+esc(m.authorName||'')+(me?' (moi)':'')+'</div><div class="xmsg-content">'+esc(m.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(sn)+'</div>'+ci+lk+'<div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+id+'\')">↩️ Répondre</button></div></div>';}
-  function rQ(e,my,hr){var id=e[0],m=e[1],me=m.authorEmail&&m.authorEmail.toLowerCase()===my,sn=PAGE_NAMES[m.sourcePage]||'',dl='<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>';return'<div class="xthread-question'+(hr?' has-replies':'')+'">'+dl+'<div class="xmsg-type">❓ Question <span class="xmsg-time" style="float:right;font-weight:400;color:#94a3b8;">'+fmtTime(m.timestamp)+'</span></div><div class="xmsg-author">'+esc(m.authorName||'')+(me?' (moi)':'')+'</div><div class="xmsg-content">'+esc(m.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(sn)+'</div><div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+id+'\')">↩️ Répondre</button></div></div>';}
-  function rR(e,my){var id=e[0],m=e[1],me=m.authorEmail&&m.authorEmail.toLowerCase()===my,sn=PAGE_NAMES[m.sourcePage]||'',dl='<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>';return'<div class="xthread-discussion">'+dl+'<div class="xmsg-type">↩️ Réponse <span style="float:right;font-weight:400;color:#94a3b8;font-size:8px;">'+fmtTime(m.timestamp)+'</span></div><div class="xmsg-author">'+esc(m.authorName||'')+(me?' (moi)':'')+'</div><div class="xmsg-content">'+esc(m.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(sn)+'</div><div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+(m.threadId||id)+'\')">↩️ Répondre</button></div></div>';}
+  function rM(e,my,tc){var id=e[0],m=e[1],me=m.authorEmail&&m.authorEmail.toLowerCase()===my,sn=PAGE_NAMES[m.sourcePage]||m.sourcePage||'',lb={problem:'❓ Question',normal:'💬 Discussion',pinned:'📌 Épinglé'},dl=me?'<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>':'',ci='',lk='';if(m.sourceCardName||m.sourceCardId)ci='<div style="font-size:8px;color:#60a5fa;margin-top:1px;font-style:italic;">📋 '+esc(m.sourceCardName||m.sourceCardId)+'</div>';if(m.sourcePage&&m.sourcePage!==PAGE_ID&&PAGE_URLS[m.sourcePage]){var u=PAGE_URLS[m.sourcePage];if(m.sourceCardId)u+='?card='+encodeURIComponent(m.sourceCardId);lk='<a style="display:inline-block;margin-top:4px;padding:2px 8px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:4px;color:#93c5fd;font-size:8px;font-weight:600;text-decoration:none;" href="'+u+'" target="_blank">🔗 Ouvrir dans '+esc(sn)+'</a>';}return'<div class="xchat-msg '+tc+'">'+dl+'<div class="xmsg-type">'+(lb[m.type]||'💬')+' <span class="xmsg-time">'+fmtTime(m.timestamp)+'</span></div><div class="xmsg-author">'+esc(m.authorName||'')+(me?' (moi)':'')+'</div><div class="xmsg-content">'+esc(m.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(sn)+'</div>'+ci+lk+'<div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+id+'\')">↩️ Répondre</button></div></div>';}
+  function rQ(e,my,hr){var id=e[0],m=e[1],me=m.authorEmail&&m.authorEmail.toLowerCase()===my,sn=PAGE_NAMES[m.sourcePage]||'',dl=me?'<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>':'';return'<div class="xthread-question'+(hr?' has-replies':'')+'">'+dl+'<div class="xmsg-type">❓ Question <span class="xmsg-time" style="float:right;font-weight:400;color:#94a3b8;">'+fmtTime(m.timestamp)+'</span></div><div class="xmsg-author">'+esc(m.authorName||'')+(me?' (moi)':'')+'</div><div class="xmsg-content">'+esc(m.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(sn)+'</div><div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+id+'\')">↩️ Répondre</button></div></div>';}
+  function rR(e,my){var id=e[0],m=e[1],me=m.authorEmail&&m.authorEmail.toLowerCase()===my,sn=PAGE_NAMES[m.sourcePage]||'',dl=me?'<button class="xmsg-delete" onclick="XChat.deleteMsg(\''+id+'\')">✕</button>':'';return'<div class="xthread-discussion">'+dl+'<div class="xmsg-type">↩️ Réponse <span style="float:right;font-weight:400;color:#94a3b8;font-size:8px;">'+fmtTime(m.timestamp)+'</span></div><div class="xmsg-author">'+esc(m.authorName||'')+(me?' (moi)':'')+'</div><div class="xmsg-content">'+esc(m.content||'').replace(/\n/g,'<br>')+'</div><div class="xmsg-source">📍 '+esc(sn)+'</div><div class="xthread-reply-zone"><button class="xthread-reply-btn" onclick="XChat.replyToThread(\''+(m.threadId||id)+'\')">↩️ Répondre</button></div></div>';}
   function openCompose(t){composeType=t;replyToThread=null;var z=document.getElementById('xchatCompose');z.className='xchat-compose active';document.getElementById('xchatComposeType').textContent='💬 DISCUSSION';var u=getUser();document.getElementById('xchatComposeAuthor').textContent=u?getUserName(u.email):'';document.getElementById('xchatComposeText').value='';document.getElementById('xchatComposeText').focus();}
   function closeCompose(){document.getElementById('xchatCompose').classList.remove('active');replyToThread=null;}
   function replyToThreadFn(tid){replyToThread=tid;openCompose('normal');document.getElementById('xchatComposeType').textContent='↩️ RÉPONSE';}
