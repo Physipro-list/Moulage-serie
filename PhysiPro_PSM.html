@@ -4778,6 +4778,29 @@ function buildPairRows(container) {
   }
   
   pairDiv.innerHTML = html;
+  
+  // CRITICAL FIX: Attach real-time save listeners to pair comments
+  // onblur in the HTML handles blur, but we also need input events for real-time save
+  pairDiv.querySelectorAll('.notes-pair-comment').forEach(function(c) {
+    c.addEventListener('input', function() {
+      if (window._loadingCard) return;
+      window._markDirty();
+      if (window._notesInputTimer) clearTimeout(window._notesInputTimer);
+      window._notesInputTimer = setTimeout(function() {
+        window._notesInputTimer = null;
+        if (window._loadingCard) return;
+        savePairComments();
+        _flushDomToData();
+        saveToFirebase();
+      }, 150);
+    });
+    c.addEventListener('blur', function() {
+      if (window._loadingCard) return;
+      savePairComments();
+      _flushDomToData();
+      saveToFirebaseNow();
+    });
+  });
 }
 
 function restoreFromPairMode(container) {
@@ -5384,6 +5407,18 @@ function switchDept(dept) {
   
   // Sync header PSM/Prix/Temps to current dept
   syncHeaderControls(dept);
+  
+  // CRITICAL FIX: Rebuild pair rows for the new dept if pair mode is active
+  if (_pairModeActive) {
+    var activePanel = document.getElementById('notesPanel_' + dept);
+    if (activePanel) {
+      var container = activePanel.querySelector('.notes-split-container');
+      if (container) {
+        container.classList.add('pair-mode');
+        buildPairRows(container);
+      }
+    }
+  }
 }
 
 // Keep old name as alias for backward compat
@@ -7203,6 +7238,19 @@ function loadCard(id) {
     renderPsmPhotos(dept, 'notes', data.photosNotes || []);
   });
   
+  // CRITICAL FIX: Rebuild pair rows for the active dept if pair mode is ON
+  // Without this, switching cards leaves stale pair data from the previous card visible.
+  if (_pairModeActive) {
+    var activePanel = document.querySelector('.psm-notes-panel.active');
+    if (activePanel) {
+      var container = activePanel.querySelector('.notes-split-container');
+      if (container) {
+        container.classList.add('pair-mode');
+        buildPairRows(container);
+      }
+    }
+  }
+  
   // CRITICAL: Release the guard — DOM writes are complete.
   // Use setTimeout(0) to ensure all browser-triggered input events from innerHTML
   // assignments are processed BEFORE we allow saves again.
@@ -7755,6 +7803,23 @@ function _flushDomToData() {
       var rightEl = document.getElementById('notes' + capitalize(dept) + 'Right');
       if (rightEl) {
         data.notesRightHtml = rightEl.innerHTML;
+      }
+      
+      // CRITICAL FIX: Also flush pair comments if pair mode is active
+      // Without this, pair comments are lost when switching cards because
+      // _flushDomToData only saved notesRightHtml but not pairComments.
+      if (_pairModeActive && dept === currentDept) {
+        var panel = document.querySelector('.psm-notes-panel.active');
+        if (panel) {
+          var pairCommentEls = panel.querySelectorAll('.notes-pair-comment');
+          if (pairCommentEls.length > 0) {
+            var comments = [];
+            pairCommentEls.forEach(function(c) {
+              comments.push(c.innerHTML);
+            });
+            data.pairComments = comments;
+          }
+        }
       }
     } catch(e) {
       console.error('_flushDomToData error for dept ' + dept + ':', e);
