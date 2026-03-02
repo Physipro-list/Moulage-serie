@@ -6620,14 +6620,15 @@ function printPSM() {
   html += '.info strong { color:#000; }';
   html += '.dept-block { margin-bottom:10px; }';
   html += '.dept-header { font-size:16px; font-weight:800; padding:6px 0; margin-bottom:8px; border-bottom:2px solid #333; }';
-  html += '.section { border:1.5px solid #999; border-radius:6px; margin-bottom:8px; page-break-inside:avoid; overflow:hidden; }';
+  html += '.section { border:1.5px solid #999; border-radius:6px; margin-bottom:8px; overflow:visible; }';
   html += '.section-title { background:#e0e0e0; padding:4px 10px; font-weight:700; font-size:11px; border-bottom:1px solid #999; }';
-  html += '.section-body { padding:8px 12px; min-height:20px; font-size:10px; line-height:1.4; }';
-  html += '.section-body img { max-width:80%; border:1px solid #999; border-radius:4px; }';
+  html += '.section-body { padding:8px 12px; min-height:20px; font-size:10px; line-height:1.4; overflow:visible; }';
+  html += '.section-body img { max-width:80%; height:auto; border:1px solid #999; border-radius:4px; display:block; margin:4px 0; }';
   html += '.mat-row { display:flex; gap:8px; margin-bottom:12px; page-break-inside:avoid; }';
   html += '.mat-col { flex:1; border:1.5px solid #999; border-radius:6px; overflow:hidden; }';
   html += '.mat-col .section-title { font-size:12px; padding:4px 8px; }';
   html += '.qmsg-images img { max-width:100%; border-radius:4px; border:1px solid #ccc; margin-top:4px; }';
+  html += '.img-lightbox { display:none; }';
   html += '.page-break { page-break-before:always; }';
   html += '.response-page { page-break-before:always; min-height:100vh; display:flex; flex-direction:column; }';
   html += '.response-page .response-box { flex:1; border:2px solid #333; border-radius:8px; overflow:hidden; display:flex; flex-direction:column; }';
@@ -6636,7 +6637,7 @@ function printPSM() {
   html += '.response-page .signature-block { padding-top:20px; display:flex; justify-content:flex-end; }';
   html += '.response-page .signature-inner { text-align:center; min-width:280px; }';
   html += '.response-page .signature-line { border-bottom:1.5px solid #333; padding-bottom:4px; margin-bottom:6px; }';
-  html += '@media print { body { margin:0; padding:0; } @page { margin:10mm; } .response-page { height:calc(100vh - 20mm); } }';
+  html += '@media print { body { margin:0; padding:10px; } @page { margin:10mm; size:letter; } .section { overflow:visible !important; page-break-inside:auto; } .section-body { overflow:visible !important; } .section-body img { max-width:100%; page-break-inside:avoid; } .dept-block { page-break-inside:auto; } .mat-row { page-break-inside:auto; } .response-page { page-break-before:always; height:auto; min-height:calc(100vh - 20mm); } .img-lightbox { display:none !important; } }';
   html += '<\/style></head><body>';
   
   // Page header with logo
@@ -7751,6 +7752,15 @@ function _sendCompleteEmail(cardId) {
 function _flushDomToData() {
   if (!currentCardId || !psmData[currentCardId]) return;
   var isDevisMode = document.body.classList.contains('devis-open');
+  
+  // CRITICAL FIX: Also flush service notes (cdServiceNotes) which is a .psm-textarea-lg
+  // The generic input/blur handlers call _flushDomToData but it wasn't saving serviceNotes,
+  // so edits in the Fiche overlay service notes field were lost unless closeFicheOverlay was called.
+  var serviceNotesEl = document.getElementById('cdServiceNotes');
+  if (serviceNotesEl) {
+    psmData[currentCardId].serviceNotesHtml = serviceNotesEl.innerHTML;
+    psmData[currentCardId].serviceNotes = serviceNotesEl.innerText || '';
+  }
   
   ['atelier', 'couture', 'metal'].forEach(function(dept) {
     try {
