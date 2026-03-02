@@ -5061,38 +5061,23 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
       }
     });
-    // On paste: only keep images, strip all text
+    // On paste: block text paste (images handled by global paste handler at document level
+    // which properly compresses images and creates psm-img-resize-wrapper)
     el.addEventListener('paste', function(e) {
       var items = (e.clipboardData || e.originalEvent.clipboardData).items;
       var hasImage = false;
       for (var i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           hasImage = true;
-          e.preventDefault();
-          var blob = items[i].getAsFile();
-          var reader = new FileReader();
-          reader.onload = function(ev) {
-            var img = document.createElement('img');
-            img.src = ev.target.result;
-            img.style.maxWidth = '100%';
-            img.style.borderRadius = '6px';
-            img.style.border = '2px solid #3b5998';
-            img.style.margin = '6px 0';
-            img.style.display = 'block';
-            img.style.cursor = 'pointer';
-            img.onclick = function() { openLightbox(this.src); };
-            el.appendChild(img);
-            window._markDirty();
-            window._debouncedNotesSave();
-          };
-          reader.readAsDataURL(blob);
           break;
         }
       }
       if (!hasImage) {
-        // No image in clipboard — block text paste
+        // No image in clipboard — block text paste in photo-only zone
         e.preventDefault();
       }
+      // If hasImage: let the event propagate to the global paste handler (line ~8855)
+      // which handles compression + proper wrapper creation
     });
     // Strip any raw text that might get typed (safety net for input event)
     el.addEventListener('input', function() {
@@ -5220,8 +5205,12 @@ document.addEventListener('DOMContentLoaded', function() {
         Array.from(files).forEach(function(file) {
           if (!file.type.startsWith('image/')) return;
           var reader = new FileReader();
-          reader.onload = function(ev) {
-            insertImgIntoEditable(notesZone, ev.target.result);
+          reader.onload = async function(ev) {
+            // CRITICAL: Compress before inserting to prevent Firebase size explosion
+            var compressed = typeof compressPsmImage === 'function' 
+              ? await compressPsmImage(ev.target.result) 
+              : ev.target.result;
+            insertImgIntoEditable(notesZone, compressed);
             saveCurrentCard();
           };
           reader.readAsDataURL(file);
@@ -8880,7 +8869,8 @@ document.addEventListener('paste', function(e) {
         // Create inline resizable image wrapper
         const wrapper = document.createElement('div');
         wrapper.className = 'psm-img-resize-wrapper';
-        wrapper.innerHTML = '<img src="' + compressed + '" style="width:300px">' +
+        wrapper.setAttribute('draggable', 'false');
+        wrapper.innerHTML = '<img src="' + compressed + '" style="width:300px" draggable="false" onclick="selectNoteImg(this)">' +
           '<span class="psm-img-resize-handle" onmousedown="startImgResize(event)">⤡</span>' +
           '<span class="psm-img-delete-btn" onclick="deleteInlineImg(this)">✕</span>';
         
@@ -9903,10 +9893,20 @@ function sendPsmFileNotifyEmail(cardId) {
 
 
 
-// Paste in devis overlay
+// Paste in devis overlay — only intercept if focus is NOT in a notes/instructions editable zone
 document.addEventListener('paste', function(e) {
   const devisOverlay = document.getElementById('devisOverlay');
   if (!devisOverlay || !devisOverlay.classList.contains('visible')) return;
+  
+  // CRITICAL: Don't steal paste from notes/instructions contenteditable zones
+  const active = document.activeElement;
+  if (active && (active.classList.contains('notes-split-text') || 
+      active.classList.contains('notes-split-right') || 
+      active.classList.contains('psm-textarea-lg') ||
+      active.classList.contains('questionnement-editable') ||
+      active.closest('.qchat-compose-textarea'))) {
+    return; // Let the normal paste handlers deal with it
+  }
   
   for (const item of e.clipboardData.items) {
     if (item.type.startsWith('image/')) {
