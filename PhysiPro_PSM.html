@@ -3898,7 +3898,7 @@ if(localStorage.getItem('physipro_last_email')){
                 <div style="display:flex; gap:4px; padding:4px 6px; background:rgba(15,23,42,0.9); border-top:1px solid rgba(255,255,255,0.1); flex-shrink:0; align-items:center; justify-content:center;">
                   <button onclick="printCardPdfFromInline()" style="padding:5px 10px; border-radius:6px; cursor:pointer; border:none; font-weight:600; transition:all 0.2s; background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; font-size:10px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">🖨️ Imprimer PDF</button>
                   <button onclick="openDevisViewerFromInline()" style="flex:1; display:flex; align-items:center; justify-content:center; gap:4px; padding:5px 10px; border-radius:6px; cursor:pointer; border:none; font-weight:600; transition:all 0.2s; background:linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; font-size:10px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">🔍 Agrandir PDF</button>
-                  <button onclick="clickToAddFileFromInline()" style="padding:5px 10px; border-radius:6px; cursor:pointer; border:none; font-weight:600; transition:all 0.2s; background:rgba(255,255,255,0.1); color:#fff; font-size:10px;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">📎 Ajouter</button>
+                  <button onclick="clickToAddFileFromInline()" style="padding:5px 10px; border-radius:6px; cursor:pointer; border:none; font-weight:600; transition:all 0.2s; background:rgba(255,255,255,0.1); color:#fff; font-size:10px;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">📋 Coller (Ctrl+V)</button>
                 </div>
               </div>
 
@@ -4032,14 +4032,14 @@ if(localStorage.getItem('physipro_last_email')){
     <!-- Magnifier lens + mouse capture overlay -->
     <div class="devis-magnifier" id="devisMagnifier"><canvas id="devisMagCanvas"></canvas></div>
     <div class="devis-mag-overlay" id="devisMagOverlay"></div>
-    <input type="file" id="devisFileInput" accept="image/*,.pdf" multiple style="display:none" onchange="handleDevisFiles(this)">
+    <!-- file picker removed: paste only -->
     
     <!-- MODE UPLOAD (shown when no images) -->
     <div class="devis-mode-upload" id="devisModeUpload">
       <div class="devis-dropzone" id="devisDropzone">
-        <div class="devis-dropzone-icon">📂</div>
-        <div class="devis-dropzone-text">Glissez et déposez vos fichiers ici</div>
-        <div class="devis-dropzone-hint">ou cliquez sur "📎 Ajouter"</div>
+        <div class="devis-dropzone-icon">📋</div>
+        <div class="devis-dropzone-text">Cliquez ici puis Ctrl+V pour coller</div>
+        <div class="devis-dropzone-hint">Copiez une image puis collez-la ici</div>
       </div>
     </div>
     
@@ -4119,7 +4119,7 @@ if(localStorage.getItem('physipro_last_email')){
 </div>
 
 <!-- Hidden input for paste photos -->
-<input type="file" id="psmPhotoFileInput" accept="image/*" style="display:none" onchange="handlePsmPhotoFile(this)">
+<!-- file picker removed: paste only -->
 
 <!-- TOAST -->
 <div class="toast-container" id="toastContainer"></div>
@@ -5776,37 +5776,49 @@ function processDroppedFiles(dataTransfer, cardId) {
 
 // Click-to-browse file picker for cards
 function clickToAddFile(cardId) {
-  var input = document.getElementById('psmFileInput');
-  if (!input) {
-    input = document.createElement('input');
-    input.type = 'file';
-    input.id = 'psmFileInput';
-    input.accept = 'image/*,.pdf,.doc,.docx';
-    input.multiple = true;
-    input.style.display = 'none';
-    document.body.appendChild(input);
+  // PASTE ONLY — no file picker
+  if (cardId !== currentCardId) {
+    openFicheOverlay(cardId);
   }
-  input.value = '';
-  input.onchange = function() {
-    if (!input.files || input.files.length === 0) return;
-    Array.from(input.files).forEach(function(file) {
-      var reader = new FileReader();
-      reader.onload = function(ev) {
-        var base64 = ev.target.result;
-        if (file.type.match(/^image\//)) {
-          compressDevisImage(base64).then(function(compressed) {
-            addDevisImageToCard(cardId, compressed);
-          }).catch(function() {
-            addDevisImageToCard(cardId, base64);
-          });
-        } else {
-          addDevisImageToCard(cardId, base64);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-  input.click();
+  setTimeout(function() { _focusDevisPasteZone(); }, 300);
+}
+
+function _focusDevisPasteZone() {
+  var zone = document.getElementById('devisPasteZone');
+  if (!zone) {
+    var emptyDiv = document.getElementById('pdfInlineEmpty');
+    if (emptyDiv) {
+      emptyDiv.innerHTML = '<div id="devisPasteZone" contenteditable="true" tabindex="0" style="width:90%;min-height:60px;margin:8px auto;outline:none;text-align:center;color:#64748b;font-size:11px;padding:12px;cursor:text;border:2px dashed rgba(59,130,246,0.3);border-radius:8px;background:rgba(59,130,246,0.05);caret-color:#3b82f6;">\ud83d\udccb Cliquez ici puis Ctrl+V pour coller</div>';
+      zone = document.getElementById('devisPasteZone');
+      if (zone) _initPasteOnlyZone(zone, function(base64) {
+        compressDevisImage(base64).then(function(c) { addDevisImageToCard(currentCardId, c); }).catch(function() { addDevisImageToCard(currentCardId, base64); });
+      });
+    }
+  }
+  if (zone) { zone.focus(); showToast('\ud83d\udccb Ctrl+V pour coller une image', 'info'); }
+}
+
+function _initPasteOnlyZone(zone, onImage) {
+  if (!zone || zone._pasteOK) return;
+  zone._pasteOK = true;
+  var ph = zone.textContent;
+  zone.addEventListener('focus', function() { if (this.textContent === ph) this.innerHTML = ''; });
+  zone.addEventListener('blur', function() { if (!this.innerHTML.trim() || this.innerHTML === '<br>') this.innerHTML = ph; });
+  zone.addEventListener('paste', function(e) {
+    e.preventDefault();
+    for (var i = 0; i < e.clipboardData.items.length; i++) {
+      if (e.clipboardData.items[i].type.indexOf('image/') === 0) {
+        var r = new FileReader();
+        r.onload = function(ev) { onImage(ev.target.result); };
+        r.readAsDataURL(e.clipboardData.items[i].getAsFile());
+        return;
+      }
+    }
+    showToast('\u26a0\ufe0f Seules les images (Ctrl+V) sont accept\xe9es', 'warning');
+  });
+  zone.addEventListener('keydown', function(e) {
+    if (!(e.ctrlKey || e.metaKey) && e.key.length === 1) e.preventDefault();
+  });
 }
 
 // ═══ GLOBAL STATE ═══
@@ -5828,6 +5840,11 @@ function switchDept(dept) {
   
   currentDept = dept;
   activeTab = dept;
+  
+  // UNIFIED SYNC: refresh devis overlay annotations when switching dept
+  if (document.body.classList.contains('devis-open')) {
+    setTimeout(function() { renderAnnotBlocks(); }, 100);
+  }
   
   // Update dept tabs in topbar
   document.querySelectorAll('.topbar-dept-tab').forEach(function(t) { t.classList.remove('active'); });
@@ -6280,9 +6297,11 @@ function saveQuestionnement(dept) {
 
 // Photo support for questionnement
 function triggerQuestPhoto(dept) {
+  // PASTE ONLY — focus the quest text area for Ctrl+V
   psmActivePhotoDept = dept;
   psmActivePhotoField = 'questText';
-  document.getElementById('psmPhotoFileInput').click();
+  var questText = document.getElementById('questText' + capitalize(dept));
+  if (questText) { questText.focus(); showToast('\ud83d\udccb Ctrl+V pour coller une image', 'info'); }
 }
 
 function updateQuestPastille(dept) {
@@ -6867,7 +6886,7 @@ function renderCards() {
         <div class="psm-card-actions">
           <div class="psm-card-pill">
             <button class="psm-card-pill-pdf has-pdf" onclick="event.stopPropagation();selectCard('${safeId}');printPSM();" style="background:#4a8ef5;">🖨️ Imprimer</button>
-            <button class="psm-card-pill-pdf card-devis-drop" data-card-id="${id}" onclick="event.stopPropagation();clickToAddFile('${safeId}')" style="background:#4a8ef5;">📂 PDF</button>
+            <button class="psm-card-pill-pdf card-devis-drop" data-card-id="${id}" onclick="event.stopPropagation();clickToAddFile('${safeId}')" style="background:#4a8ef5;">📋 Coller</button>
           </div>
         </div>
         <div class="psm-card-dept-bar">${deptBarHtml}</div>
@@ -10043,19 +10062,56 @@ function closeDevisOverlay() {
 var ANNOT_EMPTY_SLOTS = 5;
 
 function _getAnnotations(cardId) {
+  // UNIFIED: devis overlay now uses dept annotations (same data as normal view)
   var cid = cardId || currentCardId;
   if (!cid || !psmData[cid]) return [];
-  return psmData[cid].devisAnnotations || [];
+  var dept = currentDept || 'atelier';
+  var d = psmData[cid][dept];
+  return (d && d.annotations) || [];
 }
 
 function _setAnnotations(arr) {
+  // UNIFIED: write to dept annotations
   if (!currentCardId || !psmData[currentCardId]) return;
-  psmData[currentCardId].devisAnnotations = arr;
+  var dept = currentDept || 'atelier';
+  if (!psmData[currentCardId][dept]) psmData[currentCardId][dept] = {};
+  psmData[currentCardId][dept].annotations = arr;
 }
 
 function loadDevisViewerAnnotations(cardId) {
+  // UNIFIED: Auto-migrate legacy devisAnnotations → dept annotations
+  _migrateDevisAnnotsToDept(cardId);
   renderAnnotBlocks();
   _initAnnotGlobalPaste();
+}
+
+function _migrateDevisAnnotsToDept(cardId) {
+  var cid = cardId || currentCardId;
+  if (!cid || !psmData[cid]) return;
+  var legacy = psmData[cid].devisAnnotations;
+  if (!legacy || legacy.length === 0) return;
+  
+  var dept = currentDept || 'atelier';
+  if (!psmData[cid][dept]) psmData[cid][dept] = {};
+  var existing = psmData[cid][dept].annotations || [];
+  
+  // Only migrate if dept annotations are empty (don't overwrite)
+  if (existing.length === 0) {
+    psmData[cid][dept].annotations = legacy.slice(); // copy
+    console.log('PSM: Migrated ' + legacy.length + ' devisAnnotations → ' + dept + '.annotations');
+    // Save to Firebase
+    var updates = {};
+    updates['psm/' + cid + '/' + dept + '/annotations'] = legacy;
+    updates['psm/' + cid + '/devisAnnotations'] = null; // clean up legacy
+    updates['psm/' + cid + '/_lastModifiedAt'] = new Date().toISOString();
+    updates['psm/' + cid + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+    _skipSyncUntil = Date.now() + 3000;
+    db.ref().update(updates).then(function() {
+      console.log('PSM: devisAnnotations migration saved + legacy cleared');
+    }).catch(function(e) { console.error('Migration save error:', e); });
+  }
+  // Clear legacy reference in memory regardless
+  delete psmData[cid].devisAnnotations;
 }
 
 function renderAnnotBlocks() {
@@ -10131,7 +10187,7 @@ function _buildAnnotBlock(idx, data, isEmpty) {
   } else {
     var ph = document.createElement('div');
     ph.className = 'annot-img-placeholder';
-    ph.textContent = '\uD83D\uDCF7 Coller, glisser ou cliquer';
+    ph.textContent = '\uD83D\uDCF7 Cliquez ici + Ctrl+V';
     imgZone.appendChild(ph);
     imgZone.addEventListener('click', function() { triggerAnnotImageUpload(idx); });
   }
@@ -10258,18 +10314,12 @@ function setAnnotBlockImage(idx, base64) {
 // ═══ Image helpers ═══
 
 function triggerAnnotImageUpload(idx) {
-  var inp = document.createElement('input');
-  inp.type = 'file';
-  inp.accept = 'image/*';
-  inp.style.display = 'none';
-  inp.addEventListener('change', function() {
-    if (inp.files && inp.files[0]) {
-      _handleAnnotImageForSlot(idx, inp.files[0]);
-    }
-    inp.remove();
-  });
-  document.body.appendChild(inp);
-  inp.click();
+  // PASTE ONLY — focus the image zone for Ctrl+V
+  var imgZone = document.querySelector('.devis-annot-block[data-idx="' + idx + '"] .devis-annot-img-zone');
+  if (imgZone) {
+    imgZone.focus();
+    showToast('\ud83d\udccb Ctrl+V pour coller une image', 'info');
+  }
 }
 
 function _readAndSetAnnotImage(idx, file) {
@@ -10345,22 +10395,11 @@ function _initAnnotGlobalPaste() {
 // ═══ Firebase save ═══
 
 function _saveAnnotations() {
-  if (!currentCardId || !psmData[currentCardId]) return;
-  var annots = psmData[currentCardId].devisAnnotations || [];
-  _skipSyncUntil = Date.now() + 2000;
-  _pendingSave = true;
-  var updates = {};
-  updates['psm/' + currentCardId + '/devisAnnotations'] = annots.length > 0 ? annots : null;
-  updates['psm/' + currentCardId + '/_lastModifiedAt'] = new Date().toISOString();
-  updates['psm/' + currentCardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
-  db.ref().update(updates).then(function() {
-    _pendingSave = false;
-    console.log('PSM: devisAnnotations saved (' + annots.length + ' blocks)');
-  }).catch(function(e) {
-    _skipSyncUntil = 0; _pendingSave = false;
-    console.error('PSM: devisAnnotations save error:', e);
-    showToast('\u274C Erreur sauvegarde annotations: ' + (e.message || ''), 'error');
-  });
+  // UNIFIED: save via dept annotation path + sync normal view
+  var dept = currentDept || 'atelier';
+  _saveDeptAnnotations(dept);
+  // Also refresh the normal dept annotation list so both views stay in sync
+  renderDeptAnnotBlocks(dept);
 }
 
 // ═══ Flush all text from DOM before closing / switching cards ═══
@@ -10402,6 +10441,9 @@ function flushAllAnnotTexts() {
     _setAnnotations(annots);
     _saveAnnotations();
   }
+  
+  // Also flush dept annotations from the normal view
+  flushDeptAnnotTexts(currentDept || 'atelier');
 }
 
 // ═══ DEPT ANNOTATION BLOCKS (normal view: image left, text right) ═══
@@ -10446,6 +10488,18 @@ function renderDeptAnnotBlocks(dept) {
   // Empty slots
   for (var s = 0; s < DEPT_ANNOT_SLOTS; s++) {
     list.appendChild(_buildDeptAnnotRow(annots.length + s, { textHtml: '', image: null }, true, dept));
+  }
+  
+  // UNIFIED SYNC: if devis overlay is open AND this is the current dept, refresh devis annotations too
+  if (document.body.classList.contains('devis-open') && dept === (currentDept || 'atelier')) {
+    var devisList = document.getElementById('devisAnnotList');
+    if (devisList && !devisList._syncing) {
+      devisList._syncing = true;
+      setTimeout(function() {
+        renderAnnotBlocks();
+        devisList._syncing = false;
+      }, 50);
+    }
   }
 }
 
@@ -10492,7 +10546,7 @@ function _buildDeptAnnotRow(idx, data, isEmpty, dept) {
   } else {
     var ph = document.createElement('div');
     ph.className = 'da-placeholder';
-    ph.innerHTML = '\uD83D\uDCF7 Coller<br>ou cliquer';
+    ph.innerHTML = '\uD83D\uDCF7 Ctrl+V<br>pour coller';
     imgZone.appendChild(ph);
     imgZone.addEventListener('click', function() { triggerDeptAnnotUpload(idx, dept); });
   }
@@ -10591,14 +10645,12 @@ function _handleDeptAnnotImage(idx, file, dept) {
 }
 
 function triggerDeptAnnotUpload(idx, dept) {
-  var inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = 'image/*'; inp.style.display = 'none';
-  inp.addEventListener('change', function() {
-    if (inp.files && inp.files[0]) _handleDeptAnnotImage(idx, inp.files[0], dept);
-    inp.remove();
-  });
-  document.body.appendChild(inp);
-  inp.click();
+  // PASTE ONLY — focus the image zone for Ctrl+V
+  var imgZone = document.querySelector('.psm-dept-annot-row[data-idx="' + idx + '"][data-dept="' + dept + '"] .psm-dept-annot-img');
+  if (imgZone) {
+    imgZone.focus();
+    showToast('\ud83d\udccb Ctrl+V pour coller une image', 'info');
+  }
 }
 
 function _readAndSetDeptAnnotImage(idx, file, dept) {
@@ -10672,6 +10724,14 @@ function _saveDeptAnnotations(dept) {
   db.ref().update(updates).then(function() {
     _pendingSave = false;
     console.log('PSM: ' + dept + ' annotations saved (' + annots.length + ' blocks)');
+    // UNIFIED SYNC: refresh devis overlay if open
+    if (document.body.classList.contains('devis-open') && dept === (currentDept || 'atelier')) {
+      var devisList = document.getElementById('devisAnnotList');
+      if (devisList && !devisList._syncing) {
+        devisList._syncing = true;
+        setTimeout(function() { renderAnnotBlocks(); devisList._syncing = false; }, 50);
+      }
+    }
   }).catch(function(e) {
     _skipSyncUntil = 0; _pendingSave = false;
     console.error('PSM: ' + dept + ' annotations save error:', e);
@@ -10854,9 +10914,7 @@ function printCardPdfFromInline() {
 }
 
 function clickToAddFileFromInline() {
-  if (currentCardId) {
-    clickToAddFile(currentCardId);
-  }
+  _focusDevisPasteZone();
 }
 
 // When user exits fullscreen (Escape or F11), close devis viewer too
@@ -11099,7 +11157,24 @@ function initDevisDropzone() {
   if (!dropzone || dropzone._initialized) return;
   dropzone._initialized = true;
   
-  dropzone.addEventListener('click', () => document.getElementById('devisFileInput').click());
+  // PASTE ONLY — no file picker
+  dropzone.setAttribute('tabindex', '0');
+  dropzone.style.cursor = 'text';
+  dropzone.addEventListener('click', function() { dropzone.focus(); });
+  dropzone.addEventListener('paste', function(e) {
+    e.preventDefault();
+    for (var i = 0; i < e.clipboardData.items.length; i++) {
+      if (e.clipboardData.items[i].type.indexOf('image/') === 0) {
+        var r = new FileReader();
+        r.onload = function(ev) {
+          compressDevisImage(ev.target.result).then(function(c) { addDevisImageToCard(currentCardId, c); }).catch(function() { addDevisImageToCard(currentCardId, ev.target.result); });
+        };
+        r.readAsDataURL(e.clipboardData.items[i].getAsFile());
+        return;
+      }
+    }
+    showToast('\u26a0\ufe0f Seules les images (Ctrl+V) sont accept\xe9es', 'warning');
+  });
   // Drag & drop is handled by the global handler via .devis-dropzone class
 }
 
