@@ -27,6 +27,20 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg-main);color:va
 .search-box-small{display:flex;align-items:center;width:clamp(120px, 18vw, 220px);height:22px;background:rgba(255,255,255,.95);border:2px solid #3b82f6;border-radius:11px;padding:0 4px 0 8px;}
 .search-box-small input{background:transparent;border:none;color:#1e3a5f;font-size:10px;flex:1;outline:none;min-width:0;}
 .search-box-small input::placeholder{color:#64748b;}
+.search-all-wrap{display:flex;align-items:center;gap:3px;cursor:pointer;font-size:9px;font-weight:700;color:#93c5fd;white-space:nowrap;padding:0 6px;border:1px solid rgba(147,197,253,0.25);border-radius:11px;height:22px;transition:all .2s;user-select:none;}
+.search-all-wrap:hover{background:rgba(147,197,253,0.1);border-color:rgba(147,197,253,0.5);}
+.search-all-wrap input[type=checkbox]{width:11px;height:11px;accent-color:#22c55e;cursor:pointer;margin:0;}
+.search-all-wrap.active{background:rgba(34,197,94,0.22);border-color:#22c55e;color:#4ade80;}
+.mwb{display:none;align-items:center;gap:8px;padding:8px 14px;background:linear-gradient(135deg,rgba(245,158,11,0.18),rgba(249,115,22,0.12));border:1px solid rgba(245,158,11,0.5);border-radius:8px;margin:6px 8px 2px;font-size:11px;font-weight:600;color:#fbbf24;animation:mwbPulse 2.5s ease-in-out infinite;}
+.mwb.active{display:flex;}
+.mwb-icon{font-size:15px;flex-shrink:0;}
+.mwb-text{flex:1;line-height:1.4;}
+.mwb-month{color:#f97316;font-weight:800;text-transform:capitalize;}
+.mwb-btn{padding:3px 10px;background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);border-radius:5px;color:#93c5fd;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .2s;}
+.mwb-btn:hover{background:rgba(59,130,246,0.5);color:#fff;}
+.mwb-x{background:none;border:none;color:#fbbf24;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6;flex-shrink:0;}
+.mwb-x:hover{opacity:1;}
+@keyframes mwbPulse{0%,100%{border-color:rgba(245,158,11,0.5);}50%{border-color:rgba(249,115,22,0.9);}}
 .user-status{display:flex;align-items:center;gap:5px;}
 .status-dot{width:8px;height:8px;border-radius:50%;}
 .user-name{font-size:10px;color:rgba(255,255,255,.9);font-weight:600;}
@@ -627,6 +641,7 @@ body.col-resizing *{cursor:col-resize!important;}
       <div class="search-box-small">
         <input type="text" id="searchInput" placeholder="🔍 Rechercher..." oninput="filterTable()">
       </div>
+      <label class="search-all-wrap" id="searchAllWrap"><input type="checkbox" id="searchAllCb" onchange="toggleSearchAll()">📂 Classeur</label>
     </div>
   </div>
 </header>
@@ -641,6 +656,12 @@ body.col-resizing *{cursor:col-resize!important;}
     <div style="margin-left:auto;display:flex;align-items:center;gap:6px;position:relative;"><button class="btn-sep" id="statsToggleBtn" onclick="toggleStats()">📊 Stats</button><button class="col-gear-btn" onclick="toggleColPanel()">⚙️ Colonnes</button><div class="col-panel" id="colPanel"></div></div>
   </div>
   <div id="statsPanel" style="display:none;padding:16px;overflow-y:auto;max-height:calc(100vh - 140px);"></div>
+  <div class="mwb" id="mwbBanner">
+    <span class="mwb-icon">⚠️</span>
+    <span class="mwb-text" id="mwbText"></span>
+    <button class="mwb-btn" onclick="mwbReturn()">↩ Retour au mois actuel</button>
+    <button class="mwb-x" onclick="mwbClose()">✕</button>
+  </div>
   <div id="tablePanel">
     <div class="data-table-wrap" id="tableContainer">
       <table class="data-table" id="dataTable">
@@ -739,7 +760,7 @@ function normalizeBon(val){val=String(val||'').trim();if(!val)return '';val=val.
 function formatDateDisplay(dateStr){if(!dateStr)return '';var p=dateStr.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0].slice(2):dateStr;}
 
 function initMonthSelector(){var sel=document.getElementById('monthSelect');var now=new Date();var html='';for(var i=-3;i<=6;i++){var d=new Date(now.getFullYear(),now.getMonth()+i,1);var val=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');var label=d.toLocaleDateString('fr-CA',{year:'numeric',month:'long'});html+='<option value="'+val+'"'+(i===0?' selected':'')+'>'+label+'</option>';}sel.innerHTML=html;currentMonth=sel.value;}
-function changeMonth(){currentMonth=document.getElementById('monthSelect').value;loadData();if(_statsVisible)renderStats();}
+function changeMonth(){currentMonth=document.getElementById('monthSelect').value;if(_clsForeign){_clsForeign=false;_clsSavedMonth='';mwbClose();}loadData();if(_statsVisible)renderStats();}
 
 function adjustZoom(d){zoom=Math.max(50,Math.min(200,zoom+d));applyZoom();localStorage.setItem('physipro_couture_zoom',zoom);}
 function applyZoom(){document.getElementById('zoomValue').textContent=zoom+'%';var size=Math.round(11*zoom/100);document.documentElement.style.setProperty('--tbl-zoom',size+'px');}
@@ -1007,7 +1028,134 @@ function activateReadyItems(idx){
   };
 })();
 
-function filterTable(){renderTable();}
+/* ═══ CLASSEUR COMPLET — RECHERCHE CROSS-MOIS ═══ */
+var _clsActive=false, _clsSavedMonth='', _clsForeign=false, _clsTimer=null;
+
+function toggleSearchAll(){
+  _clsActive=document.getElementById('searchAllCb').checked;
+  document.getElementById('searchAllWrap').classList.toggle('active',_clsActive);
+  if(!_clsActive&&_clsForeign) mwbReturn();
+  if(!_clsActive) mwbClose();
+  filterTable();
+}
+
+function _matchRow(r,sl){
+  if(!r||r._empty)return false;
+  return((r.bonCmd||'')+(r.fauteuil||'')+(r.client||'')+(r.items||'')+(r.nom||'')+(r.autreNo||'')).toLowerCase().indexOf(sl)!==-1;
+}
+
+function _monthLabel(key){
+  var p=key.split('-');var d=new Date(parseInt(p[0]),parseInt(p[1])-1,1);
+  return d.toLocaleDateString('fr-CA',{year:'numeric',month:'long'});
+}
+
+function filterTable(){
+  if(_clsTimer)clearTimeout(_clsTimer);
+  var raw=(document.getElementById('searchInput').value||'').trim();
+  var sl=raw.toLowerCase();
+
+  // Pas de classeur ou recherche vide → rendu normal du mois courant
+  if(!_clsActive||!raw){
+    if(!raw&&_clsForeign) mwbReturn();
+    renderTable();
+    return;
+  }
+
+  // 1) Chercher d'abord dans le mois courant
+  var localRows=data[currentMonth]||[];
+  var foundLocal=false;
+  for(var li=0;li<localRows.length;li++){if(_matchRow(localRows[li],sl)){foundLocal=true;break;}}
+
+  if(foundLocal){
+    // Trouvé dans le mois courant → pas de bandeau
+    if(_clsForeign){mwbClose();_clsForeign=false;}
+    renderTable();
+    return;
+  }
+
+  // 2) Pas trouvé localement → debounce puis chercher Firebase
+  renderTable(); // Affiche vide en attendant
+  _clsTimer=setTimeout(function(){_clsSearch(sl);},450);
+}
+
+function _clsSearch(sl){
+  if(!fbDb||!fbUser){showToast('⚠️ Firebase non connecté pour la recherche classeur','warning');return;}
+  // Vérifier que la recherche est toujours la même
+  var check=(document.getElementById('searchInput').value||'').trim().toLowerCase();
+  if(check!==sl)return;
+
+  fbDb.ref('inspectionCoutureData').once('value').then(function(snap){
+    var all=snap.val()||{};
+    // Re-vérifier que la recherche n'a pas changé
+    var check2=(document.getElementById('searchInput').value||'').trim().toLowerCase();
+    if(check2!==sl)return;
+
+    // Trier les mois du plus récent au plus ancien
+    var months=Object.keys(all).sort().reverse();
+    var foundMonth=null;
+    for(var i=0;i<months.length;i++){
+      var m=months[i];
+      if(m===currentMonth)continue;
+      var rows=all[m];
+      if(!rows||!Array.isArray(rows))continue;
+      for(var j=0;j<rows.length;j++){
+        if(_matchRow(rows[j],sl)){foundMonth=m;break;}
+      }
+      if(foundMonth)break;
+    }
+
+    if(!foundMonth){
+      showToast('🔍 Aucun résultat trouvé dans le classeur complet','info');
+      return;
+    }
+
+    // Sauvegarder le mois d'origine
+    if(!_clsForeign) _clsSavedMonth=currentMonth;
+    _clsForeign=true;
+
+    // Charger les données de ce mois dans le cache
+    data[foundMonth]=all[foundMonth];
+    try{localStorage.setItem('physipro_couture_data_'+foundMonth,JSON.stringify(all[foundMonth]));}catch(e){}
+
+    // Basculer le sélecteur de mois
+    currentMonth=foundMonth;
+    var sel=document.getElementById('monthSelect');
+    // S'assurer que le mois existe dans le sélecteur
+    var exists=false;
+    for(var k=0;k<sel.options.length;k++){if(sel.options[k].value===foundMonth){exists=true;break;}}
+    if(!exists){
+      var opt=document.createElement('option');
+      opt.value=foundMonth;opt.textContent=_monthLabel(foundMonth);
+      sel.insertBefore(opt,sel.firstChild);
+    }
+    sel.value=foundMonth;
+
+    renderTable();
+
+    // Afficher le bandeau d'avertissement
+    var banner=document.getElementById('mwbBanner');
+    document.getElementById('mwbText').innerHTML=
+      'N\'oubliez pas de retourner au bon mois! Cette commande date du mois de <span class="mwb-month">'+_monthLabel(foundMonth)+'</span>.';
+    banner.classList.add('active');
+  }).catch(function(e){
+    console.error('[Classeur] search error:',e);
+    showToast('❌ Erreur recherche classeur: '+e.message,'error');
+  });
+}
+
+function mwbClose(){document.getElementById('mwbBanner').classList.remove('active');}
+
+function mwbReturn(){
+  mwbClose();
+  if(!_clsSavedMonth)return;
+  _clsForeign=false;
+  currentMonth=_clsSavedMonth;
+  document.getElementById('monthSelect').value=_clsSavedMonth;
+  document.getElementById('searchInput').value='';
+  _clsSavedMonth='';
+  loadData();
+}
+
 
 
 function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'):'';}
