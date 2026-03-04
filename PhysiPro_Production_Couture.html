@@ -545,6 +545,14 @@ body.col-resizing *{cursor:col-resize!important;}
 .nav-tile-icon{font-size:26px;line-height:1;}
 .nav-tile-label{font-size:11px;font-weight:600;color:#fff;text-align:center;}
 /* Couture modals */
+.em-client-wrap{position:relative;flex:1;}
+.em-client-input{width:100%;padding:5px 6px;background:rgba(4,21,44,0.8);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:4px;font-family:Outfit;font-size:12px;height:30px;box-sizing:border-box;outline:none;}
+.em-client-input:focus{border-color:rgba(74,142,245,0.7);}
+.em-client-dropdown{position:absolute;top:100%;left:0;right:0;background:#0f1e35;border:1px solid rgba(74,142,245,0.5);border-top:none;border-radius:0 0 5px 5px;max-height:160px;overflow-y:auto;z-index:10010;display:none;}
+.em-client-dropdown.open{display:block;}
+.em-client-option{padding:5px 8px;font-size:11px;color:#e2e8f0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.em-client-option:hover,.em-client-option.highlighted{background:rgba(74,142,245,0.25);color:#fff;}
+.em-client-option .em-client-match{color:#60a5fa;font-weight:700;}
 .list-modal-overlay,.datepicker-overlay,.dropdown-overlay,.entry-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);display:none;align-items:center;justify-content:center;z-index:9998;}
 .list-modal-overlay.active,.datepicker-overlay.active,.dropdown-overlay.active,.entry-modal-overlay.active{display:flex;}
 .list-modal{background:linear-gradient(145deg,#0a2a5c,#04152c);border:1px solid rgba(74,142,245,0.3);border-radius:16px;padding:24px;width:90%;max-width:400px;max-height:80vh;display:flex;flex-direction:column;}
@@ -1266,9 +1274,7 @@ var gs='cursor:pointer;font-size:11px;margin-left:1px;';
 var h='';
 // Row 1: Client + Date Livraison (même ligne, même hauteur)
 h+='<div style="display:flex;gap:5px;margin-bottom:5px;align-items:flex-end;">';
-h+='<div style="flex:1;"><div style="display:flex;align-items:center;gap:2px;'+ls+'">CLIENT <span class="gear" onclick="openListModal(\'clients\',\'Clients\')" style="'+gs+'">⚙️</span></div><select id="em-client" style="'+ss+'"><option value="">— Client —</option>';
-clients.forEach(function(c){h+='<option value="'+esc(c)+'"'+(row.client===c?' selected':'')+'>'+esc(c)+'</option>';});
-h+='</select></div>';
+h+='<div class="em-client-wrap"><div style="display:flex;align-items:center;gap:2px;'+ls+'">CLIENT <span class="gear" onclick="openListModal(\'clients\',\'Clients\')" style="'+gs+'">⚙️</span></div><input type="text" id="em-client-input" class="em-client-input" placeholder="Rechercher un client..." autocomplete="off" value="'+esc(row.client||'')+'" oninput="emFilterClients(this.value)" onfocus="emFilterClients(this.value)" onkeydown="emClientKeydown(event)"><input type="hidden" id="em-client" value="'+esc(row.client||'')+'">'+'<div class="em-client-dropdown" id="em-client-dropdown"></div></div>';
 h+='<div style="width:82px;flex-shrink:0;"><div style="'+ls+'">DATE LIV.</div><div id="em-dateLiv-cell" onclick="openEmDatepicker(\'dateLiv\')" style="'+dcs+(row.dateLiv?'':'color:rgba(255,255,255,0.35);')+'">'+(row.dateLiv?formatDateDisplay(row.dateLiv):'—')+'</div></div>';
 h+='</div>';
 // Row 2: POSIT + Date Entrée + Fauteuil + Couturière
@@ -1401,6 +1407,64 @@ search.value='';
 emUpdateSummary();
 }
 
+var _emClientHighlight=-1;
+function emFilterClients(val){
+  var dd=document.getElementById('em-client-dropdown');
+  var inp=document.getElementById('em-client-input');
+  var hid=document.getElementById('em-client');
+  if(!dd||!inp)return;
+  var clients=getList('clients');
+  var norm=_normalize(val);
+  var filtered=norm?clients.filter(function(c){return _normalize(c).indexOf(norm)!==-1;}):clients;
+  _emClientHighlight=-1;
+  if(!filtered.length){dd.classList.remove('open');return;}
+  var h='';
+  filtered.forEach(function(c,i){
+    var display=esc(c);
+    if(norm){
+      var ni=_normalize(c).indexOf(norm);
+      if(ni!==-1){
+        var before=esc(c.substring(0,ni));
+        var match=esc(c.substring(ni,ni+val.length));
+        var after=esc(c.substring(ni+val.length));
+        display=before+'<span class="em-client-match">'+match+'</span>'+after;
+      }
+    }
+    h+='<div class="em-client-option" data-val="'+esc(c)+'" onmousedown="event.preventDefault();emSelectClient(\''+esc(c).replace(/'/g,"\\'")+'\');">'+display+'</div>';
+  });
+  dd.innerHTML=h;
+  dd.classList.add('open');
+}
+function emSelectClient(val){
+  var inp=document.getElementById('em-client-input');
+  var hid=document.getElementById('em-client');
+  var dd=document.getElementById('em-client-dropdown');
+  if(inp)inp.value=val;
+  if(hid)hid.value=val;
+  if(dd)dd.classList.remove('open');
+}
+function emClientKeydown(e){
+  var dd=document.getElementById('em-client-dropdown');
+  if(!dd||!dd.classList.contains('open'))return;
+  var opts=dd.querySelectorAll('.em-client-option');
+  if(e.key==='ArrowDown'){e.preventDefault();_emClientHighlight=Math.min(_emClientHighlight+1,opts.length-1);}
+  else if(e.key==='ArrowUp'){e.preventDefault();_emClientHighlight=Math.max(_emClientHighlight-1,0);}
+  else if(e.key==='Enter'&&_emClientHighlight>=0){e.preventDefault();var v=opts[_emClientHighlight].dataset.val;emSelectClient(v);return;}
+  else if(e.key==='Escape'){dd.classList.remove('open');return;}
+  opts.forEach(function(o,i){o.classList.toggle('highlighted',i===_emClientHighlight);});
+  if(_emClientHighlight>=0)opts[_emClientHighlight].scrollIntoView({block:'nearest'});
+}
+// Close client dropdown on outside click
+document.addEventListener('mousedown',function(e){
+  var dd=document.getElementById('em-client-dropdown');
+  var inp=document.getElementById('em-client-input');
+  if(dd&&inp&&!dd.contains(e.target)&&e.target!==inp){
+    // Sync hidden value from input on blur
+    var hid=document.getElementById('em-client');
+    if(hid&&inp)hid.value=inp.value;
+    dd.classList.remove('open');
+  }
+},true);
 function closeEntryModal(e){if(e&&e.target&&e.target.id!=='entryModalOverlay'&&e.target!==e.currentTarget)return;document.getElementById('entryModalOverlay').classList.remove('active');_emIdx=null;}
 function confirmEntryModal(){if(writeBlocked())return;if(!hasPermission('A')){showToast('Permission refusée','error');return;}if(_emIdx===null)return;var row=(data[currentMonth]||[])[_emIdx];if(!row)return;
 row.client=document.getElementById('em-client').value;
