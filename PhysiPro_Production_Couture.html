@@ -72,6 +72,11 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg-main);color:va
 .zoom-btn:hover{border-color:var(--gold);color:var(--gold-light);background:rgba(255,255,255,.06);}
 .btn-sep{background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.7);padding:3px 8px;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap;}
 .btn-sep:hover{border-color:var(--gold);color:var(--gold-light);}
+.fav-star-btn{background:none;border:none;color:var(--gold-light);padding:0 6px;font-size:11px;font-weight:800;cursor:pointer;transition:opacity .15s;white-space:nowrap;display:flex;align-items:center;gap:4px;opacity:1;}
+.fav-star-btn .fav-star-icon{font-size:20px;line-height:1;}
+.fav-star-btn:hover{opacity:.8;}
+.fav-star-btn.active{color:var(--gold-light);opacity:1;}
+.fav-star-btn.active .fav-star-icon{filter:drop-shadow(0 0 4px var(--gold-light));}
 .data-table-wrap{border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px;overflow:auto;max-height:calc(100vh - 140px);}
 .data-table{border-collapse:collapse;font-size:var(--tbl-zoom);table-layout:fixed;width:100%;}
 .data-table thead{position:sticky;top:0;z-index:5;}
@@ -653,6 +658,7 @@ body.col-resizing *{cursor:col-resize!important;}
     <span class="zoom-btn" onclick="adjustZoom(-10)" title="Réduire">−</span><span id="zoomValue" style="font-size:9px;color:rgba(255,255,255,.7);min-width:30px;text-align:center;">90%</span><span class="zoom-btn" onclick="adjustZoom(10)" title="Agrandir">+</span>
     <div class="divider"></div>
     <select id="monthSelect" class="month-select" onchange="changeMonth()"></select>
+    <button id="favBtnCouture" class="fav-star-btn" onclick="toggleFavoritesCouture()" title="Afficher commandes Série+"><span class="fav-star-icon">⭐</span>Série+</button>
     <div style="margin-left:auto;display:flex;align-items:center;gap:6px;position:relative;"><button class="btn-sep" id="statsToggleBtn" onclick="toggleStats()">📊 Stats</button><button class="col-gear-btn" onclick="toggleColPanel()">⚙️ Colonnes</button><div class="col-panel" id="colPanel"></div></div>
   </div>
   <div id="statsPanel" style="display:none;padding:16px;overflow-y:auto;max-height:calc(100vh - 140px);"></div>
@@ -833,7 +839,7 @@ function _getVisibleColOrder(){
 }
 function _renderCell(colId,row,idx,num,isRush,vis){
   if(colId==='num')return '<td>'+num+(isRush?' 🚩':'')+'</td>';
-  if(colId==='bonCmd'){var bonVal=(row.bonCmd||'').trim();var star='';var sm=findSerie(bonVal);if(sm){star='<span class="serie-star" onclick="event.stopPropagation();openSerieFromStar('+idx+')" title="Rouvrir Série+">⭐</span>';}else if(row.serieLinked||row.permanent){star='<span class="serie-star" style="opacity:0.5;cursor:default;" title="Série+ (carte archivée/supprimée)">📋</span>';}var bonHtml='<div class="bon-wrap"><div class="bon-row">'+star+'<input type="text" value="'+esc(bonVal)+'" onchange="onBonCmdChange('+idx+',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();onBonCmdChange('+idx+',this.value);this.blur();}" style="text-align:center;"></div></div>';return '<td>'+bonHtml+'</td>';}
+  if(colId==='bonCmd'){var bonVal=(row.bonCmd||'').trim();var star='';var sm=findSerie(bonVal);if(sm){star=_favFilterCouture?'<span class="serie-star" onclick="event.stopPropagation();openSerieFromStarByBon(\''+esc(bonVal)+'\')" title="Rouvrir Série+">⭐</span>':'<span class="serie-star" onclick="event.stopPropagation();openSerieFromStar('+idx+')" title="Rouvrir Série+">⭐</span>';}else if(row.serieLinked||row.permanent){star='<span class="serie-star" style="opacity:0.5;cursor:default;" title="Série+ (carte archivée/supprimée)">📋</span>';}var bonHtml='<div class="bon-wrap"><div class="bon-row">'+star+'<input type="text" value="'+esc(bonVal)+'" onchange="onBonCmdChange('+idx+',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();onBonCmdChange('+idx+',this.value);this.blur();}" style="text-align:center;"></div></div>';return '<td>'+bonHtml+'</td>';}
   if(colId==='fauteuil')return '<td style="position:relative;">'+(row.posit?'<span style="position:absolute;top:1px;left:4px;font-size:8px;font-weight:700;color:#a855f7;letter-spacing:0.3px;">POSIT</span>':'')+'<input type="text" value="'+esc(row.fauteuil||'')+'" onchange="updateCell('+idx+',\'fauteuil\',this.value)"'+(row.posit?' style="padding-top:10px;"':'')+'></td>';
   if(colId==='client')return '<td><div class="cell-dropdown '+(row.client?'has-value':'empty')+'" onclick="openCellDropdown('+idx+',\'client\',\'Client\',\'clients\')">'+(row.client?esc(row.client):'— cliquer —')+'</div></td>';
   if(colId==='dateLiv')return '<td><div class="date-cell '+(row.dateLiv?'has-date':'empty')+'" onclick="openDatepicker('+idx+',\'dateLiv\',\''+(row.dateLiv||'')+'\')">'+(row.dateLiv?formatDateDisplay(row.dateLiv):'<span style="color:rgba(255,255,255,0.25);font-size:11px;">aaaa-mm-jj</span>')+'</div></td>';
@@ -846,14 +852,61 @@ function _renderCell(colId,row,idx,num,isRush,vis){
   if(colId==='actions')return '<td><button class="row-delete" onclick="deleteRow('+idx+')">🗑️</button></td>';
   return '<td></td>';
 }
+var _favFilterCouture=false;
+
+function toggleFavoritesCouture(){
+  _favFilterCouture=!_favFilterCouture;
+  var btn=document.getElementById('favBtnCouture');
+  if(btn)btn.classList.toggle('active',_favFilterCouture);
+  renderTable();
+}
+
+// Collecte les 15 dernieres lignes Série+ a travers TOUS les mois en localStorage
+function getFavoriteRowsCouture(){
+  var allEntries=[];
+  var seen={};
+  // Get all months from localStorage keys
+  var months=[];
+  for(var i=0;i<localStorage.length;i++){
+    var k=localStorage.key(i);
+    if(k&&k.indexOf('physipro_couture_data_')===0){
+      months.push(k.replace('physipro_couture_data_',''));
+    }
+  }
+  months.sort().reverse();
+  for(var mi=0;mi<months.length;mi++){
+    var month=months[mi];
+    var rows=[];
+    try{rows=JSON.parse(localStorage.getItem('physipro_couture_data_'+month))||[];}catch(e){}
+    for(var ri=rows.length-1;ri>=0;ri--){
+      var row=rows[ri];
+      if(!row||row._empty)continue;
+      var bon=(row.bonCmd||'').trim();
+      if(!bon||seen[bon])continue;
+      if(!findSerie(bon))continue;
+      seen[bon]=true;
+      allEntries.push({row:row,month:month,realIdx:ri});
+    }
+  }
+  return allEntries.slice(0,15);
+}
+
 function renderTable(){
   var vis=getColVis();
-  var tbody=document.getElementById('tableBody');var rows=data[currentMonth]||[];var search=(document.getElementById('searchInput').value||'').toLowerCase();
+  var tbody=document.getElementById('tableBody');var search=(document.getElementById('searchInput').value||'').toLowerCase();
   var filteredRows=[];
-  rows.forEach(function(row,idx){
+
+  if(_favFilterCouture){
+    // MODE FAVORIS : 15 dernières commandes Série+ tous mois confondus
+    var favEntries=getFavoriteRowsCouture();
+    favEntries.forEach(function(entry){
+      filteredRows.push({row:entry.row,idx:entry.realIdx});
+    });
+  }else{
+    var rows=data[currentMonth]||[];
+    rows.forEach(function(row,idx){
     if(row._empty)return; // Skip ready rows - rendered separately
-    var searchStr=(row.bonCmd||'')+(row.fauteuil||'')+(row.client||'')+(row.items||'')+(row.nom||'')+(row.autreNo||'');
-    if(search&&searchStr.toLowerCase().indexOf(search)===-1)return;
+    if(search&&!_matchRow(row,search))return;
     if(colFilters.nom==='empty'&&(row.nom||'').trim())return;
     if(colFilters.nom==='filled'&&!(row.nom||'').trim())return;
     if(colFilters.dateSortie==='empty'&&(row.dateSortie||'').trim())return;
@@ -861,7 +914,8 @@ function renderTable(){
     if(colFilters.dateLiv==='empty'&&(row.dateLiv||'').trim())return;
     if(colFilters.dateLiv==='filled'&&!(row.dateLiv||'').trim())return;
     filteredRows.push({row:row,idx:idx});
-  });
+  }); // end rows.forEach
+  } // end else (normal mode)
   if(colFilters.dateLiv==='sortDate'){filteredRows.sort(function(a,b){var da=a.row.dateLiv||'9999';var db=b.row.dateLiv||'9999';return da<db?-1:da>db?1:0;});}
   var html='',num=0;
   filteredRows.forEach(function(item){var row=item.row;var idx=item.idx;
@@ -876,6 +930,7 @@ function renderTable(){
     });
     html+='</tr>';
   });
+  if(!_favFilterCouture){
   // === 5 READY ROWS: always keep 5 empty rows at the bottom ===
   var READY_ROWS=5;
   var readyCount=0;
@@ -908,6 +963,7 @@ function renderTable(){
     });
     html+='</tr>';
   }
+  } // end if(!_favFilterCouture) for ready rows
   // Visual filler after ready rows
   var fillerCount=Math.max(60,num+30);
   for(var ei=num;ei<fillerCount;ei++){
@@ -1039,9 +1095,15 @@ function toggleSearchAll(){
   filterTable();
 }
 
+function _normalize(s){
+  return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
 function _matchRow(r,sl){
   if(!r||r._empty)return false;
-  return((r.bonCmd||'')+(r.fauteuil||'')+(r.client||'')+(r.items||'')+(r.nom||'')+(r.autreNo||'')).toLowerCase().indexOf(sl)!==-1;
+  var hay=_normalize((r.bonCmd||'')+' '+(r.fauteuil||'')+' '+(r.client||'')+' '+(r.items||'')+' '+(r.nom||'')+' '+(r.autreNo||'')+' '+(r.erreur||'')+' '+(r.dateLiv||'')+' '+(r.dateSortie||''));
+  var terms=_normalize(sl).split(/\s+/).filter(function(t){return t.length>0;});
+  for(var ti=0;ti<terms.length;ti++){if(hay.indexOf(terms[ti])===-1)return false;}
+  return true;
 }
 
 function _monthLabel(key){
@@ -1363,6 +1425,35 @@ function listenSerieCards(){if(_serieListener||!fbDb)return;_serieListener=fbDb.
 function findSerie(num){var n=String(num).trim();var nStrip=n.replace(/^0+/,'');for(var id in serieCardsCache){var c=serieCardsCache[id];var o=(c.order||'').trim();var p=(c.numeroPO||'').trim();if(o===n||p===n||o.replace(/^0+/,'')===nStrip||p.replace(/^0+/,'')===nStrip)return{cardId:id,card:c};}return null;}
 function getUnfinishedCouture(card){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){var done=(g.couture&&g.couture.inspected)||false;var inInv=(g.couture&&g.couture.sentToInventaire)||false;var qf=parseInt(g.couture&&g.couture.qtyFait)||0;var isP=(g.couture&&g.couture.partiel)||false;var tQ=parseInt(g.qty)||0;if(!done){var rem=isP?(tQ-qf):tQ;pend.push({gi:gi,name:g.name,qty:tQ,qtyFait:qf,remaining:rem,inInventaire:inInv,wasPartial:isP});}});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
 function getCompletedCouture(card){var res=[];(card.items||[]).forEach(function(item,ii){var done=[];(item.grandeurs||[]).forEach(function(g,gi){var isDone=(g.couture&&g.couture.inspected)||false;if(isDone)done.push({gi:gi,name:g.name,qty:parseInt(g.qty)||0});});if(done.length)res.push({ii:ii,name:item.name,completed:done});});return res;}
+
+function openSerieFromStarByBon(bon){
+  if(!bon)return;
+  if(fbDb){
+    fbDb.ref('serieCommandes').once('value').then(function(snap){
+      serieCardsCache=snap.val()||{};
+      // Find real idx in source month
+      var realIdx=-1;
+      for(var k in localStorage){
+        if(k.indexOf('physipro_couture_data_')!==0)continue;
+        try{var rows=JSON.parse(localStorage.getItem(k))||[];
+          for(var ri=0;ri<rows.length;ri++){if(rows[ri]&&rows[ri].bonCmd===bon){realIdx=ri;break;}}
+        }catch(e){}
+        if(realIdx>=0)break;
+      }
+      var m=findSerie(bon);
+      if(m){openSerieModal(bon,m,realIdx>=0?realIdx:0);}
+      else{showToast('Carte Série+ introuvable pour '+bon,'error');}
+    }).catch(function(){
+      var m=findSerie(bon);
+      if(m){openSerieModal(bon,m,0);}
+      else{showToast('Carte Série+ introuvable pour '+bon,'error');}
+    });
+  }else{
+    var m=findSerie(bon);
+    if(m){openSerieModal(bon,m,0);}
+    else{showToast('Carte Série+ introuvable pour '+bon,'error');}
+  }
+}
 
 function onBonCmdChange(idx,val){val=(val||'').trim();updateCell(idx,'bonCmd',val);if(!val)return;var m=findSerie(val);if(m){var row=(data[currentMonth]||[])[idx];if(row){row.serieLinked=true;row.permanent=true;}openSerieModal(val,m,idx);}}
 function openSerieFromStar(idx){var row=(data[currentMonth]||[])[idx];if(!row||!row.bonCmd)return;
