@@ -414,11 +414,8 @@
   </div>
   <div class="main-body">
     <div class="section-header">Jobs actifs — clique pour envoyer une photo</div>
-  <div class="request-banner" id="requestBanner">
-    <div class="request-banner-title"><span>🔔</span> Demande de photo reçue !</div>
-    <div class="request-banner-info" id="requestBannerOrder">—</div>
-    <div class="request-banner-sub" id="requestBannerSub">—</div>
-    <button class="request-banner-btn" onclick="answerRequest()">📷 Prendre la photo maintenant</button>
+  <div class="request-banner" id="requestBanner" style="display:none;">
+    <div class="request-banner-info" id="requestBannerOrder"></div>
   </div>
     <div class="search-wrap">
       <input type="search" class="search-input" id="jobSearch" placeholder="🔍  Rechercher commande ou client..." oninput="filterJobs(this.value)">
@@ -656,6 +653,8 @@ function loadJobs() {
 var _requestRef = null;
 var _pendingRequest = null;
 
+var _lastHandledRequestId = null;
+
 function listenForRequests() {
   if (!db) return;
   if (_requestRef) { db.ref('photoRequests').off('value'); }
@@ -663,23 +662,28 @@ function listenForRequests() {
   _requestRef.on('value', function(snap) {
     var all = snap.val() || {};
     var found = null;
-    // Find oldest waiting request
+    // Find oldest waiting or answering request
     Object.entries(all).forEach(function([jobId, req]) {
-      if (req.status === 'waiting') {
+      if (req.status === 'waiting' || req.status === 'answering') {
         if (!found || req.timestamp < found.timestamp) {
           found = Object.assign({ jobId: jobId }, req);
         }
       }
     });
     if (found) {
-      _pendingRequest = found;
-      var order = found.order ? '#' + found.order : found.jobId;
-      var client = found.client || '';
-      var by = found.requestedBy || 'Bureau';
-      document.getElementById('requestBannerOrder').textContent = order + (client ? ' — ' + client : '');
-      document.getElementById('requestBannerSub').textContent = '📥 Demandé par ' + by;
-      document.getElementById('requestBanner').classList.add('active');
+      var reqKey = found.jobId + '_' + found.timestamp;
+      if (reqKey !== _lastHandledRequestId) {
+        _lastHandledRequestId = reqKey;
+        _pendingRequest = found;
+        // Auto-navigate directly to photo screen for this job
+        db.ref('photoRequests/' + found.jobId).update({ status: 'answering' }).catch(function(){});
+        selectJob(found.jobId);
+      }
     } else {
+      // Request cancelled or done — if we're on the photo screen for that job, show a brief notice
+      if (_pendingRequest && selectedJob && selectedJob.id === _pendingRequest.jobId) {
+        // Don't force back — user might still want to send
+      }
       _pendingRequest = null;
       document.getElementById('requestBanner').classList.remove('active');
     }
@@ -687,9 +691,8 @@ function listenForRequests() {
 }
 
 function answerRequest() {
+  // kept for compatibility but auto-nav handles it
   if (!_pendingRequest) return;
-  // Mark as in-progress so bureau knows
-  db.ref('photoRequests/' + _pendingRequest.jobId).update({ status: 'answering' }).catch(function(){});
   selectJob(_pendingRequest.jobId);
 }
 
@@ -728,7 +731,20 @@ function renderJobs() {
 }
 
 function selectJob(id) {
-  selectedJob = { id, ...(jobsData[id] || {}) };
+  var jobEntry = jobsData[id];
+  if (!jobEntry && id) {
+    // Job not loaded yet — fetch directly
+    db.ref('jobs/' + id).once('value', function(snap) {
+      if (snap.val()) { jobsData[id] = snap.val(); }
+      _doSelectJob(id);
+    });
+    return;
+  }
+  _doSelectJob(id);
+}
+
+function _doSelectJob(id) {
+  selectedJob = Object.assign({ id: id }, jobsData[id] || {});
   pendingPhotos = [];
   document.getElementById('photoJobOrder').textContent = '#' + (selectedJob.order || '---');
   document.getElementById('photoJobClient').textContent = selectedJob.client || 'Client non spécifié';
@@ -737,6 +753,24 @@ function selectJob(id) {
   document.getElementById('photoMsg').value = '';
   document.getElementById('btnSend').disabled = true;
   document.getElementById('btnSendLabel').textContent = '📤 Envoyer';
+
+  // Show green "demande active" indicator if triggered by request
+  var reqIndicator = document.getElementById('reqIndicator');
+  if (_pendingRequest && _pendingRequest.jobId === id) {
+    if (!reqIndicator) {
+      var bar = document.getElementById('photoJobBar') || document.querySelector('.photo-job-bar');
+      if (bar) {
+        var ind = document.createElement('div');
+        ind.id = 'reqIndicator';
+        ind.style.cssText = 'font-size:10px;font-weight:700;color:#22c55e;letter-spacing:.3px;margin-top:1px;';
+        ind.textContent = '🟢 Demande active — ' + (_pendingRequest.requestedBy || 'Bureau');
+        bar.querySelector('.photo-job-info').appendChild(ind);
+      }
+    }
+  } else {
+    if (reqIndicator) reqIndicator.remove();
+  }
+
   showScreen('screenPhoto');
 }
 
