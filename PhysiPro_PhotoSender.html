@@ -860,48 +860,55 @@ async function sendPhotos() {
   const myEmail = (currentUser.email || '').toLowerCase();
   const myName = currentUserName || myEmail;
 
-  const msgData = {
-    content: msg || ('📷 ' + pendingPhotos.length + ' photo' + (pendingPhotos.length > 1 ? 's' : '') + ' envoyée' + (pendingPhotos.length > 1 ? 's' : '') + ' depuis mobile'),
-    type: 'conversation',
-    authorEmail: myEmail,
-    authorName: myName,
-    timestamp: Date.now(),
-    createdAt: firebase.database.ServerValue.TIMESTAMP,
-    dest: selectedJob.assignee || '',
-    jobId: selectedJob.id,
-    sentFromMobile: true
+  // Build payload — write photo INTO the photoRequest so ServiceClient injects it into compose
+  const photoPayload = {
+    status: 'done',
+    sentBy: myName,
+    sentByEmail: myEmail,
+    timestamp: Date.now()
   };
 
   if (pendingPhotos.length === 1) {
-    msgData.image = pendingPhotos[0].dataUrl;
+    photoPayload.photo = pendingPhotos[0].dataUrl;
   } else {
-    msgData.images = pendingPhotos.map(p => p.dataUrl);
+    photoPayload.photos = pendingPhotos.map(p => p.dataUrl);
   }
 
-  try {
-    await db.ref('questChat/' + selectedJob.id + '/messages').push().set(msgData);
+  // If there's a pending request, update it with the photo → ServiceClient injects into compose
+  // If no pending request (manual job select), send directly as a message
+  const targetJobId = selectedJob.id;
+  const hasPendingRequest = _pendingRequest && _pendingRequest.jobId === targetJobId;
 
-    // Notification
-    try {
-      await db.ref('notifications/' + selectedJob.id).push().set({
-        type: 'photo_mobile',
-        from: myName,
-        fromEmail: myEmail,
-        jobId: selectedJob.id,
-        order: selectedJob.order || '',
-        count: pendingPhotos.length,
+  try {
+    if (hasPendingRequest) {
+      // Inject into compose area via photoRequests
+      await db.ref('photoRequests/' + targetJobId).update(photoPayload);
+    } else {
+      // No pending request — send as direct message
+      const msgData = {
+        content: msg || ('📷 ' + pendingPhotos.length + ' photo' + (pendingPhotos.length > 1 ? 's' : '') + ' envoyée' + (pendingPhotos.length > 1 ? 's' : '') + ' depuis mobile'),
+        type: 'conversation',
+        authorEmail: myEmail,
+        authorName: myName,
         timestamp: Date.now(),
-        read: false
-      });
-    } catch(e) { /* notification non critique */ }
+        createdAt: firebase.database.ServerValue.TIMESTAMP,
+        dest: selectedJob.assignee || '',
+        jobId: targetJobId,
+        sentFromMobile: true
+      };
+      if (pendingPhotos.length === 1) msgData.image = pendingPhotos[0].dataUrl;
+      else msgData.images = pendingPhotos.map(p => p.dataUrl);
+      if (msg) msgData.content = msg;
+      await db.ref('questChat/' + targetJobId + '/messages').push().set(msgData);
+    }
 
     // Show success
     const n = pendingPhotos.length;
     document.getElementById('successMsg').innerHTML =
-      `<span class="success-dest">${n} photo${n>1?'s':''}</span> ajoutée${n>1?'s':''} dans la conversation de la commande <strong>#${esc(selectedJob.order||'---')}</strong> — ${esc(selectedJob.client||'')}`;
-    // Mark photo request as fulfilled if there was one
-    if (_pendingRequest && _pendingRequest.jobId === selectedJob.id) {
-      db.ref('photoRequests/' + selectedJob.id).remove().catch(function(){});
+      `<span class="success-dest">${n} photo${n>1?'s':''}</span> ` +
+      (hasPendingRequest ? 'ajoutée dans la zone de rédaction' : 'envoyée dans la conversation') +
+      ` — commande <strong>#${esc(selectedJob.order||'---')}</strong>`;
+    if (_pendingRequest && _pendingRequest.jobId === targetJobId) {
       _pendingRequest = null;
     }
     showScreen('screenSuccess');

@@ -5545,11 +5545,28 @@ var QuestChat = (function() {
     _photoRequestRef = database.ref('photoRequests/' + _currentJobId);
     _photoRequestRef.set(reqData).then(function() {
       if (btn) { btn.classList.add('waiting'); btn.innerHTML = '📱'; btn.title = 'Photo demandée au téléphone — cliquer pour annuler'; }
-      // Listen for photo arrival (status becomes 'done' or messages updated)
+      // Listen for photo arrival — inject into compose area
       _photoRequestListener = _photoRequestRef.on('value', function(snap) {
         var d = snap.val();
-        if (!d || d.status === 'done' || d.status === 'cancelled') {
+        if (!d || d.status === 'cancelled') {
           _clearPhotoRequest();
+          return;
+        }
+        if (d.status === 'done' && (d.photo || d.photos)) {
+          // Inject photo(s) directly into the compose area
+          var photos = d.photos ? d.photos : [d.photo];
+          photos.forEach(function(p) {
+            if (p) _composeImages.push(p);
+          });
+          updateComposeImagePreview();
+          // Clean up Firebase request
+          _photoRequestRef.remove().catch(function(){});
+          _clearPhotoRequest();
+          // Make sure compose is open and visible
+          var zone = document.getElementById('qchatCompose');
+          if (zone && !zone.classList.contains('active')) {
+            openCompose(_composeType || 'conversation');
+          }
         }
       });
       // Auto-cancel after 3 minutes
