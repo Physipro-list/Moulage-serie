@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PhysiPro 📷 Photos</title>
+<link rel="manifest" id="pwaManifest">
+<meta name="theme-color" content="#04152c">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%2304152c'/><rect x='56' y='140' width='400' height='270' rx='40' fill='%234a8ef5'/><circle cx='256' cy='275' r='88' fill='%23fff' opacity='.25'/><circle cx='256' cy='275' r='60' fill='%23fff'/><circle cx='256' cy='275' r='28' fill='%234a8ef5'/><rect x='156' y='80' width='120' height='66' rx='18' fill='%234a8ef5'/><circle cx='390' cy='172' r='24' fill='%2322c55e'/></svg>">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='5' y='25' width='90' height='60' rx='10' fill='%234a8ef5'/><circle cx='50' cy='55' r='18' fill='%23fff' opacity='.3'/><circle cx='50' cy='55' r='12' fill='%23fff'/><circle cx='50' cy='55' r='6' fill='%234a8ef5'/><rect x='30' y='15' width='26' height='14' rx='4' fill='%234a8ef5'/><circle cx='78' cy='36' r='5' fill='%2322c55e'/></svg>">
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #04152c;
+    --bg2: #091e3a;
+    --bg3: #0f2847;
+    --blue: #3b82f6;
+    --blue-light: #60a5fa;
+    --blue-glow: rgba(59,130,246,0.3);
+    --green: #22c55e;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --border: rgba(59,130,246,0.25);
+    --radius: 14px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bot: env(safe-area-inset-bottom, 0px);
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── SCREENS ── */
+  .screen {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    background: var(--bg);
+    transition: opacity 0.2s, transform 0.2s;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bot);
+  }
+  .screen.hidden { opacity: 0; pointer-events: none; transform: translateY(20px); }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px 10px;
+    background: linear-gradient(180deg, #04152c 0%, var(--bg2) 100%);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .topbar-logo {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .topbar-logo svg { width: 28px; height: 28px; }
+  .topbar-title { font-size: 16px; font-weight: 700; color: var(--blue-light); letter-spacing: -0.3px; }
+  .topbar-sub { font-size: 10px; color: var(--text-dim); }
+  .topbar-user { font-size: 10px; color: var(--text-dim); text-align: right; line-height: 1.4; }
+  .topbar-user strong { color: var(--text); display: block; font-size: 12px; }
+
+  /* ── LOGIN SCREEN ── */
+  .login-body {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 24px;
+    gap: 16px;
+  }
+  .login-icon { font-size: 64px; margin-bottom: 8px; filter: drop-shadow(0 0 20px rgba(59,130,246,0.5)); }
+  .login-title { font-size: 22px; font-weight: 800; color: var(--text); text-align: center; }
+  .login-sub { font-size: 13px; color: var(--text-dim); text-align: center; max-width: 260px; line-height: 1.5; }
+  .login-field { width: 100%; max-width: 320px; }
+  .login-field label { font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px; }
+  .login-field input {
+    width: 100%; padding: 14px 16px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg3);
+    color: var(--text); font-size: 15px;
+    outline: none; transition: border-color 0.2s;
+  }
+  .login-field input:focus { border-color: var(--blue); }
+  .login-btn {
+    width: 100%; max-width: 320px;
+    padding: 16px;
+    border-radius: var(--radius);
+    border: none;
+    background: linear-gradient(135deg, var(--blue), #2563eb);
+    color: #fff; font-size: 16px; font-weight: 700;
+    cursor: pointer; transition: filter 0.15s;
+  }
+  .login-btn:active { filter: brightness(0.9); }
+  .login-err { font-size: 12px; color: var(--red); text-align: center; min-height: 18px; }
+
+  /* ── MAIN CONTENT ── */
+  .main-body {
+    flex: 1; display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── JOB SELECTOR ── */
+  .section-header {
+    padding: 12px 16px 6px;
+    font-size: 10px; font-weight: 700; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+  .search-wrap {
+    padding: 0 16px 8px;
+    flex-shrink: 0;
+  }
+  .search-input {
+    width: 100%; padding: 10px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg3);
+    color: var(--text); font-size: 14px;
+    outline: none; transition: border-color 0.2s;
+  }
+  .search-input:focus { border-color: var(--blue); }
+  .search-input::placeholder { color: var(--text-dim); }
+
+  .jobs-list {
+    flex: 1; overflow-y: auto;
+    padding: 0 16px 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .job-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border);
+    background: var(--bg3);
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .job-item:active { background: rgba(59,130,246,0.15); border-color: var(--blue); transform: scale(0.98); }
+  .job-item.selected { background: rgba(59,130,246,0.15); border-color: var(--blue); }
+  .job-icon { font-size: 22px; flex-shrink: 0; }
+  .job-info { flex: 1; min-width: 0; }
+  .job-order { font-size: 15px; font-weight: 700; color: var(--text); }
+  .job-client { font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .job-assignee { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: rgba(59,130,246,0.2); color: var(--blue-light); font-weight: 600; flex-shrink: 0; }
+  .jobs-empty { text-align: center; padding: 40px 20px; color: var(--text-dim); font-size: 14px; }
+
+  /* ── PHOTO SCREEN ── */
+  .photo-job-bar {
+    padding: 10px 16px;
+    background: rgba(59,130,246,0.1);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+  }
+  .photo-job-back {
+    background: none; border: none; color: var(--blue-light);
+    font-size: 22px; cursor: pointer; padding: 2px 4px; flex-shrink: 0;
+  }
+  .photo-job-info { flex: 1; min-width: 0; }
+  .photo-job-order { font-size: 15px; font-weight: 700; color: var(--text); }
+  .photo-job-client { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .photo-preview-area {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 16px;
+    gap: 12px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .photo-placeholder {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    opacity: 0.5;
+  }
+  .photo-placeholder-icon { font-size: 72px; }
+  .photo-placeholder-text { font-size: 14px; color: var(--text-dim); text-align: center; line-height: 1.5; }
+
+  .photo-previews {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    justify-content: center;
+    width: 100%;
+  }
+  .photo-thumb-wrap {
+    position: relative; border-radius: 10px; overflow: hidden;
+    border: 2px solid var(--border);
+    width: calc(50% - 4px); max-width: 180px;
+    aspect-ratio: 1;
+    background: var(--bg3);
+  }
+  .photo-thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo-thumb-remove {
+    position: absolute; top: 4px; right: 4px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(239,68,68,0.9); border: none;
+    color: #fff; font-size: 14px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+
+  .photo-actions {
+    padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 10px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    background: var(--bg2);
+  }
+  .photo-btns-row { display: flex; gap: 10px; }
+  .btn-camera {
+    flex: 1; padding: 16px 12px;
+    border-radius: 14px;
+    border: 2px dashed rgba(59,130,246,0.5);
+    background: rgba(59,130,246,0.08);
+    color: var(--blue-light);
+    font-size: 14px; font-weight: 600;
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-camera:active { background: rgba(59,130,246,0.2); border-color: var(--blue); }
+  .btn-camera-icon { font-size: 28px; }
+  .btn-gallery {
+    flex: 0 0 56px; height: 56px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border);
+    background: var(--bg3);
+    color: var(--text-dim); font-size: 22px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+    align-self: flex-end;
+  }
+  .btn-gallery:active { background: var(--bg); }
+
+  .btn-send {
+    width: 100%; padding: 18px;
+    border-radius: 14px;
+    border: none;
+    background: linear-gradient(135deg, var(--green), #16a34a);
+    color: #fff; font-size: 17px; font-weight: 800;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-send:disabled { background: rgba(255,255,255,0.1); color: var(--text-dim); }
+  .btn-send:not(:disabled):active { filter: brightness(0.9); transform: scale(0.98); }
+
+  /* ── MESSAGE TEXTAREA ── */
+  .msg-field {
+    padding: 0 16px 2px;
+    flex-shrink: 0;
+  }
+  .msg-input {
+    width: 100%; padding: 10px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg3);
+    color: var(--text); font-size: 14px;
+    outline: none; resize: none;
+    font-family: inherit;
+    transition: border-color 0.2s;
+    min-height: 44px; max-height: 90px;
+  }
+  .msg-input:focus { border-color: var(--blue); }
+  .msg-input::placeholder { color: var(--text-dim); }
+
+  /* ── SUCCESS SCREEN ── */
+  .success-body {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px; gap: 16px; text-align: center;
+  }
+  .success-icon { font-size: 80px; animation: pop 0.4s ease-out; }
+  @keyframes pop { 0% { transform: scale(0); opacity: 0; } 70% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
+  .success-title { font-size: 24px; font-weight: 800; color: var(--green); }
+  .success-sub { font-size: 14px; color: var(--text-dim); line-height: 1.6; max-width: 280px; }
+  .success-dest { font-weight: 700; color: var(--text); }
+  .btn-again {
+    margin-top: 8px; padding: 14px 32px;
+    border-radius: 14px; border: 1.5px solid var(--border);
+    background: var(--bg3); color: var(--blue-light);
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-again:active { background: var(--bg2); }
+
+  /* ── LOADING ── */
+  .spinner {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── STATUS DOT ── */
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--red); display: inline-block;
+    transition: background 0.3s;
+  }
+  .status-dot.connected { background: var(--green); }
+
+  /* ── HIDDEN FILE INPUTS ── */
+  #cameraInput, #galleryInput { display: none; }
+
+  /* ── REQUEST NOTIFICATION ── */
+  .request-banner {
+    margin: 0 16px 10px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(249,115,22,0.2), rgba(249,115,22,0.08));
+    border: 1.5px solid rgba(249,115,22,0.6);
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    animation: requestPulse 1.5s ease-in-out infinite;
+  }
+  .request-banner.active { display: flex; }
+  @keyframes requestPulse { 0%,100%{border-color:rgba(249,115,22,0.6);} 50%{border-color:rgba(249,115,22,1);box-shadow:0 0 12px rgba(249,115,22,0.3);} }
+  .request-banner-title { font-size:12px; font-weight:700; color:#fdba74; display:flex; align-items:center; gap:6px; }
+  .request-banner-info { font-size:13px; font-weight:700; color:#fff; }
+  .request-banner-sub { font-size:11px; color:#94a3b8; }
+  .request-banner-btn {
+    padding: 10px; border-radius: 8px; border: none;
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    color: #fff; font-size:13px; font-weight:700; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .request-banner-btn:active { filter:brightness(0.9); }
+
+  /* ── SCROLLBAR ── */
+  .jobs-list::-webkit-scrollbar { width: 4px; }
+  .jobs-list::-webkit-scrollbar-track { background: transparent; }
+  .jobs-list::-webkit-scrollbar-thumb { background: rgba(59,130,246,0.3); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════ LOGIN SCREEN ══ -->
+<div class="screen" id="screenLogin">
+  <div class="topbar">
+    <div class="topbar-logo">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="5" y="25" width="90" height="60" rx="10" fill="#4a8ef5"/>
+        <circle cx="50" cy="55" r="18" fill="#fff" opacity=".25"/>
+        <circle cx="50" cy="55" r="12" fill="#fff"/>
+        <circle cx="50" cy="55" r="6" fill="#4a8ef5"/>
+        <rect x="30" y="15" width="26" height="14" rx="4" fill="#4a8ef5"/>
+        <circle cx="78" cy="36" r="5" fill="#22c55e"/>
+      </svg>
+      <div>
+        <div class="topbar-title">PhysiPro 📷</div>
+        <div class="topbar-sub">Envoi de photos</div>
+      </div>
+    </div>
+    <span class="status-dot" id="loginDot"></span>
+  </div>
+  <div class="login-body">
+    <div class="login-icon">📷</div>
+    <div class="login-title">Connexion PhysiPro</div>
+    <div class="login-sub">Connectez-vous avec votre compte PhysiPro pour envoyer des photos dans les conversations.</div>
+    <div class="login-field">
+      <label>Courriel</label>
+      <input type="email" id="loginEmail" placeholder="votre@physipro.com" autocomplete="email" inputmode="email">
+    </div>
+    <div class="login-field">
+      <label>Mot de passe</label>
+      <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div class="login-err" id="loginErr"></div>
+    <button class="login-btn" id="loginBtn" onclick="doLogin()">Se connecter</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ JOB LIST SCREEN ══ -->
+<div class="screen hidden" id="screenJobs">
+  <div class="topbar">
+    <div class="topbar-logo">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="5" y="25" width="90" height="60" rx="10" fill="#4a8ef5"/>
+        <circle cx="50" cy="55" r="18" fill="#fff" opacity=".25"/>
+        <circle cx="50" cy="55" r="12" fill="#fff"/>
+        <circle cx="50" cy="55" r="6" fill="#4a8ef5"/>
+        <rect x="30" y="15" width="26" height="14" rx="4" fill="#4a8ef5"/>
+        <circle cx="78" cy="36" r="5" fill="#22c55e"/>
+      </svg>
+      <div>
+        <div class="topbar-title">Choisir un job</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="status-dot connected" id="jobsDot"></span>
+      <div class="topbar-user" id="jobsUserLabel"></div>
+    </div>
+  </div>
+  <div class="main-body">
+    <div class="section-header">Jobs actifs — clique pour envoyer une photo</div>
+  <div class="request-banner" id="requestBanner">
+    <div class="request-banner-title"><span>🔔</span> Demande de photo reçue !</div>
+    <div class="request-banner-info" id="requestBannerOrder">—</div>
+    <div class="request-banner-sub" id="requestBannerSub">—</div>
+    <button class="request-banner-btn" onclick="answerRequest()">📷 Prendre la photo maintenant</button>
+  </div>
+    <div class="search-wrap">
+      <input type="search" class="search-input" id="jobSearch" placeholder="🔍  Rechercher commande ou client..." oninput="filterJobs(this.value)">
+    </div>
+    <div class="jobs-list" id="jobsList">
+      <div class="jobs-empty">Chargement des jobs...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ PHOTO SCREEN ══ -->
+<div class="screen hidden" id="screenPhoto">
+  <div class="topbar">
+    <div class="topbar-logo">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="5" y="25" width="90" height="60" rx="10" fill="#4a8ef5"/>
+        <circle cx="50" cy="55" r="18" fill="#fff" opacity=".25"/>
+        <circle cx="50" cy="55" r="12" fill="#fff"/>
+        <circle cx="50" cy="55" r="6" fill="#4a8ef5"/>
+        <rect x="30" y="15" width="26" height="14" rx="4" fill="#4a8ef5"/>
+        <circle cx="78" cy="36" r="5" fill="#22c55e"/>
+      </svg>
+      <div>
+        <div class="topbar-title">📷 Envoyer photo</div>
+      </div>
+    </div>
+    <span class="status-dot connected" id="photoDot"></span>
+  </div>
+
+  <div class="photo-job-bar">
+    <button class="photo-job-back" onclick="goToJobs()">‹</button>
+    <div class="photo-job-info">
+      <div class="photo-job-order" id="photoJobOrder">—</div>
+      <div class="photo-job-client" id="photoJobClient">—</div>
+    </div>
+  </div>
+
+  <div class="photo-preview-area" id="photoPreviewArea">
+    <div class="photo-placeholder" id="photoPlaceholder">
+      <div class="photo-placeholder-icon">📷</div>
+      <div class="photo-placeholder-text">Prends une photo ou choisis depuis la galerie.<br>Elle sera envoyée directement dans la conversation.</div>
+    </div>
+    <div class="photo-previews" id="photoPreviews"></div>
+  </div>
+
+  <div class="photo-actions">
+    <div class="photo-btns-row">
+      <button class="btn-camera" onclick="document.getElementById('cameraInput').click()">
+        <span class="btn-camera-icon">📷</span>
+        <span>Prendre une photo</span>
+      </button>
+      <button class="btn-gallery" onclick="document.getElementById('galleryInput').click()" title="Galerie">🖼️</button>
+    </div>
+    <div class="msg-field">
+      <textarea class="msg-input" id="photoMsg" placeholder="Message (optionnel)..." rows="1"
+                oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,90)+'px'"></textarea>
+    </div>
+    <button class="btn-send" id="btnSend" onclick="sendPhotos()" disabled>
+      <span id="btnSendLabel">📤 Envoyer</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ SUCCESS SCREEN ══ -->
+<div class="screen hidden" id="screenSuccess">
+  <div class="topbar">
+    <div class="topbar-logo">
+      <div style="font-size:26px;">✅</div>
+      <div class="topbar-title">Envoyé!</div>
+    </div>
+  </div>
+  <div class="success-body">
+    <div class="success-icon">✅</div>
+    <div class="success-title">Photo envoyée!</div>
+    <div class="success-sub" id="successMsg">La photo a été ajoutée à la conversation.</div>
+    <button class="btn-again" onclick="sendAnother()">📷 Envoyer une autre photo</button>
+    <button class="btn-again" style="border-color:rgba(239,68,68,0.3);color:#f87171;" onclick="doLogout()">Déconnexion</button>
+  </div>
+</div>
+
+<!-- HIDDEN FILE INPUTS -->
+<input type="file" id="cameraInput" accept="image/*" capture="environment" multiple onchange="handleFiles(this.files)">
+<input type="file" id="galleryInput" accept="image/*" multiple onchange="handleFiles(this.files)">
+
+<script>
+// ═══ FIREBASE CONFIG ═══
+const _k = ['AIza','SyCk','7bqV','nx08','Kz1f','Vq1W','24Au','W854','KY9j','Pno'];
+const FIREBASE_CONFIG = {
+  apiKey: _k.join(''),
+  authDomain: "liste-des-moulages-physipro.firebaseapp.com",
+  databaseURL: "https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",
+  projectId: "liste-des-moulages-physipro",
+  storageBucket: "liste-des-moulages-physipro.firebasestorage.app",
+  messagingSenderId: "24566847562",
+  appId: "1:24566847562:web:db492bdd33116373e0eeb3"
+};
+
+// ═══ PERMISSIONS: qui a accès aux photos (pas moulage-only) ═══
+const HUB_ACCESS = {
+  'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','archives','backup'],
+  'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','archives','backup'],
+  'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','archives','backup'],
+  'c3JveUBwaHlzaXByby5jb20=':['moulage','jobs','inspection','inspcouture','serie','psm','archives'],
+  'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['moulage','jobs'],
+  'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['moulage','jobs'],
+  'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],
+  'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['moulage','serie','jobs'],
+  'bWFnYXNpbmF0cDFAcGh5c2lwcm8uY29t':['entrepot'],
+  'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['moulage','psm','jobs','entrepot'],
+  'c2VydmljZTFAcGh5c2lwcm8uY29t':['moulage','serie','psm','jobs'],
+  'c2VydmljZTNAcGh5c2lwcm8uY29t':['moulage','serie','psm','jobs'],
+  'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':['moulage','serie','psm','jobs'],
+  'b3JkZXJzQHBoeXNpcHJvLmNvbQ==':['moulage','serie','psm','jobs'],
+  'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':['moulage','psm','jobs','archives'],
+  'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':['moulage','psm','jobs','archives'],
+  'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':['moulage','serie','inspection','inspcouture','psm','jobs','entrepot'],
+  'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':['moulage','serie','inspection','inspcouture','psm','jobs','entrepot'],
+  'cmhAcGh5c2lwcm8uY29t':['moulage','serie','inspection','inspcouture','psm','jobs','entrepot','archives'],
+  'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':['moulage','serie','inspcouture','psm','jobs','entrepot'],
+  'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':['moulage','serie','psm','jobs','entrepot'],
+  'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':['moulage','serie','inspection','inspcouture','psm','jobs','entrepot']
+};
+
+// ═══ TEAM NAMES ═══
+const TEAM_NAMES = {
+  'atelieratp@physipro.com': 'Daniel',
+  'valerie18@videotron.ca': 'Valérie',
+  'simdut@physipro.com': 'Cassie',
+  'sroy@physipro.com': 'Stéphanie',
+  'service3@physipro.com': 'Jacynthe',
+  'service1@physipro.com': 'Jonathan',
+  'ngagne@physipro.com': 'Nadia',
+  'orders@physipro.com': 'Sonia',
+  'mplanguedoc@physipro.com': 'Marie-Pier',
+  'mariesoleilr@physipro.com': 'Marie-Soleil',
+  'fabrys.frechette@physipro.com': 'Fabrys',
+  'marioouellette@physipro.com': 'Mario',
+  'michelle.bouchard@physipro.com': 'Michelle',
+  'rh@physipro.com': 'Roxanne',
+  'pbouchard@physipro.com': 'Pierre',
+  'peterbase76@gmail.com': 'Pierre'
+};
+
+// ═══ STATE ═══
+let db = null;
+let currentUser = null;
+let currentUserName = '';
+let jobsData = {};
+let filteredJobs = [];
+let selectedJob = null;
+let pendingPhotos = []; // { dataUrl, name }
+let jobsListener = null;
+
+// ═══ INIT ═══
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+
+auth.onAuthStateChanged(function(user) {
+  if (user) {
+    const email = (user.email || '').toLowerCase();
+    const access = getAccess(email);
+    // Block moulage-only
+    if (!access.includes('jobs')) {
+      showErr('Accès refusé — cette application nécessite un accès Service Client.');
+      auth.signOut();
+      return;
+    }
+    currentUser = user;
+    currentUserName = TEAM_NAMES[email] || email.split('@')[0];
+    db = firebase.database();
+    db.ref('.info/connected').on('value', s => setDots(s.val()));
+    loadJobs();
+    listenForRequests();
+    showScreen('screenJobs');
+    document.getElementById('jobsUserLabel').innerHTML = '<strong>' + esc(currentUserName) + '</strong>' + esc(email);
+  } else {
+    currentUser = null;
+    showScreen('screenLogin');
+  }
+});
+
+function getAccess(email) {
+  try { return HUB_ACCESS[btoa(email.toLowerCase().trim())] || []; }
+  catch(e) { return []; }
+}
+
+// ═══ AUTH ═══
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pwd = document.getElementById('loginPassword').value;
+  const btn = document.getElementById('loginBtn');
+  showErr('');
+  if (!email || !pwd) { showErr('Remplissez tous les champs.'); return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    await auth.signInWithEmailAndPassword(email, pwd);
+  } catch(e) {
+    showErr(e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found'
+      ? 'Courriel ou mot de passe incorrect.' : e.message);
+    btn.disabled = false;
+    btn.textContent = 'Se connecter';
+  }
+}
+
+function doLogout() {
+  pendingPhotos = [];
+  selectedJob = null;
+  if (jobsListener) { db.ref('jobs').off('value', jobsListener); jobsListener = null; }
+  auth.signOut();
+}
+
+function showErr(msg) {
+  document.getElementById('loginErr').textContent = msg;
+}
+
+// ═══ SCREENS ═══
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+  const el = document.getElementById(id);
+  if (el) { el.classList.remove('hidden'); }
+}
+
+// ═══ JOBS ═══
+function loadJobs() {
+  if (!db) return;
+  if (jobsListener) db.ref('jobs').off('value', jobsListener);
+  jobsListener = db.ref('jobs').on('value', function(snap) {
+    jobsData = snap.val() || {};
+    filterJobs(document.getElementById('jobSearch') ? document.getElementById('jobSearch').value : '');
+  });
+}
+
+// ═══ PHOTO REQUEST LISTENER ═══
+var _requestRef = null;
+var _pendingRequest = null;
+
+function listenForRequests() {
+  if (!db) return;
+  if (_requestRef) { db.ref('photoRequests').off('value'); }
+  _requestRef = db.ref('photoRequests');
+  _requestRef.on('value', function(snap) {
+    var all = snap.val() || {};
+    var found = null;
+    // Find oldest waiting request
+    Object.entries(all).forEach(function([jobId, req]) {
+      if (req.status === 'waiting') {
+        if (!found || req.timestamp < found.timestamp) {
+          found = Object.assign({ jobId: jobId }, req);
+        }
+      }
+    });
+    if (found) {
+      _pendingRequest = found;
+      var order = found.order ? '#' + found.order : found.jobId;
+      var client = found.client || '';
+      var by = found.requestedBy || 'Bureau';
+      document.getElementById('requestBannerOrder').textContent = order + (client ? ' — ' + client : '');
+      document.getElementById('requestBannerSub').textContent = '📥 Demandé par ' + by;
+      document.getElementById('requestBanner').classList.add('active');
+    } else {
+      _pendingRequest = null;
+      document.getElementById('requestBanner').classList.remove('active');
+    }
+  });
+}
+
+function answerRequest() {
+  if (!_pendingRequest) return;
+  // Mark as in-progress so bureau knows
+  db.ref('photoRequests/' + _pendingRequest.jobId).update({ status: 'answering' }).catch(function(){});
+  selectJob(_pendingRequest.jobId);
+}
+
+function filterJobs(query) {
+  const q = (query || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const all = Object.entries(jobsData)
+    .filter(([id, job]) => job && job.order)
+    .sort((a, b) => new Date(a[1].createdAt || 0) - new Date(b[1].createdAt || 0));
+
+  filteredJobs = q ? all.filter(([id, job]) => {
+    const hay = ((job.order||'') + ' ' + (job.client||'') + ' ' + (job.assignee||''))
+      .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    return hay.includes(q);
+  }) : all;
+
+  renderJobs();
+}
+
+function renderJobs() {
+  const list = document.getElementById('jobsList');
+  if (!filteredJobs.length) {
+    list.innerHTML = '<div class="jobs-empty">Aucun job trouvé</div>';
+    return;
+  }
+  list.innerHTML = filteredJobs.map(([id, job]) => {
+    const assignee = job.assignee || '';
+    return `<div class="job-item" onclick="selectJob('${esc(id)}')">
+      <div class="job-icon">📋</div>
+      <div class="job-info">
+        <div class="job-order">#${esc(job.order || '---')}</div>
+        <div class="job-client">${esc(job.client || 'Client non spécifié')}</div>
+      </div>
+      <span class="job-assignee">${esc(assignee)}</span>
+    </div>`;
+  }).join('');
+}
+
+function selectJob(id) {
+  selectedJob = { id, ...(jobsData[id] || {}) };
+  pendingPhotos = [];
+  document.getElementById('photoJobOrder').textContent = '#' + (selectedJob.order || '---');
+  document.getElementById('photoJobClient').textContent = selectedJob.client || 'Client non spécifié';
+  document.getElementById('photoPreviews').innerHTML = '';
+  document.getElementById('photoPlaceholder').style.display = 'flex';
+  document.getElementById('photoMsg').value = '';
+  document.getElementById('btnSend').disabled = true;
+  document.getElementById('btnSendLabel').textContent = '📤 Envoyer';
+  showScreen('screenPhoto');
+}
+
+function goToJobs() {
+  pendingPhotos = [];
+  showScreen('screenJobs');
+}
+
+// ═══ PHOTO HANDLING ═══
+async function handleFiles(files) {
+  if (!files || !files.length) return;
+  for (const file of Array.from(files)) {
+    if (!file.type.startsWith('image/')) continue;
+    const dataUrl = await readAndCompress(file);
+    pendingPhotos.push({ dataUrl, name: file.name || ('photo_' + Date.now() + '.jpg') });
+  }
+  renderPreviews();
+}
+
+function readAndCompress(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = new Image();
+      img.onload = function() {
+        const MAX = 1200;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderPreviews() {
+  const area = document.getElementById('photoPreviews');
+  const placeholder = document.getElementById('photoPlaceholder');
+  const btn = document.getElementById('btnSend');
+
+  if (!pendingPhotos.length) {
+    area.innerHTML = '';
+    placeholder.style.display = 'flex';
+    btn.disabled = true;
+    return;
+  }
+
+  placeholder.style.display = 'none';
+  area.innerHTML = pendingPhotos.map((p, i) =>
+    `<div class="photo-thumb-wrap">
+      <img src="${p.dataUrl}" alt="photo ${i+1}">
+      <button class="photo-thumb-remove" onclick="removePhoto(${i})">✕</button>
+    </div>`
+  ).join('');
+
+  btn.disabled = false;
+  const n = pendingPhotos.length;
+  document.getElementById('btnSendLabel').textContent = `📤 Envoyer ${n} photo${n>1?'s':''}`;
+}
+
+function removePhoto(idx) {
+  pendingPhotos.splice(idx, 1);
+  renderPreviews();
+}
+
+// ═══ SEND ═══
+async function sendPhotos() {
+  if (!selectedJob || !pendingPhotos.length || !db) return;
+  const btn = document.getElementById('btnSend');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Envoi...';
+
+  const msg = (document.getElementById('photoMsg').value || '').trim();
+  const myEmail = (currentUser.email || '').toLowerCase();
+  const myName = currentUserName || myEmail;
+
+  const msgData = {
+    content: msg || ('📷 ' + pendingPhotos.length + ' photo' + (pendingPhotos.length > 1 ? 's' : '') + ' envoyée' + (pendingPhotos.length > 1 ? 's' : '') + ' depuis mobile'),
+    type: 'conversation',
+    authorEmail: myEmail,
+    authorName: myName,
+    timestamp: Date.now(),
+    createdAt: firebase.database.ServerValue.TIMESTAMP,
+    dest: selectedJob.assignee || '',
+    jobId: selectedJob.id,
+    sentFromMobile: true
+  };
+
+  if (pendingPhotos.length === 1) {
+    msgData.image = pendingPhotos[0].dataUrl;
+  } else {
+    msgData.images = pendingPhotos.map(p => p.dataUrl);
+  }
+
+  try {
+    await db.ref('questChat/' + selectedJob.id + '/messages').push().set(msgData);
+
+    // Notification
+    try {
+      await db.ref('notifications/' + selectedJob.id).push().set({
+        type: 'photo_mobile',
+        from: myName,
+        fromEmail: myEmail,
+        jobId: selectedJob.id,
+        order: selectedJob.order || '',
+        count: pendingPhotos.length,
+        timestamp: Date.now(),
+        read: false
+      });
+    } catch(e) { /* notification non critique */ }
+
+    // Show success
+    const n = pendingPhotos.length;
+    document.getElementById('successMsg').innerHTML =
+      `<span class="success-dest">${n} photo${n>1?'s':''}</span> ajoutée${n>1?'s':''} dans la conversation de la commande <strong>#${esc(selectedJob.order||'---')}</strong> — ${esc(selectedJob.client||'')}`;
+    // Mark photo request as fulfilled if there was one
+    if (_pendingRequest && _pendingRequest.jobId === selectedJob.id) {
+      db.ref('photoRequests/' + selectedJob.id).remove().catch(function(){});
+      _pendingRequest = null;
+    }
+    showScreen('screenSuccess');
+    pendingPhotos = [];
+
+  } catch(e) {
+    btn.disabled = false;
+    document.getElementById('btnSendLabel').textContent = '⚠️ Erreur — réessayer';
+    console.error(e);
+  }
+}
+
+function sendAnother() {
+  showScreen('screenPhoto');
+  pendingPhotos = [];
+  renderPreviews();
+  document.getElementById('photoMsg').value = '';
+}
+
+// ═══ UTILS ═══
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
+
+function setDots(connected) {
+  document.querySelectorAll('.status-dot').forEach(d => {
+    d.classList.toggle('connected', !!connected);
+  });
+}
+</script>
+
+<script>
+// ═══ PWA MANIFEST — injecté dynamiquement ═══
+(function() {
+  var manifest = {
+    name: "PhysiPro Photos",
+    short_name: "📷 Photos",
+    description: "Envoyer des photos dans les conversations PhysiPro",
+    start_url: "./PhysiPro_PhotoSender.html",
+    display: "standalone",
+    background_color: "#04152c",
+    theme_color: "#04152c",
+    orientation: "portrait",
+    icons: [
+      {
+        src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%2304152c'/><rect x='56' y='140' width='400' height='270' rx='40' fill='%234a8ef5'/><circle cx='256' cy='275' r='88' fill='%23fff' opacity='.25'/><circle cx='256' cy='275' r='60' fill='%23fff'/><circle cx='256' cy='275' r='28' fill='%234a8ef5'/><rect x='156' y='80' width='120' height='66' rx='18' fill='%234a8ef5'/><circle cx='390' cy='172' r='24' fill='%2322c55e'/></svg>",
+        sizes: "512x512",
+        type: "image/svg+xml",
+        purpose: "any maskable"
+      }
+    ]
+  };
+  var blob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
+  var url = URL.createObjectURL(blob);
+  document.getElementById('pwaManifest').href = url;
+})();
+
+// ═══ INSTALL PROMPT ═══
+var _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  _deferredInstall = e;
+  showInstallBanner();
+});
+
+function showInstallBanner() {
+  if (document.getElementById("installBanner")) return;
+  var banner = document.createElement('div');
+  banner.id = 'installBanner';
+  banner.style.cssText = 'position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);left:12px;right:12px;' +
+    'background:linear-gradient(135deg,#1e3a5f,#0f2847);border:1.5px solid rgba(59,130,246,0.6);' +
+    'border-radius:14px;padding:14px 16px;z-index:99999;display:flex;align-items:center;gap:12px;' +
+    'box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+  banner.innerHTML =
+    '<div style="font-size:32px;flex-shrink:0;">📷</div>' +
+    '<div style="flex:1;min-width:0;">' +
+      '<div style="font-size:13px;font-weight:700;color:#fff;">Ajouter à l&#x27;écran d&#x27;accueil</div>' +
+      '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">Accès rapide comme une vraie app</div>' +
+    '</div>' +
+    '<button onclick="doInstall()" style="padding:9px 16px;border-radius:9px;border:none;' +
+      'background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">'+
+      'Installer</button>' +
+    '<button onclick="document.getElementById("installBanner").remove()" style="background:none;border:none;' +
+      'color:#64748b;font-size:20px;cursor:pointer;padding:0 4px;flex-shrink:0;">✕</button>';
+  document.body.appendChild(banner);
+}
+
+function doInstall() {
+  if (!_deferredInstall) return;
+  _deferredInstall.prompt();
+  _deferredInstall.userChoice.then(function(r) {
+    _deferredInstall = null;
+    var b = document.getElementById("installBanner");
+    if (b) b.remove();
+  });
+}
+
+// iOS instructions (no beforeinstallprompt on Safari)
+var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+var isInStandalone = window.navigator.standalone;
+if (isIOS && !isInStandalone) {
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      if (document.getElementById("installBanner")) return;
+      var tip = document.createElement('div');
+      tip.id = 'installBanner';
+      tip.style.cssText = 'position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);left:12px;right:12px;' +
+        'background:linear-gradient(135deg,#1e3a5f,#0f2847);border:1.5px solid rgba(59,130,246,0.5);' +
+        'border-radius:14px;padding:14px 16px;z-index:99999;' +
+        'box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+      tip.innerHTML =
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">' +
+          '<div style="font-size:28px;">📲</div>' +
+          '<div style="font-size:13px;font-weight:700;color:#fff;">Ajouter à l&#x27;écran d&#x27;accueil</div>' +
+          '<button onclick="document.getElementById(\"installBanner\").remove()" style="margin-left:auto;background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;">✕</button>' +
+        '</div>' +
+        '<div style="font-size:12px;color:#cbd5e1;line-height:1.6;">' +
+          '1. Appuie sur <strong style="color:#60a5fa;">Partager</strong> <span style="font-size:16px;">⬆️</span> en bas de Safari<br>' +
+          '2. Choisis <strong style="color:#60a5fa;">« Sur l&#x27;écran d&#x27;accueil »</strong> <span style="font-size:14px;">➕</span>' +
+        '</div>';
+      document.body.appendChild(tip);
+      setTimeout(function(){ var b=document.getElementById("installBanner");if(b)b.remove(); }, 12000);
+    }, 2000);
+  });
+}
+</script>
+</body>
+</html>
