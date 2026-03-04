@@ -1368,7 +1368,7 @@ body {
 .calendar-action-btn.close-btn { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
 
 /* ===== MODALS ===== */
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 2000; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 99992; }
 .modal-overlay.active { display: flex; }
 .modal-box { background: linear-gradient(180deg, #0d1b2a 0%, #1a2a4a 100%); border: 2px solid rgba(74,142,245,0.5); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 30px rgba(59,130,246,0.15); overflow: hidden; animation: calendarPop 0.2s ease-out; width: 440px; }
 .modal-header { padding: 14px 18px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); display: flex; justify-content: space-between; align-items: center; }
@@ -1383,6 +1383,15 @@ body {
 .modal-field input::placeholder { color: rgba(255,255,255,0.3); }
 .modal-field input:focus, .modal-field select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.2); background: rgba(255,255,255,0.1); }
 .modal-field select option { background: #1e3a5f; color: #e2e8f0; }
+.sc-client-wrap { position: relative; }
+.sc-client-input { width: 100%; padding: 10px 12px; border: 1px solid rgba(74,142,245,0.3); border-radius: 8px; background: rgba(255,255,255,0.07); color: #e2e8f0; font-size: 13px; transition: all 0.2s; box-sizing: border-box; }
+.sc-client-input::placeholder { color: rgba(255,255,255,0.3); }
+.sc-client-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.2); background: rgba(255,255,255,0.1); }
+.sc-client-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #0d1b2a; border: 1px solid rgba(74,142,245,0.5); border-top: none; border-radius: 0 0 8px 8px; max-height: 180px; overflow-y: auto; z-index: 10010; display: none; }
+.sc-client-dropdown.open { display: block; }
+.sc-client-option { padding: 8px 12px; font-size: 12px; color: #cbd5e1; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-client-option:hover, .sc-client-option.highlighted { background: rgba(59,130,246,0.2); color: #fff; }
+.sc-client-match { color: #60a5fa; font-weight: 700; }
 .modal-date-field {
   padding: 10px 12px; border: 1px solid rgba(74,142,245,0.3); border-radius: 8px;
   background: rgba(255,255,255,0.07); color: #93c5fd; font-size: 13px;
@@ -2221,7 +2230,11 @@ body {
         </div>
         <div class="modal-field">
           <label>Client <span onclick="openQuestListModal('clients','Clients')" style="cursor:pointer;font-size:12px;" title="Gérer la liste">⚙️</span></label>
-          <select id="jobClient" style="width:100%;padding:8px;border:1px solid rgba(59,130,246,0.3);border-radius:6px;background:#0f172a;color:#fff;font-size:12px;"></select>
+          <div class="sc-client-wrap">
+            <input type="text" id="jobClientInput" class="sc-client-input" placeholder="Rechercher un client..." autocomplete="off" oninput="scFilterClients(this.value)" onfocus="scFilterClients(this.value)" onkeydown="scClientKeydown(event)">
+            <input type="hidden" id="jobClient" value="">
+            <div class="sc-client-dropdown" id="scClientDropdown"></div>
+          </div>
         </div>
       </div>
       <div class="modal-row">
@@ -3067,7 +3080,7 @@ function renderJobs() {
   Object.keys(lists).forEach(name => {
     const container = document.getElementById('list' + name);
     const count = document.getElementById('count' + name);
-    const jobs = lists[name].sort((a, b) => new Date(a.dateRecue || 0) - new Date(b.dateRecue || 0));
+    const jobs = lists[name].sort((a, b) => new Date(a.createdAt || a.dateRecue || 0) - new Date(b.createdAt || b.dateRecue || 0));
     count.textContent = jobs.length;
     count.style.display = jobs.length > 0 ? '' : 'none';
     
@@ -3831,7 +3844,7 @@ function openJobModal(assignee) {
   if (writeBlocked()) return;
   document.getElementById('jobModal').classList.add('active');
   document.getElementById('jobOrder').value = '';
-  document.getElementById('jobClient').innerHTML = getClientOptions('');
+  document.getElementById('jobClientInput').value = ''; document.getElementById('jobClient').value = ''; document.getElementById('scClientDropdown').classList.remove('open');
   document.getElementById('jobPO').value = '';
   document.getElementById('jobRep').innerHTML = getRepOptions('');
   // Set date reçue to today
@@ -3844,6 +3857,58 @@ function openJobModal(assignee) {
   document.getElementById('jobDateLivDisplay').classList.remove('has-date');
   document.getElementById('jobAssignee').value = assignee || 'Jacynthe';
 }
+var _scClientHL = -1;
+function _scNorm(s) { return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function scFilterClients(val) {
+  var dd = document.getElementById('scClientDropdown');
+  var hid = document.getElementById('jobClient');
+  if (!dd) return;
+  var norm = _scNorm(val);
+  var filtered = norm ? _questClientList.filter(function(c){ return _scNorm(c).indexOf(norm) !== -1; }) : _questClientList;
+  _scClientHL = -1;
+  if (!filtered.length) { dd.classList.remove('open'); return; }
+  var h = '';
+  filtered.forEach(function(c, i) {
+    var display = escapeHtml(c);
+    if (norm) {
+      var ni = _scNorm(c).indexOf(norm);
+      if (ni !== -1) {
+        display = escapeHtml(c.substring(0, ni)) + '<span class="sc-client-match">' + escapeHtml(c.substring(ni, ni + val.length)) + '</span>' + escapeHtml(c.substring(ni + val.length));
+      }
+    }
+    h += '<div class="sc-client-option" data-val="' + escapeHtml(c) + '" onclick="scSelectClient(this.dataset.val)">' + display + '</div>';
+  });
+  dd.innerHTML = h;
+  dd.classList.add('open');
+}
+function scSelectClient(val) {
+  var inp = document.getElementById('jobClientInput');
+  var hid = document.getElementById('jobClient');
+  var dd = document.getElementById('scClientDropdown');
+  if (inp) inp.value = val;
+  if (hid) hid.value = val;
+  if (dd) dd.classList.remove('open');
+}
+function scClientKeydown(e) {
+  var dd = document.getElementById('scClientDropdown');
+  if (!dd || !dd.classList.contains('open')) return;
+  var opts = dd.querySelectorAll('.sc-client-option');
+  if (e.key === 'ArrowDown') { e.preventDefault(); _scClientHL = Math.min(_scClientHL + 1, opts.length - 1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); _scClientHL = Math.max(_scClientHL - 1, 0); }
+  else if (e.key === 'Enter' && _scClientHL >= 0) { e.preventDefault(); scSelectClient(opts[_scClientHL].dataset.val); return; }
+  else if (e.key === 'Escape') { dd.classList.remove('open'); return; }
+  opts.forEach(function(o, i) { o.classList.toggle('highlighted', i === _scClientHL); });
+  if (_scClientHL >= 0) opts[_scClientHL].scrollIntoView({ block: 'nearest' });
+}
+document.addEventListener('mousedown', function(e) {
+  var dd = document.getElementById('scClientDropdown');
+  var inp = document.getElementById('jobClientInput');
+  if (dd && inp && !dd.contains(e.target) && e.target !== inp) {
+    var hid = document.getElementById('jobClient');
+    if (hid && inp) hid.value = inp.value;
+    dd.classList.remove('open');
+  }
+}, true);
 function closeJobModal() { document.getElementById('jobModal').classList.remove('active'); }
 
 function saveJob() {
@@ -6058,7 +6123,7 @@ function switchMobileTab(tab) {
 function renderMobileList() {
   const list = document.getElementById('mobileList');
   if (mobileCurrentTab === 'jobs') {
-    const jobs = Object.entries(jobsData).sort((a, b) => new Date(a[1].dateRecue || 0) - new Date(b[1].dateRecue || 0));
+    const jobs = Object.entries(jobsData).sort((a, b) => new Date(a[1].createdAt || a[1].dateRecue || 0) - new Date(b[1].createdAt || b[1].dateRecue || 0));
     if (jobs.length === 0) { list.innerHTML = '<div class="empty-state" style="padding:40px;">Aucun job</div>'; return; }
     list.innerHTML = jobs.map(([id, job]) => {
       const msgCount = getMessageCount(id);
