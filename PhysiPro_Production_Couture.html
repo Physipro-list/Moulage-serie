@@ -2781,23 +2781,67 @@ var PChat = (function() {
 
     setTimeout(function() { _initialLoad = false; }, 3000);
 
-    // ═══ CROSS-APP: Listen for jobNotifications (Moulage, ServiceClient, PSM) ═══
+    // ═══ CROSS-APP: Listen for ALL notification sources ═══
     var crossEmailKey = myEmail.replace(/\./g, '_');
+    
     _db.ref('jobNotifications').orderByChild('to').equalTo(myEmail).on('value', function(snap) {
+      _crossAppNotifs._job = {};
       var all = snap.val() || {};
-      _crossAppNotifs = {};
-      var crossCount = 0;
       Object.keys(all).forEach(function(k) {
         var n = all[k];
         if (!n.read && !(n.readBy && n.readBy[crossEmailKey])) {
-          _crossAppNotifs[k] = n;
-          crossCount++;
+          _crossAppNotifs._job[k] = n;
         }
       });
-      var dmTotal = 0;
-      Object.values(_unreadCounts).forEach(function(c) { dmTotal += c; });
-      updateBell(dmTotal + crossCount);
+      _refreshCrossAppBell();
     });
+    
+    _db.ref('moulageNotifications').orderByChild('to').equalTo(myEmail).on('value', function(snap) {
+      _crossAppNotifs._moulage = {};
+      var all = snap.val() || {};
+      Object.keys(all).forEach(function(k) {
+        var n = all[k];
+        if (!n.read) {
+          n._source = 'moulage';
+          _crossAppNotifs._moulage[k] = n;
+        }
+      });
+      _refreshCrossAppBell();
+    });
+  }
+  
+  function _refreshCrossAppBell() {
+    var merged = {};
+    var seen = {};
+    var maxAge = 7 * 24 * 60 * 60 * 1000;
+    var now = Date.now();
+    if (_crossAppNotifs._job) {
+      Object.entries(_crossAppNotifs._job).forEach(function(e) {
+        if (now - (e[1].timestamp || 0) > maxAge) return;
+        merged[e[0]] = e[1];
+        seen[(e[1].jobId || '') + '_' + (e[1].timestamp || '')] = true;
+      });
+    }
+    if (_crossAppNotifs._moulage) {
+      Object.entries(_crossAppNotifs._moulage).forEach(function(e) {
+        var n = e[1];
+        if (now - (n.timestamp || 0) > maxAge) return;
+        var dk = (n.cardId || '') + '_' + (n.timestamp || '');
+        if (!seen[dk]) {
+          merged['moulage_' + e[0]] = {
+            to: n.to, toName: n.toName, from: n.from, fromName: n.fromName,
+            jobId: n.cardId, jobName: n.cardName,
+            messageType: n.messageType, messageContent: n.messageContent,
+            timestamp: n.timestamp, sourceApp: 'moulage', _fbKey: e[0]
+          };
+        }
+      });
+    }
+    _crossAppNotifs._merged = merged;
+    var count = Object.keys(merged).length;
+    var dmTotal = 0;
+    Object.values(_unreadCounts).forEach(function(c) { dmTotal += c; });
+    updateBell(dmTotal + count);
   }
 
   var _crossAppNotifs = {};
@@ -2837,41 +2881,63 @@ var PChat = (function() {
   function renderNotifList() {
     var list = document.getElementById('pchatNotifList');
     if (!list) return;
+    var html = '';
+    var hasContent = false;
 
-    var allUnread = [];
-    Object.keys(_unreadMessages).forEach(function(chatKey) {
-      (_unreadMessages[chatKey] || []).forEach(function(item) {
-        allUnread.push(item);
+    // Section 1: Cross-app notifications
+    var crossEntries = Object.entries(_crossAppNotifs._merged || {}).sort(function(a,b) { return (b[1].timestamp||0) - (a[1].timestamp||0); });
+    if (crossEntries.length > 0) {
+      hasContent = true;
+      html += '<div style="font-size:9px;font-weight:700;color:#60a5fa;padding:6px 12px 4px;text-transform:uppercase;border-bottom:1px solid rgba(42,107,201,.2);">📋 Notifications</div>';
+      crossEntries.slice(0, 15).forEach(function(entry) {
+        var id = entry[0]; var n = entry[1];
+        var d = n.timestamp ? new Date(n.timestamp) : new Date();
+        var timeStr = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+        var icons = { problem: '❓', normal: '💬', reply: '↩️', pinned: '📌', rappel: '🔔' };
+        var icon = n.sourceApp === 'moulage' ? '🏭' : (icons[n.messageType] || '💬');
+        var preview = ((n.messageContent || '').substring(0, 60)) + ((n.messageContent || '').length > 60 ? '...' : '');
+        var sourceLabel = n.sourceApp === 'moulage' ? '🏭 ' + esc(n.jobName || 'Moulage') : esc(n.jobName || 'Job');
+        var navFile = n.sourceApp === 'moulage' ? 'Physipro_moulage.html' : 'PhysiPro_ServiceClient.html';
+        html += '<div class="pchat-notif-item unread" onclick="PChat.closeNotifPopup();PChat._markCrossNotifRead(\'' + esc(id) + '\');window.location.href=\'' + navFile + '\';" style="cursor:pointer;">' +
+          '<div class="pchat-notif-item-header"><span class="pchat-notif-item-from">' + icon + ' ' + esc(n.fromName || 'Utilisateur') + '</span><span class="pchat-notif-item-time">' + timeStr + '</span></div>' +
+          '<div class="pchat-notif-item-content">' + esc(preview) + '</div>' +
+          '<div style="font-size:11px;color:#2a6bc9;font-weight:600;">' + sourceLabel + ' →</div></div>';
       });
-    });
-
-    allUnread.sort(function(a, b) { return (b.msg.timestamp || 0) - (a.msg.timestamp || 0); });
-
-    if (allUnread.length === 0) {
-      list.innerHTML = '<div class="pchat-notif-empty">🔔 Aucun message non lu</div>';
-      return;
     }
 
-    var html = '<div style="font-size:9px;font-weight:700;color:#60a5fa;padding:6px 12px 4px;text-transform:uppercase;border-bottom:1px solid rgba(42,107,201,.2);">💬 Messages privés</div>';
-
-    allUnread.slice(0, 30).forEach(function(item) {
-      var msg = item.msg;
-      var d = msg.timestamp ? new Date(msg.timestamp) : new Date();
-      var timeStr = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-      var preview = (msg.content || '').substring(0, 80) + ((msg.content || '').length > 80 ? '...' : '');
-      if (!preview && msg.image) preview = '📷 Image';
-
-      html += '<div class="pchat-notif-item unread" onclick="PChat.closeNotifPopup();PChat.open(\'' + esc(item.contact) + '\')">' +
-        '<div class="pchat-notif-item-header">' +
-          '<span class="pchat-notif-item-from">💬 ' + esc(msg.authorName || item.contactFull) + '</span>' +
-          '<span class="pchat-notif-item-time">' + timeStr + '</span>' +
-        '</div>' +
-        '<div class="pchat-notif-item-content">' + esc(preview) + '</div>' +
-        '<div style="font-size:11px;color:#2a6bc9;font-weight:600;">Ouvrir la conversation <span class="pchat-notif-item-arrow">\u2192</span></div>' +
-      '</div>';
+    // Section 2: PChat DM messages
+    var allUnread = [];
+    Object.keys(_unreadMessages).forEach(function(chatKey) {
+      (_unreadMessages[chatKey] || []).forEach(function(item) { allUnread.push(item); });
     });
-
+    allUnread.sort(function(a, b) { return (b.msg.timestamp || 0) - (a.msg.timestamp || 0); });
+    if (!hasContent && allUnread.length === 0) {
+      list.innerHTML = '<div class="pchat-notif-empty">🔔 Aucune notification</div>';
+      return;
+    }
+    if (allUnread.length > 0) {
+      html += '<div style="font-size:9px;font-weight:700;color:#60a5fa;padding:6px 12px 4px;text-transform:uppercase;border-bottom:1px solid rgba(42,107,201,.2);">💬 Messages privés</div>';
+      allUnread.slice(0, 30).forEach(function(item) {
+        var msg = item.msg;
+        var d = msg.timestamp ? new Date(msg.timestamp) : new Date();
+        var timeStr = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+        var preview = (msg.content || '').substring(0, 80) + ((msg.content || '').length > 80 ? '...' : '');
+        if (!preview && msg.image) preview = '📷 Image';
+        html += '<div class="pchat-notif-item unread" onclick="PChat.closeNotifPopup();PChat.open(\'' + esc(item.contact) + '\')">' +
+          '<div class="pchat-notif-item-header"><span class="pchat-notif-item-from">💬 ' + esc(msg.authorName || item.contactFull) + '</span><span class="pchat-notif-item-time">' + timeStr + '</span></div>' +
+          '<div class="pchat-notif-item-content">' + esc(preview) + '</div>' +
+          '<div style="font-size:11px;color:#2a6bc9;font-weight:600;">Ouvrir la conversation →</div></div>';
+      });
+    }
     list.innerHTML = html;
+  }
+
+  function _markCrossNotifRead(notifId) {
+    var _db = getDb(); var myEmail = getMyEmail();
+    if (!_db || !myEmail) return;
+    var ek = myEmail.replace(/\./g, '_');
+    if (notifId.indexOf('moulage_') === 0) { _db.ref('moulageNotifications/' + notifId.substring(8)).update({ read: true }).catch(function(){}); }
+    else { _db.ref('jobNotifications/' + notifId + '/read').set(true).catch(function(){}); _db.ref('jobNotifications/' + notifId + '/readBy/' + ek).set(true).catch(function(){}); }
   }
 
   function markAllRead() {
@@ -2886,11 +2952,29 @@ var PChat = (function() {
       });
     });
 
+    if (_crossAppNotifs._job) {
+      Object.keys(_crossAppNotifs._job).forEach(function(k) {
+        _db.ref('jobNotifications/' + k + '/read').set(true).catch(function(){});
+        _db.ref('jobNotifications/' + k + '/readBy/' + emailKey).set(true).catch(function(){});
+      });
+    }
+    if (_crossAppNotifs._moulage) {
+      Object.keys(_crossAppNotifs._moulage).forEach(function(k) {
+        _db.ref('moulageNotifications/' + k).update({ read: true }).catch(function(){});
+      });
+    }
+
     if (typeof showToast === 'function') showToast('\u2713 Tous les messages marqués comme lus', 'info');
     closeNotifPopup();
   }
 
   function clearAllNotifs() {
+    var _db = getDb();
+    if (_db) {
+      if (_crossAppNotifs._job) { Object.keys(_crossAppNotifs._job).forEach(function(k) { _db.ref('jobNotifications/' + k).remove().catch(function(){}); }); }
+      if (_crossAppNotifs._moulage) { Object.keys(_crossAppNotifs._moulage).forEach(function(k) { _db.ref('moulageNotifications/' + k).update({ read: true }).catch(function(){}); }); }
+    }
+    _crossAppNotifs = {};
     markAllRead();
   }
 
@@ -2915,7 +2999,7 @@ var PChat = (function() {
     fmt: fmt, fmtSize: fmtSize, fmtColor: fmtColor,
     openLightbox: openLightbox, closeLightbox: closeLightbox,
     toggleNotifPopup: toggleNotifPopup, closeNotifPopup: closeNotifPopup,
-    markAllRead: markAllRead, clearAllNotifs: clearAllNotifs,
+    markAllRead: markAllRead, clearAllNotifs: clearAllNotifs, _markCrossNotifRead: _markCrossNotifRead,
     startNotifListener: startNotifListener
   };
 })();

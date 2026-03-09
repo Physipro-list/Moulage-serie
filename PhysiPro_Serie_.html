@@ -7579,6 +7579,7 @@ if(localStorage.getItem('physipro_last_email')){
                   </div>
                   <span class="serie-dept-title centered">🔨 Atelier</span>
                   <div class="serie-header-right">
+                    <button class="serie-dept-btn" onclick="openRestoreAtelierModal()" title="Restaurer données atelier" style="background:linear-gradient(to bottom,#dc2626,#991b1b);font-size:8px;">🔧 Restaurer</button>
                   </div>
                 </div>
                 <div class="serie-dept-stats" id="serieDeptAtelierStats">
@@ -9033,10 +9034,19 @@ function _mergeExternalDepts(local, fb) {
     if (!local.items[ii].grandeurs) return;
     fItem.grandeurs.forEach(function(fG, gi) {
       if (!local.items[ii].grandeurs[gi]) return;
-      // Toujours prendre la version Firebase pour couture & inspection
+      var lG = local.items[ii].grandeurs[gi];
+      // Pour couture & inspection: prendre le MAX (ne jamais régresser)
       ['couture','inspection'].forEach(function(dept) {
-        if (fG[dept] !== undefined) {
-          local.items[ii].grandeurs[gi][dept] = fG[dept];
+        if (!fG[dept]) return;
+        if (!lG[dept]) { lG[dept] = fG[dept]; return; }
+        var fQf = parseInt(fG[dept].qtyFait) || 0;
+        var lQf = parseInt(lG[dept].qtyFait) || 0;
+        if (fQf > lQf) {
+          lG[dept] = fG[dept];
+        } else if (fQf === lQf) {
+          if (fG[dept].note !== undefined) lG[dept].note = fG[dept].note;
+          if (fG[dept].status !== undefined) lG[dept].status = fG[dept].status;
+          if (fG[dept].exped !== undefined) lG[dept].exped = fG[dept].exped;
         }
       });
     });
@@ -9073,7 +9083,7 @@ function _syncAllCardsToFirebase() {
     .catch(function(e) { console.error('Erreur Firebase Série+ bulk:', e); _serieIsSyncing = false; });
 }
 
-// Intelligent merge: couture/inspection = TOUJOURS Firebase (source de vérité), atelier = protéger le local
+// Intelligent merge: pour les 3 depts, toujours prendre le MAX de qtyFait (jamais régresser)
 function _mergeSerieCard(local, fb) {
   // Card-level fields: always accept Firebase version
   ['client','name','order','po','numeroPO','soumission','dateRecue','dateLivraison','codeChargement','notes','isBO','_typeManuel','raisonBO','createdAt'].forEach(function(f) {
@@ -9100,34 +9110,28 @@ function _mergeSerieCard(local, fb) {
       if (fG.name) lG.name = fG.name;
       if (fG.notes !== undefined) lG.notes = fG.notes;
 
-      // ═══ MERGE PAR DÉPARTEMENT ═══
-      // Couture & Inspection: Firebase est la SOURCE DE VÉRITÉ (changements viennent d'autres apps)
-      // → TOUJOURS accepter Firebase, même si qtyFait baisse (décoché) ou champs changent
-      ['couture','inspection'].forEach(function(dept) {
-        if (fG[dept] !== undefined) {
+      // ═══ MERGE PAR DÉPARTEMENT — PRENDRE LE MAX pour ne jamais régresser ═══
+      // Que ce soit Atelier (édité dans Série+), Couture (édité dans Prod. Couture),
+      // ou Inspection (édité dans Insp. Atelier), on garde la valeur la plus haute.
+      // Les notes/status sont toujours acceptés de Firebase quand qtyFait est égal.
+      ['atelier','couture','inspection'].forEach(function(dept) {
+        if (!fG[dept]) return;
+        if (!lG[dept]) { lG[dept] = fG[dept]; return; }
+        var fQf = parseInt(fG[dept].qtyFait) || 0;
+        var lQf = parseInt(lG[dept].qtyFait) || 0;
+        if (fQf > lQf) {
+          // Firebase plus avancé → prendre Firebase
           lG[dept] = fG[dept];
+        } else if (fQf === lQf) {
+          // Égal → accepter notes/status de Firebase (sync cross-app)
+          if (fG[dept].note !== undefined) lG[dept].note = fG[dept].note;
+          if (fG[dept].status !== undefined) lG[dept].status = fG[dept].status;
+          if (fG[dept].inspected !== undefined) lG[dept].inspected = fG[dept].inspected;
+          if (fG[dept].inspectedAt !== undefined) lG[dept].inspectedAt = fG[dept].inspectedAt;
+          if (fG[dept].exped !== undefined) lG[dept].exped = fG[dept].exped;
         }
+        // Si local > Firebase → garder local (pas encore poussé ou édité directement)
       });
-
-      // Atelier: Série+ est le propriétaire → protéger les changements locaux (never regress)
-      if (fG.atelier) {
-        if (!lG.atelier) { lG.atelier = fG.atelier; }
-        else {
-          var fQf = parseInt(fG.atelier.qtyFait) || 0;
-          var lQf = parseInt(lG.atelier.qtyFait) || 0;
-          // Si Firebase a plus de progrès → prendre Firebase
-          if (fQf > lQf) { lG.atelier = fG.atelier; }
-          // Si égal, prendre Firebase aussi pour sync des notes/status
-          else if (fQf === lQf) {
-            // Accepter les champs non-qtyFait de Firebase (notes, status, etc.)
-            if (fG.atelier.note !== undefined) lG.atelier.note = fG.atelier.note;
-            if (fG.atelier.status !== undefined) lG.atelier.status = fG.atelier.status;
-            if (fG.atelier.inspected !== undefined) lG.atelier.inspected = fG.atelier.inspected;
-            if (fG.atelier.inspectedAt !== undefined) lG.atelier.inspectedAt = fG.atelier.inspectedAt;
-          }
-          // Si local > Firebase, garder local (changement pas encore poussé)
-        }
-      }
     });
   });
   // If Firebase has MORE items than local, add them
@@ -13836,6 +13840,128 @@ function serieCreateBackup() {
 setInterval(function() { serieCreateBackup(); }, 30 * 60 * 1000);
 window.addEventListener('beforeunload', function() { serieCreateBackup(); });
 
+// ═══ RESTAURATION ATELIER DEPUIS BACKUP ═══
+function openRestoreAtelierModal() {
+  if (!firebaseDb) { showToast('⚠️ Firebase non connecté', 'error'); return; }
+  
+  var old = document.getElementById('restoreAtelierOverlay');
+  if (old) old.remove();
+  
+  var overlay = document.createElement('div');
+  overlay.id = 'restoreAtelierOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:999999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  
+  overlay.innerHTML = '<div style="background:linear-gradient(180deg,#1e3a5f,#0f172a);border-radius:12px;width:500px;max-width:95%;max-height:80vh;overflow:hidden;border:2px solid rgba(59,130,246,0.4);box-shadow:0 10px 40px rgba(0,0,0,0.5);display:flex;flex-direction:column;">' +
+    '<div style="background:linear-gradient(to bottom,#dc2626,#991b1b);padding:12px 16px;color:white;font-weight:700;font-size:14px;text-align:center;">🔧 Restauration données Atelier depuis backup</div>' +
+    '<div style="padding:16px;color:#94a3b8;font-size:11px;text-align:center;">Chargement des backups...</div>' +
+    '<div id="restoreBackupList" style="flex:1;overflow-y:auto;padding:8px;"></div>' +
+    '<div style="padding:10px 16px;background:rgba(0,0,0,0.3);display:flex;gap:8px;">' +
+      '<button onclick="document.getElementById(\'restoreAtelierOverlay\').remove()" style="flex:1;background:#6b7280;border:none;color:white;padding:8px;border-radius:6px;font-weight:600;cursor:pointer;">Fermer</button>' +
+    '</div>' +
+  '</div>';
+  
+  document.body.appendChild(overlay);
+  
+  // Load backups from Firebase
+  firebaseDb.ref('serieBackups').orderByKey().limitToLast(20).once('value', function(snap) {
+    var backups = snap.val() || {};
+    var keys = Object.keys(backups).sort().reverse();
+    var list = document.getElementById('restoreBackupList');
+    
+    if (keys.length === 0) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:#ef4444;">Aucun backup trouvé</div>';
+      return;
+    }
+    
+    var html = '<div style="padding:4px 8px;font-size:10px;color:#60a5fa;font-weight:700;">Sélectionnez un backup à restaurer (ATELIER seulement):</div>';
+    
+    keys.forEach(function(key) {
+      var b = backups[key];
+      var data = b.serieCommandes || b;
+      var cardCount = Object.keys(data).length;
+      
+      // Count how many cards have atelier data with qtyFait > 0
+      var atelierCards = 0;
+      Object.values(data).forEach(function(card) {
+        if (!card.items) return;
+        card.items.forEach(function(item) {
+          (item.grandeurs || []).forEach(function(g) {
+            if (g.atelier && parseInt(g.atelier.qtyFait) > 0) atelierCards++;
+          });
+        });
+      });
+      
+      // Parse date from key
+      var dateStr = key.replace('backup_', '').replace('preClear_', '').replace(/-/g, ':').replace('T', ' ').substring(0, 19);
+      
+      html += '<div style="padding:8px 12px;margin:4px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:8px;cursor:pointer;transition:all 0.2s;" ' +
+        'onmouseover="this.style.background=\'rgba(59,130,246,0.25)\'" onmouseout="this.style.background=\'rgba(59,130,246,0.1)\'" ' +
+        'onclick="confirmRestoreAtelier(\'' + key + '\')">' +
+        '<div style="font-size:12px;font-weight:700;color:#e2e8f0;">📅 ' + dateStr + '</div>' +
+        '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">' + cardCount + ' cartes | ' + atelierCards + ' grandeurs atelier avec progrès</div>' +
+      '</div>';
+    });
+    
+    list.innerHTML = html;
+  });
+}
+window.openRestoreAtelierModal = openRestoreAtelierModal;
+
+function confirmRestoreAtelier(backupKey) {
+  if (!confirm('⚠️ Restaurer les données ATELIER depuis ce backup?\n\nCeci va:\n- Remettre les qtyFait Atelier du backup\n- NE PAS toucher Couture/Inspection\n- NE PAS toucher les noms/dates/clients\n\nContinuer?')) return;
+  
+  firebaseDb.ref('serieBackups/' + backupKey).once('value', function(snap) {
+    var backup = snap.val();
+    if (!backup) { showToast('❌ Backup introuvable', 'error'); return; }
+    
+    var backupCards = backup.serieCommandes || backup;
+    var restored = 0;
+    var skipped = 0;
+    
+    Object.keys(backupCards).forEach(function(cardId) {
+      var bCard = backupCards[cardId];
+      var lCard = serieCardsData[cardId];
+      if (!lCard || !bCard || !bCard.items || !lCard.items) { skipped++; return; }
+      
+      bCard.items.forEach(function(bItem, ii) {
+        if (!lCard.items[ii]) return;
+        (bItem.grandeurs || []).forEach(function(bG, gi) {
+          if (!lCard.items[ii].grandeurs || !lCard.items[ii].grandeurs[gi]) return;
+          var lG = lCard.items[ii].grandeurs[gi];
+          
+          // Restaurer SEULEMENT atelier — prendre le MAX entre backup et actuel
+          if (bG.atelier) {
+            var backupQty = parseInt(bG.atelier.qtyFait) || 0;
+            var currentQty = parseInt((lG.atelier && lG.atelier.qtyFait) || 0);
+            if (backupQty > currentQty) {
+              lG.atelier = bG.atelier;
+              restored++;
+            }
+          }
+        });
+      });
+    });
+    
+    // Save and push
+    if (restored > 0) {
+      localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
+      _syncAllCardsToFirebase();
+      
+      // Refresh display
+      Object.keys(serieCardsData).forEach(function(cid) {
+        updateSerieCardDisplay(cid);
+      });
+      if (currentSerieId) renderSerie3Cols(currentSerieId);
+      updateSerieCounters();
+    }
+    
+    document.getElementById('restoreAtelierOverlay')?.remove();
+    showToast('✅ Restauration: ' + restored + ' grandeur(s) atelier récupérée(s) | ' + skipped + ' carte(s) ignorée(s)', restored > 0 ? 'success' : 'warning');
+  });
+}
+window.confirmRestoreAtelier = confirmRestoreAtelier;
+
 /* ================================================================
    FIN SECTION 24: PAGE SÉRIE+
    ================================================================ */
@@ -14386,23 +14512,79 @@ var PChat = (function() {
 
     setTimeout(function() { _initialLoad = false; }, 3000);
 
-    // ═══ CROSS-APP: Listen for jobNotifications (Moulage, ServiceClient, PSM) ═══
-    var emailKey = myEmail.replace(/\./g, '_');
+    // ═══ CROSS-APP: Listen for ALL notification sources ═══
+    var crossEmailKey = myEmail.replace(/\./g, '_');
+    
+    // Source 1: jobNotifications (ServiceClient, PSM, Moulage cross-app)
     _db.ref('jobNotifications').orderByChild('to').equalTo(myEmail).on('value', function(snap) {
+      _crossAppNotifs._job = {};
       var all = snap.val() || {};
-      _crossAppNotifs = {};
-      var count = 0;
       Object.keys(all).forEach(function(k) {
         var n = all[k];
-        if (!n.read && !(n.readBy && n.readBy[emailKey])) {
-          _crossAppNotifs[k] = n;
-          count++;
+        if (!n.read && !(n.readBy && n.readBy[crossEmailKey])) {
+          _crossAppNotifs._job[k] = n;
         }
       });
-      var dmTotal = 0;
-      Object.values(_unreadCounts).forEach(function(c) { dmTotal += c; });
-      updateBell(dmTotal + count);
+      _refreshCrossAppBell();
     });
+    
+    // Source 2: moulageNotifications (Moulage native — fallback si jobNotifications bloqué)
+    _db.ref('moulageNotifications').orderByChild('to').equalTo(myEmail).on('value', function(snap) {
+      _crossAppNotifs._moulage = {};
+      var all = snap.val() || {};
+      Object.keys(all).forEach(function(k) {
+        var n = all[k];
+        if (!n.read) {
+          n._source = 'moulage';
+          n._fbKey = k;
+          _crossAppNotifs._moulage[k] = n;
+        }
+      });
+      _refreshCrossAppBell();
+    });
+  }
+  
+  function _refreshCrossAppBell() {
+    // Merge all sources, deduplicate by cardId+timestamp
+    var merged = {};
+    var seen = {};
+    var maxAge = 7 * 24 * 60 * 60 * 1000; // 7 jours max
+    var now = Date.now();
+    
+    // Job notifications first
+    if (_crossAppNotifs._job) {
+      Object.entries(_crossAppNotifs._job).forEach(function(e) {
+        if (now - (e[1].timestamp || 0) > maxAge) return; // Trop vieille, ignorer
+        merged[e[0]] = e[1];
+        var dedupKey = (e[1].jobId || '') + '_' + (e[1].timestamp || '');
+        seen[dedupKey] = true;
+      });
+    }
+    
+    // Moulage notifications (skip if already in jobNotifications via cross-app push)
+    if (_crossAppNotifs._moulage) {
+      Object.entries(_crossAppNotifs._moulage).forEach(function(e) {
+        var n = e[1];
+        if (now - (n.timestamp || 0) > maxAge) return; // Trop vieille, ignorer
+        var dedupKey = (n.cardId || '') + '_' + (n.timestamp || '');
+        if (!seen[dedupKey]) {
+          // Normalize to same format as jobNotifications
+          merged['moulage_' + e[0]] = {
+            to: n.to, toName: n.toName, from: n.from, fromName: n.fromName,
+            jobId: n.cardId, jobName: n.cardName,
+            messageType: n.messageType, messageContent: n.messageContent,
+            timestamp: n.timestamp, sourceApp: 'moulage', _fbKey: e[0]
+          };
+        }
+      });
+    }
+    
+    _crossAppNotifs._merged = merged;
+    
+    var count = Object.keys(merged).length;
+    var dmTotal = 0;
+    Object.values(_unreadCounts).forEach(function(c) { dmTotal += c; });
+    updateBell(dmTotal + count);
   }
 
   function updateBell(count) {
@@ -14444,7 +14626,7 @@ var PChat = (function() {
     var hasContent = false;
 
     // Section 1: Cross-app notifications (Moulage, SC, PSM)
-    var crossEntries = Object.entries(_crossAppNotifs).sort(function(a,b) { return (b[1].timestamp||0) - (a[1].timestamp||0); });
+    var crossEntries = Object.entries(_crossAppNotifs._merged || {}).sort(function(a,b) { return (b[1].timestamp||0) - (a[1].timestamp||0); });
     if (crossEntries.length > 0) {
       hasContent = true;
       html += '<div style="font-size:9px;font-weight:700;color:#60a5fa;padding:6px 12px 4px;text-transform:uppercase;border-bottom:1px solid rgba(42,107,201,.2);">📋 Notifications</div>';
@@ -14514,8 +14696,14 @@ var PChat = (function() {
     var myEmail = getMyEmail();
     if (!_db || !myEmail) return;
     var emailKey = myEmail.replace(/\./g, '_');
-    _db.ref('jobNotifications/' + notifId + '/read').set(true).catch(function(){});
-    _db.ref('jobNotifications/' + notifId + '/readBy/' + emailKey).set(true).catch(function(){});
+    // Check if it's a moulage notification (prefixed with 'moulage_')
+    if (notifId.indexOf('moulage_') === 0) {
+      var realKey = notifId.substring(8);
+      _db.ref('moulageNotifications/' + realKey).update({ read: true }).catch(function(){});
+    } else {
+      _db.ref('jobNotifications/' + notifId + '/read').set(true).catch(function(){});
+      _db.ref('jobNotifications/' + notifId + '/readBy/' + emailKey).set(true).catch(function(){});
+    }
   }
 
   function markAllRead() {
@@ -14530,11 +14718,21 @@ var PChat = (function() {
       });
     });
 
-    // Cross-app notifications
-    Object.keys(_crossAppNotifs).forEach(function(key) {
-      _db.ref('jobNotifications/' + key + '/read').set(true).catch(function(){});
-      _db.ref('jobNotifications/' + key + '/readBy/' + emailKey).set(true).catch(function(){});
-    });
+    // Cross-app notifications (both jobNotifications and moulageNotifications)
+    var _db2 = getDb();
+    if (_db2) {
+      if (_crossAppNotifs._job) {
+        Object.keys(_crossAppNotifs._job).forEach(function(key) {
+          _db2.ref('jobNotifications/' + key + '/read').set(true).catch(function(){});
+          _db2.ref('jobNotifications/' + key + '/readBy/' + emailKey).set(true).catch(function(){});
+        });
+      }
+      if (_crossAppNotifs._moulage) {
+        Object.keys(_crossAppNotifs._moulage).forEach(function(key) {
+          _db2.ref('moulageNotifications/' + key).update({ read: true }).catch(function(){});
+        });
+      }
+    }
 
     if (typeof showToast === 'function') showToast('\u2713 Tous les messages marqués comme lus', 'info');
     closeNotifPopup();
@@ -14544,9 +14742,16 @@ var PChat = (function() {
     var _db = getDb();
     var myEmail = getMyEmail();
     if (_db && myEmail) {
-      Object.keys(_crossAppNotifs).forEach(function(key) {
-        _db.ref('jobNotifications/' + key).remove().catch(function(){});
-      });
+      if (_crossAppNotifs._job) {
+        Object.keys(_crossAppNotifs._job).forEach(function(key) {
+          _db.ref('jobNotifications/' + key).remove().catch(function(){});
+        });
+      }
+      if (_crossAppNotifs._moulage) {
+        Object.keys(_crossAppNotifs._moulage).forEach(function(key) {
+          _db.ref('moulageNotifications/' + key).update({ read: true }).catch(function(){});
+        });
+      }
       _crossAppNotifs = {};
     }
     markAllRead();
