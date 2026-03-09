@@ -667,6 +667,7 @@ body.col-resizing *{cursor:col-resize!important;}
     <div class="divider"></div>
     <select id="monthSelect" class="month-select" onchange="changeMonth()"></select>
     <button id="favBtnCouture" class="fav-star-btn" onclick="toggleFavoritesCouture()" title="Afficher commandes Série+"><span class="fav-star-icon">⭐</span>Série+</button>
+    <button class="fav-star-btn" onclick="reVerifyAllSerieRows()" title="Re-vérifier et auto-compléter les commandes Client" style="color:#22c55e;font-size:10px;padding:0 4px;">🔄</button>
     <div style="margin-left:auto;display:flex;align-items:center;gap:6px;position:relative;"><button class="btn-sep" id="statsToggleBtn" onclick="toggleStats()">📊 Stats</button><button class="col-gear-btn" onclick="toggleColPanel()">⚙️ Colonnes</button><div class="col-panel" id="colPanel"></div></div>
   </div>
   <div id="statsPanel" style="display:none;padding:16px;overflow-y:auto;max-height:calc(100vh - 140px);"></div>
@@ -847,7 +848,7 @@ function _getVisibleColOrder(){
 }
 function _renderCell(colId,row,idx,num,isRush,vis){
   if(colId==='num')return '<td>'+num+(isRush?' 🚩':'')+'</td>';
-  if(colId==='bonCmd'){var bonVal=(row.bonCmd||'').trim();var star='';var sm=findSerie(bonVal);if(sm){star=_favFilterCouture?'<span class="serie-star" onclick="event.stopPropagation();openSerieFromStarByBon(\''+esc(bonVal)+'\')" title="Rouvrir Série+">⭐</span>':'<span class="serie-star" onclick="event.stopPropagation();openSerieFromStar('+idx+')" title="Rouvrir Série+">⭐</span>';}else if(row.serieLinked||row.permanent){star='<span class="serie-star" style="opacity:0.5;cursor:default;" title="Série+ (carte archivée/supprimée)">📋</span>';}var bonHtml='<div class="bon-wrap"><div class="bon-row">'+star+'<input type="text" value="'+esc(bonVal)+'" onchange="onBonCmdChange('+idx+',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();onBonCmdChange('+idx+',this.value);this.blur();}" style="text-align:center;"></div></div>';return '<td>'+bonHtml+'</td>';}
+  if(colId==='bonCmd'){var bonVal=(row.bonCmd||'').trim();var star='';var sm=findSerie(bonVal);if(sm){var _isCl=_isClientCard(sm.card);var _sSt=_isCl?'background:rgba(59,130,246,.2);color:#3b82f6;':'';var _sIc=_isCl?'🔵':'⭐';var _sTi=_isCl?'Commande Client (Série+)':'Rouvrir Série+';star=_favFilterCouture?'<span class="serie-star" style="'+_sSt+'" onclick="event.stopPropagation();openSerieFromStarByBon(\''+esc(bonVal)+'\')" title="'+_sTi+'">'+_sIc+'</span>':'<span class="serie-star" style="'+_sSt+'" onclick="event.stopPropagation();openSerieFromStar('+idx+')" title="'+_sTi+'">'+_sIc+'</span>';}else if(row.serieLinked||row.permanent){star='<span class="serie-star" style="opacity:0.5;cursor:default;" title="Série+ (carte archivée/supprimée)">📋</span>';}var bonHtml='<div class="bon-wrap"><div class="bon-row">'+star+'<input type="text" value="'+esc(bonVal)+'" onchange="onBonCmdChange('+idx+',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();onBonCmdChange('+idx+',this.value);this.blur();}" style="text-align:center;"></div></div>';return '<td>'+bonHtml+'</td>';}
   if(colId==='fauteuil')return '<td style="position:relative;">'+(row.posit?'<span style="position:absolute;top:1px;left:4px;font-size:8px;font-weight:700;color:#a855f7;letter-spacing:0.3px;">POSIT</span>':'')+'<input type="text" value="'+esc(row.fauteuil||'')+'" onchange="updateCell('+idx+',\'fauteuil\',this.value)"'+(row.posit?' style="padding-top:10px;"':'')+'></td>';
   if(colId==='client')return '<td><div class="cell-dropdown '+(row.client?'has-value':'empty')+'" onclick="openCellDropdown('+idx+',\'client\',\'Client\',\'clients\')">'+(row.client?esc(row.client):'— cliquer —')+'</div></td>';
   if(colId==='dateLiv')return '<td><div class="date-cell '+(row.dateLiv?'has-date':'empty')+'" onclick="openDatepicker('+idx+',\'dateLiv\',\''+(row.dateLiv||'')+'\')">'+(row.dateLiv?formatDateDisplay(row.dateLiv):'<span style="color:rgba(255,255,255,0.25);font-size:11px;">aaaa-mm-jj</span>')+'</div></td>';
@@ -1029,12 +1030,12 @@ function activateReadyRow(idx,field,val){
       fbDb.ref('serieCommandes').once('value').then(function(snap){
         serieCardsCache=snap.val()||{};
         var m=findSerie(bon);
-        if(m){openSerieModal(bon,m,idx);}else{openEntryModal(idx);}
+        if(m){_handleSerieMatch(bon,m,idx);}else{openEntryModal(idx);}
       }).catch(function(){
-        var m=findSerie(bon);if(m){openSerieModal(bon,m,idx);}else{openEntryModal(idx);}
+        var m=findSerie(bon);if(m){_handleSerieMatch(bon,m,idx);}else{openEntryModal(idx);}
       });
     }else{
-      var m=findSerie(bon);if(m){openSerieModal(bon,m,idx);}else{openEntryModal(idx);}
+      var m=findSerie(bon);if(m){_handleSerieMatch(bon,m,idx);}else{openEntryModal(idx);}
     }
   }
   showToast('Ligne créée','success');
@@ -1246,7 +1247,7 @@ function addRowFromSerie(bonCmd,client,items){if(writeBlocked())return;if(!hasPe
 function scanBonBar(){var input=document.getElementById('scanBonInput');var bon=input.value.trim();if(!bon){showToast('Entrez un #','error');return;}
 if(!data[currentMonth])data[currentMonth]=[];
 var newIdx=data[currentMonth].length;
-data[currentMonth].push({id:generateId(),bonCmd:bon,fauteuil:'',rush:false,client:'',dateLiv:'',dateEntree:todayStr(),items:'',nom:'',dateSortie:'',autreNo:'',erreur:'',posit:false,serieLinked:false});
+data[currentMonth].push({id:generateId(),bonCmd:bon,fauteuil:'',rush:false,client:'',dateLiv:'',dateEntree:todayStr(),items:'',nom:'',dateSortie:'',autreNo:'',erreur:'',posit:false,serieLinked:false,permanent:true});
 saveData();renderTable();scrollToRow(newIdx);
 input.value='';input.focus();
 // Fresh fetch from Firebase then match (like Inspection Atelier)
@@ -1254,12 +1255,12 @@ if(fbDb){
   fbDb.ref('serieCommandes').once('value').then(function(snap){
     serieCardsCache=snap.val()||{};
     var m=findSerie(bon);
-    if(m){openSerieModal(bon,m,newIdx);}else{openEntryModal(newIdx);}
+    if(m){_handleSerieMatch(bon,m,newIdx);}else{openEntryModal(newIdx);}
   }).catch(function(){
-    var m=findSerie(bon);if(m){openSerieModal(bon,m,newIdx);}else{openEntryModal(newIdx);}
+    var m=findSerie(bon);if(m){_handleSerieMatch(bon,m,newIdx);}else{openEntryModal(newIdx);}
   });
 }else{
-  var m=findSerie(bon);if(m){openSerieModal(bon,m,newIdx);}else{openEntryModal(newIdx);}
+  var m=findSerie(bon);if(m){_handleSerieMatch(bon,m,newIdx);}else{openEntryModal(newIdx);}
 }}
 
 var _emIdx=null;var _emSelMap={};
@@ -1490,6 +1491,140 @@ function findSerie(num){var n=String(num).trim();var nStrip=n.replace(/^0+/,'');
 function getUnfinishedCouture(card){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){var done=(g.couture&&g.couture.inspected)||false;var inInv=(g.couture&&g.couture.sentToInventaire)||false;var qf=parseInt(g.couture&&g.couture.qtyFait)||0;var isP=(g.couture&&g.couture.partiel)||false;var tQ=parseInt(g.qty)||0;if(!done){var rem=isP?(tQ-qf):tQ;pend.push({gi:gi,name:g.name,qty:tQ,qtyFait:qf,remaining:rem,inInventaire:inInv,wasPartial:isP});}});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
 function getCompletedCouture(card){var res=[];(card.items||[]).forEach(function(item,ii){var done=[];(item.grandeurs||[]).forEach(function(g,gi){var isDone=(g.couture&&g.couture.inspected)||false;if(isDone)done.push({gi:gi,name:g.name,qty:parseInt(g.qty)||0});});if(done.length)res.push({ii:ii,name:item.name,completed:done});});return res;}
 
+/* ═══ CLIENT vs SÉRIE — Logique métier ═══ */
+function _isClientCard(card) {
+  if (!card) return false;
+  if (card._typeManuel === 'client') return true;
+  if (card._typeManuel === 'serie') return false;
+  var items = card.items || [];
+  if (items.length === 0) return true;
+  for (var i = 0; i < items.length; i++) {
+    var gs = items[i].grandeurs || [];
+    if (gs.length > 1) return false;
+    for (var g = 0; g < gs.length; g++) {
+      if ((parseInt(gs[g].qty) || 0) > 1) return false;
+    }
+  }
+  return true;
+}
+
+/* Auto-compléter une carte Client dans Série+ section couture */
+function autoCompleteClientCardCouture(cardId, card, bon, rowIdx) {
+  if (!card || !card.items) return false;
+  var fbU = {};
+  var anyChange = false;
+  var itemLines = [];
+  var totalQty = 0;
+
+  card.items.forEach(function(item, ii) {
+    (item.grandeurs || []).forEach(function(g, gi) {
+      var tQ = parseInt(g.qty) || 0;
+      if (tQ <= 0) return;
+      if (!g.couture) g.couture = {};
+      var alreadyDone = g.couture.inspected || false;
+      var alreadyFait = parseInt(g.couture.qtyFait) || 0;
+      if (alreadyDone && alreadyFait >= tQ) return;
+
+      g.couture.qtyFait = tQ;
+      g.couture.inspected = true;
+      g.couture.partiel = false;
+      g.couture.status = 'pret';
+      g.couture.inspectedBy = fbUser ? fbUser.email : '';
+      g.couture.inspectedAt = new Date().toISOString();
+      fbU['items/' + ii + '/grandeurs/' + gi + '/couture'] = g.couture;
+      anyChange = true;
+      var gName = g.name || 'STD';
+      var iName = item.name || '';
+      itemLines.push((iName ? iName + '|' : '') + gName + ' ' + tQ + 'x');
+      totalQty += tQ;
+    });
+  });
+
+  if (!anyChange) return false;
+
+  // Push to Firebase
+  if (fbDb) {
+    fbDb.ref('serieCommandes/' + cardId).update(fbU).then(function() {
+      console.log('[AUTO-CLIENT-COUTURE] Série+ couture auto-complété pour ' + cardId);
+    }).catch(function(e) { console.error('[AUTO-CLIENT-COUTURE] Erreur:', e); });
+  }
+
+  // Update local cache
+  serieCardsCache[cardId] = card;
+
+  // Update the couture row
+  var itemStr = itemLines.join('\n');
+  if (rowIdx !== undefined && rowIdx !== null && data[currentMonth] && data[currentMonth][rowIdx]) {
+    var row = data[currentMonth][rowIdx];
+    row.items = itemStr;
+    row.client = card.client || row.client;
+    row.serieLinked = true;
+    row.permanent = true;
+    row.serieSnapshot = { client: card.client || '', items: itemStr, importedAt: new Date().toISOString() };
+    saveData(); renderTable();
+  }
+  return true;
+}
+
+/* Gateway: Client → auto-complete, Série → ouvre le modal */
+function _handleSerieMatch(bon, match, rowIdx) {
+  if (!match || !match.card) return;
+  if (_isClientCard(match.card)) {
+    var ok = autoCompleteClientCardCouture(match.cardId, match.card, bon, rowIdx);
+    if (ok) {
+      showToast('✅ Client #' + bon + ' — couture auto-complétée', 'success');
+    } else {
+      showToast('✅ Client #' + bon + ' — déjà complété', 'info');
+    }
+    closeSerieModal();
+  } else {
+    openSerieModal(bon, match, rowIdx);
+  }
+}
+
+/* Re-vérification complète */
+function reVerifyAllSerieRows() {
+  if (!fbDb) { showToast('Firebase non connecté', 'error'); return; }
+  showToast('🔍 Vérification en cours...', 'info');
+  fbDb.ref('serieCommandes').once('value').then(function(snap) {
+    serieCardsCache = snap.val() || {};
+    var autoCompleted = 0, starsFound = 0;
+    // Scan all months
+    for (var k in localStorage) {
+      if (k.indexOf('physipro_couture_data_') !== 0) continue;
+      try {
+        var rows = JSON.parse(localStorage.getItem(k)) || [];
+        rows.forEach(function(row) {
+          if (!row) return;
+          var bon = (row.bonCmd || '').trim();
+          if (!bon) return;
+          var m = findSerie(bon);
+          if (!m) return;
+          starsFound++;
+          if (_isClientCard(m.card)) {
+            var needsComplete = false;
+            (m.card.items || []).forEach(function(item) {
+              (item.grandeurs || []).forEach(function(g) {
+                var tQ = parseInt(g.qty) || 0;
+                if (tQ <= 0) return;
+                var sd = g.couture || {};
+                if (!sd.inspected || (parseInt(sd.qtyFait) || 0) < tQ) needsComplete = true;
+              });
+            });
+            if (needsComplete) {
+              autoCompleteClientCardCouture(m.cardId, m.card, bon, undefined);
+              autoCompleted++;
+            }
+          }
+        });
+      } catch (e) {}
+    }
+    renderTable();
+    showToast('✅ Vérifié: ' + starsFound + ' Série+, ' + autoCompleted + ' Client auto-complétées', 'success');
+  }).catch(function(e) { showToast('❌ Erreur', 'error'); });
+}
+window.reVerifyAllSerieRows = reVerifyAllSerieRows;
+
 function openSerieFromStarByBon(bon){
   if(!bon)return;
   if(fbDb){
@@ -1505,21 +1640,21 @@ function openSerieFromStarByBon(bon){
         if(realIdx>=0)break;
       }
       var m=findSerie(bon);
-      if(m){openSerieModal(bon,m,realIdx>=0?realIdx:0);}
+      if(m){_handleSerieMatch(bon,m,realIdx>=0?realIdx:0);}
       else{showToast('Carte Série+ introuvable pour '+bon,'error');}
     }).catch(function(){
       var m=findSerie(bon);
-      if(m){openSerieModal(bon,m,0);}
+      if(m){_handleSerieMatch(bon,m,0);}
       else{showToast('Carte Série+ introuvable pour '+bon,'error');}
     });
   }else{
     var m=findSerie(bon);
-    if(m){openSerieModal(bon,m,0);}
+    if(m){_handleSerieMatch(bon,m,0);}
     else{showToast('Carte Série+ introuvable pour '+bon,'error');}
   }
 }
 
-function onBonCmdChange(idx,val){val=(val||'').trim();updateCell(idx,'bonCmd',val);if(!val)return;var m=findSerie(val);if(m){var row=(data[currentMonth]||[])[idx];if(row){row.serieLinked=true;row.permanent=true;}openSerieModal(val,m,idx);}}
+function onBonCmdChange(idx,val){val=(val||'').trim();updateCell(idx,'bonCmd',val);if(!val)return;var m=findSerie(val);if(m){var row=(data[currentMonth]||[])[idx];if(row){row.serieLinked=true;row.permanent=true;}_handleSerieMatch(val,m,idx);}}
 function openSerieFromStar(idx){var row=(data[currentMonth]||[])[idx];if(!row||!row.bonCmd)return;
   var bon=row.bonCmd.trim();
   // Force re-fetch from Firebase to get freshest card data (like Inspection Atelier)
@@ -1527,16 +1662,16 @@ function openSerieFromStar(idx){var row=(data[currentMonth]||[])[idx];if(!row||!
     fbDb.ref('serieCommandes').once('value').then(function(snap){
       serieCardsCache=snap.val()||{};
       var m=findSerie(bon);
-      if(m){openSerieModal(bon,m,idx);}
+      if(m){_handleSerieMatch(bon,m,idx);}
       else{showToast('Carte Série+ introuvable pour '+bon,'error');}
     }).catch(function(){
       var m=findSerie(bon);
-      if(m){openSerieModal(bon,m,idx);}
+      if(m){_handleSerieMatch(bon,m,idx);}
       else{showToast('Carte Série+ introuvable pour '+bon,'error');}
     });
   }else{
     var m=findSerie(bon);
-    if(m){openSerieModal(bon,m,idx);}
+    if(m){_handleSerieMatch(bon,m,idx);}
     else{showToast('Carte Série+ introuvable pour '+bon,'error');}
   }
 }
@@ -1727,14 +1862,43 @@ function syncAllPending(){
     if(months.length>0)showToast('🔄 '+months.length+' mois synchronisé'+(months.length>1?'s':''),'success');
   }catch(e){console.error('syncAllPending error:',e);}
 }
+
+/* ═══ Migration: marquer TOUTES les lignes existantes comme permanent ═══ */
+(function migratePermanentFlagCouture() {
+  var MK = 'physipro_migration_couture_permanent_v1';
+  if (localStorage.getItem(MK) === 'done') return;
+  var totalFixed = 0;
+  for (var k in localStorage) {
+    if (k.indexOf('physipro_couture_data_') !== 0) continue;
+    try {
+      var rows = JSON.parse(localStorage.getItem(k)) || [];
+      if (!Array.isArray(rows)) continue;
+      var changed = false;
+      rows.forEach(function(r) {
+        if (r && !r._empty && !r.permanent) {
+          r.permanent = true;
+          changed = true;
+          totalFixed++;
+        }
+      });
+      if (changed) localStorage.setItem(k, JSON.stringify(rows));
+    } catch(e) {}
+  }
+  localStorage.setItem(MK, 'done');
+  if (totalFixed > 0) console.log('[MIGRATION-COUTURE] ✅ ' + totalFixed + ' ligne(s) marquée(s) permanent');
+})();
+
 function loadData(){
   // Try localStorage first for immediate display
   try{var local=localStorage.getItem('physipro_couture_data_'+currentMonth);if(local)data[currentMonth]=JSON.parse(local);}catch(e){}
   if(!fbDb||!fbUser){renderTable();return;}
   fbDb.ref('inspectionCoutureData/'+currentMonth).once('value').then(function(snap){
     var fbData=snap.val()||[];
-    // Anti-resurrection: filter out deleted IDs
-    if(Array.isArray(fbData)){fbData=fbData.filter(function(r){return !r.id||!isCoutureIdDeleted(r.id);});}
+    // Anti-resurrection: filter out deleted IDs — but NEVER permanent/serieLinked rows
+    if(Array.isArray(fbData)){fbData=fbData.filter(function(r){
+      if(r.permanent||r.serieLinked||r.serieSnapshot) return true; // [FIX: permanent rows are SACRED]
+      return !r.id||!isCoutureIdDeleted(r.id);
+    });}
     // PROTECTION: Preserve permanent/serieLinked rows from local that might be missing in Firebase
     var localRows=data[currentMonth]||[];
     if(Array.isArray(localRows)&&localRows.length>0){
