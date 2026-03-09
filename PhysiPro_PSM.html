@@ -8619,12 +8619,11 @@ function renderNotifications() {
   var totalCount = unreadCount;
   
   // ═══ COMBINE ALL NOTIFICATION SOURCES ON BELL ═══
-  // Add DM, quest, and job counts to the PSM notification count
+  // Only count sources that ARE shown in the dropdown (not questCount — those are visible on cards)
   var dmCount = parseInt(badge.getAttribute('data-dm-count') || '0') || 0;
-  var questCount = parseInt(badge.getAttribute('data-quest-count') || '0') || 0;
   var jobCount = parseInt(badge.getAttribute('data-job-count') || '0') || 0;
   badge.setAttribute('data-psm-count', unreadCount);
-  var combinedTotal = unreadCount + dmCount + questCount + jobCount;
+  var combinedTotal = unreadCount + dmCount + jobCount;
   
   badge.textContent = combinedTotal > 99 ? '99+' : combinedTotal;
   badge.classList.toggle('has-notif', combinedTotal > 0);
@@ -8869,16 +8868,39 @@ function markAllNotifsRead() {
       });
     });
     
-    // Job notifications
+    // Job notifications — set BOTH readBy AND read=true for cross-app compatibility
     if (typeof _jobNotifs !== 'undefined') {
       Object.keys(_jobNotifs).forEach(function(key) {
         db.ref('jobNotifications/' + key + '/readBy/' + emailKey).set(true).catch(function(){});
+        db.ref('jobNotifications/' + key + '/read').set(true).catch(function(){});
       });
     }
     
-    // DM private messages
+    // PChat DM private messages
     if (typeof DM !== 'undefined' && typeof DM.markAllRead === 'function') {
       DM.markAllRead();
+    }
+    
+    // psmChat messages (quest count) — mark all as read by me
+    if (db) {
+      db.ref('psmChat').once('value', function(snap) {
+        var allChats = snap.val() || {};
+        var updates = {};
+        Object.keys(allChats).forEach(function(cardId) {
+          var msgs = allChats[cardId].messages || {};
+          Object.keys(msgs).forEach(function(msgId) {
+            var msg = msgs[msgId];
+            if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail.toLowerCase()) {
+              if (!msg.readBy || !msg.readBy[emailKey]) {
+                updates['psmChat/' + cardId + '/messages/' + msgId + '/readBy/' + emailKey] = true;
+              }
+            }
+          });
+        });
+        if (Object.keys(updates).length > 0) {
+          db.ref().update(updates).catch(function(){});
+        }
+      });
     }
   } catch(e) {
     console.error('markAllNotifsRead EXCEPTION:', e);
@@ -8926,6 +8948,29 @@ function clearAllNotifs() {
     // DM private messages - mark as read
     if (typeof DM !== 'undefined' && typeof DM.markAllRead === 'function') {
       DM.markAllRead();
+    }
+    
+    // psmChat messages (quest count) — mark all as read by me
+    if (db) {
+      var emailKey2 = myEmail.replace(/\./g, '_');
+      db.ref('psmChat').once('value', function(snap) {
+        var allChats = snap.val() || {};
+        var updates = {};
+        Object.keys(allChats).forEach(function(cardId) {
+          var msgs = allChats[cardId].messages || {};
+          Object.keys(msgs).forEach(function(msgId) {
+            var msg = msgs[msgId];
+            if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail.toLowerCase()) {
+              if (!msg.readBy || !msg.readBy[emailKey2]) {
+                updates['psmChat/' + cardId + '/messages/' + msgId + '/readBy/' + emailKey2] = true;
+              }
+            }
+          });
+        });
+        if (Object.keys(updates).length > 0) {
+          db.ref().update(updates).catch(function(){});
+        }
+      });
     }
   } catch(e) {
     console.error('clearAllNotifs EXCEPTION:', e);
@@ -12402,7 +12447,7 @@ var PChat = (function() {
         var dmCount = parseInt(bellBadge.getAttribute('data-dm-count') || '0') || 0;
         var psmCount = parseInt(bellBadge.getAttribute('data-psm-count') || '0') || 0;
         var jobCount = parseInt(bellBadge.getAttribute('data-job-count') || '0') || 0;
-        var totalCount = psmCount + questCount + dmCount + jobCount;
+        var totalCount = psmCount + dmCount + jobCount;
         
         bellBadge.textContent = totalCount > 99 ? '99+' : totalCount;
         bellBadge.classList.toggle('has-notif', totalCount > 0);
@@ -13743,11 +13788,10 @@ var DM = (function() {
     if (bellBadge) {
       // Store DM count
       bellBadge.setAttribute('data-dm-count', count);
-      // Read ALL other counts
-      var questCount = parseInt(bellBadge.getAttribute('data-quest-count') || '0') || 0;
+      // Read ALL other counts (excluding questCount — shown on cards, not in dropdown)
       var psmCount = parseInt(bellBadge.getAttribute('data-psm-count') || '0') || 0;
       var jobCount = parseInt(bellBadge.getAttribute('data-job-count') || '0') || 0;
-      var totalCount = psmCount + questCount + jobCount + count;
+      var totalCount = psmCount + jobCount + count;
       
       bellBadge.textContent = totalCount > 99 ? '99+' : totalCount;
       bellBadge.classList.toggle('has-notif', totalCount > 0);
