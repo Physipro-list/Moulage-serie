@@ -6815,6 +6815,12 @@ function openNotifDetail(notifId) {
     db.ref('jobNotifications/' + notifId + '/read').set(true).catch(function(){});
     db.ref('jobNotifications/' + notifId + '/readBy/' + emailKey).set(true).catch(function(){});
   }
+  // Cross-app: moulage notification → navigate to Moulage page
+  if (n.sourceApp === 'moulage') {
+    PChat.closeNotifPopup();
+    window.location.href = 'Physipro_moulage.html';
+    return;
+  }
   if (n.jobId && jobsData[n.jobId]) {
     PChat.closeNotifPopup();
     if (window.innerWidth <= 768) { openMobileFiche(n.jobId); } else { openFiche(n.jobId); }
@@ -7769,15 +7775,17 @@ var PChat = (function() {
         var d = n.timestamp ? new Date(n.timestamp) : new Date();
         var timeStr = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
         var icons = { problem: '❓', normal: '💬', reply: '↩️', pinned: '📌', rappel: '🔔' };
+        var icon = n.sourceApp === 'moulage' ? '🏭' : (icons[n.messageType] || '💬');
         var preview = ((n.messageContent || '').substring(0, 80)) + ((n.messageContent || '').length > 80 ? '...' : '');
         var isRead = n.read || (n.readBy && n.readBy[emailKeyNotif]);
+        var sourceLabel = n.sourceApp === 'moulage' ? '🏭 ' + esc(n.jobName || 'Moulage') : esc(n.jobName || 'Job');
         html += '<div class="pchat-notif-item' + (isRead ? '' : ' unread') + '" onclick="openNotifDetail(\'' + esc(id) + '\')">' +
           '<div class="pchat-notif-item-header">' +
-            '<span class="pchat-notif-item-from">' + (icons[n.messageType] || '💬') + ' ' + esc(n.fromName || 'Utilisateur') + '</span>' +
+            '<span class="pchat-notif-item-from">' + icon + ' ' + esc(n.fromName || 'Utilisateur') + '</span>' +
             '<span class="pchat-notif-item-time">' + timeStr + '</span>' +
           '</div>' +
           '<div class="pchat-notif-item-content">' + esc(preview) + '</div>' +
-          '<div style="font-size:11px;color:#60a5fa;font-weight:600;">' + esc(n.jobName || 'Job') + ' <span class="pchat-notif-item-arrow">→</span></div>' +
+          '<div style="font-size:11px;color:#60a5fa;font-weight:600;">' + sourceLabel + ' <span class="pchat-notif-item-arrow">→</span></div>' +
         '</div>';
       });
     }

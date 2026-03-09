@@ -13552,6 +13552,21 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           console.log('❌ Erreur notification:', e.message);
           showToast('⚠️ Erreur: Vérifiez les règles Firebase', 'error');
         });
+      
+      // ═══ CROSS-APP: Also push to jobNotifications so PSM & ServiceClient see it ═══
+      firebaseDb.ref('jobNotifications').push().set({
+        to: notifData.to,
+        toName: notifData.toName,
+        from: notifData.from,
+        fromName: notifData.fromName,
+        jobId: notifData.cardId,
+        jobName: notifData.cardName,
+        messageType: notifData.messageType,
+        messageContent: notifData.messageContent,
+        timestamp: notifData.timestamp,
+        read: false,
+        sourceApp: 'moulage'
+      }).catch(function(){});
     }
     
     // Fonction de TEST des notifications
@@ -13889,6 +13904,21 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           mobileNotifBadge.textContent = '';
           mobileNotifBadge.classList.remove('active');
           mobileNotifBtn.classList.remove('has-notifs');
+        }
+      }
+      
+      // ═══ Also update PChat bell with combined count (moulage + DM) ═══
+      var btn = document.getElementById('pchatBellBtn');
+      var text = document.getElementById('pchatBellText');
+      if (btn) {
+        var dmCount = (typeof PChat !== 'undefined' && PChat.getUnreadCount) ? PChat.getUnreadCount() : 0;
+        var totalCount = count + dmCount;
+        if (totalCount > 0) {
+          btn.classList.add('has-notifs');
+          if (text) text.textContent = totalCount > 99 ? '99+' : totalCount;
+        } else {
+          btn.classList.remove('has-notifs');
+          if (text) text.textContent = '';
         }
       }
     }
@@ -16895,9 +16925,12 @@ var PChat = (function() {
     var btn = document.getElementById('pchatBellBtn');
     var text = document.getElementById('pchatBellText');
     if (!btn) return;
-    if (count > 0) {
+    // Combine DM count with moulage notifications count
+    var moulageCount = (typeof firebaseNotifications !== 'undefined') ? firebaseNotifications.length : 0;
+    var totalCount = count + moulageCount;
+    if (totalCount > 0) {
       btn.classList.add('has-notifs');
-      if (text) text.textContent = count > 99 ? '99+' : count + ' new';
+      if (text) text.textContent = totalCount > 99 ? '99+' : totalCount;
     } else {
       btn.classList.remove('has-notifs');
       if (text) text.textContent = '';
@@ -16927,6 +16960,31 @@ var PChat = (function() {
     var list = document.getElementById('pchatNotifList');
     if (!list) return;
 
+    var html = '';
+    var hasContent = false;
+
+    // Section 1: Moulage notifications (questionnements)
+    if (typeof firebaseNotifications !== 'undefined' && firebaseNotifications.length > 0) {
+      hasContent = true;
+      html += '<div style="font-size:9px;font-weight:700;color:#60a5fa;padding:6px 12px 4px;text-transform:uppercase;border-bottom:1px solid rgba(42,107,201,.2);">📋 Moulage</div>';
+      firebaseNotifications.slice(0, 15).forEach(function(notif, idx) {
+        var d = notif.timestamp ? new Date(notif.timestamp) : new Date();
+        var timeStr = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+        var icons = { problem: '❓', solution: '✅', reply: '💬', normal: '💬', pinned: '📌' };
+        var icon = icons[notif.messageType] || '💬';
+        var preview = (notif.messageContent || '').substring(0, 60) + ((notif.messageContent || '').length > 60 ? '...' : '');
+        html += '<div class="pchat-notif-item unread" onclick="PChat.closeNotifPopup();if(typeof openNotifDetail===\'function\')openNotifDetail(' + idx + ');" style="cursor:pointer;">' +
+          '<div class="pchat-notif-item-header">' +
+            '<span class="pchat-notif-item-from">' + icon + ' ' + esc(notif.fromName || 'Utilisateur') + '</span>' +
+            '<span class="pchat-notif-item-time">' + timeStr + '</span>' +
+          '</div>' +
+          '<div class="pchat-notif-item-content">' + esc(preview) + '</div>' +
+          '<div style="font-size:11px;color:#2a6bc9;font-weight:600;">📋 ' + esc(notif.cardName || 'Moulage') + ' <span class="pchat-notif-item-arrow">→</span></div>' +
+        '</div>';
+      });
+    }
+
+    // Section 2: PChat DM unread messages
     var allUnread = [];
     Object.keys(_unreadMessages).forEach(function(chatKey) {
       (_unreadMessages[chatKey] || []).forEach(function(item) {
@@ -16936,31 +16994,32 @@ var PChat = (function() {
 
     allUnread.sort(function(a, b) { return (b.msg.timestamp || 0) - (a.msg.timestamp || 0); });
 
-    if (allUnread.length === 0) {
-      list.innerHTML = '<div class="pchat-notif-empty">🔔 Aucun message non lu</div>';
-      return;
+    if (allUnread.length > 0) {
+      hasContent = true;
+      html += '<div style="font-size:9px;font-weight:700;color:#60a5fa;padding:6px 12px 4px;text-transform:uppercase;border-bottom:1px solid rgba(42,107,201,.2);">💬 Messages privés</div>';
+      allUnread.slice(0, 30).forEach(function(item) {
+        var msg = item.msg;
+        var d = msg.timestamp ? new Date(msg.timestamp) : new Date();
+        var timeStr = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+        var preview = (msg.content || '').substring(0, 80) + ((msg.content || '').length > 80 ? '...' : '');
+        if (!preview && msg.image) preview = '📷 Image';
+
+        html += '<div class="pchat-notif-item unread" onclick="PChat.closeNotifPopup();PChat.open(\'' + esc(item.contact) + '\')">' +
+          '<div class="pchat-notif-item-header">' +
+            '<span class="pchat-notif-item-from">💬 ' + esc(msg.authorName || item.contactFull) + '</span>' +
+            '<span class="pchat-notif-item-time">' + timeStr + '</span>' +
+          '</div>' +
+          '<div class="pchat-notif-item-content">' + esc(preview) + '</div>' +
+          '<div style="font-size:11px;color:#2a6bc9;font-weight:600;">Ouvrir la conversation <span class="pchat-notif-item-arrow">→</span></div>' +
+        '</div>';
+      });
     }
 
-    var html = '<div style="font-size:9px;font-weight:700;color:#60a5fa;padding:6px 12px 4px;text-transform:uppercase;border-bottom:1px solid rgba(42,107,201,.2);">💬 Messages privés</div>';
-
-    allUnread.slice(0, 30).forEach(function(item) {
-      var msg = item.msg;
-      var d = msg.timestamp ? new Date(msg.timestamp) : new Date();
-      var timeStr = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-      var preview = (msg.content || '').substring(0, 80) + ((msg.content || '').length > 80 ? '...' : '');
-      if (!preview && msg.image) preview = '📷 Image';
-
-      html += '<div class="pchat-notif-item unread" onclick="PChat.closeNotifPopup();PChat.open(\'' + esc(item.contact) + '\')">' +
-        '<div class="pchat-notif-item-header">' +
-          '<span class="pchat-notif-item-from">💬 ' + esc(msg.authorName || item.contactFull) + '</span>' +
-          '<span class="pchat-notif-item-time">' + timeStr + '</span>' +
-        '</div>' +
-        '<div class="pchat-notif-item-content">' + esc(preview) + '</div>' +
-        '<div style="font-size:11px;color:#2a6bc9;font-weight:600;">Ouvrir la conversation <span class="pchat-notif-item-arrow">\u2192</span></div>' +
-      '</div>';
-    });
-
-    list.innerHTML = html;
+    if (!hasContent) {
+      list.innerHTML = '<div class="pchat-notif-empty">🔔 Aucun message non lu</div>';
+    } else {
+      list.innerHTML = html;
+    }
   }
 
   function markAllRead() {
@@ -16969,11 +17028,21 @@ var PChat = (function() {
     var emailKey = myEmail.replace(/\./g, '_');
     if (!_db || !myEmail) return;
 
+    // Mark PChat DMs as read
     Object.keys(_unreadMessages).forEach(function(chatKey) {
       (_unreadMessages[chatKey] || []).forEach(function(item) {
         _db.ref('privateChat/' + chatKey + '/' + item.id + '/readBy/' + emailKey).set(true).catch(function(){});
       });
     });
+
+    // Mark moulage notifications as read
+    if (typeof firebaseNotifications !== 'undefined') {
+      firebaseNotifications.forEach(function(notif) {
+        if (notif.firebaseKey) {
+          _db.ref('moulageNotifications/' + notif.firebaseKey).update({ read: true }).catch(function(){});
+        }
+      });
+    }
 
     if (typeof showToast === 'function') showToast('\u2713 Tous les messages marqués comme lus', 'info');
     closeNotifPopup();

@@ -8669,7 +8669,9 @@ function renderNotifications() {
       var cls = 'notif-item unread';
       var timeAgo = getTimeAgo(n.timestamp);
       var title = '';
-      if (n.messageType === 'complet' || (n.messageContent && n.messageContent.toLowerCase().indexOf('complet') !== -1)) {
+      if (n.sourceApp === 'moulage') {
+        title = '🏭 ' + (n.fromName || n.from || '') + ' — Moulage';
+      } else if (n.messageType === 'complet' || (n.messageContent && n.messageContent.toLowerCase().indexOf('complet') !== -1)) {
         title = '✅ ' + (n.fromName || n.from || 'Quelqu\'un') + ' — Complet';
       } else if (n.messageType === 'psmChat') {
         title = '💬 ' + (n.fromName || n.from || '') + ' — Questionnement';
@@ -8987,6 +8989,20 @@ function deletePsmNotif(notifId) {
 
 // ═══ JOB NOTIFICATION ACTIONS ═══
 function markJobNotifRead(notifId, jobId) {
+  // Check if this is a cross-app notification → navigate to source app
+  if (_jobNotifs[notifId] && _jobNotifs[notifId].sourceApp === 'moulage') {
+    // Mark as read first
+    if (db) {
+      var ek = currentUser ? currentUser.email.replace(/\./g, '_') : '';
+      if (ek) {
+        db.ref('jobNotifications/' + notifId + '/readBy/' + ek).set(true).catch(function(){});
+        db.ref('jobNotifications/' + notifId + '/read').set(true).catch(function(){});
+      }
+    }
+    // Navigate to Moulage
+    window.location.href = 'Physipro_moulage.html';
+    return;
+  }
   // Local first
   if (_jobNotifs[notifId]) {
     var myEmail = currentUser ? currentUser.email.replace(/\./g, '_') : '';
