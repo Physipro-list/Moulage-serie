@@ -5158,6 +5158,9 @@ var QuestChat = (function() {
   function loadForJob(jobId) {
     detach();
     _currentJobId = jobId;
+    _annotations = {};
+    _pendingAnnotData = {};
+    _loadAnnotationsForJob(jobId);
     _selectedImgSrc = null;
     _replyToId = null;
     _extraDests = [];
@@ -5342,7 +5345,7 @@ var QuestChat = (function() {
     if (scroll) setTimeout(function(){ scroll.scrollTop = scroll.scrollHeight; }, 50);
     
     // Redraw annotation canvases + init drawing on all images
-    setTimeout(function(){ redrawAllAnnotations(); initAllCanvases(); }, 120);
+    setTimeout(function(){ initAllCanvases(); _applyPendingAnnotations(); }, 150);
   }
   
   function renderCard(e, myEmail, isReply) {
@@ -5803,6 +5806,9 @@ var QuestChat = (function() {
     } else if (_selectedImgSrc && _annotations[_selectedImgSrc]) {
       _annotations[_selectedImgSrc].pop();
       redrawAllAnnotations();
+      // Save after undo
+      var selImg = document.querySelector('.qchat-msg-img.selected');
+      if (selImg) _saveAnnotationsForImg(selImg);
     }
   }
   
@@ -5899,6 +5905,49 @@ var QuestChat = (function() {
     _annotTool = null;
   }
   
+  // ── Annotation persistence ──
+  var _pendingAnnotData = {}; // { msgId: { imgIndex: [annots] } }
+
+  function _saveAnnotationsForImg(img) {
+    var database = getDb();
+    if (!database || !_currentJobId) return;
+    var msgDiv = img.closest('[data-msgid]');
+    if (!msgDiv) return;
+    var msgId = msgDiv.dataset.msgid;
+    var allImgs = Array.from(msgDiv.querySelectorAll('.qchat-msg-img'));
+    var imgIndex = allImgs.indexOf(img);
+    if (imgIndex === -1) imgIndex = 0;
+    var annots = _annotations[img.src] || [];
+    var path = 'questChat/' + _currentJobId + '/annotations/' + msgId + '/' + imgIndex;
+    database.ref(path).set(annots.length > 0 ? annots : null).catch(function(e){ console.error('annot save err', e); });
+  }
+
+  function _loadAnnotationsForJob(jobId) {
+    var database = getDb();
+    if (!database || !jobId) return;
+    database.ref('questChat/' + jobId + '/annotations').once('value', function(snap) {
+      _pendingAnnotData = snap.val() || {};
+      _applyPendingAnnotations();
+    });
+  }
+
+  function _applyPendingAnnotations() {
+    if (!_pendingAnnotData || Object.keys(_pendingAnnotData).length === 0) return;
+    document.querySelectorAll('[data-msgid]').forEach(function(msgDiv) {
+      var msgId = msgDiv.dataset.msgid;
+      var annotsByIndex = _pendingAnnotData[msgId];
+      if (!annotsByIndex) return;
+      var allImgs = msgDiv.querySelectorAll('.qchat-msg-img');
+      allImgs.forEach(function(img, idx) {
+        var annots = annotsByIndex[idx];
+        if (annots && annots.length > 0) {
+          _annotations[img.src] = annots;
+        }
+      });
+    });
+    redrawAllAnnotations();
+  }
+
   function _initInlineCanvas(canvas, img) {
     // Sync canvas size to image
     function syncSize() {
@@ -5944,6 +5993,7 @@ var QuestChat = (function() {
       if (!_annotations[img.src]) _annotations[img.src] = [];
       _annotations[img.src].push({type:_annotTool, x1:startX, y1:startY, x2:ex, y2:ey, color:color});
       redrawAllAnnotations();
+      _saveAnnotationsForImg(img);
     });
     // Touch support
     canvas.addEventListener('touchstart', function(e) {
@@ -5978,6 +6028,7 @@ var QuestChat = (function() {
       if (!_annotations[img.src]) _annotations[img.src] = [];
       _annotations[img.src].push({type:_annotTool, x1:startX, y1:startY, x2:ex, y2:ey, color:color});
       redrawAllAnnotations();
+      _saveAnnotationsForImg(img);
     }, {passive:false});
   }
 
