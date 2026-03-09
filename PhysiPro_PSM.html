@@ -5404,6 +5404,7 @@ document.addEventListener('DOMContentLoaded', function() {
       PChat.startNotifListeners();
       if (typeof DM !== 'undefined') DM.startNotifListener();
       listenQuestReplies();
+      listenMoulageNotifs();
     } else {
       localStorage.removeItem('physipro_last_email');
       // CRITICAL: Remove the !important style tag so login overlay can appear
@@ -6258,6 +6259,58 @@ function listenQuestReplies() {
         if (typeof updateQuestStatusPill === 'function') updateQuestStatusPill();
       }
     }
+  });
+}
+
+// ═══ MOULAGE FALLBACK: Écouter moulageNotifications directement ═══
+var _moulageNotifListener = null;
+var _moulageNotifs = {};
+function listenMoulageNotifs() {
+  if (!db || !currentUser) return;
+  var myEmail = (currentUser.email || '').toLowerCase();
+  var myEmailKey = myEmail.replace(/\./g, '_');
+  var maxAge = 7 * 24 * 60 * 60 * 1000;
+  
+  if (_moulageNotifListener) db.ref('moulageNotifications').off('value', _moulageNotifListener);
+  _moulageNotifListener = db.ref('moulageNotifications').orderByChild('to').equalTo(myEmail).limitToLast(30).on('value', function(snap) {
+    var all = snap.val() || {};
+    _moulageNotifs = {};
+    var now = Date.now();
+    var seen = {};
+    
+    // Build dedup keys from existing _jobNotifs (cross-app push may have succeeded)
+    Object.values(_jobNotifs).forEach(function(n) {
+      if (n.sourceApp === 'moulage') {
+        seen[(n.jobId || '') + '_' + (n.timestamp || '')] = true;
+      }
+    });
+    
+    Object.keys(all).forEach(function(k) {
+      var n = all[k];
+      if (n.read) return;
+      if (now - (n.timestamp || 0) > maxAge) return;
+      var dk = (n.cardId || '') + '_' + (n.timestamp || '');
+      if (seen[dk]) return; // Already in _jobNotifs via cross-app
+      
+      // Normalize to _jobNotifs format and merge
+      _jobNotifs['moulage_' + k] = {
+        to: n.to, toName: n.toName, from: n.from, fromName: n.fromName,
+        jobId: n.cardId, jobName: n.cardName,
+        messageType: n.messageType, messageContent: n.messageContent,
+        timestamp: n.timestamp, sourceApp: 'moulage', _fbKey: k,
+        read: false
+      };
+      _moulageNotifs[k] = n;
+    });
+    
+    // Refresh bell and dropdown
+    var bellBadge = document.getElementById('bellBadge');
+    if (bellBadge) {
+      var emailKey = myEmailKey;
+      var unread = Object.values(_jobNotifs).filter(function(n) { return !n.read && !(n.readBy && n.readBy[emailKey]); }).length;
+      bellBadge.setAttribute('data-job-count', unread);
+    }
+    if (typeof renderNotifications === 'function') renderNotifications();
   });
 }
 
@@ -8873,8 +8926,12 @@ function markAllNotifsRead() {
     // Job notifications — set BOTH readBy AND read=true for cross-app compatibility
     if (typeof _jobNotifs !== 'undefined') {
       Object.keys(_jobNotifs).forEach(function(key) {
-        db.ref('jobNotifications/' + key + '/readBy/' + emailKey).set(true).catch(function(){});
-        db.ref('jobNotifications/' + key + '/read').set(true).catch(function(){});
+        if (key.indexOf('moulage_') === 0) {
+          db.ref('moulageNotifications/' + key.substring(8)).update({ read: true }).catch(function(){});
+        } else {
+          db.ref('jobNotifications/' + key + '/readBy/' + emailKey).set(true).catch(function(){});
+          db.ref('jobNotifications/' + key + '/read').set(true).catch(function(){});
+        }
       });
     }
     
@@ -8943,7 +9000,11 @@ function clearAllNotifs() {
     
     if (typeof jobKeys !== 'undefined') {
       jobKeys.forEach(function(key) {
-        db.ref('jobNotifications/' + key).remove().catch(function(){});
+        if (key.indexOf('moulage_') === 0) {
+          db.ref('moulageNotifications/' + key.substring(8)).update({ read: true }).catch(function(){});
+        } else {
+          db.ref('jobNotifications/' + key).remove().catch(function(){});
+        }
       });
     }
     
@@ -8989,9 +9050,18 @@ function deletePsmNotif(notifId) {
 
 // ═══ JOB NOTIFICATION ACTIONS ═══
 function markJobNotifRead(notifId, jobId) {
+  // Check if this is a moulage notification (from fallback listener)
+  if (notifId.indexOf('moulage_') === 0) {
+    var realKey = notifId.substring(8);
+    if (db) db.ref('moulageNotifications/' + realKey).update({ read: true }).catch(function(){});
+    delete _jobNotifs[notifId];
+    closeNotifDropdown();
+    renderNotifications();
+    window.location.href = 'Physipro_moulage.html';
+    return;
+  }
   // Check if this is a cross-app notification → navigate to source app
   if (_jobNotifs[notifId] && _jobNotifs[notifId].sourceApp === 'moulage') {
-    // Mark as read first
     if (db) {
       var ek = currentUser ? currentUser.email.replace(/\./g, '_') : '';
       if (ek) {
@@ -8999,7 +9069,6 @@ function markJobNotifRead(notifId, jobId) {
         db.ref('jobNotifications/' + notifId + '/read').set(true).catch(function(){});
       }
     }
-    // Navigate to Moulage
     window.location.href = 'Physipro_moulage.html';
     return;
   }
@@ -9012,7 +9081,6 @@ function markJobNotifRead(notifId, jobId) {
   }
   closeNotifDropdown();
   renderNotifications();
-  // Firebase in background
   if (db) {
     var emailKey = currentUser ? currentUser.email.replace(/\./g, '_') : '';
     if (emailKey) {
@@ -9023,10 +9091,16 @@ function markJobNotifRead(notifId, jobId) {
 }
 
 function deleteJobNotif(notifId) {
-  _dismissedNotifKeys['job_' + notifId] = true; // Local dismiss first
+  _dismissedNotifKeys['job_' + notifId] = true;
   delete _jobNotifs[notifId];
   renderNotifications();
-  if (db) db.ref('jobNotifications/' + notifId).remove().catch(function() {});
+  if (db) {
+    if (notifId.indexOf('moulage_') === 0) {
+      db.ref('moulageNotifications/' + notifId.substring(8)).update({ read: true }).catch(function(){});
+    } else {
+      db.ref('jobNotifications/' + notifId).remove().catch(function(){});
+    }
+  }
 }
 
 // ═══ PRINT ═══
