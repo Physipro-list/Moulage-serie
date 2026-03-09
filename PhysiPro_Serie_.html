@@ -65,7 +65,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;min-height:
 
 /* ===== TOPBAR ===== */
 .topbar{height:75px;min-height:75px;background:linear-gradient(to bottom,#04152c 0%,#2a6bc9 100%);display:flex;align-items:center;padding:0 15px;z-index:100;position:relative;}
-.tb-left{display:flex;align-items:center;width:145px;min-width:145px;}
+.tb-left{display:flex;align-items:center;width:auto;min-width:145px;}
 .tb-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;}
 .top-title{font-size:18px;font-weight:700;text-shadow:1px 1px 3px rgba(0,0,0,.6);white-space:nowrap;}
 .tb-right{display:flex;align-items:center;gap:8px;margin-left:auto;}
@@ -7459,6 +7459,7 @@ if(localStorage.getItem('physipro_last_email')){
         <div class="logo-bottom-text">Série+</div>
       </div>
           </div>
+    <button id="serieRefreshBtn" onclick="serieForceRefresh()" title="Rafraîchir pour la dernière version" style="display:flex;align-items:center;gap:4px;padding:5px 12px;background:linear-gradient(to bottom,#1e40af,#2563eb);border:1px solid rgba(255,255,255,0.2);color:white;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;letter-spacing:0.3px;margin-left:10px;">🔄 Rafraîchir</button>
   </div>
     <div class="logo-menu" id="logoMenu" style="display:none;"></div>
   <div class="tb-center"><span class="top-title">📦 COMMANDES SÉRIE+</span></div>
@@ -7766,12 +7767,36 @@ function checkAppVersion() {
     if (required && typeof required === 'number' && APP_VERSION < required) {
       _versionOK = false;
       showVersionWarning(required);
+      // Show outdated on button
+      var btn = document.getElementById('serieRefreshBtn');
+      if (btn) { btn.style.background = 'linear-gradient(to bottom,#dc2626,#991b1b)'; btn.style.borderColor = '#7f1d1d'; }
     } else {
       db.ref('appSettings/versions/' + APP_MODULE).set(APP_VERSION);
       _versionOK = true;
     }
   });
 }
+
+function serieForceRefresh() {
+  // Check Firebase for latest required version first
+  if (typeof db !== 'undefined' && db) {
+    db.ref('appSettings/versions/' + APP_MODULE).once('value', function(snap) {
+      var required = snap.val();
+      if (required && typeof required === 'number' && APP_VERSION >= required) {
+        showToast('✅ Vous avez déjà la dernière version (v' + APP_VERSION + ')', 'success');
+      } else {
+        showToast('🔄 Nouvelle version détectée — rechargement...', 'info');
+      }
+      // Force hard reload with cache busting regardless
+      setTimeout(function() {
+        window.location.href = window.location.pathname + '?v=' + Date.now();
+      }, 500);
+    });
+  } else {
+    window.location.href = window.location.pathname + '?v=' + Date.now();
+  }
+}
+window.serieForceRefresh = serieForceRefresh;
 
 function showVersionWarning(required) {
   if (_versionBanner) return;
