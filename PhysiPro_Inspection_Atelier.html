@@ -101,8 +101,11 @@ body.col-resizing *{cursor:col-resize!important;}
 .data-table tr.partial-row{background:rgba(251,191,36,.1) !important;}
 .data-table tr.partial-row:hover{background:rgba(251,191,36,.18) !important;}
 .data-table tr.partial-row td{border-bottom-color:rgba(251,191,36,.25) !important;}
-.serie-star{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:3px;background:rgba(59,130,246,.12);color:#60a5fa;font-size:10px;cursor:pointer;transition:all 0.15s;vertical-align:middle;margin-right:2px;}
-.serie-star:hover{background:rgba(59,130,246,.3);transform:scale(1.2);}
+.serie-dot{display:inline-block;width:9px;height:9px;border-radius:50%;cursor:pointer;transition:all 0.15s;vertical-align:middle;flex-shrink:0;}
+.serie-dot:hover{transform:scale(1.4);filter:brightness(1.3);}
+.serie-star-icon{font-size:12px;line-height:1;cursor:pointer;transition:all 0.15s;vertical-align:middle;flex-shrink:0;}
+.serie-star-icon:hover{transform:scale(1.3);filter:brightness(1.3);}
+.serie-indicator{display:inline-flex;align-items:center;justify-content:center;cursor:pointer;vertical-align:middle;margin-right:2px;}
 .partial-badge{display:block;font-size:6px;font-weight:800;color:#fbbf24;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);border-radius:2px;padding:0 2px;text-align:center;line-height:1.3;letter-spacing:.3px;margin-bottom:0px;}
 .bon-wrap{display:flex;flex-direction:column;align-items:center;gap:0px;}
 .bon-row{display:inline-flex;align-items:center;gap:2px;justify-content:center;}
@@ -565,7 +568,7 @@ tr:hover .row-del-btn{opacity:.6;}
 <!-- INSPECTION -->
 <div class="content active" id="tab-inspection">
   <div class="entry-bar">
-    <label>📋 #</label><input type="text" id="insp-bon" placeholder="# bon + Entrée" onkeydown="if(event.key==='Enter')scanBon('inspection')"><span class="zoom-btn" onclick="doRefresh('inspection')" title="Rafraîchir">🔄</span>
+    <label>📋 #</label><input type="text" id="insp-bon" placeholder="# bon + Entrée" onkeydown="if(event.key==='Enter')scanBon('inspection')"><span class="zoom-btn" onclick="doRefresh('inspection')" title="Rafraîchir">🔄</span><span class="zoom-btn" onclick="restoreSerieFromFB()" title="Restaurer cartes Série+ depuis Firebase" style="color:#fbbf24;">🛡️</span>
     <div class="divider"></div>
     <span class="zoom-btn" onclick="zoomTable(-1)" title="Réduire texte">▼</span><span class="zoom-btn" onclick="zoomTable(1)" title="Agrandir texte">▲</span>
     <button class="btn-sep" onclick="addDateSep('inspection')">📅 Séparation</button>
@@ -830,6 +833,62 @@ var FB_PATHS = {
 
 /* ─── Storage keys ─── */
 var SK = 'physipro_serie_cards', IK = 'physipro_inspection_data', CK = 'physipro_couture_data';
+/* 🛡️ BACKUP: Sauvegarde automatique avant chaque écriture Firebase */
+var _lastBackupTime = 0;
+function _autoBackup(dept) {
+  var now = Date.now();
+  if (now - _lastBackupTime < 60000) return; // Max 1 backup/minute
+  _lastBackupTime = now;
+  try {
+    var lk = dept === 'inspection' ? IK : CK;
+    var data = localStorage.getItem(lk);
+    if (data) {
+      var bk = '_backup_' + lk;
+      localStorage.setItem(bk, data);
+      localStorage.setItem(bk + '_ts', new Date().toISOString());
+    }
+  } catch(e) { /* silencieux */ }
+}
+function restoreBackup(dept) {
+  var lk = dept === 'inspection' ? IK : CK;
+  var bk = '_backup_' + lk;
+  var backup = localStorage.getItem(bk);
+  var ts = localStorage.getItem(bk + '_ts');
+  if (!backup) { showToast('Aucun backup trouvé', 'error'); return; }
+  if (!confirm('Restaurer le backup du ' + (ts || '?') + ' pour ' + dept + '?')) return;
+  localStorage.setItem(lk, backup);
+  renderTable(dept);
+  showToast('✅ Backup restauré pour ' + dept, 'success');
+}
+window.restoreBackup = restoreBackup;
+
+/* 🛡️ Restaurer les cartes Série+ depuis Firebase (bouton d'urgence) */
+function restoreSerieFromFB() {
+  if (!fbDb || !fbUser) { showToast('Firebase non connecté', 'error'); return; }
+  showToast('🛡️ Lecture Firebase...', 'info');
+  fbDb.ref('serieCommandes').once('value').then(function(snap) {
+    var fbCards = snap.val();
+    if (!fbCards || typeof fbCards !== 'object') {
+      showToast('⚠️ Firebase serieCommandes est vide!', 'error');
+      return;
+    }
+    var count = Object.keys(fbCards).length;
+    if (!confirm('🛡️ Firebase contient ' + count + ' cartes Série+.\n\nRestaurer dans localStorage?')) return;
+    // Écrire dans les deux clés (Inspection + Série+)
+    localStorage.setItem(SK, JSON.stringify(fbCards));
+    localStorage.setItem('physipro_serie_data', JSON.stringify(fbCards));
+    // Vider les IDs supprimés pour éviter le re-nettoyage
+    localStorage.removeItem('physipro_serie_deleted_cards');
+    _serieCache = {};
+    renderTable('inspection');
+    showToast('✅ ' + count + ' cartes Série+ restaurées! Recharge aussi Série+.', 'success');
+    console.log('🛡️ [RESTORE] ' + count + ' cartes restaurées depuis Firebase');
+  }).catch(function(e) {
+    showToast('❌ Erreur: ' + e.message, 'error');
+    console.error('🛡️ [RESTORE] Erreur:', e);
+  });
+}
+window.restoreSerieFromFB = restoreSerieFromFB;
 
 /* ─── State flags ─── */
 var _syncPhase = 'idle';       // 'idle' | 'syncing' | 'live'
@@ -906,6 +965,17 @@ function safeLSSet(k, v) {
       var newCount = _countEntries(newData);
       if (currentCount > 5 && newCount < currentCount * 0.5) {
         console.error('🛡️ [safeLSSet] BLOQUÉ ' + dept + ': ' + currentCount + ' → ' + newCount + ' entries. Écriture refusée.');
+        return false;
+      }
+    }
+    // 🛡️ Protection pour les cartes Série+: ne jamais vider le cache
+    if (k === SK) {
+      var currentCards; try { currentCards = JSON.parse(localStorage.getItem(SK)) || {}; } catch(e) { currentCards = {}; }
+      var curCardCount = Object.keys(currentCards).length;
+      var newCards; try { newCards = JSON.parse(v) || {}; } catch(e) { newCards = {}; }
+      var newCardCount = Object.keys(newCards).length;
+      if (curCardCount > 3 && newCardCount < curCardCount * 0.4) {
+        console.error('🛡️ [safeLSSet] BLOQUÉ SK: ' + curCardCount + ' → ' + newCardCount + ' cartes. Écriture refusée.');
         return false;
       }
     }
@@ -1148,6 +1218,7 @@ function listenSerieCards() {
       if (fbCard.numeroPO && fbCard.numeroPO !== lCard.numeroPO) { lCard.numeroPO = fbCard.numeroPO; changed = true; }
       // [FIX: Sync _typeManuel so Client/Série detection works cross-app]
       if (fbCard._typeManuel !== undefined && fbCard._typeManuel !== lCard._typeManuel) { lCard._typeManuel = fbCard._typeManuel; changed = true; }
+      if (fbCard.targetColumn && fbCard.targetColumn !== lCard.targetColumn) { lCard.targetColumn = fbCard.targetColumn; changed = true; }
       if (fbCard.items) {
         if (!lCard.items) lCard.items = [];
         fbCard.items.forEach(function(fItem, ii) {
@@ -1162,15 +1233,24 @@ function listenSerieCards() {
             if (fG.atelier && !lG.atelier) { lG.atelier = fG.atelier; changed = true; }
             if (fG.couture && !lG.couture) { lG.couture = fG.couture; changed = true; }
             if (fG.atelier && lG.atelier) {
+              // 🛡️ MAX qtyFait: ne jamais régresser le progrès d'inspection
+              var fbAtelierQf = parseInt(fG.atelier.qtyFait) || 0;
+              var lcAtelierQf = parseInt(lG.atelier.qtyFait) || 0;
               var fbTime = fG.atelier.inspectedAt || '';
               var lcTime = lG.atelier.inspectedAt || '';
-              if (fbTime > lcTime) { lG.atelier = fG.atelier; changed = true; }
+              if (fbTime > lcTime && fbAtelierQf >= lcAtelierQf) { lG.atelier = fG.atelier; changed = true; }
+              else if (fbAtelierQf > lcAtelierQf) { lG.atelier.qtyFait = fbAtelierQf; changed = true; }
+              if (fG.atelier.inspected && !lG.atelier.inspected) { lG.atelier.inspected = true; changed = true; }
               if (fG.atelier.sentToInventaire && !lG.atelier.sentToInventaire) { lG.atelier.sentToInventaire = true; changed = true; }
               if (fG.atelier.distributed && !lG.atelier.distributed) { lG.atelier.distributed = true; changed = true; }
             }
             if (fG.couture && lG.couture) {
+              // 🛡️ MAX qtyFait couture
+              var fbCoutQf = parseInt(fG.couture.qtyFait) || 0;
+              var lcCoutQf = parseInt(lG.couture.qtyFait) || 0;
+              if (fbCoutQf > lcCoutQf) { lG.couture.qtyFait = fbCoutQf; changed = true; }
               var rank = { attente: 0, partiel: 1, pret: 2 };
-              if ((rank[fG.couture.status] || 0) > (rank[lG.couture.status] || 0)) { lG.couture = fG.couture; changed = true; }
+              if ((rank[fG.couture.status] || 0) > (rank[lG.couture.status] || 0)) { lG.couture.status = fG.couture.status; changed = true; }
               if (fG.couture.sentToInventaire && !lG.couture.sentToInventaire) { lG.couture.sentToInventaire = true; changed = true; }
               if (fG.couture.distributed && !lG.couture.distributed) { lG.couture.distributed = true; changed = true; }
             }
@@ -1240,25 +1320,48 @@ function pushToFB(dept) {
   if (!fbUser) { setSyncBadge('offline'); return; }
   var lk = dept === 'inspection' ? IK : CK;
   var data; try { data = JSON.parse(localStorage.getItem(lk)) || {}; } catch(e) { return; }
-  setFbWriting(dept, true);
-  setSyncBadge('syncing');
-  fbDb.ref(FB_PATHS[dept]).set(data).then(function() {
-    setTimeout(function() { setFbWriting(dept, false); setSyncBadge('online'); }, 1500);
-    _retryCount[dept] = 0;
-    console.log('✅ Firebase saved:', dept);
-  }).catch(function(err) {
-    console.error('❌ Firebase error:', dept, err.message);
-    _retryCount[dept] = (_retryCount[dept] || 0) + 1;
-    if (_retryCount[dept] <= _maxRetries) {
-      var delay = _retryCount[dept] * 2000;
-      console.log('🔄 Retry ' + _retryCount[dept] + '/' + _maxRetries + ' in ' + delay + 'ms for', dept);
-      setTimeout(function() { pushToFB(dept); }, delay);
-    } else {
-      setFbWriting(dept, false);
-      _retryCount[dept] = 0;
-      setSyncBadge('offline');
-      showToast('⚠️ Firebase: ' + err.message, 'error');
+  // 🛡️ PROTECTION: Ne jamais écrire de données vides ou suspicieusement petites
+  var entryCount = _countEntries(data);
+  if (entryCount === 0 && Object.keys(data).length === 0) {
+    console.error('🛡️ [pushToFB] BLOQUÉ: données vides pour ' + dept + '. Écriture annulée.');
+    return;
+  }
+  // 🛡️ PROTECTION: Vérifier que FB n'a pas plus d'entrées avant d'écraser
+  fbDb.ref(FB_PATHS[dept]).once('value').then(function(fbSnap) {
+    var fbData = fbSnap.val();
+    var fbCount = fbData ? _countEntries(fbData) : 0;
+    if (fbCount > 5 && entryCount < fbCount * 0.5) {
+      console.error('🛡️ [pushToFB] BLOQUÉ: réduction suspecte ' + dept + ' FB=' + fbCount + ' → Local=' + entryCount);
+      showToast('🛡️ Écriture bloquée: perte de données détectée (' + dept + ')', 'error');
+      return;
     }
+    _autoBackup(dept);
+    setFbWriting(dept, true);
+    setSyncBadge('syncing');
+    fbDb.ref(FB_PATHS[dept]).set(data).then(function() {
+      setTimeout(function() { setFbWriting(dept, false); setSyncBadge('online'); }, 1500);
+      _retryCount[dept] = 0;
+      console.log('✅ Firebase saved:', dept, entryCount + ' entries');
+    }).catch(function(err) {
+      console.error('❌ Firebase error:', dept, err.message);
+      _retryCount[dept] = (_retryCount[dept] || 0) + 1;
+      if (_retryCount[dept] <= _maxRetries) {
+        var delay = _retryCount[dept] * 2000;
+        setTimeout(function() { pushToFB(dept); }, delay);
+      } else {
+        setFbWriting(dept, false);
+        _retryCount[dept] = 0;
+        setSyncBadge('offline');
+        showToast('⚠️ Firebase: ' + err.message, 'error');
+      }
+    });
+  }).catch(function() {
+    // FB unreachable — push anyway (best effort)
+    setFbWriting(dept, true);
+    setSyncBadge('syncing');
+    fbDb.ref(FB_PATHS[dept]).set(data).then(function() {
+      setTimeout(function() { setFbWriting(dept, false); setSyncBadge('online'); }, 1500);
+    }).catch(function(err) { setFbWriting(dept, false); setSyncBadge('offline'); });
   });
 }
 function debouncePush(dept) {
@@ -1399,6 +1502,8 @@ function _loadSerieCards() {
         if (fbCard.client) lCard.client = fbCard.client;
         if (fbCard.order) lCard.order = fbCard.order;
         if (fbCard.numeroPO) lCard.numeroPO = fbCard.numeroPO;
+        if (fbCard.targetColumn) lCard.targetColumn = fbCard.targetColumn;
+        if (fbCard._typeManuel !== undefined) lCard._typeManuel = fbCard._typeManuel;
         if (fbCard.items && lCard.items) {
           fbCard.items.forEach(function(fItem, ii) {
             if (!lCard.items[ii]) { lCard.items[ii] = fItem; return; }
@@ -1797,7 +1902,7 @@ function saveD(d,data){if(!hasPermission("M"))return;
 }
 
 /* ═══ LISTS ═══ */
-var DEFAULT_LISTS={employes_atelier:['Pierre Caron','Serge Lavallée','Tommy Beaudoin','Nestor Torres','Mathieu Perreault','Cheickna','Daniel Charest','Saul','Pablo','Sylvain Carrier','Stéphane','Paul','Didier','Michel Coffe','Manuel'],items:['Premium','Ultra','Pz','Siliko','Physiair','Hp2','Cinch','Resolve','Brio','Thoraciques','Thoraciques faconnés','C3s','Axis','Lxa','Biseau','Glissières','Pelvien','Moulage','Moulage du cnc','Moulage retour d\'essayage','Appui tête normal','Appui tête bouclier','Appui tête juif','Appui tête constance','Appui tête prolongement latéral','App moignon','App mollet','Airfoam','Coussin de table','Gdsquared gel','Nssquared','Viscozen','Néozen','Valdis','Peinture moulage','Coussin dossier','Easy-fit'],clients:['Commande client','C1south','Hme','France Rts','Vermeiren','Cubro','Inventaire','Série','Chsld Rimouski','Constance','Hopital Juif'],erreurs:['erreur','mauvais format','Mauvais matériaux','Mauvaise plaque','Oublie','Mauvaise épaisseur','Pelvien oublié','Coins pas coupés','Erreur magasin','mauvaise mesure','Manque coupe canvas','Biseau collé au lieu de velcro','Biseau mauvaise mesure','Item mauvais coté','abs manquant'],inspecteurs:['Valérie','Michelle','Nestor','Cassie','Serge','Daniel'],coutureuses:['Cassie','Michelle','Nestor','Valérie']};
+var DEFAULT_LISTS={employes_atelier:['Pierre Caron','Serge Lavallée','Tommy Beaudoin','Nestor Torres','Mathieu Perreault','Cheickna','Daniel Charest','Saul','Pablo','Sylvain Carrier','Stéphane','Paul','Didier','Michel Coffe','Manuel'],items:['Premium','Ultra','Pz','Siliko','Physiair','Hp2','Cinch','Resolve','Brio','Thoraciques','Thoraciques faconnés','C3s','Axis','Lxa','Biseau','Glissières','Pelvien','Moulage','Moulage du cnc','Moulage retour d\'essayage','Appui tête normal','Appui tête bouclier','Appui tête juif','Appui tête constance','Appui tête prolongement latéral','App moignon','App mollet','Airfoam','Coussin de table','Gdsquared gel','Nssquared','Viscozen','Néozen','Valdis','Peinture moulage','Coussin dossier','Easy-fit'],clients:['France client','France série','Vermeiren client','Vermeiren série','HME client','HME série','C1South client','C1South série','Autre 1 client','Autre 1 série','Autre 2 client','Autre 2 série','Inventaire','Commande client','Série','Chsld Rimouski','Constance','Hopital Juif'],erreurs:['erreur','mauvais format','Mauvais matériaux','Mauvaise plaque','Oublie','Mauvaise épaisseur','Pelvien oublié','Coins pas coupés','Erreur magasin','mauvaise mesure','Manque coupe canvas','Biseau collé au lieu de velcro','Biseau mauvaise mesure','Item mauvais coté','abs manquant'],inspecteurs:['Valérie','Michelle','Nestor','Cassie','Serge','Daniel'],coutureuses:['Cassie','Michelle','Nestor','Valérie']};
 /* ═══ LIST CACHE — Avoid repeated JSON.parse from localStorage ═══ */
 var _listCache={};
 var _listCacheTime=0;
@@ -2048,6 +2153,9 @@ function renderTable(dept){
         var fEntry=favRows[fi];
         var row=fEntry.row;
         var realIdx=fEntry.realIdx; // index exact dans le mois source
+        // Auto-fix client label
+        var _rfSmF = _cachedFindSerie((row.bon||'').trim());
+        if(_rfSmF && _rfSmF.card){var _rfLbl = getSerieAutoClient(_rfSmF.card);if(_rfLbl && row.client !== _rfLbl){row.client = _rfLbl;}}
         count++;
         var hasErr=row.hasError!==undefined?row.hasError:((row.errQty||0)>0);
         var hasPart=rowHasPartial(row);
@@ -2065,6 +2173,25 @@ function renderTable(dept){
       if(row.type==='date'){if(!hideDates)html+='<tr class="date-row"><td colspan="'+nc+'"><div class="date-row-inner"><span class="date-row-label" onclick="editDateSep(event,\''+dept+'\','+idx+')" title="Modifier la date">📅 '+esc(row.dateLabel)+'</span><span class="date-row-del" onclick="delDateSep(\''+dept+'\','+idx+')" title="Supprimer ce séparateur">✕</span></div></td></tr>';continue;}
       var ss=[row.bon,row.nom,row.item,row.client,row.description,row.errorReason].join(' ').toLowerCase();
       if(f&&ss.indexOf(f)<0)continue;
+      // Auto-fix: corriger le label client si un match Série+ existe et que le format est ancien
+      if(!window._clientFixRunning){
+        var _rfSm = _cachedFindSerie((row.bon||'').trim());
+        if(_rfSm && _rfSm.card){
+          var _rfLabel = getSerieAutoClient(_rfSm.card);
+          if(_rfLabel && row.client !== _rfLabel){
+            row.client = _rfLabel;
+            if(!window._renderFixPending){
+              window._renderFixPending=true;
+              setTimeout(function(){
+                window._renderFixPending=false;
+                window._clientFixRunning=true;
+                var _md2=gmd(dept);saveD(dept,_md2.data);
+                window._clientFixRunning=false;
+              },1000);
+            }
+          }
+        }
+      }
       count++;
       var hasErr=row.hasError!==undefined?row.hasError:((row.errQty||0)>0);
       var hasPart=rowHasPartial(row);
@@ -2131,14 +2258,16 @@ function cellHTML(dept,colId,row,idx,count,hasErr){
     case 'bon':
       var star='';var sm=_cachedFindSerie((row.bon||'').trim());
       if(sm){
-        var isClientStar = sm.card ? _isClientCard(sm.card) : false;
-        var starStyle = isClientStar ? 'background:rgba(59,130,246,.2);color:#3b82f6;' : '';
-        var starIcon = isClientStar ? '🔵' : '⭐';
-        var starTitle = isClientStar ? 'Commande Client (Série+)' : 'Rouvrir Série+';
+        var dotColor = getSerieClientDotColor(sm.card);
+        var dotLabel = getSerieClientLabel(sm.card);
+        var isSerie = !_isClientCard(sm.card);
+        var indicator = isSerie
+          ? '<span class="serie-star-icon" style="color:'+dotColor+';text-shadow:0 0 4px '+dotColor+';">★</span>'
+          : '<span class="serie-dot" style="background:'+dotColor+';box-shadow:0 0 4px '+dotColor+';"></span>';
         if(_favoritesFilter){
-          star='<span class="serie-star" style="'+starStyle+'" onclick="event.stopPropagation();reopenSerieModalByBon(\''+esc(row.bon||'')+'\',\'inspection\')" title="'+starTitle+'">'+starIcon+'</span>';
+          star='<span class="serie-indicator" onclick="event.stopPropagation();reopenSerieModalByBon(\''+esc(row.bon||'')+'\',\'inspection\')" title="'+dotLabel+'">'+indicator+'</span>';
         }else{
-          star='<span class="serie-star" style="'+starStyle+'" onclick="event.stopPropagation();reopenSerieModal(\''+dept+'\','+idx+')" title="'+starTitle+'">'+starIcon+'</span>';
+          star='<span class="serie-indicator" onclick="event.stopPropagation();reopenSerieModal(\''+dept+'\','+idx+')" title="'+dotLabel+'">'+indicator+'</span>';
         }
       }
       var pb=rowHasPartial(row)?'<span class="partial-badge">PARTIEL</span>':'';
@@ -2150,11 +2279,11 @@ function cellHTML(dept,colId,row,idx,count,hasErr){
       var itemVal=row.item||'';
       if(itemVal.indexOf('\n')>=0||itemVal.indexOf('|')>=0||itemVal.match(/\s+\d+\/\d+$/m)||itemVal.match(/\s+\d+x$/m)||itemVal.match(/\s+x\d+$/m)||itemVal.match(/^~/m)){
         if(window._showSerieDetail===false){
-          return'<span style="font-weight:600;color:#60a5fa;font-size:inherit;white-space:nowrap;">Commande série</span>';
+          return'<span style="font-weight:600;color:#60a5fa;font-size:inherit;white-space:nowrap;">•••</span>';
         }
         var itemLines=itemVal.split('\n').filter(function(x){return x.trim();});
         var sm2=_cachedFindSerie((row.bon||'').trim());
-        var ih='<div class="si-cell"><span class="si-lbl">COMMANDE SÉRIE</span>';
+        var ih='<div class="si-cell">';
         if(sm2){
           var c2=sm2.card;var grp={};var grpOrder=[];
           itemLines.forEach(function(line){
@@ -2233,7 +2362,18 @@ function cellHTML(dept,colId,row,idx,count,hasErr){
         ih+='</div>';return ih;
       }
       return '<div class="cell-dropdown clr-item '+(row.item?'has-value':'empty')+'" onclick="openCellDropdown(\''+dept+'\','+idx+',\'item\',\'Item\',\'items\')">'+(row.item?esc(row.item):'—')+'</div>';
-    case 'client':return '<div class="cell-dropdown clr-client '+(row.client?'has-value':'empty')+'" onclick="openCellDropdown(\''+dept+'\','+idx+',\'client\',\'Client\',\'clients\')">'+(row.client?esc(row.client):'—')+'</div>';
+    case 'client':
+      var _ccl = (row.client||'').toLowerCase();
+      var _cColor = '';
+      if(_ccl.indexOf('france')>=0) _cColor='#facc15';
+      else if(_ccl.indexOf('vermeiren')>=0) _cColor='#4ade80';
+      else if(_ccl.indexOf('hme')>=0) _cColor='#E8B97A';
+      else if(_ccl.indexOf('c1south')>=0) _cColor='#c084fc';
+      else if(_ccl.indexOf('cubro')>=0) _cColor='#9ca3b8';
+      else if(_ccl.indexOf('inventaire')>=0) _cColor='#f97316';
+      else if(_ccl.indexOf('autre')>=0) _cColor='#9ca3b8';
+      var _cStyle = _cColor ? 'color:'+_cColor+';' : '';
+      return '<div class="cell-dropdown clr-client '+(row.client?'has-value':'empty')+'" style="'+_cStyle+'" onclick="openCellDropdown(\''+dept+'\','+idx+',\'client\',\'Client\',\'clients\')">'+(row.client?esc(row.client):'—')+'</div>';
     case 'insp':return '<div class="cell-dropdown clr-insp '+(row.inspecteur?'has-value':'empty')+'" onclick="openCellDropdown(\''+dept+'\','+idx+',\'inspecteur\',\'Inspecteur\',\'inspecteurs\')">'+(row.inspecteur?esc(row.inspecteur):'—')+'</div>';
     case 'cout':return '<div class="cell-dropdown clr-insp '+(row.inspecteur?'has-value':'empty')+'" onclick="openCellDropdown(\''+dept+'\','+idx+',\'inspecteur\',\'Couturière\',\'coutureuses\')">'+(row.inspecteur?esc(row.inspecteur):'—')+'</div>';
     case 'err':return mkErr(dept,idx,hasErr);
@@ -2314,13 +2454,18 @@ function tgErr(d,i){var md=gmd(d);var r=md.rows[i];if(!r||r.type!=='entry')retur
 function cyc(d,i){var md=gmd(d);var r=md.rows[i];if(!r)return;var o=['recu','enCours','complet'];var c=r.coutureStatus||'recu';r.coutureStatus=o[(o.indexOf(c)+1)%o.length];md.data[md.month]=md.rows;saveD(d,md.data);renderTable(d);}
 function delRow(d,i){if(!confirm('Supprimer?'))return;var md=gmd(d);var row=md.rows[i];if(row&&row.id)markIdDeleted(row.id);md.rows.splice(i,1);md.data[md.month]=md.rows;
   // FIX: Push immédiatement à Firebase (pas debounce) pour éviter résurrection
-  safeLSSet(d==='inspection'?IK:CK,JSON.stringify(md.data));
+  var _delData = md.data;
+  var _delCount = _countEntries(_delData);
+  safeLSSet(d==='inspection'?IK:CK,JSON.stringify(_delData));
   if(fbDb&&fbUser){
-    setFbWriting(d,true); // Block listener pendant le push
-    fbDb.ref(FB_PATHS[d]).set(md.data).then(function(){
-      setFbWriting(d,false);setSyncBadge('online');
-      console.log('🗑️ Suppression synced to Firebase');
-    }).catch(function(e){setFbWriting(d,false);console.error('❌ Delete sync error:',e);});
+    // 🛡️ Vérifier que la suppression ne vide pas tout
+    if(_delCount > 0 || confirm('⚠️ Plus aucune entrée. Confirmer la suppression?')){
+      setFbWriting(d,true);
+      fbDb.ref(FB_PATHS[d]).set(_delData).then(function(){
+        setFbWriting(d,false);setSyncBadge('online');
+        console.log('🗑️ Suppression synced to Firebase (' + _delCount + ' entries restantes)');
+      }).catch(function(e){setFbWriting(d,false);console.error('❌ Delete sync error:',e);});
+    }
   }
   renderTable(d);showToast('🗑️','info');}
 function delDateSep(d,i){if(!confirm('Supprimer ce séparateur de date?'))return;var md=gmd(d);var row=md.rows[i];if(row&&row.id)markIdDeleted(row.id);md.rows.splice(i,1);md.data[md.month]=md.rows;
@@ -2369,6 +2514,67 @@ function _isClientCard(card) {
     }
   }
   return true;
+}
+
+/* ═══ COULEUR DU POINT selon la colonne Série+ (matching entêtes Série+) ═══ */
+var SERIE_COL_DOT_COLORS = {
+  'serieCollapsableCards': '#4ade80',  // Vert — Vermeiren Série
+  'serieBoList': '#4ade80',            // Vert — Vermeiren Client
+  'serieFranceSerieList': '#facc15',   // Jaune — France Série
+  'serieFranceClientList': '#facc15',  // Jaune — France Client
+  'serieC1southList': '#c084fc',       // Mauve — C1South
+  'serieHmeList': '#E8B97A',           // Brun doré — HME
+  'serieCubroList': '#9ca3b8',         // Gris — Autre 1
+  'serieAutreList': '#9ca3b8'          // Gris — Autre 2
+};
+var SERIE_CLIENT_DOT_COLORS = {
+  'france': '#facc15',     // Jaune/Or — France
+  'vermeiren': '#4ade80',  // Vert — Vermeiren
+  'hme': '#E8B97A',        // Doré/Sable — HME
+  'c1south': '#c084fc',    // Mauve — C1South
+  'cubro': '#9ca3b8',      // Gris — Autre
+  'inventaire': '#f97316', // Orange — Inventaire
+  'serie': '#f97316',      // Orange — Série générique
+  'default': '#3b82f6'     // Bleu — Autre/Défaut
+};
+function getSerieClientDotColor(card) {
+  if (!card) return SERIE_CLIENT_DOT_COLORS['default'];
+  // Priorité 1: targetColumn (source de vérité Série+)
+  var tc = card.targetColumn || '';
+  if (tc && SERIE_COL_DOT_COLORS[tc]) return SERIE_COL_DOT_COLORS[tc];
+  // Priorité 2: card.client fallback
+  var cl = (card.client || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return SERIE_CLIENT_DOT_COLORS[cl] || SERIE_CLIENT_DOT_COLORS['default'];
+}
+function getSerieClientLabel(card) {
+  if (!card) return 'Série+';
+  var cl = (card.client || 'Autre').trim();
+  var isCl = _isClientCard(card);
+  return cl + (isCl ? ' (Client)' : ' (Série)');
+}
+/* Retourne la valeur exacte pour le dropdown Client basé sur la colonne Série+ */
+function getSerieAutoClient(card) {
+  if (!card) return '';
+  var tc = card.targetColumn || '';
+  var isCl = _isClientCard(card);
+  var suffix = isCl ? ' client' : ' série';
+  // Mapping direct containerId → label
+  if (tc === 'serieCollapsableCards') return 'Vermeiren série';
+  if (tc === 'serieBoList') return 'Vermeiren client';
+  if (tc === 'serieFranceSerieList') return 'France série';
+  if (tc === 'serieFranceClientList') return 'France client';
+  if (tc === 'serieC1southList') return 'C1South' + suffix;
+  if (tc === 'serieHmeList') return 'HME' + suffix;
+  if (tc === 'serieCubroList') return (card._customColName || 'Autre 1') + suffix;
+  if (tc === 'serieAutreList') return (card._customColName || 'Autre 2') + suffix;
+  // Fallback: déduction par card.client
+  var cl = (card.client || '').trim();
+  if (!cl) return '';
+  var clLower = cl.toLowerCase().replace(/[^a-z0-9]/g, '');
+  var nameMap = {france:'France',vermeiren:'Vermeiren',hme:'HME',c1south:'C1South',cubro:'Cubro',inventaire:'Inventaire'};
+  var displayName = nameMap[clLower] || cl;
+  if (clLower === 'inventaire') return 'Inventaire';
+  return displayName + suffix;
 }
 
 /* Auto-compléter une carte Client dans Série+ (toutes grandeurs → complet) */
@@ -2424,24 +2630,37 @@ function autoCompleteClientCard(cardId, card, dept, bon, sourceRowIdx) {
 
   // Create/update the inspection row
   var itemStr = itemLines.join('\n');
-  if (sourceRowIdx !== undefined && sourceRowIdx !== null) {
+  // 🛡️ Si appelé depuis reVerify, utiliser la ligne directe (cross-month safe)
+  var directRow = window._reVerifyDirectRow || null;
+  var directMonth = window._reVerifyDirectMonth || null;
+  if (directRow && directRow.type === 'entry') {
+    directRow.item = itemStr;
+    directRow.qty = totalQty;
+    directRow.client = getSerieAutoClient(card) || directRow.client;
+    directRow.permanent = true;
+    directRow.serieLinked = true;
+    directRow.serieSnapshot = { client: card.client || '', items: itemStr, importedAt: new Date().toISOString() };
+    // 🛡️ NE PAS changer l'inspecteur existant
+    // Save sera fait par reVerify après la boucle
+  } else if (sourceRowIdx !== undefined && sourceRowIdx !== null) {
     var md = gmd(dept);
     var row = md.rows[sourceRowIdx];
     if (row && row.type === 'entry') {
       row.item = itemStr;
       row.qty = totalQty;
-      row.client = card.client || row.client;
+      row.client = getSerieAutoClient(card) || row.client;
       row.permanent = true;
       row.serieLinked = true;
       row.serieSnapshot = { client: card.client || '', items: itemStr, importedAt: new Date().toISOString() };
+      // 🛡️ NE PAS changer l'inspecteur existant
       md.data[md.month] = md.rows;
       saveD(dept, md.data);
       renderTable(dept);
     } else {
-      addRow(bon || '', '', String(totalQty), itemStr, dept, card.client || '', '', '', fbUser ? resolveInspName(fbUser.email) : '');
+      addRow(bon || '', '', String(totalQty), itemStr, dept, getSerieAutoClient(card) || card.client || '', '', '', fbUser ? resolveInspName(fbUser.email) : '');
     }
   } else {
-    addRow(bon || '', '', String(totalQty), itemStr, dept, card.client || '', '', '', fbUser ? resolveInspName(fbUser.email) : '');
+    addRow(bon || '', '', String(totalQty), itemStr, dept, getSerieAutoClient(card) || card.client || '', '', '', fbUser ? resolveInspName(fbUser.email) : '');
   }
   return true;
 }
@@ -2454,13 +2673,50 @@ function reVerifyAllSerieRows(dept) {
   fbDb.ref('serieCommandes').once('value').then(function(snap) {
     var fbCards = snap.val() || {};
     // Update local cache
-    safeLSSet(SK, JSON.stringify(fbCards));
+    // 🛡️ Merge FB into local — NEVER overwrite local inspection/couture progress
+    var localCards = getSerieCards();
+    Object.keys(fbCards).forEach(function(cid) {
+      if (!localCards[cid]) { localCards[cid] = fbCards[cid]; return; }
+      var lCard = localCards[cid], fbCard = fbCards[cid];
+      if (fbCard.client) lCard.client = fbCard.client;
+      if (fbCard.order) lCard.order = fbCard.order;
+      if (fbCard.numeroPO) lCard.numeroPO = fbCard.numeroPO;
+      if (fbCard.targetColumn) lCard.targetColumn = fbCard.targetColumn;
+      if (fbCard._typeManuel !== undefined) lCard._typeManuel = fbCard._typeManuel;
+      if (fbCard.items) {
+        if (!lCard.items) lCard.items = [];
+        fbCard.items.forEach(function(fItem, ii) {
+          if (!lCard.items[ii]) { lCard.items[ii] = fItem; return; }
+          if (fItem.name) lCard.items[ii].name = fItem.name;
+          if (!lCard.items[ii].grandeurs) lCard.items[ii].grandeurs = [];
+          (fItem.grandeurs || []).forEach(function(fG, gi) {
+            if (!lCard.items[ii].grandeurs[gi]) { lCard.items[ii].grandeurs[gi] = fG; return; }
+            var lG = lCard.items[ii].grandeurs[gi];
+            if (fG.qty) lG.qty = fG.qty;
+            if (fG.name) lG.name = fG.name;
+            // 🛡️ Preserve local atelier/couture data — use MAX qtyFait
+            ['atelier', 'couture'].forEach(function(sec) {
+              if (fG[sec] && !lG[sec]) { lG[sec] = fG[sec]; }
+              else if (fG[sec] && lG[sec]) {
+                var fQf = parseInt(fG[sec].qtyFait) || 0;
+                var lQf = parseInt(lG[sec].qtyFait) || 0;
+                if (fQf > lQf) lG[sec] = fG[sec];
+              }
+            });
+          });
+        });
+      }
+    });
+    safeLSSet(SK, JSON.stringify(localCards));
     var autoCompleted = 0;
+    var labelsFixed = 0;
     var starsFound = 0;
     var allData = loadDLocal(dept);
+    var anyDataChanged = false;
     // Scan all months
     Object.keys(allData).forEach(function(month) {
       var rows = allData[month] || [];
+      var monthChanged = false;
       rows.forEach(function(row, idx) {
         if (!row || row.type !== 'entry') return;
         var bon = (row.bon || row.bonCmd || '').trim();
@@ -2478,6 +2734,13 @@ function reVerifyAllSerieRows(dept) {
         }
         if (!found) return;
         starsFound++;
+        // TOUJOURS corriger le label client (ancien "Vermeiren" → "Vermeiren série", etc.)
+        var correctLabel = getSerieAutoClient(found.card);
+        if (correctLabel && row.client !== correctLabel) {
+          row.client = correctLabel;
+          monthChanged = true;
+          labelsFixed++;
+        }
         if (_isClientCard(found.card)) {
           var section = (dept === 'inspection') ? 'atelier' : 'couture';
           var needsComplete = false;
@@ -2490,14 +2753,26 @@ function reVerifyAllSerieRows(dept) {
             });
           });
           if (needsComplete) {
-            autoCompleteClientCard(found.cardId, found.card, dept, bon, undefined);
+            // 🛡️ FIX: Compléter la carte Série+ dans Firebase SANS créer de nouvelle ligne
+            // On passe _directRow pour que autoCompleteClientCard mette à jour la ligne existante
+            window._reVerifyDirectRow = row;
+            window._reVerifyDirectMonth = month;
+            autoCompleteClientCard(found.cardId, found.card, dept, bon, idx);
+            window._reVerifyDirectRow = null;
+            window._reVerifyDirectMonth = null;
             autoCompleted++;
+            monthChanged = true;
           }
         }
       });
+      if (monthChanged) { allData[month] = rows; anyDataChanged = true; }
     });
+    if (anyDataChanged) { saveD(dept, allData); }
     renderTable(dept);
-    showToast('✅ Vérifié: ' + starsFound + ' Série+ trouvées, ' + autoCompleted + ' Client auto-complétées', 'success');
+    var msg = '✅ ' + starsFound + ' Série+';
+    if (labelsFixed) msg += ', ' + labelsFixed + ' labels corrigés';
+    if (autoCompleted) msg += ', ' + autoCompleted + ' auto-complétées';
+    showToast(msg, 'success');
   }).catch(function(e) {
     console.error('[VERIFY] Erreur:', e);
     showToast('❌ Erreur de vérification', 'error');
@@ -2514,10 +2789,12 @@ function _handleSerieMatch(bon, match, dept) {
     var ok = autoCompleteClientCard(match.cardId, match.card, dept, bon, sourceRowIdx);
     if (ok) {
       showToast('✅ Client #' + bon + ' — auto-complété (' + (dept === 'inspection' ? 'Atelier' : 'Couture') + ')', 'success');
+      closeModal();
     } else {
-      showToast('✅ Client #' + bon + ' — déjà complété', 'info');
+      // 🛡️ Déjà complété → ouvrir le modal manuel avec client verrouillé pour re-saisie
+      closeModal();
+      openManualModal(bon, dept);
     }
-    closeModal();
   } else {
     // Série: ouvrir le modal de sélection de grandeurs
     openSerieModal(bon, match, dept);
@@ -2539,6 +2816,8 @@ function reopenSerieModal(dept,idx){
         if(fbCard.client)lCard.client=fbCard.client;
         if(fbCard.order)lCard.order=fbCard.order;
         if(fbCard.numeroPO)lCard.numeroPO=fbCard.numeroPO;
+        if(fbCard.targetColumn)lCard.targetColumn=fbCard.targetColumn;
+        if(fbCard._typeManuel!==undefined)lCard._typeManuel=fbCard._typeManuel;
         if(fbCard.items){
           if(!lCard.items)lCard.items=[];
           fbCard.items.forEach(function(fItem,ii){
@@ -2598,6 +2877,8 @@ function reopenSerieModalByBon(bon,dept){
         if(fbCard.client)lCard.client=fbCard.client;
         if(fbCard.order)lCard.order=fbCard.order;
         if(fbCard.numeroPO)lCard.numeroPO=fbCard.numeroPO;
+        if(fbCard.targetColumn)lCard.targetColumn=fbCard.targetColumn;
+        if(fbCard._typeManuel!==undefined)lCard._typeManuel=fbCard._typeManuel;
         if(fbCard.items){
           if(!lCard.items)lCard.items=[];
           fbCard.items.forEach(function(fItem,ii){
@@ -2642,6 +2923,8 @@ if(fbDb){
       if(fbCard.client)lCard.client=fbCard.client;
       if(fbCard.order)lCard.order=fbCard.order;
       if(fbCard.numeroPO)lCard.numeroPO=fbCard.numeroPO;
+      if(fbCard.targetColumn)lCard.targetColumn=fbCard.targetColumn;
+      if(fbCard._typeManuel!==undefined)lCard._typeManuel=fbCard._typeManuel;
       if(fbCard.items){
         if(!lCard.items)lCard.items=[];
         fbCard.items.forEach(function(fItem,ii){
@@ -2680,7 +2963,8 @@ function openSerieModal(bon,match,dept){var cid=match.cardId;
 var freshCards=getSerieCards();var card=freshCards[cid]||match.card;
 var items=getUnfinished(card,dept);var completed=getCompleted(card,dept);
 var completedMap={};completed.forEach(function(ci){completedMap[ci.ii]=ci;});
-var h='<div class="serie-match-info"><div class="label">🔗 Série+</div><div class="value">'+esc(card.client||'')+' — '+esc(card.order||bon)+'</div></div>';
+var _smiDotColor = getSerieClientDotColor(card);
+var h='<div class="serie-match-info" style="border-color:'+_smiDotColor+';background:'+_smiDotColor+'10;"><div class="label" style="color:'+_smiDotColor+';">🔗 Série+ <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+_smiDotColor+';vertical-align:middle;box-shadow:0 0 4px '+_smiDotColor+';"></span></div><div class="value">'+esc(card.client||'')+' — '+esc(card.order||bon)+'</div></div>';
 if(!items.length && !completed.length){
   h+='<p style="color:var(--success);font-weight:700;">✅ Tout complété!</p>';
 } else {
@@ -2841,11 +3125,11 @@ if(ctx.sourceRowIdx!=null){
     existingRow.qty=allQty;
     md.data[md.month]=md.rows;
     saveD(ctx.dept,md.data);renderTable(ctx.dept);
-  }else{addRow(ctx.bon,'',String(tq),itemStr,ctx.dept,card.client||'','','',fbUser?resolveInspName(fbUser.email):'');}
-}else{addRow(ctx.bon,'',String(tq),itemStr,ctx.dept,card.client||'','','',fbUser?resolveInspName(fbUser.email):'');}
+  }else{addRow(ctx.bon,'',String(tq),itemStr,ctx.dept,getSerieAutoClient(card)||card.client||'','','',fbUser?resolveInspName(fbUser.email):'');}
+}else{addRow(ctx.bon,'',String(tq),itemStr,ctx.dept,getSerieAutoClient(card)||card.client||'','','',fbUser?resolveInspName(fbUser.email):'');}
 closeModal();showToast('✅ Inspecté + sync Série+','success');}
 function cascadeToInventaire(cardId,cgs){if(!fbDb||!cgs.length)return;cgs.forEach(function(cg){['atelier','couture'].forEach(function(sec){fbDb.ref('inventaire_v4/bassin/'+sec).once('value',function(snap){var bd=snap.val()||{};Object.keys(bd).forEach(function(invId){var it=bd[invId];if(it.fromSerie&&it.linkedCmd===cardId&&it.linkedItemIdx===cg.ii&&it.linkedGrandeurIdx===cg.gi){var fid='fab_insp_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);var fi={commande:it.commande,client:it.client,nom:it.nom,grandeur:it.grandeur,quantite:it.quantite,dateAdded:it.dateAdded,completedDate:new Date().toISOString(),completedBy:'auto-inspection',autoInspection:true,fromSerie:true,linkedCmd:it.linkedCmd,linkedItemIdx:it.linkedItemIdx,linkedGrandeurIdx:it.linkedGrandeurIdx,originalId:invId};fbDb.ref('inventaire_v4/fabrique/'+sec+'/'+fid).set(fi);fbDb.ref('inventaire_v4/bassin/'+sec+'/'+invId).remove();console.log('[INSP→INV] Auto-complété '+sec+': '+it.nom+' '+it.grandeur);}});});});})}
-function openManualModal(bon,dept){var emps=getList('employes_atelier'),items=getList('items'),cls=getList('clients'),errs=getList('erreurs');var isI=dept==='inspection';var h='';h+='<div style="margin-bottom:12px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.15);"><span style="font-size:10px;color:rgba(255,255,255,.6);"># Commande</span> <span class="modal-bon-num" style="font-size:18px;margin-left:6px;">'+esc(bon)+'</span></div>';h+='<div style="display:flex;gap:10px;margin-bottom:8px;"><div class="modal-field" style="flex:1;margin-bottom:0;"><div class="modal-field-label">Technicien</div><select id="man-nom"><option value="">—</option>';emps.forEach(function(e){h+='<option>'+esc(e)+'</option>';});h+='</select></div><div class="modal-field" style="width:100px;margin-bottom:0;"><div class="modal-field-label" style="font-size:8px;">Qté Sér./Inv.</div><input type="number" id="man-qty" value="1" min="1"></div></div>';if(isI){h+='<div style="display:flex;gap:10px;margin-bottom:8px;"><div style="flex:1;display:flex;align-items:center;gap:8px;"><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-moulage" onchange="tgMoul()"> Moulage</label><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-peinture" onchange="tgPeinture()"> Peinture Moulage</label></div><div class="modal-field" style="flex:1;margin-bottom:0;"><div class="modal-field-label" style="color:var(--danger);">\u274c Erreur trouvée</div><select id="man-reason" style="background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);"><option value="">— Aucune —</option>';errs.forEach(function(e){h+='<option>'+esc(e)+'</option>';});h+='</select></div></div>';}else{h+='<div style="margin-bottom:8px;display:flex;gap:8px;"><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-moulage" onchange="tgMoul()"> Moulage</label><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-peinture" onchange="tgPeinture()"> Peinture Moulage</label></div>';}h+='<div class="modal-field"><div class="modal-field-label">Client</div><select id="man-client">';cls.forEach(function(c){h+='<option'+(c==='Commande client'?' selected':'')+'>'+esc(c)+'</option>';});h+='</select></div>';h+='<div class="modal-field"><div class="modal-field-label">Item</div><select id="man-item"><option value="">—</option>';items.forEach(function(i){h+='<option>'+esc(i)+'</option>';});h+='</select></div>';h+='<div style="text-align:right;margin-top:12px;"><button class="btn btn-add" onclick="submitMan(\''+esc(bon).replace(/'/g,"\\\\'")+'\',\''+dept+'\')" style="padding:8px 24px;font-size:12px;">\u2705 Ajouter</button></div>';document.getElementById('modalTitle').textContent=isI?'\u2611\ufe0f Inspection':'\ud83e\uddf5 Couture';document.getElementById('modalBody').innerHTML=h;document.getElementById('modalOverlay').classList.add('show');}
+function openManualModal(bon,dept){var emps=getList('employes_atelier'),items=getList('items'),cls=getList('clients'),errs=getList('erreurs');var isI=dept==='inspection';var _manAutoClient='Commande client';var _manSm=_cachedFindSerie(bon);if(_manSm&&_manSm.card){var _mac=getSerieAutoClient(_manSm.card);if(_mac)_manAutoClient=_mac;}var h='';h+='<div style="margin-bottom:12px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.15);"><span style="font-size:10px;color:rgba(255,255,255,.6);"># Commande</span> <span class="modal-bon-num" style="font-size:18px;margin-left:6px;">'+esc(bon)+'</span></div>';h+='<div style="display:flex;gap:10px;margin-bottom:8px;"><div class="modal-field" style="flex:1;margin-bottom:0;"><div class="modal-field-label">Technicien</div><select id="man-nom"><option value="">—</option>';emps.forEach(function(e){h+='<option>'+esc(e)+'</option>';});h+='</select></div><div class="modal-field" style="width:100px;margin-bottom:0;"><div class="modal-field-label" style="font-size:8px;">Qté Sér./Inv.</div><input type="number" id="man-qty" value="1" min="1"></div></div>';if(isI){h+='<div style="display:flex;gap:10px;margin-bottom:8px;"><div style="flex:1;display:flex;align-items:center;gap:8px;"><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-moulage" onchange="tgMoul()"> Moulage</label><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-peinture" onchange="tgPeinture()"> Peinture Moulage</label></div><div class="modal-field" style="flex:1;margin-bottom:0;"><div class="modal-field-label" style="color:var(--danger);">\u274c Erreur trouvée</div><select id="man-reason" style="background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);"><option value="">— Aucune —</option>';errs.forEach(function(e){h+='<option>'+esc(e)+'</option>';});h+='</select></div></div>';}else{h+='<div style="margin-bottom:8px;display:flex;gap:8px;"><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-moulage" onchange="tgMoul()"> Moulage</label><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-peinture" onchange="tgPeinture()"> Peinture Moulage</label></div>';}h+='<div class="modal-field"><div class="modal-field-label">Client</div>';if(_manSm&&_manAutoClient!=='Commande client'){var _dotC=getSerieClientDotColor(_manSm.card);h+='<div style="padding:6px 10px;border-radius:4px;font-weight:700;font-size:12px;color:'+_dotC+';background:'+_dotC+'15;border:1px solid '+_dotC+'40;display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+_dotC+';box-shadow:0 0 4px '+_dotC+';flex-shrink:0;"></span>'+esc(_manAutoClient)+'<span style="font-size:8px;opacity:.6;margin-left:auto;">🔒 Série+</span></div><input type="hidden" id="man-client" value="'+esc(_manAutoClient)+'">';}else{h+='<select id="man-client">';cls.forEach(function(c){h+='<option'+(c===_manAutoClient?' selected':'')+'>'+esc(c)+'</option>';});h+='</select>';}h+='</div>';h+='<div class="modal-field"><div class="modal-field-label">Item</div><select id="man-item"><option value="">—</option>';items.forEach(function(i){h+='<option>'+esc(i)+'</option>';});h+='</select></div>';h+='<div style="text-align:right;margin-top:12px;"><button class="btn btn-add" onclick="submitMan(\''+esc(bon).replace(/'/g,"\\\\'")+'\',\''+dept+'\')" style="padding:8px 24px;font-size:12px;">\u2705 Ajouter</button></div>';document.getElementById('modalTitle').textContent=isI?'\u2611\ufe0f Inspection':'\ud83e\uddf5 Couture';document.getElementById('modalBody').innerHTML=h;document.getElementById('modalOverlay').classList.add('show');}
 function tgMoul(){var m=document.getElementById('man-moulage'),p=document.getElementById('man-peinture'),it=document.getElementById('man-item');if(m&&m.checked){if(p)p.checked=false;it.value='Moulage';}else if(it&&it.value==='Moulage')it.value='';}
 function tgPeinture(){var p=document.getElementById('man-peinture'),m=document.getElementById('man-moulage'),it=document.getElementById('man-item');if(p&&p.checked){if(m)m.checked=false;it.value='Peinture moulage';}else if(it&&it.value==='Peinture moulage')it.value='';}
 
@@ -2898,6 +3182,14 @@ function commitFromEmpty(trId,dept){
     }
   });
   if(!bon){showToast('# bon requis','error');return;}
+  // Auto-fill client from Série+ if user hasn't chosen one manually
+  if(!client || client==='Commande client' || client==='—'){
+    var _smAuto = _cachedFindSerie(bon);
+    if(_smAuto && _smAuto.card){
+      var autoClient = getSerieAutoClient(_smAuto.card);
+      if(autoClient) client = autoClient;
+    }
+  }
   // Create the row with all collected values
   var md=gmd(dept);var rows=md.rows;
   var autoInsp=insp||'';
@@ -2907,7 +3199,7 @@ function commitFromEmpty(trId,dept){
   rows.push({id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:job,qty:qty,item:item||'',client:client,inspecteur:autoInsp,hasError:hasErr,errorReason:reason||'',errQty:hasErr?1:0,description:'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu',permanent:true});
   md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');
 }
-function addRow(bon,nom,qty,item,dept,client,notes,errorReason,inspOverride){var md=gmd(dept);var rows=md.rows;var autoInsp=inspOverride||'';if(!autoInsp&&fbUser&&fbUser.email){autoInsp=resolveInspName(fbUser.email);}if(!autoInsp){var il=dept==='inspection'?getList('inspecteurs'):getList('coutureuses');autoInsp=il[0]||'';}var hasErr=!!errorReason;var newRow={id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:1,qty:parseInt(qty)||1,item:item||'',client:client||'Commande client',inspecteur:autoInsp,hasError:hasErr,errorReason:errorReason||'',errQty:hasErr?1:0,description:notes||'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu',permanent:true,serieSnapshot:{client:client||'',item:item||'',qty:qty,importedAt:new Date().toISOString()}};rows.push(newRow);md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');}
+function addRow(bon,nom,qty,item,dept,client,notes,errorReason,inspOverride){if(!client||client==='Commande client'){var _smA=_cachedFindSerie(bon);if(_smA&&_smA.card){var ac=getSerieAutoClient(_smA.card);if(ac)client=ac;}}var md=gmd(dept);var rows=md.rows;var autoInsp=inspOverride||'';if(!autoInsp&&fbUser&&fbUser.email){autoInsp=resolveInspName(fbUser.email);}if(!autoInsp){var il=dept==='inspection'?getList('inspecteurs'):getList('coutureuses');autoInsp=il[0]||'';}var hasErr=!!errorReason;var newRow={id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:1,qty:parseInt(qty)||1,item:item||'',client:client||'Commande client',inspecteur:autoInsp,hasError:hasErr,errorReason:errorReason||'',errQty:hasErr?1:0,description:notes||'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu',permanent:true,serieSnapshot:{client:client||'',item:item||'',qty:qty,importedAt:new Date().toISOString()}};rows.push(newRow);md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');}
 
 /* ═══ STATS ═══ */
 var statsView='atelier';
@@ -2974,8 +3266,8 @@ function renderAtelierStats(month){
   var totalSI=0;Object.values(empI).forEach(function(s){totalSI+=s.qtySI;});
   var errPct=iR.length>0?((errEntries.length/iR.length)*100).toFixed(1):'0';
 
-  // Séparer erreurs France/Vermeiren vs autres
-  var EXTERN_CLIENTS=['france','vermeiren'];
+  // Séparer erreurs Série+ vs autres
+  var EXTERN_CLIENTS=['france','vermeiren','c1south','hme','autre'];
   function isExternClient(client){var c=(client||'').toLowerCase();for(var i=0;i<EXTERN_CLIENTS.length;i++){if(c.indexOf(EXTERN_CLIENTS[i])>=0)return true;}return false;}
   var errExtern=errEntries.filter(function(r){return isExternClient(r.client);});
   var errIntern=errEntries.filter(function(r){return !isExternClient(r.client);});
@@ -2998,14 +3290,14 @@ function renderAtelierStats(month){
     // ── Résumé: Internes vs Externes ──
     html+='<div style="display:flex;gap:8px;padding:6px 8px;font-size:10px;border-bottom:1px solid rgba(239,68,68,.15);">';
     html+='<div style="flex:1;padding:6px 10px;background:rgba(239,68,68,.08);border-radius:5px;text-align:center;"><div style="font-weight:700;color:var(--danger);font-size:14px;">'+errIntern.length+'</div><div style="color:var(--text-muted);">Internes ('+pctIntern+'%)</div></div>';
-    html+='<div style="flex:1;padding:6px 10px;background:rgba(59,130,246,.08);border-radius:5px;text-align:center;"><div style="font-weight:700;color:var(--info);font-size:14px;">'+errExtern.length+'</div><div style="color:var(--text-muted);">France / Vermeiren ('+pctExtern+'%)</div></div>';
+    html+='<div style="flex:1;padding:6px 10px;background:rgba(59,130,246,.08);border-radius:5px;text-align:center;"><div style="font-weight:700;color:var(--info);font-size:14px;">'+errExtern.length+'</div><div style="color:var(--text-muted);">Série+ ('+pctExtern+'%)</div></div>';
     html+='</div>';
 
     // ── Tableau détail erreurs (toutes) ──
     var errEmps={};errEntries.forEach(function(r){var n=r.nom||'?';errEmps[n]=(errEmps[n]||0)+1;});
     html+='<div class="err-filter-bar"><label>👤</label><select id="err-filter-emp" onchange="filterErrTable()"><option value="">Tous</option>';
     Object.entries(errEmps).sort(function(a,b){return b[1]-a[1];}).forEach(function(x){html+='<option value="'+esc(x[0])+'">'+esc(x[0])+' ('+x[1]+')</option>';});
-    html+='</select><select id="err-filter-type" onchange="filterErrTable()" style="margin-left:4px;"><option value="">Toutes</option><option value="intern">Internes seulement</option><option value="extern">France/Vermeiren seulement</option></select><span class="ct" id="err-count-display">'+errEntries.length+'</span></div>';
+    html+='</select><select id="err-filter-type" onchange="filterErrTable()" style="margin-left:4px;"><option value="">Toutes</option><option value="intern">Internes seulement</option><option value="extern">Série+ seulement</option></select><span class="ct" id="err-count-display">'+errEntries.length+'</span></div>';
     html+='<div style="max-height:180px;overflow-y:auto;"><table class="c-tbl" id="err-detail-tbl"><tr><th>Nom</th><th>Date</th><th>Bon</th><th>Client</th><th>Raison</th></tr>';
     errEntries.forEach(function(r){
       var ext=isExternClient(r.client);
@@ -3022,10 +3314,10 @@ function renderAtelierStats(month){
     });
     html+='</table></div>';
 
-    // ── Raisons — France/Vermeiren seulement (si des erreurs existent) ──
+    // ── Raisons — Série+ seulement (si des erreurs existent) ──
     if(errExtern.length>0){
       var byRE={};errExtern.forEach(function(r){var re=r.errorReason||'?';byRE[re]=(byRE[re]||0)+1;});
-      html+='<div style="padding:3px 6px;border-top:1px solid rgba(59,130,246,.15);"><div style="font-size:9px;font-weight:700;color:var(--info);padding:3px 0;">🌍 Raisons — France / Vermeiren ('+errExtern.length+')</div><table class="c-tbl"><tr><th>Raison</th><th class="n">Nb</th><th>Client</th></tr>';
+      html+='<div style="padding:3px 6px;border-top:1px solid rgba(59,130,246,.15);"><div style="font-size:9px;font-weight:700;color:var(--info);padding:3px 0;">🌍 Raisons — Série+ ('+errExtern.length+')</div><table class="c-tbl"><tr><th>Raison</th><th class="n">Nb</th><th>Client</th></tr>';
       Object.entries(byRE).sort(function(a,b){return b[1]-a[1];}).forEach(function(x){
         // Trouver les clients associés à cette raison
         var clients={};errExtern.forEach(function(r){if((r.errorReason||'?')===x[0])clients[r.client||'?']=true;});

@@ -7710,6 +7710,7 @@ if(localStorage.getItem('physipro_last_email')){
   <div class="tb-right">
     <div class="tb-search-row">
       <button onclick="openSerieJsonModal()" title="Importer des commandes JSON" style="background:linear-gradient(to bottom,#f59e0b,#b45309);border:1px solid rgba(0,0,0,0.3);color:white;font-size:9px;font-weight:700;padding:2px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;">📥 JSON</button>
+      <button onclick="openRestoreCardsModal()" title="Restaurer les cartes depuis un backup" id="btnRestoreCards" style="display:none;background:linear-gradient(to bottom,#22c55e,#15803d);border:1px solid rgba(0,0,0,0.3);color:white;font-size:9px;font-weight:700;padding:2px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;">🛡️ Restaurer</button>
       <button class="pchat-bell-btn" id="pchatBellBtn" onclick="PChat.toggleNotifPopup()" title="Notifications PChat">
         <span class="pchat-bell-icon">🔔</span>
         <span class="pchat-bell-text" id="pchatBellText"></span>
@@ -8253,6 +8254,7 @@ firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(funct
     var ps=document.getElementById('preauth-hide');if(ps)ps.remove();
     currentUser = { email: user.email, name: getPhysiproDisplayName(user.email) };
     document.getElementById('currentUserName').textContent = currentUser.name;
+    if(user.email==='atelieratp@physipro.com'){var _rb=document.getElementById('btnRestoreCards');if(_rb)_rb.style.display='';}
     localStorage.setItem('physipro_last_email', user.email);
     initLogoMenu('serie');
     checkAppVersion(function(isOK) {
@@ -9571,15 +9573,37 @@ function _attachSerieFirebaseListeners() {
 
     // 2. SUPPRIMER — cartes locales qui n'existent PLUS dans Firebase
     //    (SAUF les cartes dirty = pas encore synchées vers Firebase)
-    Object.keys(serieCardsData).forEach(function(cid) {
-      if (!fbData[cid] && !_serieDirtyCards.has(cid) && !_recentlyDeletedIds.has(cid)) {
-        // La carte n'existe plus dans Firebase et n'est pas en attente de sync → supprimer localement
-        delete serieCardsData[cid];
-        var el = document.querySelector('.mcard[data-id="' + cid + '"]');
-        if (el) el.remove();
-        removed++;
-      }
-    });
+    //    🛡️ PROTECTION: Si Firebase a beaucoup moins de cartes que local, NE PAS supprimer
+    var localCount = Object.keys(serieCardsData).length;
+    var fbCount = Object.keys(fbData).length;
+    var massDeleteBlocked = false;
+    if (localCount > 3 && fbCount < localCount * 0.5) {
+      console.error('🛡️ ANOMALIE: Firebase=' + fbCount + ' vs Local=' + localCount + ' — suppression de masse bloquée. Push local → Firebase.');
+      massDeleteBlocked = true;
+      // Backup avant push
+      try {
+        var _anomalyBk = 'anomaly_' + new Date().toISOString().replace(/[:.]/g, '-');
+        firebaseDb.ref('serieBackups/' + _anomalyBk).set({
+          data: JSON.parse(JSON.stringify(serieCardsData)),
+          reason: 'anomaly-protection',
+          localCount: localCount,
+          fbCount: fbCount,
+          timestamp: new Date().toISOString()
+        });
+      } catch(e) {}
+      // Push local to Firebase
+      _syncAllCardsToFirebase();
+    }
+    if (!massDeleteBlocked) {
+      Object.keys(serieCardsData).forEach(function(cid) {
+        if (!fbData[cid] && !_serieDirtyCards.has(cid) && !_recentlyDeletedIds.has(cid)) {
+          delete serieCardsData[cid];
+          var el = document.querySelector('.mcard[data-id="' + cid + '"]');
+          if (el) el.remove();
+          removed++;
+        }
+      });
+    }
 
     if (added > 0 || updated > 0 || removed > 0) {
       console.log('☁️ Firebase sync: +' + added + ' nouvelles, ' + updated + ' maj, -' + removed + ' supprimées');
@@ -14700,7 +14724,113 @@ function confirmRestoreAtelier(backupKey) {
 }
 window.confirmRestoreAtelier = confirmRestoreAtelier;
 
-/* ================================================================
+/* ═══ RESTAURATION COMPLÈTE DES CARTES DEPUIS BACKUP ═══ */
+function openRestoreCardsModal() {
+  if (!firebaseDb) { showToast('⚠️ Firebase non connecté', 'error'); return; }
+  if (!currentUser || currentUser.email !== 'atelieratp@physipro.com') { showToast('⚠️ Accès réservé', 'error'); return; }
+  var old = document.getElementById('restoreCardsOverlay');
+  if (old) old.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'restoreCardsOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = '<div style="background:linear-gradient(180deg,#1e3a5f,#0f172a);border-radius:12px;width:550px;max-width:95%;max-height:85vh;overflow:hidden;border:2px solid rgba(34,197,94,0.4);box-shadow:0 10px 40px rgba(0,0,0,0.5);display:flex;flex-direction:column;">' +
+    '<div style="background:linear-gradient(to bottom,#22c55e,#15803d);padding:12px 16px;color:white;font-weight:700;font-size:14px;text-align:center;">🛡️ Restaurer les cartes Série+</div>' +
+    '<div style="padding:12px 16px;color:#94a3b8;font-size:10px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.1);">Sélectionnez un backup pour restaurer TOUTES les cartes. Le progrès atelier/couture sera préservé (MAX).</div>' +
+    '<div id="restoreCardsList" style="flex:1;overflow-y:auto;padding:8px;"><div style="text-align:center;padding:20px;color:#fbbf24;">⏳ Chargement des backups...</div></div>' +
+    '<div style="padding:10px 16px;background:rgba(0,0,0,0.3);display:flex;gap:8px;">' +
+      '<button onclick="document.getElementById(\'restoreCardsOverlay\').remove()" style="flex:1;background:#6b7280;border:none;color:white;padding:8px;border-radius:6px;font-weight:600;cursor:pointer;">Fermer</button>' +
+    '</div></div>';
+  document.body.appendChild(overlay);
+  // Load backups
+  firebaseDb.ref('serieBackups').orderByKey().limitToLast(25).once('value', function(snap) {
+    var backups = snap.val() || {};
+    var keys = Object.keys(backups).sort().reverse();
+    var list = document.getElementById('restoreCardsList');
+    if (keys.length === 0) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:#ef4444;font-weight:700;">❌ Aucun backup trouvé dans Firebase</div>';
+      return;
+    }
+    var html = '';
+    keys.forEach(function(key) {
+      var b = backups[key];
+      var data = b.serieCommandes || b.data || b;
+      var cardCount = 0;
+      try { cardCount = Object.keys(data).filter(function(k){return k!=='timestamp'&&k!=='version'&&k!=='user'&&k!=='reason';}).length; } catch(e){}
+      if (cardCount === 0) return;
+      var dateStr = (b.timestamp || key.replace('backup_','').replace('preClear_','')).replace(/T/,' ').substring(0,19);
+      var reason = b.reason || '';
+      var reasonTag = reason ? '<span style="background:rgba(239,68,68,0.2);color:#fca5a5;padding:1px 5px;border-radius:3px;font-size:8px;margin-left:4px;">'+reason+'</span>' : '';
+      var user = b.user || b.clearedBy || '';
+      html += '<div style="padding:10px 12px;margin:4px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:8px;cursor:pointer;transition:all 0.2s;" ' +
+        'onmouseover="this.style.background=\'rgba(34,197,94,0.2)\'" onmouseout="this.style.background=\'rgba(34,197,94,0.08)\'" ' +
+        'onclick="confirmRestoreCards(\''+key+'\')">' +
+        '<div style="font-size:12px;font-weight:700;color:#e2e8f0;">📅 '+dateStr+reasonTag+'</div>' +
+        '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">'+cardCount+' cartes'+(user?' | par '+user:'')+'</div>' +
+      '</div>';
+    });
+    list.innerHTML = html || '<div style="padding:20px;text-align:center;color:#ef4444;">Aucun backup valide</div>';
+  });
+}
+window.openRestoreCardsModal = openRestoreCardsModal;
+
+function confirmRestoreCards(backupKey) {
+  if (!currentUser || currentUser.email !== 'atelieratp@physipro.com') return;
+  if (!confirm('🛡️ Restaurer TOUTES les cartes depuis ce backup?\n\nCeci va:\n- Remettre toutes les cartes du backup\n- Préserver le progrès atelier/couture (MAX)\n- Pousser vers Firebase\n\nContinuer?')) return;
+  firebaseDb.ref('serieBackups/' + backupKey).once('value', function(snap) {
+    var backup = snap.val();
+    if (!backup) { showToast('❌ Backup introuvable', 'error'); return; }
+    var backupCards = backup.serieCommandes || backup.data || backup;
+    // Filtrer les métadonnées
+    var cleanCards = {};
+    Object.keys(backupCards).forEach(function(k) {
+      if (k === 'timestamp' || k === 'version' || k === 'user' || k === 'reason' || k === 'cardCount' || k === 'clearedBy' || k === 'localCount' || k === 'fbCount') return;
+      cleanCards[k] = backupCards[k];
+    });
+    var count = Object.keys(cleanCards).length;
+    if (count === 0) { showToast('❌ Backup vide', 'error'); return; }
+    // Merge: garder le MAX du progrès atelier/couture
+    Object.keys(cleanCards).forEach(function(cid) {
+      var bCard = cleanCards[cid];
+      var lCard = serieCardsData[cid];
+      if (lCard && lCard.items && bCard.items) {
+        bCard.items.forEach(function(bItem, ii) {
+          if (!lCard.items[ii]) return;
+          (bItem.grandeurs || []).forEach(function(bG, gi) {
+            if (!lCard.items[ii].grandeurs || !lCard.items[ii].grandeurs[gi]) return;
+            var lG = lCard.items[ii].grandeurs[gi];
+            ['atelier','couture'].forEach(function(sec) {
+              if (lG[sec] && bG[sec]) {
+                var lQf = parseInt(lG[sec].qtyFait) || 0;
+                var bQf = parseInt(bG[sec].qtyFait) || 0;
+                if (lQf > bQf) bG[sec] = lG[sec]; // Keep local if more advanced
+              } else if (lG[sec] && !bG[sec]) {
+                bG[sec] = lG[sec]; // Keep local progress
+              }
+            });
+          });
+        });
+      }
+      serieCardsData[cid] = bCard;
+    });
+    // Save locally
+    try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
+    // Clear deleted IDs
+    try { localStorage.removeItem('physipro_serie_deleted_cards'); } catch(e) {}
+    _recentlyDeletedIds.clear();
+    // Push to Firebase
+    _syncAllCardsToFirebase();
+    // Rebuild DOM
+    _rebuildSerieDOM();
+    updateSerieCounters();
+    if (currentSerieId && serieCardsData[currentSerieId]) renderSerie3Cols(currentSerieId);
+    document.getElementById('restoreCardsOverlay')?.remove();
+    showToast('✅ ' + count + ' cartes restaurées depuis backup!', 'success');
+  });
+}
+window.confirmRestoreCards = confirmRestoreCards;
+
+/*================================================================
    FIN SECTION 24: PAGE SÉRIE+
    ================================================================ */
 
