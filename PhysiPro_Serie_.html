@@ -7703,13 +7703,13 @@ if(localStorage.getItem('physipro_last_email')){
         <div class="logo-bottom-text">Série+</div>
       </div>
           </div>
-    <button id="serieViewToggleBtn" class="serie-view-toggle-btn mode-production" onclick="toggleSerieViewMode()" title="Basculer vers la vue Production (Atelier/Couture)">🔧 Production</button>
-    <button id="serieAddCmdTopBtn" class="serie-view-toggle-btn" onclick="openAddSerieCommandeModal()" title="Créer une nouvelle commande" style="background:linear-gradient(to bottom,#22c55e,#15803d);">+ Commande</button>
+    <button id="serieAddCmdTopBtn" class="serie-view-toggle-btn" onclick="openAddSerieCommandeModal()" title="Créer une nouvelle commande" style="background:linear-gradient(to bottom,#3b82f6,#1e40af);">📦 Ajouter commande</button>
   </div>
     <div class="logo-menu" id="logoMenu" style="display:none;"></div>
   <div class="tb-center"><span class="top-title">📦 COMMANDES SÉRIE+</span></div>
   <div class="tb-right">
     <div class="tb-search-row">
+      <button onclick="openSerieJsonModal()" title="Importer des commandes JSON" style="background:linear-gradient(to bottom,#f59e0b,#b45309);border:1px solid rgba(0,0,0,0.3);color:white;font-size:9px;font-weight:700;padding:2px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;">📥 JSON</button>
       <button class="pchat-bell-btn" id="pchatBellBtn" onclick="PChat.toggleNotifPopup()" title="Notifications PChat">
         <span class="pchat-bell-icon">🔔</span>
         <span class="pchat-bell-text" id="pchatBellText"></span>
@@ -7720,7 +7720,6 @@ if(localStorage.getItem('physipro_last_email')){
   <div class="tb-user-bottom">
     <div class="user-status">
       <button id="serieRefreshBtn" onclick="serieForceRefresh()" title="Rafraîchir" style="background:linear-gradient(to bottom,#1e40af,#2563eb);border:1px solid rgba(0,0,0,0.4);color:white;font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;cursor:pointer;text-shadow:1px 1px 0 #000;white-space:nowrap;">🔄 Rafraîchir</button>
-      <button id="serieRestaurerBtn" onclick="openRestoreAtelierModal()" title="Restaurer données atelier" style="display:none;background:linear-gradient(to bottom,#dc2626,#991b1b);border:1px solid rgba(0,0,0,0.4);color:white;font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;cursor:pointer;text-shadow:1px 1px 0 #000;white-space:nowrap;">🔧 Restaurer</button>
       <span class="status-dot" id="statusDot"></span><span class="user-name" id="currentUserName">--</span>
     </div>
   </div>
@@ -7870,11 +7869,10 @@ if(localStorage.getItem('physipro_last_email')){
               <div class="serie-dept-col" id="serieDeptAtelier" data-dept="atelier">
                 <div class="serie-dept-header">
                   <div class="serie-header-left">
-                    <button class="serie-dept-btn" onclick="toggleSerieViewMode('commandes')" title="Retour aux commandes" style="font-size:10px;">◀ Commandes</button>
+                    <button class="serie-dept-btn" onclick="toggleSerieViewMode('commandes')" title="Retour aux commandes" style="font-size:10px;">◀ Retour aux commandes</button>
                   </div>
                   <span class="serie-dept-title centered">🔨 Atelier</span>
                   <div class="serie-header-right">
-                    <button class="serie-dept-btn" onclick="openSerieJsonModal()">JSON</button>
                   </div>
                 </div>
                 <div class="serie-dept-stats" id="serieDeptAtelierStats">
@@ -8255,9 +8253,6 @@ firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(funct
     var ps=document.getElementById('preauth-hide');if(ps)ps.remove();
     currentUser = { email: user.email, name: getPhysiproDisplayName(user.email) };
     document.getElementById('currentUserName').textContent = currentUser.name;
-    // Bouton Restaurer visible UNIQUEMENT pour Daniel
-    var _restBtn = document.getElementById('serieRestaurerBtn');
-    if (_restBtn) _restBtn.style.display = (user.email.toLowerCase() === 'atelieratp@physipro.com') ? '' : 'none';
     localStorage.setItem('physipro_last_email', user.email);
     initLogoMenu('serie');
     checkAppVersion(function(isOK) {
@@ -9294,6 +9289,45 @@ var _serieIsSyncing = false;
 var _serieDirtyCards = new Set();
 var _serieSyncTimer = null;
 var _serieListenersAttached = false; // Empêche l'attachement multiple
+var _recentlyDeletedIds = new Set(); // IDs supprimés localement — le listener les ignore
+var _clearAllPending = false; // Flag pour clearAll en cours — bloque le listener complètement
+var _clearAllTimestamp = 0; // Timestamp du dernier clearAll — protection extra 30s
+
+// Charger les IDs supprimés depuis localStorage pour survivre aux rechargements
+(function _loadDeletedIdsFromStorage() {
+  try {
+    var saved = localStorage.getItem('physipro_serie_deleted_cards');
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      var now = Date.now();
+      // Garder les suppressions des dernières 60 secondes
+      Object.keys(parsed).forEach(function(id) {
+        if (now - parsed[id] < 60000) {
+          _recentlyDeletedIds.add(id);
+        }
+      });
+      // Nettoyer les vieux IDs
+      var cleaned = {};
+      Object.keys(parsed).forEach(function(id) {
+        if (now - parsed[id] < 60000) cleaned[id] = parsed[id];
+      });
+      localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(cleaned));
+      if (_recentlyDeletedIds.size > 0) {
+        console.log('🛡️ ' + _recentlyDeletedIds.size + ' ID(s) supprimé(s) chargés depuis localStorage');
+      }
+    }
+    // Charger le timestamp clearAll
+    var clearTs = localStorage.getItem('physipro_serie_clearall_ts');
+    if (clearTs) {
+      _clearAllTimestamp = parseInt(clearTs) || 0;
+      if (Date.now() - _clearAllTimestamp < 30000) {
+        _clearAllPending = true;
+        console.log('🛡️ ClearAll récent détecté — listener bloqué');
+        setTimeout(function() { _clearAllPending = false; }, 30000 - (Date.now() - _clearAllTimestamp));
+      }
+    }
+  } catch(e) {}
+})();
 
 // ═══ 1. SAUVEGARDE LOCALE ═══
 function saveSerieDataToLocalStorage(changedCardId) {
@@ -9491,18 +9525,40 @@ function _attachSerieFirebaseListeners() {
     firebaseDb.ref('serieDeletedCards').set(null).catch(function() {});
   }
 
-  // --- Listener: Données des commandes — AJOUTER + METTRE À JOUR, JAMAIS SUPPRIMER ---
+  // --- Listener: Données des commandes — SYNC BIDIRECTIONNEL ---
   firebaseDb.ref('serieCommandes').on('value', function(snapshot) {
     if (_serieIsSyncing) return;
-    var fbData = snapshot.exists() ? snapshot.val() : {};
-    if (!fbData || typeof fbData !== 'object') return;
+    if (_clearAllPending) return; // clearAll en cours — ignorer tout
 
-    var added = 0, updated = 0;
+    // Protection anti-résurrection: si clearAll récent (<30s) et local vide, bloquer
+    if (_clearAllTimestamp && (Date.now() - _clearAllTimestamp < 30000) && Object.keys(serieCardsData).length === 0) {
+      console.log('🛡️ Listener bloqué — clearAll récent (' + Math.round((Date.now() - _clearAllTimestamp)/1000) + 's)');
+      return;
+    }
+
+    var fbData = snapshot.exists() ? snapshot.val() : null;
+    if (!fbData || typeof fbData !== 'object') fbData = {};
+
+    // Recharger les IDs supprimés depuis localStorage (survivent aux reloads)
+    try {
+      var savedDel = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
+      var now = Date.now();
+      Object.keys(savedDel).forEach(function(id) {
+        if (now - savedDel[id] < 60000) _recentlyDeletedIds.add(id);
+      });
+    } catch(e) {}
+
+    var added = 0, updated = 0, removed = 0;
+
+    // 1. AJOUTER/METTRE À JOUR — cartes dans Firebase
     Object.keys(fbData).forEach(function(cid) {
       if (cid.startsWith('demo-') || cid.startsWith('test-') || cid.startsWith('sample-')) return;
       if (cid === 'timestamp' || cid === 'date' || cid === 'undefined' || cid === 'null') return;
       var fd = fbData[cid];
       if (!fd || typeof fd !== 'object') return;
+
+      // Ignorer les cartes récemment supprimées localement
+      if (_recentlyDeletedIds.has(cid)) return;
 
       if (!serieCardsData[cid]) {
         serieCardsData[cid] = fd;
@@ -9513,8 +9569,20 @@ function _attachSerieFirebaseListeners() {
       }
     });
 
-    if (added > 0 || updated > 0) {
-      console.log('☁️ Firebase: +' + added + ' nouvelles, ' + updated + ' mises à jour');
+    // 2. SUPPRIMER — cartes locales qui n'existent PLUS dans Firebase
+    //    (SAUF les cartes dirty = pas encore synchées vers Firebase)
+    Object.keys(serieCardsData).forEach(function(cid) {
+      if (!fbData[cid] && !_serieDirtyCards.has(cid) && !_recentlyDeletedIds.has(cid)) {
+        // La carte n'existe plus dans Firebase et n'est pas en attente de sync → supprimer localement
+        delete serieCardsData[cid];
+        var el = document.querySelector('.mcard[data-id="' + cid + '"]');
+        if (el) el.remove();
+        removed++;
+      }
+    });
+
+    if (added > 0 || updated > 0 || removed > 0) {
+      console.log('☁️ Firebase sync: +' + added + ' nouvelles, ' + updated + ' maj, -' + removed + ' supprimées');
       try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
     }
 
@@ -10573,10 +10641,18 @@ function serieJsonImport() {
 
       // --- Construire les données de la carte ---
       // Noms de champs alignés sur initSerieCardData + loadSerieFiche
+      var importClient = c.client || 'Autre';
+      // Utiliser les items pour déterminer Série vs Client
+      var tempData = { client: importClient, items: itemsArray };
+      var importTargetCol = _getCardContainerId(tempData);
+      var importIsClient = (SERIE_CLIENT_CONTAINERS.indexOf(importTargetCol) >= 0);
+
       serieCardsData[cardId] = {
         id: cardId,
-        client: c.client || 'Autre',
-        name: c.client || '',
+        client: importClient,
+        targetColumn: importTargetCol,
+        _typeManuel: importIsClient ? 'client' : 'serie',
+        name: importClient,
         order: c.numero || '',
         po: c.po || '',
         numeroPO: c.po || '',
@@ -10584,11 +10660,12 @@ function serieJsonImport() {
         dateRecue: c.dateCommande || c.dateRecue || new Date().toISOString().split('T')[0],
         dateLivraison: c.dateLivraison || '',
         notes: c.notes || '',
-        isBO: false,
+        isBO: importIsClient,
         raisonBO: '',
         items: itemsArray,
         materiaux: {},
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        createdBy: currentUser?.name || 'JSON Import'
       };
 
       if (createSerieCardFromData(cardId, serieCardsData[cardId])) {
@@ -10689,17 +10766,72 @@ function serieJsonClearAll() {
     console.log('🛡️ Pre-clear backup saved:', backupKey);
   } catch(bkErr) { console.error('Backup before clear failed:', bkErr); }
 
-  Object.keys(serieCardsData).forEach(id => {
-    const el = document.querySelector('.mcard[data-id="' + id + '"]') || document.querySelector('.mcard[data-card-id="' + id + '"]');
+  // Marquer TOUS les IDs comme supprimés — persister dans localStorage
+  var deletedMap = {};
+  var now = Date.now();
+  Object.keys(serieCardsData).forEach(function(id) {
+    _recentlyDeletedIds.add(id);
+    deletedMap[id] = now;
+  });
+  try { localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(deletedMap)); } catch(e) {}
+
+  _clearAllPending = true;
+  _clearAllTimestamp = now;
+  try { localStorage.setItem('physipro_serie_clearall_ts', String(now)); } catch(e) {}
+
+  // Annuler tout timer de sync en cours
+  if (_serieSyncTimer) { clearTimeout(_serieSyncTimer); _serieSyncTimer = null; }
+  _serieDirtyCards.clear();
+
+  // Supprimer les éléments DOM
+  Object.keys(serieCardsData).forEach(function(id) {
+    var el = document.querySelector('.mcard[data-id="' + id + '"]') || document.querySelector('.mcard[data-card-id="' + id + '"]');
     if (el) el.remove();
   });
 
   serieCardsData = {};
   try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
-  if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
-    _serieIsSyncing = true;
-    firebaseDb.ref('serieCommandes').set({}).then(function(){ setTimeout(function(){ _serieIsSyncing = false; }, 500); }).catch(function(e){ console.error('Clear FB error:', e); _serieIsSyncing = false; });
+
+  _serieIsSyncing = true;
+
+  function _doClearFirebase(attempt) {
+    if (typeof firebaseDb === 'undefined' || !firebaseDb || !isFirebaseEnabled) {
+      _serieIsSyncing = false;
+      _clearAllPending = false;
+      return;
+    }
+    firebaseDb.ref('serieCommandes').set(null).then(function() {
+      console.log('✅ Firebase serieCommandes vidé (tentative ' + attempt + ')');
+      _serieIsSyncing = false;
+      // Garder _clearAllPending pendant 10 secondes pour bloquer le listener
+      setTimeout(function() {
+        _clearAllPending = false;
+        try { localStorage.removeItem('physipro_serie_clearall_ts'); } catch(e) {}
+        // Nettoyer les IDs supprimés après 30 secondes
+        setTimeout(function() {
+          _recentlyDeletedIds.clear();
+          try { localStorage.removeItem('physipro_serie_deleted_cards'); } catch(e) {}
+        }, 20000);
+      }, 10000);
+    }).catch(function(e) {
+      console.error('❌ Clear Firebase échoué (tentative ' + attempt + '):', e);
+      _serieIsSyncing = false;
+      if (attempt < 3) {
+        // Réessayer après 2 secondes
+        showToast('⚠️ Erreur Firebase — réessai ' + (attempt + 1) + '/3...', 'warning');
+        setTimeout(function() { _doClearFirebase(attempt + 1); }, 2000);
+      } else {
+        showToast('❌ Impossible de supprimer dans Firebase après 3 tentatives', 'error');
+        // Garder _clearAllPending pendant 30 secondes pour empêcher la résurrection
+        setTimeout(function() {
+          _clearAllPending = false;
+          try { localStorage.removeItem('physipro_serie_clearall_ts'); } catch(e) {}
+        }, 30000);
+      }
+    });
   }
+
+  _doClearFirebase(1);
   if (typeof updateSerieCounters === 'function') updateSerieCounters();
   showToast('🗑️ Toutes les cartes supprimées', 'success');
 }
@@ -11308,6 +11440,7 @@ function deleteSerieCard(cardId) {
   // 🛡️ Backup automatique avant suppression
   if (typeof serieCreateBackup === 'function') { try { serieCreateBackup(); } catch(e) {} }
   console.log('🗑️ Suppression carte:', cardId, serieCardsData[cardId]?.client);
+  _recentlyDeletedIds.add(cardId); // Empêcher le listener de la re-ajouter
   delete serieCardsData[cardId];
 
   const card = document.querySelector(`.mcard[data-id="${cardId}"]`);
@@ -11321,7 +11454,28 @@ function deleteSerieCard(cardId) {
       .then(function(){ console.log('[DEL] Carte série ' + cardId + ' marquée supprimée'); })
       .catch(function(e){ console.error('[DEL] Erreur:', e); });
     firebaseDb.ref('serieCommandes/' + cardId).remove()
-      .catch(function(e){ console.error('[DEL] Remove from FB error:', e); });
+      .then(function() {
+        console.log('[DEL] Carte ' + cardId + ' supprimée de Firebase OK');
+        // Garder l'ID bloqué pendant 30 secondes pour empêcher la résurrection
+        setTimeout(function() { _recentlyDeletedIds.delete(cardId); }, 30000);
+      })
+      .catch(function(e){
+        console.error('[DEL] Remove from FB error:', e);
+        showToast('⚠️ Erreur suppression Firebase — réessai...', 'warning');
+        // Réessayer une fois
+        setTimeout(function() {
+          firebaseDb.ref('serieCommandes/' + cardId).remove()
+            .then(function() {
+              console.log('[DEL] Carte ' + cardId + ' supprimée de Firebase (2e tentative)');
+              setTimeout(function() { _recentlyDeletedIds.delete(cardId); }, 30000);
+            })
+            .catch(function(e2) {
+              console.error('[DEL] 2e tentative échouée:', e2);
+              // Garder bloqué pendant 60 secondes
+              setTimeout(function() { _recentlyDeletedIds.delete(cardId); }, 60000);
+            });
+        }, 2000);
+      });
   }
 
   try {
