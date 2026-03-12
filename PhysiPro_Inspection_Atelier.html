@@ -103,7 +103,7 @@ body.col-resizing *{cursor:col-resize!important;}
 .data-table tr.partial-row td{border-bottom-color:rgba(251,191,36,.25) !important;}
 .serie-dot{display:inline-block;width:9px;height:9px;border-radius:50%;cursor:pointer;transition:all 0.15s;vertical-align:middle;flex-shrink:0;}
 .serie-dot:hover{transform:scale(1.4);filter:brightness(1.3);}
-.serie-star-icon{font-size:12px;line-height:1;cursor:pointer;transition:all 0.15s;vertical-align:middle;flex-shrink:0;}
+.serie-star-icon{font-size:20px;line-height:1;cursor:pointer;transition:all 0.15s;vertical-align:middle;flex-shrink:0;}
 .serie-star-icon:hover{transform:scale(1.3);filter:brightness(1.3);}
 .serie-indicator{display:inline-flex;align-items:center;justify-content:center;cursor:pointer;vertical-align:middle;margin-right:2px;}
 .partial-badge{display:block;font-size:6px;font-weight:800;color:#fbbf24;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);border-radius:2px;padding:0 2px;text-align:center;line-height:1.3;letter-spacing:.3px;margin-bottom:0px;}
@@ -575,7 +575,7 @@ tr:hover .row-del-btn{opacity:.6;}
     <div class="divider"></div>
     <div style="display:flex;align-items:center;gap:6px;"><select id="insp-month" class="month-select month-sm" onchange="renderTable('inspection')"></select></div>
     <button id="favBtn" class="fav-star-btn" onclick="toggleFavorites()" title="Afficher commandes Série+"><span class="fav-star-icon">⭐</span>Série+</button>
-    <button class="fav-star-btn" onclick="reVerifyAllSerieRows('inspection')" title="Re-vérifier et auto-compléter les commandes Client" style="color:#22c55e;font-size:10px;padding:0 4px;">🔄</button>
+    <button class="fav-star-btn" onclick="reVerifyAllSerieRows('inspection')" title="Re-vérifier et corriger les commandes Série+" style="color:#22c55e;"><span class="fav-star-icon" style="font-size:18px;">🔄</span>Rafraîchir</button>
     <div style="margin-left:auto;display:flex;align-items:center;gap:6px;position:relative;"><button class="col-gear-btn" id="statsBtn" onclick="switchTab('stats')" style="padding:4px 10px;font-size:11px;display:none;">📊 Statistiques</button><button class="col-gear-btn" onclick="toggleColPanel('inspection')">⚙️ Colonnes</button><div class="col-panel" id="colPanel-inspection"></div></div>
   </div>
   <div class="data-table-wrap"><table class="data-table" id="insp-table"><colgroup id="insp-colgroup"></colgroup><thead id="insp-thead"></thead><tbody id="insp-body"></tbody></table></div>
@@ -833,32 +833,63 @@ var FB_PATHS = {
 
 /* ─── Storage keys ─── */
 var SK = 'physipro_serie_cards', IK = 'physipro_inspection_data', CK = 'physipro_couture_data';
-/* 🛡️ BACKUP: Sauvegarde automatique avant chaque écriture Firebase */
-var _lastBackupTime = 0;
+/* 🛡️ BACKUP — 1 slot localStorage + Firebase 30 min */
+var _lastBkTime = 0, _lastKnownInspCount = 0;
+
 function _autoBackup(dept) {
   var now = Date.now();
-  if (now - _lastBackupTime < 60000) return; // Max 1 backup/minute
-  _lastBackupTime = now;
+  if (now - _lastBkTime < 60000) return; // Max 1/min
+  _lastBkTime = now;
   try {
     var lk = dept === 'inspection' ? IK : CK;
     var data = localStorage.getItem(lk);
-    if (data) {
-      var bk = '_backup_' + lk;
-      localStorage.setItem(bk, data);
-      localStorage.setItem(bk + '_ts', new Date().toISOString());
-    }
-  } catch(e) { /* silencieux */ }
+    if (!data) return;
+    var count = _countEntries(JSON.parse(data));
+    if (count < 3) return;
+    localStorage.setItem('_bk_' + lk, data);
+    localStorage.setItem('_bk_' + lk + '_ts', new Date().toISOString());
+  } catch(e) {}
 }
+
+function _inspIntegrityCheck() {
+  try {
+    var data = JSON.parse(localStorage.getItem(IK) || '{}');
+    var count = _countEntries(data);
+    if (_lastKnownInspCount === 0 && count > 0) { _lastKnownInspCount = count; return; }
+    if (_lastKnownInspCount > 5 && count < _lastKnownInspCount * 0.5) {
+      console.error('🚨 INTÉGRITÉ: ' + _lastKnownInspCount + ' → ' + count);
+      var bk = localStorage.getItem('_bk_' + IK);
+      if (bk) {
+        var bkData = JSON.parse(bk);
+        var bkCount = _countEntries(bkData);
+        if (bkCount > count) {
+          Object.keys(bkData).forEach(function(m) {
+            if (!data[m]) { data[m] = bkData[m]; return; }
+            var ids = {}; data[m].forEach(function(r) { if (r.id) ids[r.id] = true; });
+            (bkData[m] || []).forEach(function(r) { if (r.id && !ids[r.id]) data[m].push(r); });
+          });
+          safeLSSet(IK, JSON.stringify(data));
+          showToast('🛡️ ' + (_countEntries(data) - count) + ' entrées récupérées', 'success');
+          renderTable('inspection');
+        }
+      }
+    }
+    if (count > 0) _lastKnownInspCount = count;
+  } catch(e) {}
+}
+setInterval(_inspIntegrityCheck, 120000); // 2 min
+
 function restoreBackup(dept) {
   var lk = dept === 'inspection' ? IK : CK;
-  var bk = '_backup_' + lk;
-  var backup = localStorage.getItem(bk);
-  var ts = localStorage.getItem(bk + '_ts');
-  if (!backup) { showToast('Aucun backup trouvé', 'error'); return; }
-  if (!confirm('Restaurer le backup du ' + (ts || '?') + ' pour ' + dept + '?')) return;
-  localStorage.setItem(lk, backup);
+  var bk = localStorage.getItem('_bk_' + lk);
+  var ts = localStorage.getItem('_bk_' + lk + '_ts');
+  if (!bk) { showToast('Aucun backup trouvé', 'error'); return; }
+  var count = _countEntries(JSON.parse(bk));
+  if (!confirm('Restaurer backup du ' + (ts || '?') + ' (' + count + ' entrées)?')) return;
+  localStorage.setItem(lk, bk);
+  debouncePush(dept);
   renderTable(dept);
-  showToast('✅ Backup restauré pour ' + dept, 'success');
+  showToast('✅ Restauré', 'success');
 }
 window.restoreBackup = restoreBackup;
 
@@ -1356,12 +1387,15 @@ function pushToFB(dept) {
       }
     });
   }).catch(function() {
-    // FB unreachable — push anyway (best effort)
-    setFbWriting(dept, true);
-    setSyncBadge('syncing');
-    fbDb.ref(FB_PATHS[dept]).set(data).then(function() {
-      setTimeout(function() { setFbWriting(dept, false); setSyncBadge('online'); }, 1500);
-    }).catch(function(err) { setFbWriting(dept, false); setSyncBadge('offline'); });
+    // FB unreachable — push only if data is valid
+    if (entryCount > 0) {
+      _autoBackup(dept);
+      setFbWriting(dept, true);
+      setSyncBadge('syncing');
+      fbDb.ref(FB_PATHS[dept]).set(data).then(function() {
+        setTimeout(function() { setFbWriting(dept, false); setSyncBadge('online'); }, 1500);
+      }).catch(function(err) { setFbWriting(dept, false); setSyncBadge('offline'); });
+    }
   });
 }
 function debouncePush(dept) {
@@ -1894,6 +1928,7 @@ function doRefresh(dept) {
 function loadDLocal(d){try{return JSON.parse(localStorage.getItem(d==='inspection'?IK:CK))||{};}catch(e){return {};}}
 function loadD(d){return loadDLocal(d);}
 function saveD(d,data){if(!hasPermission("M"))return;
+  _autoBackup(d);
   safeLSSet(d==='inspection'?IK:CK,JSON.stringify(data));
   debouncePush(d);
   var wrapId=d==='inspection'?'tab-inspection':(d==='couture'?'tab-couture':'tab-'+d);
@@ -2173,24 +2208,11 @@ function renderTable(dept){
       if(row.type==='date'){if(!hideDates)html+='<tr class="date-row"><td colspan="'+nc+'"><div class="date-row-inner"><span class="date-row-label" onclick="editDateSep(event,\''+dept+'\','+idx+')" title="Modifier la date">📅 '+esc(row.dateLabel)+'</span><span class="date-row-del" onclick="delDateSep(\''+dept+'\','+idx+')" title="Supprimer ce séparateur">✕</span></div></td></tr>';continue;}
       var ss=[row.bon,row.nom,row.item,row.client,row.description,row.errorReason].join(' ').toLowerCase();
       if(f&&ss.indexOf(f)<0)continue;
-      // Auto-fix: corriger le label client si un match Série+ existe et que le format est ancien
-      if(!window._clientFixRunning){
-        var _rfSm = _cachedFindSerie((row.bon||'').trim());
-        if(_rfSm && _rfSm.card){
-          var _rfLabel = getSerieAutoClient(_rfSm.card);
-          if(_rfLabel && row.client !== _rfLabel){
-            row.client = _rfLabel;
-            if(!window._renderFixPending){
-              window._renderFixPending=true;
-              setTimeout(function(){
-                window._renderFixPending=false;
-                window._clientFixRunning=true;
-                var _md2=gmd(dept);saveD(dept,_md2.data);
-                window._clientFixRunning=false;
-              },1000);
-            }
-          }
-        }
+      // Auto-fix client label from Série+ (batched, saves once after render)
+      var _rfSm = _cachedFindSerie((row.bon||'').trim());
+      if(_rfSm && _rfSm.card){
+        var _rfLabel = getSerieAutoClient(_rfSm.card);
+        if(_rfLabel && row.client !== _rfLabel){ row.client = _rfLabel; window._renderNeedsSave = true; }
       }
       count++;
       var hasErr=row.hasError!==undefined?row.hasError:((row.errQty||0)>0);
@@ -2227,6 +2249,8 @@ function renderTable(dept){
   } /* fin if(!f) — pas de lignes vides pendant la recherche */
   document.getElementById(tbodyId).innerHTML=html;
   var cntEl=document.getElementById(cntId);if(cntEl)cntEl.innerHTML='<strong>'+count+'</strong> — '+gml(month);
+  // Batch save if client labels were auto-fixed
+  if(window._renderNeedsSave){window._renderNeedsSave=false;setTimeout(function(){var _md3=gmd(dept);saveD(dept,_md3.data);},2000);}
   // Auto-scroll: show last entry row with ~5 rows of visible space below
   scrollToBottom(dept);
 }
@@ -2372,7 +2396,7 @@ function cellHTML(dept,colId,row,idx,count,hasErr){
       else if(_ccl.indexOf('cubro')>=0) _cColor='#9ca3b8';
       else if(_ccl.indexOf('inventaire')>=0) _cColor='#f97316';
       else if(_ccl.indexOf('autre')>=0) _cColor='#9ca3b8';
-      var _cStyle = _cColor ? 'color:'+_cColor+';' : '';
+      var _cStyle = _cColor ? 'color:'+_cColor+';font-size:13px;font-weight:800;' : '';
       return '<div class="cell-dropdown clr-client '+(row.client?'has-value':'empty')+'" style="'+_cStyle+'" onclick="openCellDropdown(\''+dept+'\','+idx+',\'client\',\'Client\',\'clients\')">'+(row.client?esc(row.client):'—')+'</div>';
     case 'insp':return '<div class="cell-dropdown clr-insp '+(row.inspecteur?'has-value':'empty')+'" onclick="openCellDropdown(\''+dept+'\','+idx+',\'inspecteur\',\'Inspecteur\',\'inspecteurs\')">'+(row.inspecteur?esc(row.inspecteur):'—')+'</div>';
     case 'cout':return '<div class="cell-dropdown clr-insp '+(row.inspecteur?'has-value':'empty')+'" onclick="openCellDropdown(\''+dept+'\','+idx+',\'inspecteur\',\'Couturière\',\'coutureuses\')">'+(row.inspecteur?esc(row.inspecteur):'—')+'</div>';
@@ -2453,7 +2477,7 @@ function setReason(d,i,v){var md=gmd(d);var r=md.rows[i];if(!r||r.type!=='entry'
 function tgErr(d,i){var md=gmd(d);var r=md.rows[i];if(!r||r.type!=='entry')return;var c=r.hasError!==undefined?r.hasError:((r.errQty||0)>0);r.hasError=!c;r.errQty=!c?1:0;if(c)r.errorReason='';md.data[md.month]=md.rows;saveD(d,md.data);renderTable(d);}
 function cyc(d,i){var md=gmd(d);var r=md.rows[i];if(!r)return;var o=['recu','enCours','complet'];var c=r.coutureStatus||'recu';r.coutureStatus=o[(o.indexOf(c)+1)%o.length];md.data[md.month]=md.rows;saveD(d,md.data);renderTable(d);}
 function delRow(d,i){if(!confirm('Supprimer?'))return;var md=gmd(d);var row=md.rows[i];if(row&&row.id)markIdDeleted(row.id);md.rows.splice(i,1);md.data[md.month]=md.rows;
-  // FIX: Push immédiatement à Firebase (pas debounce) pour éviter résurrection
+  _autoBackup(d);
   var _delData = md.data;
   var _delCount = _countEntries(_delData);
   safeLSSet(d==='inspection'?IK:CK,JSON.stringify(_delData));
@@ -2469,6 +2493,7 @@ function delRow(d,i){if(!confirm('Supprimer?'))return;var md=gmd(d);var row=md.r
   }
   renderTable(d);showToast('🗑️','info');}
 function delDateSep(d,i){if(!confirm('Supprimer ce séparateur de date?'))return;var md=gmd(d);var row=md.rows[i];if(row&&row.id)markIdDeleted(row.id);md.rows.splice(i,1);md.data[md.month]=md.rows;
+  _autoBackup(d);
   safeLSSet(d==='inspection'?IK:CK,JSON.stringify(md.data));
   if(fbDb&&fbUser){
     setFbWriting(d,true);
@@ -2785,16 +2810,9 @@ function _handleSerieMatch(bon, match, dept) {
   if (!match || !match.card) return;
   var sourceRowIdx = window._reopenRowIdx;
   if (_isClientCard(match.card)) {
-    // Client: auto-compléter toutes les grandeurs sans modal
-    var ok = autoCompleteClientCard(match.cardId, match.card, dept, bon, sourceRowIdx);
-    if (ok) {
-      showToast('✅ Client #' + bon + ' — auto-complété (' + (dept === 'inspection' ? 'Atelier' : 'Couture') + ')', 'success');
-      closeModal();
-    } else {
-      // 🛡️ Déjà complété → ouvrir le modal manuel avec client verrouillé pour re-saisie
-      closeModal();
-      openManualModal(bon, dept);
-    }
+    // Client: auto-compléter Série+ en background, puis ouvrir le modal pour technicien/item
+    autoCompleteClientCard(match.cardId, match.card, dept, bon, sourceRowIdx);
+    openManualModal(bon, dept);
   } else {
     // Série: ouvrir le modal de sélection de grandeurs
     openSerieModal(bon, match, dept);
@@ -3129,7 +3147,7 @@ if(ctx.sourceRowIdx!=null){
 }else{addRow(ctx.bon,'',String(tq),itemStr,ctx.dept,getSerieAutoClient(card)||card.client||'','','',fbUser?resolveInspName(fbUser.email):'');}
 closeModal();showToast('✅ Inspecté + sync Série+','success');}
 function cascadeToInventaire(cardId,cgs){if(!fbDb||!cgs.length)return;cgs.forEach(function(cg){['atelier','couture'].forEach(function(sec){fbDb.ref('inventaire_v4/bassin/'+sec).once('value',function(snap){var bd=snap.val()||{};Object.keys(bd).forEach(function(invId){var it=bd[invId];if(it.fromSerie&&it.linkedCmd===cardId&&it.linkedItemIdx===cg.ii&&it.linkedGrandeurIdx===cg.gi){var fid='fab_insp_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);var fi={commande:it.commande,client:it.client,nom:it.nom,grandeur:it.grandeur,quantite:it.quantite,dateAdded:it.dateAdded,completedDate:new Date().toISOString(),completedBy:'auto-inspection',autoInspection:true,fromSerie:true,linkedCmd:it.linkedCmd,linkedItemIdx:it.linkedItemIdx,linkedGrandeurIdx:it.linkedGrandeurIdx,originalId:invId};fbDb.ref('inventaire_v4/fabrique/'+sec+'/'+fid).set(fi);fbDb.ref('inventaire_v4/bassin/'+sec+'/'+invId).remove();console.log('[INSP→INV] Auto-complété '+sec+': '+it.nom+' '+it.grandeur);}});});});})}
-function openManualModal(bon,dept){var emps=getList('employes_atelier'),items=getList('items'),cls=getList('clients'),errs=getList('erreurs');var isI=dept==='inspection';var _manAutoClient='Commande client';var _manSm=_cachedFindSerie(bon);if(_manSm&&_manSm.card){var _mac=getSerieAutoClient(_manSm.card);if(_mac)_manAutoClient=_mac;}var h='';h+='<div style="margin-bottom:12px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.15);"><span style="font-size:10px;color:rgba(255,255,255,.6);"># Commande</span> <span class="modal-bon-num" style="font-size:18px;margin-left:6px;">'+esc(bon)+'</span></div>';h+='<div style="display:flex;gap:10px;margin-bottom:8px;"><div class="modal-field" style="flex:1;margin-bottom:0;"><div class="modal-field-label">Technicien</div><select id="man-nom"><option value="">—</option>';emps.forEach(function(e){h+='<option>'+esc(e)+'</option>';});h+='</select></div><div class="modal-field" style="width:100px;margin-bottom:0;"><div class="modal-field-label" style="font-size:8px;">Qté Sér./Inv.</div><input type="number" id="man-qty" value="1" min="1"></div></div>';if(isI){h+='<div style="display:flex;gap:10px;margin-bottom:8px;"><div style="flex:1;display:flex;align-items:center;gap:8px;"><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-moulage" onchange="tgMoul()"> Moulage</label><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-peinture" onchange="tgPeinture()"> Peinture Moulage</label></div><div class="modal-field" style="flex:1;margin-bottom:0;"><div class="modal-field-label" style="color:var(--danger);">\u274c Erreur trouvée</div><select id="man-reason" style="background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);"><option value="">— Aucune —</option>';errs.forEach(function(e){h+='<option>'+esc(e)+'</option>';});h+='</select></div></div>';}else{h+='<div style="margin-bottom:8px;display:flex;gap:8px;"><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-moulage" onchange="tgMoul()"> Moulage</label><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-peinture" onchange="tgPeinture()"> Peinture Moulage</label></div>';}h+='<div class="modal-field"><div class="modal-field-label">Client</div>';if(_manSm&&_manAutoClient!=='Commande client'){var _dotC=getSerieClientDotColor(_manSm.card);h+='<div style="padding:6px 10px;border-radius:4px;font-weight:700;font-size:12px;color:'+_dotC+';background:'+_dotC+'15;border:1px solid '+_dotC+'40;display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+_dotC+';box-shadow:0 0 4px '+_dotC+';flex-shrink:0;"></span>'+esc(_manAutoClient)+'<span style="font-size:8px;opacity:.6;margin-left:auto;">🔒 Série+</span></div><input type="hidden" id="man-client" value="'+esc(_manAutoClient)+'">';}else{h+='<select id="man-client">';cls.forEach(function(c){h+='<option'+(c===_manAutoClient?' selected':'')+'>'+esc(c)+'</option>';});h+='</select>';}h+='</div>';h+='<div class="modal-field"><div class="modal-field-label">Item</div><select id="man-item"><option value="">—</option>';items.forEach(function(i){h+='<option>'+esc(i)+'</option>';});h+='</select></div>';h+='<div style="text-align:right;margin-top:12px;"><button class="btn btn-add" onclick="submitMan(\''+esc(bon).replace(/'/g,"\\\\'")+'\',\''+dept+'\')" style="padding:8px 24px;font-size:12px;">\u2705 Ajouter</button></div>';document.getElementById('modalTitle').textContent=isI?'\u2611\ufe0f Inspection':'\ud83e\uddf5 Couture';document.getElementById('modalBody').innerHTML=h;document.getElementById('modalOverlay').classList.add('show');}
+function openManualModal(bon,dept){var emps=getList('employes_atelier'),items=getList('items'),cls=getList('clients'),errs=getList('erreurs');var isI=dept==='inspection';var _manAutoClient='Commande client';var _manSm=_cachedFindSerie(bon);if(_manSm&&_manSm.card){var _mac=getSerieAutoClient(_manSm.card);if(_mac)_manAutoClient=_mac;}var h='';h+='<div style="margin-bottom:12px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.15);"><span style="font-size:10px;color:rgba(255,255,255,.6);"># Commande</span> <span class="modal-bon-num" style="font-size:18px;margin-left:6px;">'+esc(bon)+'</span></div>';h+='<div style="display:flex;gap:10px;margin-bottom:8px;"><div class="modal-field" style="flex:1;margin-bottom:0;"><div class="modal-field-label">Technicien</div><select id="man-nom"><option value="">—</option>';emps.forEach(function(e){h+='<option>'+esc(e)+'</option>';});h+='</select></div><div class="modal-field" style="width:100px;margin-bottom:0;"><div class="modal-field-label" style="font-size:8px;">Qté Sér./Inv.</div><input type="number" id="man-qty" value="1" min="1"></div></div>';if(isI){h+='<div style="display:flex;gap:10px;margin-bottom:8px;"><div style="flex:1;display:flex;align-items:center;gap:8px;"><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-moulage" onchange="tgMoul()"> Moulage</label><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-peinture" onchange="tgPeinture()"> Peinture Moulage</label></div><div class="modal-field" style="flex:1;margin-bottom:0;"><div class="modal-field-label" style="color:var(--danger);">\u274c Erreur trouvée</div><select id="man-reason" style="background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);"><option value="">— Aucune —</option>';errs.forEach(function(e){h+='<option>'+esc(e)+'</option>';});h+='</select></div></div>';}else{h+='<div style="margin-bottom:8px;display:flex;gap:8px;"><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-moulage" onchange="tgMoul()"> Moulage</label><label class="modal-chk chk-moulage" style="padding:6px 12px;border-radius:5px;font-size:11px;"><input type="checkbox" id="man-peinture" onchange="tgPeinture()"> Peinture Moulage</label></div>';}h+='<div class="modal-field"><div class="modal-field-label">Client</div>';if(_manSm&&_manAutoClient!=='Commande client'){var _dotC=getSerieClientDotColor(_manSm.card);var _isSerieStar=!_isClientCard(_manSm.card);var _lockIcon=_isSerieStar?'<span style="color:'+_dotC+';font-size:14px;">★</span>':'<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+_dotC+';box-shadow:0 0 4px '+_dotC+';flex-shrink:0;"></span>';h+='<div style="padding:8px 12px;border-radius:4px;font-weight:700;font-size:13px;color:#94a3b8;background:#1e293b;border:1px solid #334155;display:flex;align-items:center;gap:8px;opacity:0.85;">'+_lockIcon+'<span style="color:'+_dotC+';">'+esc(_manAutoClient)+'</span><span style="font-size:8px;color:#64748b;margin-left:auto;">🔒</span></div><input type="hidden" id="man-client" value="'+esc(_manAutoClient)+'">';}else{h+='<select id="man-client">';cls.forEach(function(c){h+='<option'+(c===_manAutoClient?' selected':'')+'>'+esc(c)+'</option>';});h+='</select>';}h+='</div>';h+='<div class="modal-field"><div class="modal-field-label">Item</div><select id="man-item"><option value="">—</option>';items.forEach(function(i){h+='<option>'+esc(i)+'</option>';});h+='</select></div>';h+='<div style="text-align:right;margin-top:12px;"><button class="btn btn-add" onclick="submitMan(\''+esc(bon).replace(/'/g,"\\\\'")+'\',\''+dept+'\')" style="padding:8px 24px;font-size:12px;">\u2705 Ajouter</button></div>';document.getElementById('modalTitle').textContent=isI?'\u2611\ufe0f Inspection':'\ud83e\uddf5 Couture';document.getElementById('modalBody').innerHTML=h;document.getElementById('modalOverlay').classList.add('show');}
 function tgMoul(){var m=document.getElementById('man-moulage'),p=document.getElementById('man-peinture'),it=document.getElementById('man-item');if(m&&m.checked){if(p)p.checked=false;it.value='Moulage';}else if(it&&it.value==='Moulage')it.value='';}
 function tgPeinture(){var p=document.getElementById('man-peinture'),m=document.getElementById('man-moulage'),it=document.getElementById('man-item');if(p&&p.checked){if(m)m.checked=false;it.value='Peinture moulage';}else if(it&&it.value==='Peinture moulage')it.value='';}
 
@@ -3354,6 +3372,8 @@ function csvCell(v){var s=String(v==null?'':v);if(s.indexOf(',')>=0||s.indexOf('
 function exportCSV(){var tab=document.querySelector('.content.active').id.replace('tab-','');if(tab==='stats'||tab==='resume'){showToast('Inspection/Couture','info');return;}var md=gmd(tab);var entries=(md.rows||[]).filter(function(r){return r.type==='entry';});if(!entries.length){showToast('Vide','info');return;}var isI=tab==='inspection';var hdrs=isI?['Bon','Nom','Job','Qté Sér./Inv.','Item','Client','Inspecteur','Erreur','Raison','Notes']:['Bon','Nom','Job','Qté Sér./Inv.','Item','Client','Couturière','Statut','Notes'];var lines=[hdrs.join(',')];entries.forEach(function(e){var q=parseInt(e.qty)||1;if(isI)lines.push([csvCell(e.bon),csvCell(e.nom),'1',q>1?q:'',csvCell(e.item),csvCell(e.client),csvCell(e.inspecteur),e.hasError?'Oui':'Non',csvCell(e.errorReason||''),csvCell(e.description||'')].join(','));else lines.push([csvCell(e.bon),csvCell(e.nom),'1',q>1?q:'',csvCell(e.item),csvCell(e.client),csvCell(e.inspecteur),csvCell(e.coutureStatus||'recu'),csvCell(e.description||'')].join(','));});var blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='physipro_'+tab+'_'+gmk()+'.csv';a.click();URL.revokeObjectURL(url);showToast('📊','success');}
 // Close column panels on outside click
 document.addEventListener('click',function(e){if(!e.target.closest('.col-gear-btn')&&!e.target.closest('.col-panel')){document.querySelectorAll('.col-panel').forEach(function(p){p.classList.remove('show');});}});
+/* 🛡️ Backup avant fermeture */
+window.addEventListener('beforeunload', function() { _lastBkTime = 0; _autoBackup('inspection'); });
 // FIX #5 + #20: Single unified Escape handler for all overlays
 document.addEventListener('keydown',function(e){
   if(e.key==='Escape'){

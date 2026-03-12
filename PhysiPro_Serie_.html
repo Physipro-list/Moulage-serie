@@ -9332,8 +9332,35 @@ var _clearAllTimestamp = 0; // Timestamp du dernier clearAll — protection extr
 })();
 
 // ═══ 1. SAUVEGARDE LOCALE ═══
+/* 🛡️ Rolling backup — garde les 2 derniers bons snapshots */
+var _lastSaveBackupTime = 0;
+function _rollingBackup() {
+  var now = Date.now();
+  if (now - _lastSaveBackupTime < 60000) return; // Max 1/min
+  _lastSaveBackupTime = now;
+  try {
+    var current = localStorage.getItem('physipro_serie_data');
+    if (!current) return;
+    var count = Object.keys(JSON.parse(current)).length;
+    if (count < 3) return;
+    localStorage.setItem('_bk_serie_data', current);
+    localStorage.setItem('_bk_serie_data_ts', new Date().toISOString());
+  } catch(e) {}
+}
+
 function saveSerieDataToLocalStorage(changedCardId) {
-  // Toujours sauvegarder localStorage — même si version obsolète
+  // 🛡️ PROTECTION: Ne JAMAIS écrire un objet vide si on avait des cartes
+  var newCount = Object.keys(serieCardsData).length;
+  if (newCount === 0) {
+    var existing; try { existing = JSON.parse(localStorage.getItem('physipro_serie_data') || '{}'); } catch(e) { existing = {}; }
+    var existingCount = Object.keys(existing).length;
+    if (existingCount > 3) {
+      console.error('🛡️ [SAVE BLOQUÉ] Tentative d\'écrire 0 cartes alors qu\'il y en avait ' + existingCount + '. Écriture refusée.');
+      return;
+    }
+  }
+  // 🛡️ Rolling backup avant écriture
+  _rollingBackup();
   try {
     localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
   } catch(e) { console.error('Erreur localStorage:', e); }
@@ -9427,7 +9454,10 @@ function _pushCardToFirebaseNow(cardId) {
 // ═══ 4. BULK SYNC — après import JSON ═══
 function _syncAllCardsToFirebase() {
   if (typeof firebaseDb === 'undefined' || !firebaseDb || !isFirebaseEnabled) return;
-  if (Object.keys(serieCardsData).length === 0) return;
+  if (Object.keys(serieCardsData).length === 0) {
+    console.error('🛡️ [BULK SYNC] Bloqué — serieCardsData est vide. Rien à pousser.');
+    return;
+  }
   if (writeBlocked()) return;
 
   _serieIsSyncing = true;
@@ -9470,10 +9500,14 @@ function _mergeSerieCard(local, fb) {
         var lQf = parseInt(lG[dept].qtyFait) || 0;
         if (fQf > lQf) { lG[dept] = fG[dept]; }
         else if (fQf === lQf) {
-          ['note','status','inspected','inspectedAt','exped'].forEach(function(k) {
+          ['note','status','inspected','inspectedAt','inspectedBy','exped','sentToCouture','sentToInventaire','distributed','partiel'].forEach(function(k) {
             if (fG[dept][k] !== undefined) lG[dept][k] = fG[dept][k];
           });
         }
+        // 🛡️ Flags booléens qui ne doivent JAMAIS régresser (true stays true)
+        ['sentToCouture','sentToInventaire','distributed','inspected'].forEach(function(flag) {
+          if (fG[dept][flag] && !lG[dept][flag]) lG[dept][flag] = true;
+        });
       });
     });
   });
@@ -9488,16 +9522,28 @@ function _loadSerieFromLocalStorage() {
     var saved = localStorage.getItem('physipro_serie_data');
     if (!saved) return;
     var rawData = JSON.parse(saved);
-    serieCardsData = {};
+    if (!rawData || typeof rawData !== 'object' || Object.keys(rawData).length === 0) return;
+    var newData = {};
     Object.keys(rawData).forEach(function(cardId) {
       var d = rawData[cardId];
       if (!d || typeof d !== 'object') return;
       if (cardId === 'timestamp' || cardId === 'date' || cardId === 'undefined' || cardId === 'null') return;
       if (cardId.startsWith('demo-') || cardId.startsWith('test-') || cardId.startsWith('sample-')) return;
-      serieCardsData[cardId] = d;
+      newData[cardId] = d;
     });
+    // 🛡️ Ne pas écraser si le parse donne moins que ce qu'on a déjà
+    var currentCount = Object.keys(serieCardsData).length;
+    var newCount = Object.keys(newData).length;
+    if (currentCount > 3 && newCount < currentCount * 0.5) {
+      console.error('🛡️ [LOAD] localStorage a ' + newCount + ' cartes vs mémoire ' + currentCount + '. Chargement ignoré.');
+      return;
+    }
+    serieCardsData = newData;
     console.log('📂 localStorage: ' + Object.keys(serieCardsData).length + ' commandes');
-  } catch (e) { console.error('Erreur localStorage:', e); }
+  } catch (e) {
+    console.error('Erreur localStorage:', e);
+    // 🛡️ NE PAS vider serieCardsData sur erreur de parse
+  }
 }
 
 // ═══ 7. RECRÉER LES CARTES DOM MANQUANTES ═══
@@ -9607,7 +9653,11 @@ function _attachSerieFirebaseListeners() {
 
     if (added > 0 || updated > 0 || removed > 0) {
       console.log('☁️ Firebase sync: +' + added + ' nouvelles, ' + updated + ' maj, -' + removed + ' supprimées');
-      try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
+      // 🛡️ Ne jamais écrire vide
+      if (Object.keys(serieCardsData).length > 0) {
+        _rollingBackup();
+        try { if(Object.keys(serieCardsData).length>0){_rollingBackup();localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
+      }
     }
 
     _rebuildSerieDOM();
@@ -9659,7 +9709,7 @@ function initExistingSerieCards() {
   });
 
   // Sauvegarder état local — PAS de bulk sync vers Firebase (le listener Firebase gère ça)
-  try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
+  try { if(Object.keys(serieCardsData).length>0){_rollingBackup();localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
   if (Object.keys(serieCardsData).length > 0) {
     console.log('📂 Données existantes: ' + Object.keys(serieCardsData).length + ' commandes');
   } else {
@@ -10704,7 +10754,7 @@ function serieJsonImport() {
   });
 
   // Sauvegarder vers localStorage + Firebase (bulk import)
-  try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
+  try { if(Object.keys(serieCardsData).length>0){_rollingBackup();localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
   _syncAllCardsToFirebase();
 
   // Compteurs
@@ -10759,7 +10809,7 @@ function serieJsonCleanupImported() {
     if (el) el.remove();
   });
 
-  try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
+  try { if(Object.keys(serieCardsData).length>0){_rollingBackup();localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled && Object.keys(fbDeletes).length) {
     firebaseDb.ref().update(fbDeletes).catch(function(e){ console.error('Cleanup FB error:', e); });
   }
@@ -10814,7 +10864,7 @@ function serieJsonClearAll() {
   });
 
   serieCardsData = {};
-  try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
+  try { if(Object.keys(serieCardsData).length>0){_rollingBackup();localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
 
   _serieIsSyncing = true;
 
@@ -11261,7 +11311,7 @@ function _purgeEmptySerieCards() {
     fbDeletes['serieCommandes/' + cid] = null;
     // NE PAS écrire dans serieDeletedCards — seul deleteSerieCard() a le droit
   });
-  try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
+  try { if(Object.keys(serieCardsData).length>0){_rollingBackup();localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled && _versionOK) {
     firebaseDb.ref().update(fbDeletes).then(function() {
       console.log('🧹 ' + toDelete.length + ' carte(s) vide(s) supprimée(s) de Firebase');
@@ -11509,7 +11559,7 @@ function deleteSerieCard(cardId) {
   } catch(e) {}
 
   // Firebase handled above via .remove() — just save localStorage
-  try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
+  try { if(Object.keys(serieCardsData).length>0){_rollingBackup();localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
   if (typeof updateSerieCounters === 'function') updateSerieCounters();
   showToast('🗑️ Carte supprimée (entrées Couture/Atelier intactes)', 'success');
 }
@@ -11848,12 +11898,105 @@ function renderSerie3Cols(cardId) {
   
   const items = data.items || [];
   
+  // France client = vue simplifiée (pastille Complet / À faire)
+  if (data.targetColumn === 'serieFranceClientList') {
+    _renderFranceClientSimple(cardId, items);
+    return;
+  }
+  
   // Générer chaque colonne séparément
   renderSerieAtelier(cardId, items);
   renderSerieCouture(cardId, items);
   renderSerieInspection(cardId, items);
   updateDeptStats(cardId);
 }
+
+/* ═══ Vue simplifiée pour France client — pastille Complet/À faire par département ═══ */
+function _renderFranceClientSimple(cardId, items) {
+  ['atelier', 'couture'].forEach(function(dept) {
+    var containerId = dept === 'atelier' ? 'serieDeptAtelierBody' : 'serieDeptCoutureBody';
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    
+    var totalQty = 0, totalFait = 0;
+    items.forEach(function(item) {
+      (item.grandeurs || []).forEach(function(g) {
+        var q = parseInt(g.qty) || 0;
+        totalQty += q;
+        if (g[dept]) totalFait += parseInt(g[dept].qtyFait) || 0;
+      });
+    });
+    
+    var isComplete = totalQty > 0 && totalFait >= totalQty;
+    var pillColor = isComplete ? '#22c55e' : '#f59e0b';
+    var pillBg = isComplete ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.12)';
+    var pillBorder = isComplete ? 'rgba(34,197,94,0.4)' : 'rgba(245,158,11,0.4)';
+    var pillText = isComplete ? '✅ Complet' : '⏳ À faire';
+    var countText = totalFait + ' / ' + totalQty;
+    
+    var html = '<div style="display:flex;align-items:center;justify-content:center;padding:16px 12px;flex-direction:column;gap:6px;">';
+    html += '<div onclick="toggleFranceClientDept(\'' + cardId + '\',\'' + dept + '\')" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:10px 16px;border-radius:8px;background:' + pillBg + ';border:2px solid ' + pillBorder + ';transition:all 0.2s;">';
+    html += '<span style="font-size:14px;font-weight:800;color:' + pillColor + ';">' + pillText + '</span>';
+    html += '<span style="font-size:11px;color:#94a3b8;font-weight:600;">(' + countText + ')</span>';
+    html += '</div>';
+    if (!isComplete) {
+      html += '<div style="font-size:9px;color:#64748b;text-align:center;">Cliquer pour marquer complet</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  });
+  // Inspection column
+  var inspContainer = document.getElementById('serieDeptInspectionBody');
+  if (inspContainer) inspContainer.innerHTML = '';
+  updateDeptStats(cardId);
+}
+
+/* Toggle complet/à faire pour France client */
+function toggleFranceClientDept(cardId, dept) {
+  var data = serieCardsData[cardId];
+  if (!data || !data.items) return;
+  
+  var totalQty = 0, totalFait = 0;
+  data.items.forEach(function(item) {
+    (item.grandeurs || []).forEach(function(g) {
+      totalQty += parseInt(g.qty) || 0;
+      if (g[dept]) totalFait += parseInt(g[dept].qtyFait) || 0;
+    });
+  });
+  
+  var isCurrentlyComplete = totalQty > 0 && totalFait >= totalQty;
+  var fbUpdates = {};
+  
+  data.items.forEach(function(item, ii) {
+    (item.grandeurs || []).forEach(function(g, gi) {
+      var q = parseInt(g.qty) || 0;
+      if (q <= 0) return;
+      if (!g[dept]) g[dept] = {};
+      if (isCurrentlyComplete) {
+        // Toggle OFF → remettre à 0
+        g[dept].qtyFait = 0;
+        g[dept].inspected = false;
+      } else {
+        // Toggle ON → marquer complet
+        g[dept].qtyFait = q;
+        g[dept].inspected = true;
+        g[dept].inspectedAt = new Date().toISOString();
+        g[dept].inspectedBy = currentUser ? currentUser.email : '';
+        if (dept === 'atelier') g[dept].sentToCouture = true;
+        else g[dept].status = 'pret';
+      }
+      fbUpdates['items/' + ii + '/grandeurs/' + gi + '/' + dept] = g[dept];
+    });
+  });
+  
+  saveSerieDataToLocalStorage(cardId);
+  if (typeof firebaseDb !== 'undefined' && firebaseDb) {
+    firebaseDb.ref('serieCommandes/' + cardId).update(fbUpdates);
+  }
+  renderSerie3Cols(cardId);
+  showToast(isCurrentlyComplete ? '⏳ Remis à faire' : '✅ Marqué complet', 'success');
+}
+window.toggleFranceClientDept = toggleFranceClientDept;
 window.renderSerie3Cols = renderSerie3Cols;
 
 // ═══ STATISTIQUES ATELIER / COUTURE ═══
@@ -14599,8 +14742,43 @@ function serieCreateBackup() {
     console.log('💾 Série+ backup créé:', backupKey);
   }).catch(function(err) { console.error('❌ Série+ backup error:', err.message); });
 }
-setInterval(function() { serieCreateBackup(); }, 30 * 60 * 1000);
+setInterval(function() { serieCreateBackup(); }, 30 * 60 * 1000); // 🛡️ Backup toutes les 30 min
 window.addEventListener('beforeunload', function() { serieCreateBackup(); });
+
+/* 🛡️ AUDIT: Vérification d'intégrité périodique */
+var _lastKnownCardCount = 0;
+function _integrityCheck() {
+  var count = Object.keys(serieCardsData).length;
+  // Première exécution — enregistrer le compte
+  if (_lastKnownCardCount === 0 && count > 0) { _lastKnownCardCount = count; return; }
+  // Si on perd plus de 50% des cartes soudainement → alerte + auto-recovery
+  if (_lastKnownCardCount > 5 && count < _lastKnownCardCount * 0.5) {
+    console.error('🚨 INTÉGRITÉ: Perte de cartes détectée! ' + _lastKnownCardCount + ' → ' + count);
+    // Tenter auto-recovery depuis rolling backup
+    try {
+      var slot1 = localStorage.getItem('_bk_serie_data');
+      if (slot1) {
+        var backupData = JSON.parse(slot1);
+        var bkCount = Object.keys(backupData).length;
+        if (bkCount > count) {
+          console.log('🛡️ Auto-recovery depuis rolling backup (' + bkCount + ' cartes)');
+          // Merge: garder le MAX
+          Object.keys(backupData).forEach(function(cid) {
+            if (!serieCardsData[cid]) {
+              serieCardsData[cid] = backupData[cid];
+            }
+          });
+          try { if(Object.keys(serieCardsData).length>0){_rollingBackup();localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
+          _rebuildSerieDOM();
+          showToast('🛡️ ' + (Object.keys(serieCardsData).length - count) + ' cartes récupérées automatiquement', 'success');
+          count = Object.keys(serieCardsData).length;
+        }
+      }
+    } catch(e) { console.error('Auto-recovery failed:', e); }
+  }
+  if (count > 0) _lastKnownCardCount = count;
+}
+setInterval(_integrityCheck, 120000); // 2 min
 
 // ═══ RESTAURATION ATELIER DEPUIS BACKUP ═══
 function openRestoreAtelierModal() {
@@ -14814,7 +14992,7 @@ function confirmRestoreCards(backupKey) {
       serieCardsData[cid] = bCard;
     });
     // Save locally
-    try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
+    try { if(Object.keys(serieCardsData).length>0){_rollingBackup();localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
     // Clear deleted IDs
     try { localStorage.removeItem('physipro_serie_deleted_cards'); } catch(e) {}
     _recentlyDeletedIds.clear();
