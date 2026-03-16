@@ -7764,6 +7764,7 @@ if(localStorage.getItem('physipro_last_email')){
           <div class="serie-col-cmd-header" id="serieColCmdHeader">
             <button class="serie-hr-btn-half" onclick="openAddSerieCommandeModal()">+ Commande</button>
             <button class="serie-hr-btn-half json" onclick="openSerieJsonModal()">📥 JSON</button>
+            <button class="serie-hr-btn-half" onclick="openSerieCompletedLog()" style="background:linear-gradient(to bottom,#16a34a,#15803d);border-color:#15803d;" title="Voir les commandes complétées (30 jours)">📋 Log</button>
           </div>
           <!-- Cartes -->
           <div class="moulages-col-content" id="serieCardsList">
@@ -7813,6 +7814,7 @@ if(localStorage.getItem('physipro_last_email')){
                   <div class="cmd-date-pill" id="serieFieldDateLiv" onclick="openSerieDatePicker('dateLivraison', this)">aaaa-mm-jj</div>
                 </div>
                 <button class="serie-btn-json" onclick="openSerieJsonModal()">📥 Import JSON</button>
+                <button class="serie-btn-json" onclick="openSerieCompletedLog()" style="background:linear-gradient(to bottom,#16a34a,#15803d);border-color:#15803d;margin-top:4px;" title="Historique commandes complétées (30 jours)">📋 Log complétées</button>
               </div>
             </div>
             
@@ -9933,6 +9935,75 @@ function autoPurgeCompletedCards() {
 }
 window.autoPurgeCompletedCards = autoPurgeCompletedCards;
 
+// === MODAL LOG DES CARTES COMPLÉTÉES ===
+function openSerieCompletedLog() {
+  var existing = document.getElementById('serieCompletedLogOverlay');
+  if (existing) { existing.remove(); return; }
+
+  // Lire + nettoyer le log
+  var log = [];
+  try { log = JSON.parse(localStorage.getItem(SERIE_COMPLETED_LOG_KEY) || '[]'); } catch(e) {}
+  _purgeCompletedLogEntries(log);
+
+  // Trier du plus récent au plus ancien
+  log.sort(function(a, b) { return (b.completedAt || 0) - (a.completedAt || 0); });
+
+  var overlay = document.createElement('div');
+  overlay.id = 'serieCompletedLogOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:999999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+  var mois = ['jan','fév','mars','avr','mai','juin','juil','août','sep','oct','nov','déc'];
+  function fmtTs(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts);
+    return d.getDate() + ' ' + mois[d.getMonth()] + ' ' + d.getFullYear() + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+
+  var rowsHtml = '';
+  if (log.length === 0) {
+    rowsHtml = '<tr><td colspan="3" style="text-align:center;padding:20px;color:rgba(255,255,255,0.4);font-style:italic;">Aucune commande complétée dans les 30 derniers jours</td></tr>';
+  } else {
+    log.forEach(function(entry) {
+      var ageMs = Date.now() - (entry.completedAt || 0);
+      var ageDays = Math.floor(ageMs / (24*60*60*1000));
+      var ageLabel = ageDays === 0 ? "Aujourd'hui" : ageDays === 1 ? 'Hier' : ageDays + ' jours';
+      rowsHtml += '<tr style="border-bottom:1px solid rgba(255,255,255,0.06);">' +
+        '<td style="padding:8px 12px;color:#86efac;font-weight:700;">#' + escapeHtml(String(entry.order || '—')) + '</td>' +
+        '<td style="padding:8px 12px;color:#fff;">' + escapeHtml(String(entry.client || '—')) + '</td>' +
+        '<td style="padding:8px 12px;color:rgba(255,255,255,0.5);font-size:11px;">' + fmtTs(entry.completedAt) + '<br><span style="color:#4ade80;font-size:10px;">' + ageLabel + '</span></td>' +
+      '</tr>';
+    });
+  }
+
+  overlay.innerHTML =
+    '<div style="background:linear-gradient(160deg,#04152c 0%,#0f2847 50%,#1a3a5c 100%);border:2px solid rgba(34,197,94,0.3);border-radius:16px;padding:0;max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,0.7);">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.1);">' +
+        '<div>' +
+          '<div style="font-size:16px;font-weight:700;color:#fff;">📋 Log des commandes complétées</div>' +
+          '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;">' + log.length + ' entrée(s) — 30 derniers jours</div>' +
+        '</div>' +
+        '<button onclick="document.getElementById(&apos;serieCompletedLogOverlay&apos;).remove()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);font-size:18px;cursor:pointer;padding:4px 10px;border-radius:8px;line-height:1;">✕</button>' +
+      '</div>' +
+      '<div style="overflow-y:auto;flex:1;">' +
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+          '<thead><tr style="background:rgba(0,0,0,0.3);">' +
+            '<th style="padding:8px 12px;text-align:left;color:rgba(255,255,255,0.5);font-weight:600;">N° Commande</th>' +
+            '<th style="padding:8px 12px;text-align:left;color:rgba(255,255,255,0.5);font-weight:600;">Client</th>' +
+            '<th style="padding:8px 12px;text-align:left;color:rgba(255,255,255,0.5);font-weight:600;">Complétée le</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rowsHtml + '</tbody>' +
+        '</table>' +
+      '</div>' +
+      '<div style="padding:12px 20px;border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:flex-end;gap:8px;">' +
+        '<button onclick="document.getElementById(&apos;serieCompletedLogOverlay&apos;).remove()" style="padding:8px 20px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Fermer</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+}
+window.openSerieCompletedLog = openSerieCompletedLog;
+
 // Initialiser les données des cartes existantes dans le DOM
 function initExistingSerieCards() {
   // [FIX: Query visible containers instead of hidden #serieCardsList]
@@ -10678,6 +10749,22 @@ function updateSerieCardDisplay(cardId) {
   // Mettre à jour la classe de statut sur la carte (change la couleur de fond)
   card.classList.remove('serie-status-produire', 'serie-status-production', 'serie-status-partiel', 'serie-status-complete');
   card.classList.add('serie-status-' + status.key);
+
+  // Log: enregistrer le timestamp de complétion quand la carte passe à "complete"
+  if (status.key === 'complete') {
+    if (!data._completedAt) {
+      data._completedAt = Date.now();
+      // Persister _completedAt dans Firebase + localStorage
+      if (typeof saveSerieDataToLocalStorage === 'function') saveSerieDataToLocalStorage(cardId);
+    }
+    if (typeof addToCompletedLog === 'function') addToCompletedLog(cardId);
+  } else {
+    // Si la carte repasse en cours (ex: quantité modifiée), effacer le timestamp
+    if (data._completedAt) {
+      delete data._completedAt;
+      if (typeof saveSerieDataToLocalStorage === 'function') saveSerieDataToLocalStorage(cardId);
+    }
+  }
 
   // Mettre à jour la classe de couleur client
   const clientKey = (data.client || 'Autre').toLowerCase().replace(/[^a-z0-9]/g, '');
