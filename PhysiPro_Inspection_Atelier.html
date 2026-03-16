@@ -951,8 +951,9 @@ function _safeMerge(fbData, localData) {
   if (fbData) {
     Object.keys(fbData).forEach(function(month) {
       merged[month] = (fbData[month] || []).filter(function(r) {
-        if (r.permanent || r.serieLinked || r.serieSnapshot) return true; // [FIX: NEVER filter permanent rows]
-        return !r.id || !isIdDeleted(r.id);
+        // Si l'ID est explicitement marqué supprimé, toujours filtrer — même les lignes permanentes
+        if (r.id && isIdDeleted(r.id)) return false;
+        return true;
       });
     });
   }
@@ -960,8 +961,8 @@ function _safeMerge(fbData, localData) {
     Object.keys(localData).forEach(function(month) {
       if (!merged[month]) {
         merged[month] = (localData[month] || []).filter(function(r) {
-          if (r.permanent || r.serieLinked || r.serieSnapshot) return true; // [FIX]
-          return !r.id || !isIdDeleted(r.id);
+          if (r.id && isIdDeleted(r.id)) return false;
+          return true;
         });
         return;
       }
@@ -969,16 +970,16 @@ function _safeMerge(fbData, localData) {
       merged[month].forEach(function(r) { if (r.id) ids[r.id] = true; });
       (localData[month] || []).forEach(function(r) {
         if (r.id && !ids[r.id]) {
-          if (r.permanent || r.serieLinked || r.serieSnapshot || !isIdDeleted(r.id)) merged[month].push(r); // [FIX]
+          if (!isIdDeleted(r.id)) merged[month].push(r);
         }
       });
     });
   }
-  // Final filter — but NEVER remove permanent rows
+  // Final filter — respecte toujours les suppressions explicites
   Object.keys(merged).forEach(function(month) {
-    merged[month] = merged[month].filter(function(r) { 
-      if (r.permanent || r.serieLinked || r.serieSnapshot) return true;
-      return !r.id || !isIdDeleted(r.id); 
+    merged[month] = merged[month].filter(function(r) {
+      if (r.id && isIdDeleted(r.id)) return false;
+      return true;
     });
   });
   return merged;
@@ -1205,8 +1206,9 @@ function listenDeletedIds() {
           Object.keys(data).forEach(function(month) {
             var before = data[month].length;
             data[month] = data[month].filter(function(r) {
-              if (r.permanent || r.serieLinked || r.serieSnapshot) return true; // [FIX: NEVER delete permanent/série-linked rows]
-              return !r.id || !isIdDeleted(r.id);
+              // Suppression explicite par ID — priorité absolue sur permanent/serieLinked
+              if (r.id && isIdDeleted(r.id)) return false;
+              return true;
             });
             if (data[month].length < before) cleaned = true;
           });
@@ -1321,11 +1323,20 @@ function listenFB(dept) {
       return;
     }
 
-    var merged = _safeMerge(fbData, localData);
+    // Nettoyer les IDs supprimés du local avant merge
+    var cleanedLocal = JSON.parse(JSON.stringify(localData));
+    Object.keys(cleanedLocal).forEach(function(month) {
+      cleanedLocal[month] = (cleanedLocal[month] || []).filter(function(r) {
+        return !r.id || !isIdDeleted(r.id);
+      });
+    });
+    var cleanedCount = _countEntries(cleanedLocal);
+
+    var merged = _safeMerge(fbData, cleanedLocal);
     var mergedCount = _countEntries(merged);
 
-    // Protection: never reduce data
-    if (localCount > 2 && mergedCount < localCount) {
+    // Protection: never reduce vs cleaned local
+    if (cleanedCount > 2 && mergedCount < cleanedCount) {
       return;
     }
 
@@ -1607,14 +1618,23 @@ function _loadMainData() {
       console.log('[SYNC] ' + dept + ': FB=' + fbCount + ' Local=' + localCount);
 
       if (fbData) {
-        var merged = _safeMerge(fbData, localData);
+        // Nettoyer d'abord les IDs supprimés du local avant toute comparaison
+        var cleanedLocal = JSON.parse(JSON.stringify(localData));
+        Object.keys(cleanedLocal).forEach(function(month) {
+          cleanedLocal[month] = (cleanedLocal[month] || []).filter(function(r) {
+            return !r.id || !isIdDeleted(r.id);
+          });
+        });
+        var cleanedLocalCount = _countEntries(cleanedLocal);
+
+        var merged = _safeMerge(fbData, cleanedLocal);
         var mergedCount = _countEntries(merged);
         console.log('[SYNC] ' + dept + ': Merged=' + mergedCount);
 
-        // Protection: never reduce
-        if (localCount > 2 && mergedCount < localCount) {
-          console.warn('🛡️ [SYNC] ' + dept + ': Keeping local (' + localCount + '), adding FB-only entries');
-          var finalData = JSON.parse(JSON.stringify(localData));
+        // Protection: never reduce vs cleaned local (pas le local brut)
+        if (cleanedLocalCount > 2 && mergedCount < cleanedLocalCount) {
+          console.warn('🛡️ [SYNC] ' + dept + ': Keeping local (' + cleanedLocalCount + '), adding FB-only entries');
+          var finalData = JSON.parse(JSON.stringify(cleanedLocal));
           Object.keys(fbData).forEach(function(month) {
             if (!finalData[month]) finalData[month] = [];
             var ids = {}; finalData[month].forEach(function(r) { if (r.id) ids[r.id] = true; });
@@ -1626,7 +1646,6 @@ function _loadMainData() {
           pushToFB(dept);
         } else {
           safeLSSet(lk, JSON.stringify(merged));
-          // Push to FB if local had unique entries
           if (mergedCount > fbCount) pushToFB(dept);
         }
       } else if (localCount > 0) {
@@ -1906,10 +1925,18 @@ function doRefresh(dept) {
       var lk = dept === 'inspection' ? IK : CK;
       var localData; try { localData = JSON.parse(localStorage.getItem(lk)) || {}; } catch(e) { localData = {}; }
       var localCount = _countEntries(localData);
-      var merged = _safeMerge(fbData, localData);
+      // Nettoyer les IDs supprimés avant merge
+      var cleanedLocal = JSON.parse(JSON.stringify(localData));
+      Object.keys(cleanedLocal).forEach(function(month) {
+        cleanedLocal[month] = (cleanedLocal[month] || []).filter(function(r) {
+          return !r.id || !isIdDeleted(r.id);
+        });
+      });
+      var merged = _safeMerge(fbData, cleanedLocal);
       var mergedCount = _countEntries(merged);
-      if (localCount > 2 && mergedCount < localCount) {
-        console.warn('🛡️ [doRefresh] merged(' + mergedCount + ') < local(' + localCount + ') — keeping local');
+      var cleanedCount = _countEntries(cleanedLocal);
+      if (cleanedCount > 2 && mergedCount < cleanedCount) {
+        console.warn('🛡️ [doRefresh] merged(' + mergedCount + ') < local(' + cleanedCount + ') — keeping local');
       } else {
         safeLSSet(lk, JSON.stringify(merged));
       }
