@@ -9792,7 +9792,146 @@ function loadSerieDataFromLocalStorage() {
   _loadSerieFromLocalStorage();
   _rebuildSerieDOM();
   _attachSerieFirebaseListeners(); // N'attache qu'une fois grâce au flag
+  // Auto-nettoyage du log complété (entrées > 1 mois) au chargement
+  _purgeCompletedLog();
+  // Auto-purge des cartes complétées après un délai (Firebase doit être chargé)
+  setTimeout(function() { autoPurgeCompletedCards(); }, 15000);
 }
+
+// === LOG DES CARTES COMPLÉTÉES ===
+// Clé localStorage: 'physipro_serie_completed_log'
+// Format: [ { order, client, completedAt (timestamp ms) }, ... ]
+
+var SERIE_COMPLETED_LOG_KEY = 'physipro_serie_completed_log';
+var SERIE_COMPLETED_LOG_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 1 mois en ms
+
+// Vérifie si un numéro de commande est dans le log des complétées (dernier 1 mois)
+function isInCompletedLog(order) {
+  var orderClean = String(order || '').trim();
+  if (!orderClean) return false; // Guard: chaîne vide = jamais un match valide
+  try {
+    var log = JSON.parse(localStorage.getItem(SERIE_COMPLETED_LOG_KEY) || '[]');
+    var cutoff = Date.now() - SERIE_COMPLETED_LOG_MAX_AGE;
+    return log.some(function(entry) {
+      return entry.completedAt > cutoff && String(entry.order || '').trim() === orderClean;
+    });
+  } catch(e) { return false; }
+}
+window.isInCompletedLog = isInCompletedLog;
+
+// Ajoute une entrée au log des complétées
+function addToCompletedLog(cardId) {
+  var data = serieCardsData[cardId];
+  if (!data) return;
+  try {
+    var log = JSON.parse(localStorage.getItem(SERIE_COMPLETED_LOG_KEY) || '[]');
+    var order = String(data.order || cardId).trim();
+    // Éviter les doublons
+    log = log.filter(function(e) { return String(e.order || '').trim() !== order; });
+    log.push({
+      order: order,
+      client: escapeHtml(data.client || ''),
+      completedAt: Date.now()
+    });
+    _purgeCompletedLogEntries(log); // Nettoyer avant de sauvegarder
+    localStorage.setItem(SERIE_COMPLETED_LOG_KEY, JSON.stringify(log));
+  } catch(e) { console.error('addToCompletedLog error:', e); }
+}
+window.addToCompletedLog = addToCompletedLog;
+
+// Nettoie les entrées du log plus vieilles que 1 mois (opère sur un tableau en mémoire)
+function _purgeCompletedLogEntries(log) {
+  var cutoff = Date.now() - SERIE_COMPLETED_LOG_MAX_AGE;
+  for (var i = log.length - 1; i >= 0; i--) {
+    if (!log[i].completedAt || log[i].completedAt < cutoff) {
+      log.splice(i, 1);
+    }
+  }
+  return log;
+}
+
+// Nettoie le log en localStorage (appelé au chargement)
+function _purgeCompletedLog() {
+  try {
+    var raw = localStorage.getItem(SERIE_COMPLETED_LOG_KEY);
+    if (!raw) return;
+    var log = JSON.parse(raw);
+    var before = log.length;
+    _purgeCompletedLogEntries(log);
+    if (log.length !== before) {
+      localStorage.setItem(SERIE_COMPLETED_LOG_KEY, JSON.stringify(log));
+      console.log('🧹 Log complétées: ' + (before - log.length) + ' entrée(s) > 1 mois supprimée(s)');
+    }
+  } catch(e) { console.error('_purgeCompletedLog error:', e); }
+}
+window._purgeCompletedLog = _purgeCompletedLog;
+
+// Auto-purge des cartes dont le statut est "complete" depuis plus de 7 jours
+// Appelé 15s après le chargement pour laisser Firebase se synchroniser
+var _autoPurgeHasRun = false;
+function autoPurgeCompletedCards() {
+  if (_autoPurgeHasRun) return;
+  _autoPurgeHasRun = true;
+  if (writeBlocked(true)) { console.log('⛔ autoPurgeCompletedCards: writeBlocked, skip'); return; }
+
+  var AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
+  var now = Date.now();
+
+  // Collecter d'abord les IDs à purger — JAMAIS modifier serieCardsData pendant forEach
+  var toDelete = [];
+  Object.keys(serieCardsData).forEach(function(cardId) {
+    var d = serieCardsData[cardId];
+    if (!d) return;
+    var status = getSerieCardStatus(d);
+    if (status.key !== 'complete') return;
+    var completedAt = d._completedAt || 0;
+    if (!completedAt) return; // Pas de timestamp = ne pas supprimer
+    if (now - completedAt > AGE_MS) {
+      toDelete.push(cardId);
+    }
+  });
+
+  if (toDelete.length === 0) return;
+  console.log('🧹 autoPurgeCompletedCards: ' + toDelete.length + ' carte(s) à archiver');
+
+  // Supprimer (itération sur tableau séparé, serieCardsData n'est plus en cours d'itération)
+  toDelete.forEach(function(cardId) {
+    addToCompletedLog(cardId); // Sauvegarder dans le log avant suppression
+    var el = document.querySelector('.mcard[data-id="' + cardId + '"]');
+    if (el) el.remove();
+    var el2 = document.querySelector('.mcard[data-card-id="' + cardId + '"]');
+    if (el2) el2.remove();
+    delete serieCardsData[cardId];
+  });
+
+  // Sauvegarder localStorage
+  try {
+    if (Object.keys(serieCardsData).length > 0) {
+      _rollingBackup();
+      localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
+    }
+  } catch(e) {}
+
+  // Sauvegarder Firebase en batch
+  if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled && _versionOK) {
+    var fbUpdates = {};
+    toDelete.forEach(function(cardId) {
+      fbUpdates['serieCommandes/' + cardId] = null;
+      var safeKey = cardId.replace(/[.#$\/\[\]]/g, '_');
+      fbUpdates['serieDeletedCards/' + safeKey] = Date.now();
+    });
+    firebaseDb.ref().update(fbUpdates).then(function() {
+      console.log('🧹 autoPurgeCompletedCards: ' + toDelete.length + ' carte(s) archivées dans Firebase');
+    }).catch(function(e) {
+      console.error('autoPurgeCompletedCards Firebase error:', e);
+    });
+  }
+
+  if (typeof updateSerieCounters === 'function') updateSerieCounters();
+  if (typeof rebuildDateSeparators === 'function') rebuildDateSeparators();
+  showToast('🧹 ' + toDelete.length + ' carte(s) complétée(s) archivée(s)', 'info');
+}
+window.autoPurgeCompletedCards = autoPurgeCompletedCards;
 
 // Initialiser les données des cartes existantes dans le DOM
 function initExistingSerieCards() {
@@ -10026,7 +10165,7 @@ function toggleSerieCardType(cardId) {
   overlay.innerHTML =
     '<div id="serieTypeModal">' +
       '<div class="stm-header">🔄 Type de commande</div>' +
-      '<div class="stm-subtext">' + clientName + '</div>' +
+      '<div class="stm-subtext">' + escapeHtml(clientName) + '</div>' +
       '<div class="stm-buttons">' +
         '<div class="stm-btn stm-serie' + (!currentlyClient ? ' stm-active' : '') + '" id="stmBtnSerie">📦 Série</div>' +
         '<div class="stm-btn stm-client' + (currentlyClient ? ' stm-active' : '') + '" id="stmBtnClient">👤 Client</div>' +
@@ -10749,11 +10888,11 @@ function serieJsonPreview() {
     });
 
     html += '<div style="background:#252525;border-radius:6px;padding:8px;margin-bottom:6px;border-left:3px solid #3b82f6;font-size:11px;">';
-    html += '<div><strong style="color:#f59e0b;">#' + (idx + 1) + '</strong> — <strong>' + (c.numero || '?') + '</strong> | ' + (c.client || '?') + '</div>';
-    if (c.dateLivraison) html += '<div style="color:#94a3b8;">Livraison: ' + c.dateLivraison + '</div>';
+    html += '<div><strong style="color:#f59e0b;">#' + (idx + 1) + '</strong> — <strong>' + escapeHtml(c.numero || '?') + '</strong> | ' + escapeHtml(c.client || '?') + '</div>';
+    if (c.dateLivraison) html += '<div style="color:#94a3b8;">Livraison: ' + escapeHtml(c.dateLivraison) + '</div>';
     html += '<div style="margin-top:4px;color:#94a3b8;">';
     Object.entries(grouped).forEach(([name, info]) => {
-      html += '<div>• <strong>' + name + '</strong> — ' + info.grandeurs.join(', ') + '</div>';
+      html += '<div>• <strong>' + escapeHtml(name) + '</strong> — ' + escapeHtml(info.grandeurs.join(', ')) + '</div>';
     });
     html += '</div></div>';
   });
@@ -11549,9 +11688,23 @@ function rebuildDateSeparators() {
 
     // Get all cards and sort by dateLivraison
     const cards = Array.from(container.querySelectorAll('.mcard[data-id]'));
+    // Cache le statut AVANT le sort (évite O(n log n) appels répétés à getSerieCardStatus)
+    const _statusRank = { produire: 0, partiel: 1, complete: 2 };
+    const _cardStatusCache = {};
+    cards.forEach(function(c) {
+      const cid = c.dataset.id || c.dataset.cardId;
+      const d = serieCardsData[cid] || {};
+      _cardStatusCache[cid] = _statusRank[getSerieCardStatus(d).key] ?? 0;
+    });
+    // Tri: 1er bleu (À faire), 2e jaune (En cours), 3e vert (Complet), puis par dateLivraison
     cards.sort((a, b) => {
-      const dA = (serieCardsData[a.dataset.id || a.dataset.cardId] || {}).dateLivraison || '9999-99-99';
-      const dB = (serieCardsData[b.dataset.id || b.dataset.cardId] || {}).dateLivraison || '9999-99-99';
+      const idA = a.dataset.id || a.dataset.cardId;
+      const idB = b.dataset.id || b.dataset.cardId;
+      const sA = _cardStatusCache[idA] ?? 0;
+      const sB = _cardStatusCache[idB] ?? 0;
+      if (sA !== sB) return sA - sB;
+      const dA = (serieCardsData[idA] || {}).dateLivraison || '9999-99-99';
+      const dB = (serieCardsData[idB] || {}).dateLivraison || '9999-99-99';
       return dA.localeCompare(dB);
     });
     cards.forEach(c => container.appendChild(c));
@@ -11784,7 +11937,7 @@ function openSerieCardInfoModal(cardId) {
         </div>
       </div>
       <div class="serie-card-info-footer" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <button onclick="showDeleteConfirmModal('${data.client ? data.client + ' — #' + (data.order || cardId) : '#' + (data.order || cardId)}', function(){ deleteSerieCard('${cardId}'); closeSerieCardInfoModal(); })" style="padding:6px 14px;border:none;border-radius:6px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">🗑️ Supprimer</button>
+        <button onclick="closeSerieCardInfoModal(); confirmDeleteSerieCard('${cardId}');" style="padding:6px 14px;border:none;border-radius:6px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">🗑️ Supprimer</button>
         <button class="serie-card-info-btn-ok" onclick="closeSerieCardInfoModal()">OK</button>
       </div>
     </div>
@@ -11942,7 +12095,7 @@ function loadSerieFiche(cardId) {
   if (fieldSoumission) fieldSoumission.value = data.soumission || '';
   if (fieldDateRecue) fieldDateRecue.textContent = data.dateRecue || 'aaaa-mm-jj';
   if (fieldDateLiv) fieldDateLiv.textContent = data.dateLivraison || 'aaaa-mm-jj';
-  if (fieldNotes) fieldNotes.innerHTML = data.notes || '';
+  if (fieldNotes) fieldNotes.textContent = data.notes || '';
 
   // Délai
   updateSerieDelaiDisplay(cardId);
