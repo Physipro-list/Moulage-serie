@@ -1946,16 +1946,17 @@ tr.item-spacer td { border: none !important; background: transparent !important;
 }
 .sdept-item-pill-cell .pill-item {
   width: 100%;
-  height: 100% !important;
+  height: auto !important;
   min-height: 22px;
   line-height: 1.2 !important;
   display: flex !important;
   align-items: center;
   justify-content: center;
   text-align: center;
-  white-space: nowrap !important;
+  white-space: normal !important;
+  word-break: break-word;
   overflow: hidden;
-  padding: 0 4px !important;
+  padding: 2px 4px !important;
   cursor: pointer;
   background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%) !important;
   color: #fff !important;
@@ -1963,6 +1964,7 @@ tr.item-spacer td { border: none !important; background: transparent !important;
   text-shadow: 0 1px 0 #000;
   border-radius: 3px !important;
   font-weight: 700;
+  font-size: 9px !important;
 }
 .sdept-item-pill-cell .pill-item.item-complete {
   background: linear-gradient(to bottom, #16a34a, #22c55e) !important;
@@ -2435,9 +2437,9 @@ tr.item-spacer td { border: none !important; background: transparent !important;
   width: 100%;
   background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%);
   color: white;
-  font-size: 4px !important;
+  font-size: 9px !important;
   font-weight: 700;
-  padding: 0px 2px;
+  padding: 2px 4px;
   border-radius: 2px;
   cursor: pointer;
   border: 1px solid #000;
@@ -2445,10 +2447,12 @@ tr.item-spacer td { border: none !important; background: transparent !important;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap !important;
+  white-space: normal !important;
+  word-break: break-word;
   box-sizing: border-box;
-  line-height: 10px !important;
-  height: 10px !important;
+  line-height: 1.2 !important;
+  height: auto !important;
+  min-height: 18px;
 }
 
 .pill-item.couture { background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); }
@@ -2481,19 +2485,19 @@ tr.item-spacer td { border: none !important; background: transparent !important;
   display: inline-block;
   background: #475569;
   color: white;
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
-  padding: 0px 2px;
+  padding: 1px 4px;
   border-radius: 2px;
   cursor: pointer;
   border: 1px solid #000;
   text-shadow: 1px 1px 0 #000;
   text-align: center;
-  min-width: 18px;
+  min-width: 22px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 11px;
+  line-height: 14px;
 }
 
 /* v2: Toutes les pastilles grandeur = même gris, AUCUNE variante couleur */
@@ -7764,6 +7768,7 @@ if(localStorage.getItem('physipro_last_email')){
   <div class="tb-right">
     <div class="tb-search-row">
       <button onclick="openSerieJsonModal()" title="Importer des commandes JSON" style="background:linear-gradient(to bottom,#f59e0b,#b45309);border:1px solid rgba(0,0,0,0.3);color:white;font-size:9px;font-weight:700;padding:2px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;">📥 JSON</button>
+      <button onclick="openRestoreFranceModal()" title="Récupérer les commandes France supprimées" style="background:linear-gradient(to bottom,#92400e,#f59e0b);border:1px solid rgba(0,0,0,0.3);color:white;font-size:9px;font-weight:700;padding:2px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;">🔄 France</button>
       <input type="text" id="globalSearch" placeholder="🔍 Rechercher..." oninput="handleGlobalSearch(this.value)" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;padding:3px 8px;border-radius:5px;font-size:10px;width:140px;font-family:inherit;outline:none;">
       <button class="pchat-bell-btn" id="pchatBellBtn" onclick="PChat.toggleNotifPopup()" title="Notifications PChat">
         <span class="pchat-bell-icon">🔔</span>
@@ -9449,16 +9454,16 @@ var _clearAllTimestamp = 0; // Timestamp du dernier clearAll — protection extr
     if (saved) {
       var parsed = JSON.parse(saved);
       var now = Date.now();
-      // Garder les suppressions des dernières 60 secondes
+      var DELETED_TTL = 7 * 24 * 60 * 60 * 1000; // 7 jours
       Object.keys(parsed).forEach(function(id) {
-        if (now - parsed[id] < 60000) {
+        if (now - parsed[id] < DELETED_TTL) {
           _recentlyDeletedIds.add(id);
         }
       });
-      // Nettoyer les vieux IDs
+      // Nettoyer seulement les IDs de plus de 7 jours
       var cleaned = {};
       Object.keys(parsed).forEach(function(id) {
-        if (now - parsed[id] < 60000) cleaned[id] = parsed[id];
+        if (now - parsed[id] < DELETED_TTL) cleaned[id] = parsed[id];
       });
       localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(cleaned));
       if (_recentlyDeletedIds.size > 0) {
@@ -9714,8 +9719,7 @@ function _attachSerieFirebaseListeners() {
   _serieListenersAttached = true;
   console.log('🔌 Firebase listeners attachés');
 
-  // serieDeletedCards DÉSACTIVÉ — c'était la source du bug.
-  // On ne LIT plus serieDeletedCards — c'est un canal d'écriture seulement.
+  // serieDeletedCards : lire au démarrage pour bloquer les résurrections inter-sessions
   if (_versionOK) {
     firebaseDb.ref('serieDeletedCards').set(null).catch(function() {});
   }
@@ -9738,8 +9742,9 @@ function _attachSerieFirebaseListeners() {
     try {
       var savedDel = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
       var now = Date.now();
+      var _DEL_TTL = 7 * 24 * 60 * 60 * 1000;
       Object.keys(savedDel).forEach(function(id) {
-        if (now - savedDel[id] < 60000) _recentlyDeletedIds.add(id);
+        if (now - savedDel[id] < _DEL_TTL) _recentlyDeletedIds.add(id);
       });
     } catch(e) {}
 
@@ -11049,8 +11054,17 @@ function serieJsonImport() {
       const cardId = 'serie-' + Date.now() + '-' + idx + '-' + Math.random().toString(36).substr(2, 5);
 
       // --- Filtrer les items à exclure (housses, accessoires non-produits) ---
+      // --- Filtrer les items à exclure (housses, accessoires, items France stock) ---
       const ITEMS_EXCLUS_CODES = ['HP01','S1900','S1900-RES','S2200','S2465','VR10077','S5001','S5002','S1271','S1277','UL7530','VIF10','PHY7530','D4695','S1902','S2828','S1900RES'];
-      const ITEMS_EXCLUS_MOTS = ['housse','cover','couvre','installation','découpe','decoupe','mousse','accessoire','sur bell','bell base','visserie','hardware','velcro strip','strap','sangle','velcro add','belt','belts'];
+      const ITEMS_EXCLUS_MOTS = [
+        'housse','cover','couvre','installation','découpe','decoupe','mousse','accessoire',
+        'sur bell','bell base','visserie','hardware','velcro strip','strap','sangle','velcro add','belt','belts',
+        'ceinture coussin','ceinture 4 pointes','harnais poitrine','harnais de poitrine',
+        'règle coulissante','regle coulissante',
+        'toile velcro','velcro crochet',
+        'ancrage appui-thoracique','ancrage appui thoracique',
+        'support appui-tête déporté','support appui-tete deporte'
+      ];
 
       // --- Regrouper les items par nom ---
       const groupes = {};
@@ -11095,9 +11109,16 @@ function serieJsonImport() {
       // --- Construire les données de la carte ---
       // Noms de champs alignés sur initSerieCardData + loadSerieFiche
       var importClient = c.client || 'Autre';
-      // Utiliser les items pour déterminer Série vs Client
+      // Si type:stock et client France → forcer France Série
+      var isStockOrder = (c.type === 'stock' || c.type === 'Stock' || c.type === 'STOCK');
+      var clientKeyImp = importClient.toLowerCase().replace(/[^a-z0-9]/g, '');
       var tempData = { client: importClient, items: itemsArray };
-      var importTargetCol = _getCardContainerId(tempData);
+      var importTargetCol;
+      if (isStockOrder && clientKeyImp === 'france') {
+        importTargetCol = 'serieFranceSerieList';
+      } else {
+        importTargetCol = _getCardContainerId(tempData);
+      }
       var importIsClient = (SERIE_CLIENT_CONTAINERS.indexOf(importTargetCol) >= 0);
 
       serieCardsData[cardId] = {
@@ -11385,6 +11406,9 @@ Chaque bon de commande contient des lignes numérotées. Tu dois IGNORER :
 - TOUTES les lignes de housses, couvres, covers, installations, découpes, mousses, accessoires, sangles, velcro, hardware, visserie — même si elles ont un prix
   Exemples à ignorer : HP01, S1900-RES, S2200, S2465, VR10077, S5001, S5002, S1271, S1277, UL7530, VIF10, PHY7530, D4695, S1902, S2828
 - Tout item dont le nom contient : housse, cover, couvre, installation, découpe, mousse, accessoire, strap, sangle, velcro, hardware, sur bell, bell base
+- Les items de type ceinture, harnais, règle coulissante, velcro crochet, toile velcro, ancrage appui-thoracique, support appui-tête déporté → à ignorer complètement
+  Exemples à ignorer : Ceinture coussinée adulte métal, Harnais poitrine souple homme moyen, Ceinture 4 pointes style Y adulte/enfant, Harnais poitrine souple enfant, Règle coulissante 25\"/52\", Toile velcro #3, Velcro crochet noir adhésif, Ancrage appui-thoracique universel, Support appui-tête déporté multi-réglable
+- EXCEPTION : Les items contenant "Table" (ex: Table standard glissières France) doivent être conservés
 
 Tu gardes UNIQUEMENT les produits principaux (coussins, dossiers, appuis thoraciques, pommeaux — ceux avec un ARTICLE NO et un nom de produit reconnu).
 
@@ -11451,7 +11475,8 @@ Génère UNIQUEMENT le JSON brut, sans explications, sans backticks markdown.
       "soumission": "",
       "dateCommande": "2026-02-13",
       "dateLivraison": "2026-03-12",
-      "notes": "Vermeiren Iberica (Spain) - Julie Houtakkers"
+      "notes": "Vermeiren Iberica (Spain) - Julie Houtakkers",
+      "type": ""
     },
     "items": [
       {
@@ -11481,6 +11506,7 @@ Génère UNIQUEMENT le JSON brut, sans explications, sans backticks markdown.
 - **dateCommande** : Date (AAAA-MM-JJ)
 - **dateLivraison** : Shipping date (AAAA-MM-JJ)
 - **notes** : Destinataire final de la ligne INFO CLIENT
+- **type** : Mettre \"stock\" si la commande est une commande de réapprovisionnement de stock (les bons France portant la mention STOCK, RÉASSORT ou similaire). Laisser vide sinon. Les commandes type \"stock\" iront automatiquement dans la colonne France Série.
 
 ### Champs items
 - **nom** : Nom simplifié selon la table ci-dessus
@@ -11968,7 +11994,7 @@ function deleteSerieCard(cardId) {
       .then(function() {
         console.log('[DEL] Carte ' + cardId + ' supprimée de Firebase OK');
         // Garder l'ID bloqué pendant 30 secondes pour empêcher la résurrection
-        setTimeout(function() { _recentlyDeletedIds.delete(cardId); }, 30000);
+        // ID gardé bloqué 7 jours via localStorage — pas besoin de delete() ici
       })
       .catch(function(e){
         console.error('[DEL] Remove from FB error:', e);
@@ -11978,12 +12004,12 @@ function deleteSerieCard(cardId) {
           firebaseDb.ref('serieCommandes/' + cardId).remove()
             .then(function() {
               console.log('[DEL] Carte ' + cardId + ' supprimée de Firebase (2e tentative)');
-              setTimeout(function() { _recentlyDeletedIds.delete(cardId); }, 30000);
+              // ID gardé bloqué 7 jours via localStorage — pas besoin de delete() ici
             })
             .catch(function(e2) {
               console.error('[DEL] 2e tentative échouée:', e2);
               // Garder bloqué pendant 60 secondes
-              setTimeout(function() { _recentlyDeletedIds.delete(cardId); }, 60000);
+              // ID gardé bloqué 7 jours via localStorage
             });
         }, 2000);
       });
@@ -12334,12 +12360,6 @@ function renderSerie3Cols(cardId) {
   if (!data) return;
   
   const items = data.items || [];
-  
-  // France client = vue simplifiée (pastille Complet / À faire)
-  if (data.targetColumn === 'serieFranceClientList') {
-    _renderFranceClientSimple(cardId, items);
-    return;
-  }
   
   // Générer chaque colonne séparément
   renderSerieAtelier(cardId, items);
@@ -15268,6 +15288,166 @@ function openRestoreAtelierModal() {
   });
 }
 window.openRestoreAtelierModal = openRestoreAtelierModal;
+// ═══ RESTAURATION COMMANDES FRANCE SUPPRIMÉES ═══
+function openRestoreFranceModal() {
+  if (!firebaseDb) { showToast('⚠️ Firebase non connecté', 'error'); return; }
+  var old = document.getElementById('restoreFranceOverlay');
+  if (old) old.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'restoreFranceOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML =
+    '<div style="background:linear-gradient(180deg,#1e3a5f,#0f172a);border-radius:12px;width:520px;max-width:95%;max-height:85vh;overflow:hidden;border:2px solid rgba(245,158,11,0.5);box-shadow:0 10px 40px rgba(0,0,0,0.7);display:flex;flex-direction:column;">' +
+    '<div style="background:linear-gradient(to bottom,#92400e,#d97706);padding:12px 16px;color:white;font-weight:700;font-size:14px;text-align:center;">🔄 Récupérer commandes France supprimées</div>' +
+    '<div style="padding:10px 16px;color:#94a3b8;font-size:11px;text-align:center;">Sélectionne un backup pour voir les commandes France qui existaient à ce moment.</div>' +
+    '<div id="restoreFranceList" style="flex:1;overflow-y:auto;padding:8px;"><div style="padding:20px;text-align:center;color:#94a3b8;">Chargement des backups...</div></div>' +
+    '<div style="padding:10px 16px;background:rgba(0,0,0,0.3);display:flex;gap:8px;">' +
+    '<button onclick="document.getElementById(\'restoreFranceOverlay\').remove()" style="flex:1;background:#6b7280;border:none;color:white;padding:8px;border-radius:6px;font-weight:600;cursor:pointer;">✖ Fermer</button>' +
+    '</div></div>';
+  document.body.appendChild(overlay);
+
+  firebaseDb.ref('serieBackups').orderByKey().limitToLast(30).once('value', function(snap) {
+    var backups = snap.val() || {};
+    var keys = Object.keys(backups).sort().reverse();
+    var list = document.getElementById('restoreFranceList');
+    if (keys.length === 0) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:#ef4444;">Aucun backup trouvé dans Firebase</div>';
+      return;
+    }
+    var html = '<div style="padding:4px 8px;font-size:10px;color:#f59e0b;font-weight:700;margin-bottom:4px;">Backups disponibles — clique pour voir les commandes France:</div>';
+    keys.forEach(function(key) {
+      var b = backups[key];
+      var data = b.serieCommandes || b;
+      // Compter les cartes France
+      var francCards = Object.values(data).filter(function(c) {
+        return c && c.client && c.client.toLowerCase().includes('france');
+      });
+      var dateStr = key.replace('backup_','').replace('preClear_','').replace(/-/g,':').replace('T',' ').substring(0,19);
+      var countTxt = francCards.length + ' commande' + (francCards.length !== 1 ? 's' : '') + ' France';
+      var color = francCards.length > 0 ? '#f59e0b' : '#6b7280';
+      html += '<div style="padding:10px 12px;margin:4px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;cursor:pointer;transition:all 0.2s;" ' +
+        'onmouseover="this.style.background=\'rgba(245,158,11,0.2)\'" onmouseout="this.style.background=\'rgba(245,158,11,0.08)\'" ' +
+        'onclick="showFranceBackupDetail(\'' + key + '\')">' +
+        '<div style="font-size:12px;font-weight:700;color:#e2e8f0;">📅 ' + dateStr + '</div>' +
+        '<div style="font-size:10px;color:' + color + ';margin-top:2px;">🇫🇷 ' + countTxt + ' | ' + Object.keys(data).length + ' cartes total</div>' +
+        '</div>';
+    });
+    list.innerHTML = html;
+  });
+}
+window.openRestoreFranceModal = openRestoreFranceModal;
+
+function showFranceBackupDetail(backupKey) {
+  if (!firebaseDb) return;
+  firebaseDb.ref('serieBackups/' + backupKey).once('value', function(snap) {
+    var backup = snap.val();
+    if (!backup) { showToast('❌ Backup introuvable', 'error'); return; }
+    var data = backup.serieCommandes || backup;
+    var francCards = {};
+    Object.keys(data).forEach(function(cid) {
+      var c = data[cid];
+      if (c && c.client && c.client.toLowerCase().includes('france')) francCards[cid] = c;
+    });
+
+    var overlay = document.getElementById('restoreFranceOverlay');
+    if (!overlay) return;
+    var list = document.getElementById('restoreFranceList');
+    if (!list) return;
+
+    if (Object.keys(francCards).length === 0) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:#ef4444;">Aucune commande France dans ce backup</div>' +
+        '<div style="padding:8px;text-align:center;"><button onclick="openRestoreFranceModal()" style="background:#3b82f6;border:none;color:white;padding:8px 16px;border-radius:6px;cursor:pointer;">← Retour</button></div>';
+      return;
+    }
+
+    var dateStr = backupKey.replace('backup_','').replace('preClear_','').replace(/-/g,':').replace('T',' ').substring(0,19);
+    var html = '<div style="padding:4px 8px;font-size:10px;color:#f59e0b;font-weight:700;margin-bottom:4px;">Commandes France — backup du ' + dateStr + ':</div>';
+    Object.keys(francCards).forEach(function(cid) {
+      var c = francCards[cid];
+      var alreadyExists = !!serieCardsData[cid];
+      var orderNum = (c.order || '------').slice(-6);
+      var colLabel = c.targetColumn === 'serieFranceClientList' ? 'France Client' : 'France Série';
+      var itemCount = (c.items || []).length;
+      var bg = alreadyExists ? 'rgba(34,197,94,0.08)' : 'rgba(245,158,11,0.08)';
+      var border = alreadyExists ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.3)';
+      var statusTxt = alreadyExists ? '<span style="color:#22c55e;font-size:9px;">✅ Déjà présente</span>' : '<span style="color:#f59e0b;font-size:9px;">⚠️ Manquante — peut être restaurée</span>';
+      html += '<div style="padding:10px 12px;margin:4px;background:' + bg + ';border:1px solid ' + border + ';border-radius:8px;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+        '<div>' +
+        '<div style="font-size:12px;font-weight:700;color:#e2e8f0;">#' + orderNum + ' — ' + (c.client||'France') + '</div>' +
+        '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">' + colLabel + ' · ' + itemCount + ' item(s) · ' + (c.dateLivraison||'—') + '</div>' +
+        '<div style="margin-top:3px;">' + statusTxt + '</div>' +
+        '</div>' +
+        (!alreadyExists ? '<button onclick="restoreSingleFranceCard(\'' + cid + '\',\'' + backupKey + '\')" style="background:linear-gradient(to bottom,#92400e,#d97706);border:1px solid #d97706;color:white;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">🔄 Restaurer</button>' : '') +
+        '</div></div>';
+    });
+    html += '<div style="padding:8px;margin-top:4px;display:flex;gap:6px;">' +
+      '<button onclick="openRestoreFranceModal()" style="flex:1;background:#3b82f6;border:none;color:white;padding:8px;border-radius:6px;cursor:pointer;font-size:11px;">← Retour</button>' +
+      '<button onclick="restoreAllMissingFrance(\'' + backupKey + '\')" style="flex:2;background:linear-gradient(to bottom,#92400e,#d97706);border:1px solid #d97706;color:white;padding:8px;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px;">🔄 Restaurer toutes les manquantes</button>' +
+      '</div>';
+    list.innerHTML = html;
+  });
+}
+window.showFranceBackupDetail = showFranceBackupDetail;
+
+function restoreSingleFranceCard(cardId, backupKey) {
+  if (serieCardsData[cardId]) { showToast('ℹ️ Carte déjà présente', 'info'); return; }
+  firebaseDb.ref('serieBackups/' + backupKey + '/serieCommandes/' + cardId).once('value', function(snap) {
+    var c = snap.val();
+    if (!c) { showToast('❌ Données introuvables', 'error'); return; }
+    // Retirer de la liste des supprimés pour permettre la restauration
+    try {
+      var delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
+      delete delIds[cardId];
+      localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(delIds));
+    } catch(e) {}
+    firebaseDb.ref('serieDeletedCards/' + cardId.replace(/[.#$\/\[\]]/g,'_')).remove();
+    // Réinsérer dans Firebase et mémoire
+    serieCardsData[cardId] = c;
+    firebaseDb.ref('serieCommandes/' + cardId).set(c);
+    createSerieCardFromData(cardId, c);
+    saveSerieDataToLocalStorage(cardId);
+    if (typeof updateSerieCounters === 'function') updateSerieCounters();
+    showToast('✅ Commande #' + (c.order||'').slice(-6) + ' restaurée!', 'success');
+    showFranceBackupDetail(backupKey); // Rafraîchir la vue
+  });
+}
+window.restoreSingleFranceCard = restoreSingleFranceCard;
+
+function restoreAllMissingFrance(backupKey) {
+  firebaseDb.ref('serieBackups/' + backupKey).once('value', function(snap) {
+    var backup = snap.val();
+    if (!backup) { showToast('❌ Backup introuvable', 'error'); return; }
+    var data = backup.serieCommandes || backup;
+    var restored = 0;
+    var fbUpdates = {};
+    Object.keys(data).forEach(function(cid) {
+      var c = data[cid];
+      if (!c || !c.client || !c.client.toLowerCase().includes('france')) return;
+      if (serieCardsData[cid]) return; // déjà présente
+      // Retirer des supprimés
+      try {
+        var delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
+        delete delIds[cid];
+        localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(delIds));
+      } catch(e) {}
+      firebaseDb.ref('serieDeletedCards/' + cid.replace(/[.#$\/\[\]]/g,'_')).remove();
+      serieCardsData[cid] = c;
+      fbUpdates['serieCommandes/' + cid] = c;
+      createSerieCardFromData(cid, c);
+      restored++;
+    });
+    if (Object.keys(fbUpdates).length > 0) firebaseDb.ref('/').update(fbUpdates);
+    try { if(Object.keys(serieCardsData).length>0){_rollingBackup();localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
+    if (typeof updateSerieCounters === 'function') updateSerieCounters();
+    showToast('✅ ' + restored + ' commande(s) France restaurée(s)!', 'success');
+    document.getElementById('restoreFranceOverlay')?.remove();
+  });
+}
+window.restoreAllMissingFrance = restoreAllMissingFrance;
+
+
 
 function confirmRestoreAtelier(backupKey) {
   if (!confirm('⚠️ Restaurer les données ATELIER depuis ce backup?\n\nCeci va:\n- Remettre les qtyFait Atelier du backup\n- NE PAS toucher Couture/Inspection\n- NE PAS toucher les noms/dates/clients\n\nContinuer?')) return;
