@@ -5953,7 +5953,11 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         if (messagesMap.has(msgId)) {
           const existing = messagesMap.get(msgId);
           // Préserver les mises à jour locales (sentTo, threadParticipants, etc.)
-          messagesMap.set(msgId, { ...existing, ...msg, id: msgId });
+          // Ne pas écraser des valeurs Firebase valides avec des valeurs locales null/vides
+          const merged = { ...existing, ...msg, id: msgId };
+          if (!merged.threadParticipants && existing.threadParticipants) merged.threadParticipants = existing.threadParticipants;
+          if ((!merged.sentTo || merged.sentTo.length === 0) && existing.sentTo && existing.sentTo.length > 0) merged.sentTo = existing.sentTo;
+          messagesMap.set(msgId, merged);
         } else {
           // Nouveau message local, l'ajouter
           messagesMap.set(msgId, { ...msg, id: msgId });
@@ -9159,7 +9163,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             cardName: card.name,
             messageType: 'reply',
             messageContent: (content || '(Image)').substring(0, 100),
-            hasImage: !!image,
+            hasImage: imagesArr.length > 0,
             timestamp: Date.now(),
             threadId: parentQuestion?.id || questionIndex // Lier au thread
           });
@@ -9800,8 +9804,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         image: allImages.length === 1 ? allImages[0] : (allImages.length > 0 ? allImages[0] : ''),
         images: allImages.length > 1 ? allImages : undefined,
         sentTo: [],
-        // Pour les questions, on stockera les participants du thread après sélection
-        threadParticipants: currentComposeType === 'problem' ? [{ name: authorName, email: authorEmail }] : null
+        // Pour les questions ET discussions, on stockera les participants du thread après sélection
+        threadParticipants: (currentComposeType === 'problem' || currentComposeType === 'normal') ? [{ name: authorName, email: authorEmail }] : null
       };
       
       cardsData[currentCardId].messages.push(newMessage);
@@ -10656,7 +10660,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             <div style="font-size: 50px; margin-bottom: 10px;">⏰</div>
             <h2 style="color: #fff; font-size: 18px; margin-bottom: 8px;">Rappel: Raison d'attente</h2>
             <p style="color: #fbbf24; font-size: 14px; margin-bottom: 5px; font-weight: 600;">
-              ${card.name || 'Carte'} - #${card.order || '?'}
+              ${escapeHtml(card.name || 'Carte')} - #${escapeHtml(card.order || '?')}
             </p>
             <p style="color: #94a3b8; font-size: 12px; margin-bottom: 20px;">
               ${totalCount > 1 ? `et ${totalCount - 1} autre(s) carte(s)` : 'Cette carte n\'a pas de raison d\'attente'}
@@ -13482,8 +13486,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           sentAt: new Date().toISOString()
         }));
         
-        // Si c'est un nouveau thread (Question), stocker les participants
-        if (isNewThread || message.type === 'problem') {
+        // Stocker les participants du thread pour Questions ET Discussions
+        if (isNewThread || message.type === 'problem' || message.type === 'normal') {
           const threadParticipants = [
             { name: authorName, email: authorEmail },
             ...selectedDestinataires
@@ -13531,9 +13535,9 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
       if (!data.to || !data.from) return;
       
       const notifData = {
-        to: data.to,
+        to: (data.to || '').toLowerCase().trim(),
         toName: data.toName || data.to.split('@')[0],
-        from: data.from,
+        from: (data.from || '').toLowerCase().trim(),
         fromName: data.fromName || data.from.split('@')[0],
         cardId: data.cardId || '',
         cardName: data.cardName || 'Carte inconnue',
@@ -13607,7 +13611,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
     function initNotifications() {
       if (!firebaseDb || !currentUser) return;
       
-      const userEmail = currentUser.email;
+      const userEmail = (currentUser.email || '').toLowerCase().trim();
       let firstLoad = true;
       
       firebaseDb.ref('moulageNotifications')
@@ -13762,8 +13766,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         html += `
           <div class="notif-card ${typeClass}" data-index="${idx}">
             <div class="notif-card-text">
-              <span class="notif-card-line1">${typeLabel} de <span class="notif-card-from">${notif.fromName || 'Utilisateur'}</span></span>
-              <span class="notif-card-subject">(au sujet du moulage <span class="notif-card-name">${notif.cardName || 'Moulage'}</span>)</span>
+              <span class="notif-card-line1">${typeLabel} de <span class="notif-card-from">${escapeHtml(notif.fromName || 'Utilisateur')}</span></span>
+              <span class="notif-card-subject">(au sujet du moulage <span class="notif-card-name">${escapeHtml(notif.cardName || 'Moulage')}</span>)</span>
             </div>
             <button class="notif-card-btn" onclick="viewNotifAtIndex(${idx})">👁️ ${btnLabel}</button>
           </div>
@@ -13958,11 +13962,11 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
               <button onclick="event.stopPropagation();deleteNotifItem(${idx})" style="position:absolute;top:6px;right:6px;width:20px;height:20px;background:rgba(239,68,68,0.2);border:none;border-radius:50%;color:#ef4444;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;" title="Supprimer">✕</button>
               <div onclick="openNotifDetail(${idx})" style="cursor:pointer;">
               <div class="notif-item-header">
-                <span class="notif-item-from">${icon} ${notif.fromName || 'Utilisateur'}</span>
+                <span class="notif-item-from">${icon} ${escapeHtml(notif.fromName || 'Utilisateur')}</span>
                 <span class="notif-item-time">${timeAgo}</span>
               </div>
-              <div class="notif-item-content">${label}: ${(notif.messageContent || 'Nouveau message').substring(0, 60)}${(notif.messageContent || '').length > 60 ? '...' : ''}</div>
-              <div class="notif-item-card">📋 ${notif.cardName || 'Moulage'} <span class="notif-item-arrow">→</span></div>
+              <div class="notif-item-content">${label}: ${escapeHtml((notif.messageContent || 'Nouveau message').substring(0, 60))}${(notif.messageContent || '').length > 60 ? '...' : ''}</div>
+              <div class="notif-item-card">📋 ${escapeHtml(notif.cardName || 'Moulage')} <span class="notif-item-arrow">→</span></div>
               </div>
             </div>`;
         });
@@ -14415,8 +14419,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             html += `
               <div class="mobile-card ${regionClass}" data-card-id="${card.id}" onclick="openMobileFiche('${card.id}')">
                 <div class="mobile-card-top">
-                  <span class="mobile-card-name">${card.name || 'Sans nom'}</span>
-                  <span class="mobile-card-order">${card.order || ''}</span>
+                  <span class="mobile-card-name">${escapeHtml(card.name || 'Sans nom')}</span>
+                  <span class="mobile-card-order">${escapeHtml(card.order || '')}</span>
                 </div>
                 <div class="mobile-card-separator"></div>
                 <div class="mobile-card-item ${itemClass}" ${itemClick}>${itemDisplay}</div>
@@ -14495,8 +14499,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
           
           const cardContent = `
             <div class="mobile-card-top">
-              <span class="mobile-card-name">${card.name || 'Sans nom'}</span>
-              <span class="mobile-card-order">${card.order || ''}</span>
+              <span class="mobile-card-name">${escapeHtml(card.name || 'Sans nom')}</span>
+              <span class="mobile-card-order">${escapeHtml(card.order || '')}</span>
             </div>
             <div class="mobile-card-separator"></div>
             <div class="mobile-card-item ${itemClass}" ${itemClick}>${itemDisplay}</div>
@@ -15214,8 +15218,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             <div class="mobile-chat-msg" data-index="${msgIndex}" style="background:#fff;border-radius:6px;padding:8px;margin-bottom:6px;position:relative;">
               <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${msgIndex})" title="Supprimer">✕</button>
               <button class="mobile-msg-edit-btn" onclick="editMobileMessage(${msgIndex})" title="Modifier">✏️</button>
-              <div class="mobile-msg-author">${msg.author || 'Utilisateur'} • ${msg.date || ''}</div>
-              <div class="mobile-msg-content">${msg.content || ''}</div>
+              <div class="mobile-msg-author">${escapeHtml(msg.author || 'Utilisateur')} • ${msg.date || ''}</div>
+              <div class="mobile-msg-content">${escapeHtml(msg.content || '')}</div>
               ${renderMsgImages(msg)}
             </div>
           `;
@@ -15254,8 +15258,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
               <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${questionMsgIndex})" title="Supprimer">✕</button>
               <button class="mobile-msg-edit-btn" onclick="editMobileMessage(${questionMsgIndex})" title="Modifier">✏️</button>
               <div class="mobile-msg-type question">❓ Question</div>
-              <div class="mobile-msg-author">${thread.question.author || 'Utilisateur'} • ${thread.question.date || ''}</div>
-              <div class="mobile-msg-content">${thread.question.content || ''}</div>
+              <div class="mobile-msg-author">${escapeHtml(thread.question.author || 'Utilisateur')} • ${thread.question.date || ''}</div>
+              <div class="mobile-msg-content">${escapeHtml(thread.question.content || '')}</div>
               ${renderMsgImages(thread.question)}
             </div>`;
           
@@ -15266,8 +15270,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
                 <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${replyMsgIndex})" title="Supprimer">✕</button>
                 <button class="mobile-msg-edit-btn" onclick="editMobileMessage(${replyMsgIndex})" title="Modifier">✏️</button>
                 <div class="mobile-msg-type reply">💬 Réponse</div>
-                <div class="mobile-msg-author">${reply.author || 'Utilisateur'} • ${reply.date || ''}</div>
-                <div class="mobile-msg-content">${reply.content || ''}</div>
+                <div class="mobile-msg-author">${escapeHtml(reply.author || 'Utilisateur')} • ${reply.date || ''}</div>
+                <div class="mobile-msg-content">${escapeHtml(reply.content || '')}</div>
                 ${renderMsgImages(reply)}
               </div>
             `;
@@ -15285,8 +15289,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
             <div class="mobile-chat-msg" data-index="${msgIndex}" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;position:relative;">
               <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${msgIndex})" title="Supprimer">✕</button>
               <button class="mobile-msg-edit-btn" onclick="editMobileMessage(${msgIndex})" title="Modifier">✏️</button>
-              <div class="mobile-msg-author">💬 ${msg.author || 'Utilisateur'} • ${msg.date || ''}</div>
-              <div class="mobile-msg-content">${msg.content || ''}</div>
+              <div class="mobile-msg-author">💬 ${escapeHtml(msg.author || 'Utilisateur')} • ${msg.date || ''}</div>
+              <div class="mobile-msg-content">${escapeHtml(msg.content || '')}</div>
               ${renderMsgImages(msg)}
             </div>
           `;
@@ -15723,7 +15727,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=docum
         image: imageData,
         images: imagesData,
         sentTo: [],
-        threadParticipants: mobileComposeType === 'problem' ? [{ name: authorName, email: authorEmail }] : null,
+        threadParticipants: (mobileComposeType === 'problem' || mobileComposeType === 'normal') ? [{ name: authorName, email: authorEmail }] : null,
         parentIndex: null
       };
       
