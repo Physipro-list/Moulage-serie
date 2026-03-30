@@ -5938,6 +5938,19 @@ document.addEventListener('DOMContentLoaded', function() {
     el.addEventListener('blur', window._immediateNoteSave);
   });
   
+  // ═══ Simple notes editors (deptNotesEditor + itemNotesEditor) ═══
+  // These have onblur in HTML, but also need input listeners for _dirty flag + auto-save
+  ['deptNotesEditor', 'itemNotesEditor'].forEach(function(edId) {
+    var ed = document.getElementById(edId);
+    if (ed) {
+      ed.addEventListener('input', function() {
+        if (window._loadingCard) return;
+        window._markDirty();
+        window._debouncedNotesSave();
+      });
+    }
+  });
+  
   // Also attach input listeners to left panels for image additions (they trigger DOM changes)
   document.querySelectorAll('.notes-split-text').forEach(function(el) {
     // Use MutationObserver for non-contenteditable elements to detect image additions
@@ -8051,6 +8064,14 @@ function initPSM() {
           psmData[currentCardId][dept].prixMajore = localCardSnapshot[dept].prixMajore;
           psmData[currentCardId][dept].simpleNotes = localCardSnapshot[dept].simpleNotes;
           psmData[currentCardId][dept].noteImage = localCardSnapshot[dept].noteImage;
+          // Items (images, notes, temps per item) — CRITICAL for item data survival
+          if (localCardSnapshot[dept].items) {
+            psmData[currentCardId][dept].items = localCardSnapshot[dept].items;
+          }
+          // Annotations and materials
+          if (localCardSnapshot[dept].annotations) psmData[currentCardId][dept].annotations = localCardSnapshot[dept].annotations;
+          if (localCardSnapshot[dept].questAnnotations) psmData[currentCardId][dept].questAnnotations = localCardSnapshot[dept].questAnnotations;
+          if (localCardSnapshot[dept].materiaux) psmData[currentCardId][dept].materiaux = localCardSnapshot[dept].materiaux;
           // NOTE: complete is NOT merged from local — Firebase is authoritative for completion state
           // This ensures that when another dept completes remotely, it's properly reflected
         }
@@ -8061,6 +8082,10 @@ function initPSM() {
       psmData[currentCardId].questionnementResolvedAt = localCardSnapshot.questionnementResolvedAt;
       psmData[currentCardId].questionnementResolvedBy = localCardSnapshot.questionnementResolvedBy;
       psmData[currentCardId].questionnementSentAt = localCardSnapshot.questionnementSentAt;
+      // Preserve devisImages and serviceNotes
+      if (localCardSnapshot.devisImages) psmData[currentCardId].devisImages = localCardSnapshot.devisImages;
+      if (localCardSnapshot.serviceNotesHtml !== undefined) psmData[currentCardId].serviceNotesHtml = localCardSnapshot.serviceNotesHtml;
+      if (localCardSnapshot.serviceNotes !== undefined) psmData[currentCardId].serviceNotes = localCardSnapshot.serviceNotes;
     }
     
     renderCards();
