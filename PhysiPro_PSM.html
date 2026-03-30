@@ -6326,6 +6326,13 @@ function switchDept(dept) {
   
   // Refresh questionnement bottom zone for new dept
   if (typeof renderQuestAnnotBlocks === 'function') renderQuestAnnotBlocks(dept);
+  
+  // If questionnement view is active, reload image + chat for new dept
+  if (_rightQuestActive) {
+    _loadSimpleQuestView();
+    QChat.loadForCard();
+    startQuestChatListener();
+  }
 }
 
 // Keep old name as alias for backward compat
@@ -7760,7 +7767,8 @@ function initPSM() {
               ld.questionHtml !== rd.questionHtml ||
               ld.temps !== rd.temps ||
               ld.evalBy !== rd.evalBy ||
-              ld.psm !== rd.psm) {
+              ld.psm !== rd.psm ||
+              ld.complete !== rd.complete) {
             needReload = true;
           }
         });
@@ -7815,7 +7823,8 @@ function initPSM() {
           psmData[currentCardId][dept].temps = localCardSnapshot[dept].temps;
           psmData[currentCardId][dept].psm = localCardSnapshot[dept].psm;
           psmData[currentCardId][dept].prixMajore = localCardSnapshot[dept].prixMajore;
-          psmData[currentCardId][dept].complete = localCardSnapshot[dept].complete;
+          // NOTE: complete is NOT merged from local — Firebase is authoritative for completion state
+          // This ensures that when another dept completes remotely, it's properly reflected
         }
       });
     }
@@ -8695,8 +8704,9 @@ function _handleQuestResolved(cardId) {
 // Mark all psmChat messages for a card as read by me
 function _markQuestChatRead(cardId) {
   if (!db || !currentUser) return;
+  var dept = currentDept || 'atelier';
   var myEmailKey = (currentUser.email || '').toLowerCase().replace(/\./g, '_');
-  db.ref('psmChat/' + cardId + '/messages').once('value').then(function(snap) {
+  db.ref('psmChat/' + cardId + '/' + dept + '/messages').once('value').then(function(snap) {
     var msgs = snap.val();
     if (!msgs) return;
     var updates = {};
@@ -8704,7 +8714,7 @@ function _markQuestChatRead(cardId) {
       var msg = msgs[msgId];
       if (msg.authorEmail && msg.authorEmail.toLowerCase() !== (currentUser.email || '').toLowerCase()) {
         if (!msg.readBy || !msg.readBy[myEmailKey]) {
-          updates['psmChat/' + cardId + '/messages/' + msgId + '/readBy/' + myEmailKey] = true;
+          updates['psmChat/' + cardId + '/' + dept + '/messages/' + msgId + '/readBy/' + myEmailKey] = true;
         }
       }
     });
@@ -10018,10 +10028,24 @@ function markAllNotifsRead() {
         var allChats = snap.val() || {};
         var updates = {};
         Object.keys(allChats).forEach(function(cardId) {
-          var msgs = allChats[cardId].messages || {};
-          Object.keys(msgs).forEach(function(msgId) {
-            var msg = msgs[msgId];
-            if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail.toLowerCase()) {
+          var cardData = allChats[cardId];
+          // Support both old format (cardId/messages) and new format (cardId/dept/messages)
+          ['atelier', 'couture'].forEach(function(dept) {
+            var msgs = (cardData[dept] && cardData[dept].messages) || {};
+            Object.keys(msgs).forEach(function(msgId) {
+              var msg = msgs[msgId];
+              if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail.toLowerCase()) {
+                if (!msg.readBy || !msg.readBy[emailKey]) {
+                  updates['psmChat/' + cardId + '/' + dept + '/messages/' + msgId + '/readBy/' + emailKey] = true;
+                }
+              }
+            });
+          });
+          // Legacy: also check old format
+          var legacyMsgs = cardData.messages || {};
+          Object.keys(legacyMsgs).forEach(function(msgId) {
+            var msg = legacyMsgs[msgId];
+            if (msg && msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail.toLowerCase()) {
               if (!msg.readBy || !msg.readBy[emailKey]) {
                 updates['psmChat/' + cardId + '/messages/' + msgId + '/readBy/' + emailKey] = true;
               }
@@ -10092,10 +10116,23 @@ function clearAllNotifs() {
         var allChats = snap.val() || {};
         var updates = {};
         Object.keys(allChats).forEach(function(cardId) {
-          var msgs = allChats[cardId].messages || {};
-          Object.keys(msgs).forEach(function(msgId) {
-            var msg = msgs[msgId];
-            if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail.toLowerCase()) {
+          var cardData = allChats[cardId];
+          ['atelier', 'couture'].forEach(function(dept) {
+            var msgs = (cardData[dept] && cardData[dept].messages) || {};
+            Object.keys(msgs).forEach(function(msgId) {
+              var msg = msgs[msgId];
+              if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail.toLowerCase()) {
+                if (!msg.readBy || !msg.readBy[emailKey2]) {
+                  updates['psmChat/' + cardId + '/' + dept + '/messages/' + msgId + '/readBy/' + emailKey2] = true;
+                }
+              }
+            });
+          });
+          // Legacy
+          var legacyMsgs = cardData.messages || {};
+          Object.keys(legacyMsgs).forEach(function(msgId) {
+            var msg = legacyMsgs[msgId];
+            if (msg && msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail.toLowerCase()) {
               if (!msg.readBy || !msg.readBy[emailKey2]) {
                 updates['psmChat/' + cardId + '/messages/' + msgId + '/readBy/' + emailKey2] = true;
               }
@@ -12459,7 +12496,7 @@ var QChat = (function() {
     return new Date(ts).toLocaleString('fr-CA', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
   }
 
-  function chatPath() { return 'psmChat/' + currentCardId + '/messages'; }
+  function chatPath() { return 'psmChat/' + currentCardId + '/' + (currentDept || 'atelier') + '/messages'; }
 
   function isFirstSend() {
     if (!currentCardId || !psmData[currentCardId]) return true;
@@ -12921,7 +12958,7 @@ function sendQuestChatReply(idx, dept, text) {
   };
   msgData.readBy[emailKey] = true;
   
-  var chatPath = 'psmChat/' + currentCardId + '/messages';
+  var chatPath = 'psmChat/' + currentCardId + '/' + (dept || currentDept || 'atelier') + '/messages';
   db.ref(chatPath).push().set(msgData).then(function() {
     showToast('📤 Réponse envoyée', 'success');
     // Send notification to quest assignee
@@ -12990,14 +13027,16 @@ function _sendQuestReplyNotification(text) {
 
 // Listen to psmChat messages and populate quest chat zones
 var _questChatListener = null;
+var _questChatListenerDept = null;
 function startQuestChatListener() {
   if (_questChatListener) {
-    if (db) db.ref('psmChat/' + _questChatListener + '/messages').off('value');
+    if (db) db.ref('psmChat/' + _questChatListener + '/' + (_questChatListenerDept || 'atelier') + '/messages').off('value');
   }
   if (!currentCardId || !db) return;
   _questChatListener = currentCardId;
+  _questChatListenerDept = currentDept || 'atelier';
   
-  db.ref('psmChat/' + currentCardId + '/messages').orderByChild('timestamp').limitToLast(200).on('value', function(snap) {
+  db.ref('psmChat/' + currentCardId + '/' + _questChatListenerDept + '/messages').orderByChild('timestamp').limitToLast(200).on('value', function(snap) {
     var data = snap.val() || {};
     var msgs = Object.values(data).sort(function(a, b) { return (a.timestamp || 0) - (b.timestamp || 0); });
     populateQuestChatMessages(msgs);
@@ -14164,7 +14203,7 @@ window.addEventListener('beforeunload', function() {
 // ===== PCHAT — Questionnement par carte PSM =====
 // ═══════════════════════════════════════════════════════════
 // PChat — Questionnement par carte PSM
-// Firebase path: psmChat/{cardId}/messages
+// Firebase path: psmChat/{cardId}/{dept}/messages
 // ═══════════════════════════════════════════════════════════
 var PChat = (function() {
   var _cardId = null;
@@ -14227,7 +14266,7 @@ var PChat = (function() {
   }
   
   function chatPath() {
-    return 'psmChat/' + _cardId + '/messages';
+    return 'psmChat/' + _cardId + '/' + (currentDept || 'atelier') + '/messages';
   }
   
   // Called when selecting a card
@@ -14302,7 +14341,12 @@ var PChat = (function() {
   
   function detach() {
     if (_listener && db && _cardId) {
-      db.ref('psmChat/' + _cardId + '/messages').off('value', _listener);
+      // Detach from all possible dept paths
+      ['atelier', 'couture'].forEach(function(d) {
+        try { db.ref('psmChat/' + _cardId + '/' + d + '/messages').off('value', _listener); } catch(e) {}
+      });
+      // Legacy path
+      try { db.ref('psmChat/' + _cardId + '/messages').off('value', _listener); } catch(e) {}
     }
     _listener = null;
   }
