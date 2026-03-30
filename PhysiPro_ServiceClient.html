@@ -1021,7 +1021,12 @@ body {
   text-align: center; box-shadow: 0 2px 6px rgba(59,130,246,0.4);
 }
 .job-card-badge.alert { background: linear-gradient(135deg, #ef4444, #dc2626); animation: blink 1s infinite; box-shadow: 0 2px 8px rgba(239,68,68,0.5); }
+/* Resolved job card */
+.job-card.job-resolved { border-color: rgba(16,185,129,0.6); background: linear-gradient(to bottom, #064e3b 0%, #0f172a 100%); opacity: 0.85; }
+.job-card.job-resolved:hover { border-color: rgba(16,185,129,0.9); opacity: 1; }
+.job-card-resolved-badge { font-size: 10px; font-weight: 800; color: #10b981; text-align: center; padding: 3px 6px; letter-spacing: 0.3px; background: rgba(16,185,129,0.1); border-radius: 4px; margin: 2px 4px; line-height: 1.4; }
 .job-card.psm-card { background: linear-gradient(to bottom, #0a1628 0%, #1e3a5f 100%); border-color: rgba(59,130,246,0.5); }
+.job-card.psm-card.job-resolved { background: linear-gradient(to bottom, #064e3b 0%, #1e3a5f 100%); border-color: rgba(16,185,129,0.5); }
 .job-card.psm-card:hover { box-shadow: 0 6px 20px rgba(59,130,246,0.4); border-color: rgba(59,130,246,0.8); }
 .psm-card-badge { display:inline-block; background:linear-gradient(135deg,#1e3a8a,#3b82f6); color:#fff; font-size:7px; font-weight:800; padding:2px 5px; border-radius:4px; letter-spacing:0.5px; vertical-align:middle; margin-right:2px; text-transform:uppercase; }
 .psm-card-badge.prix-majore { background:linear-gradient(135deg,#92400e,#f59e0b); color:#fff; }
@@ -2127,6 +2132,7 @@ body {
           </div>
           <div class="qchat-actions">
             <button class="qchat-resolve-btn" id="ficheResolveBtn" onclick="openResolveModal()" style="display:none;">✅ Questionnement réglé</button>
+            <button class="qchat-resolve-btn" id="ficheAckBtn" onclick="confirmAckResolved()" style="display:none;background:linear-gradient(135deg,#3b82f6,#2563eb);">✓ J'ai vu, archiver</button>
             <button class="qchat-action-btn" onclick="QuestChat.openEmailForm()" title="Email / PDF">✉️</button>
             <button class="qchat-action-btn" onclick="QuestChat.printChat()" title="Imprimer">🖨️</button>
           </div>
@@ -3011,6 +3017,9 @@ function initData() {
     renderJobs();
     if (window.innerWidth <= 768) renderMobileList();
     
+    // Auto-cleanup resolved jobs older than 7 days
+    cleanupOldResolvedJobs();
+    
     // Deep link: check URL for ?card=XXX on first load
     if (!window._deepLinkHandled) {
       window._deepLinkHandled = true;
@@ -3142,9 +3151,22 @@ function renderJobs() {
         }
         let creatorHtml = creatorName ? `<div class="job-card-creator">Questionnement de ${escapeHtml(creatorName.split(' ')[0])}</div>` : '';
         
+        // Resolved state
+        var resolvedCls = job.resolved ? ' job-resolved' : '';
+        var resolvedBadge = '';
+        if (job.resolved) {
+          var daysAgo = job.resolvedAt ? Math.floor((Date.now() - new Date(job.resolvedAt).getTime()) / 86400000) : 0;
+          var autoDeleteIn = Math.max(0, 7 - daysAgo);
+          var deleteText = autoDeleteIn > 0 
+            ? '<div style="font-size:8px;color:rgba(255,255,255,0.5);margin-top:1px;">Va s\'effacer dans ' + autoDeleteIn + ' jour' + (autoDeleteIn > 1 ? 's' : '') + '</div>'
+            : '<div style="font-size:8px;color:#f87171;margin-top:1px;">Sera archivé aujourd\'hui</div>';
+          resolvedBadge = '<div class="job-card-resolved-badge">✅ Questionnement réglé' + deleteText + '</div>';
+        }
+        
         return `
-          <div class="job-card${job.fromPSM ? ' psm-card' : ''}" draggable="true" data-job-id="${job.id}" onclick="openFiche('${job.id}')" ondragstart="dragJobStart(event,'${job.id}')" ondragend="dragJobEnd(event)">
+          <div class="job-card${job.fromPSM ? ' psm-card' : ''}${resolvedCls}" draggable="true" data-job-id="${job.id}" onclick="openFiche('${job.id}')" ondragstart="dragJobStart(event,'${job.id}')" ondragend="dragJobEnd(event)">
             ${rappelHtml}
+            ${resolvedBadge}
             ${job.fromPSM ? `<div class="job-card-client" style="font-weight:800;">${escapeHtml(job.psmName || job.client || 'Patient')}</div>
             <div class="job-card-creator" style="display:flex;align-items:center;justify-content:center;gap:6px;"><span class="psm-card-badge${(job.psmType||'').toLowerCase().indexOf('prix') >= 0 ? ' prix-majore' : ''}">${escapeHtml(job.psmType || 'PSM')}</span>${isNewPsm ? '<span class="new-card-badge">NEW</span>' : ''}</div>
             <div class="job-card-creator">Questionnement de ${escapeHtml((job.psmSentBy || job.createdByName || '').split(' ')[0] || 'PSM')}</div>` : 
@@ -4846,10 +4868,17 @@ function openFiche(jobId) {
   // Render rappel section
   renderRappelSection(jobId, d);
   
-  // Show/hide resolve button for PSM cards only
+  // Show resolve button for ALL jobs (PSM + normal)
   var resolveBtn = document.getElementById('ficheResolveBtn');
+  var ackBtn = document.getElementById('ficheAckBtn');
   if (resolveBtn) {
-    resolveBtn.style.display = d.fromPSM ? '' : 'none';
+    if (d.resolved) {
+      resolveBtn.style.display = 'none';
+      if (ackBtn) ackBtn.style.display = '';
+    } else {
+      resolveBtn.style.display = '';
+      if (ackBtn) ackBtn.style.display = 'none';
+    }
   }
   
   // PSM info now shows as first message in chat, hide static block
@@ -5066,7 +5095,7 @@ function deleteCurrentJob() {
 function openResolveModal() {
   if (!currentJobId) return;
   var job = jobsData[currentJobId];
-  if (!job || !job.fromPSM) return;
+  if (!job) return;
   var info = document.getElementById('resolveModalInfo');
   if (info) info.textContent = 'Commande #' + (job.order || '?') + ' • ' + (job.client || job.psmName || 'Patient');
   document.getElementById('resolveQuestModal').classList.remove('hidden');
@@ -5079,21 +5108,28 @@ function confirmResolveQuest() {
   document.getElementById('resolveQuestModal').classList.add('hidden');
   if (!currentJobId) return;
   var job = jobsData[currentJobId];
-  if (!job || !job.fromPSM) return;
+  if (!job) return;
   
   var resolverName = typeof getCurrentUserName === 'function' ? getCurrentUserName() : (currentUser ? (currentUser.displayName || currentUser.email) : 'Service Client');
   var resolverEmail = currentUser ? currentUser.email.toLowerCase() : '';
   
-  // Mark as resolved in PSM BEFORE archiving (so archiveJobThenDelete won't duplicate)
-  var psmUpdates = {};
-  if (job.psmCardId) {
-    psmUpdates['psm/' + job.psmCardId + '/questionnementResolved'] = true;
-    psmUpdates['psm/' + job.psmCardId + '/questionnementResolvedAt'] = new Date().toISOString();
-    psmUpdates['psm/' + job.psmCardId + '/questionnementResolvedBy'] = resolverName;
+  var updates = {};
+  
+  // Mark job as resolved (NOT deleted — stays visible until acknowledged)
+  updates['jobs/' + currentJobId + '/resolved'] = true;
+  updates['jobs/' + currentJobId + '/resolvedAt'] = new Date().toISOString();
+  updates['jobs/' + currentJobId + '/resolvedBy'] = resolverName;
+  updates['jobs/' + currentJobId + '/resolvedByEmail'] = resolverEmail;
+  
+  // If PSM job, also mark resolved in PSM
+  if (job.fromPSM && job.psmCardId) {
+    updates['psm/' + job.psmCardId + '/questionnementResolved'] = true;
+    updates['psm/' + job.psmCardId + '/questionnementResolvedAt'] = new Date().toISOString();
+    updates['psm/' + job.psmCardId + '/questionnementResolvedBy'] = resolverName;
     
     // Send resolved message into psmChat so PSM user sees it
     var resolvedMsgKey = 'resolved_' + Date.now();
-    psmUpdates['psmChat/' + job.psmCardId + '/messages/' + resolvedMsgKey] = {
+    updates['psmChat/' + job.psmCardId + '/messages/' + resolvedMsgKey] = {
       content: '✅ Questionnement réglé par ' + resolverName + ' pour #' + (job.order || job.psmName || ''),
       authorEmail: resolverEmail,
       authorName: resolverName,
@@ -5104,15 +5140,91 @@ function confirmResolveQuest() {
     };
   }
   
-  // Mark the job locally so archiveJobThenDelete won't send duplicate resolved message
-  job._alreadyResolved = true;
+  // Send resolved message in questChat too (visible in ServiceClient chat)
+  var questResolvedKey = 'resolved_' + Date.now();
+  updates['questChat/' + currentJobId + '/messages/' + questResolvedKey] = {
+    content: '✅ Questionnement réglé par ' + resolverName,
+    authorEmail: resolverEmail,
+    authorName: resolverName,
+    timestamp: Date.now(),
+    type: 'quest-resolved',
+    readBy: {}
+  };
   
-  db.ref().update(psmUpdates).then(function() {
-    showToast('✅ Questionnement réglé! Notification envoyée au PSM.', 'success');
-    // Auto-archive and delete the job
-    archiveJobThenDelete(currentJobId, 'desktop');
+  // Send notification to the job creator so they can acknowledge
+  var creatorEmail = (job.createdBy || '').toLowerCase();
+  if (creatorEmail && creatorEmail !== resolverEmail) {
+    var creatorName = job.createdByName || job.psmSentBy || '';
+    updates['jobNotifications/questResolved_' + currentJobId + '_' + Date.now()] = {
+      to: creatorEmail,
+      toName: creatorName,
+      from: resolverEmail,
+      fromName: resolverName,
+      jobId: currentJobId,
+      jobName: '#' + (job.order || '---'),
+      message: '✅ Questionnement réglé par ' + resolverName + ' — ' + (job.client || job.psmName || ''),
+      messageType: 'quest-resolved',
+      timestamp: Date.now(),
+      read: false
+    };
+  }
+  
+  job._alreadyResolved = true;
+  job.resolved = true;
+  job.resolvedAt = new Date().toISOString();
+  job.resolvedBy = resolverName;
+  
+  db.ref().update(updates).then(function() {
+    showToast('✅ Questionnement réglé! Le créateur sera notifié.', 'success');
+    renderCards();
+    // Refresh fiche to show "J'ai vu" button
+    openFiche(currentJobId);
   }).catch(function(e) {
     showToast('❌ Erreur: ' + e.message, 'error');
+  });
+}
+
+// ═══ ACKNOWLEDGE RESOLVED — creator confirms they've seen the answer ═══
+function confirmAckResolved() {
+  if (!currentJobId) return;
+  var job = jobsData[currentJobId];
+  if (!job) return;
+  
+  if (!confirm('Archiver et supprimer ce questionnement réglé?')) return;
+  
+  var ackerName = typeof getCurrentUserName === 'function' ? getCurrentUserName() : '';
+  var ackerEmail = currentUser ? currentUser.email.toLowerCase() : '';
+  
+  // Mark acknowledged
+  db.ref('jobs/' + currentJobId + '/resolvedAckedBy').set(ackerName || ackerEmail).catch(function(){});
+  db.ref('jobs/' + currentJobId + '/resolvedAckedAt').set(new Date().toISOString()).catch(function(){});
+  
+  // Mark _alreadyResolved so archiveJobThenDelete doesn't send duplicate PSM message
+  job._alreadyResolved = true;
+  
+  // Archive and delete
+  archiveJobThenDelete(currentJobId, 'desktop');
+  showToast('📦 Questionnement archivé', 'success');
+}
+
+// ═══ AUTO-CLEANUP: Delete resolved jobs older than 7 days ═══
+function cleanupOldResolvedJobs() {
+  if (!jobsData || !db) return;
+  var now = Date.now();
+  var SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+  
+  Object.keys(jobsData).forEach(function(jobId) {
+    var job = jobsData[jobId];
+    if (!job || !job.resolved || !job.resolvedAt) return;
+    
+    var resolvedTime = new Date(job.resolvedAt).getTime();
+    if (isNaN(resolvedTime)) return;
+    
+    if (now - resolvedTime > SEVEN_DAYS) {
+      console.log('🧹 Auto-archiving resolved job ' + jobId + ' (resolved ' + Math.floor((now - resolvedTime) / 86400000) + ' days ago)');
+      job._alreadyResolved = true;
+      archiveJobThenDelete(jobId, 'desktop');
+    }
   });
 }
 
@@ -6452,10 +6564,12 @@ function renderMobileList() {
     list.innerHTML = jobs.map(([id, job]) => {
       const msgCount = getMessageCount(id);
       const hasQ = hasUnresolvedQuestions(id);
+      const mDaysAgo = job.resolved && job.resolvedAt ? Math.floor((Date.now() - new Date(job.resolvedAt).getTime()) / 86400000) : 0; const mAutoDelete = Math.max(0, 7 - mDaysAgo); const mResolvedBadge = job.resolved ? '<div style="font-size:9px;font-weight:800;color:#10b981;text-align:center;padding:2px 6px;background:rgba(16,185,129,0.1);border-radius:4px;margin:2px 0;">✅ Questionnement réglé<div style="font-size:7px;color:rgba(0,0,0,0.4);margin-top:1px;">Va s'effacer dans ' + mAutoDelete + ' jour' + (mAutoDelete > 1 ? 's' : '') + '</div></div>' : '';
       return `
         <div class="mobile-job-card" onclick="openMobileFiche('${id}')">
           <div class="mobile-job-order">#${escapeHtml(job.order || '---')}</div>
           <div class="mobile-job-client">${escapeHtml(job.client || 'Client')}</div>
+          ${mResolvedBadge}
           <span class="mobile-job-assignee ${(job.assignee||'').toLowerCase()}">${escapeHtml(job.assignee||'')}</span>
           <div class="mobile-job-date">📅 Livraison: ${formatDateDisplay(job.dateLivraison) || 'N/D'}</div>
           ${msgCount > 0 ? `<span class="mobile-job-badge${hasQ?' alert':''}">${msgCount}</span>` : ''}
