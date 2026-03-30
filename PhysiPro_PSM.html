@@ -8804,35 +8804,46 @@ function selectCard(id) {
   // Determine which tab to open
   var openQuestTab = false;
   
-  // ═══ RESOLVED QUEST: open quest tab, clear after first view by sender ═══
+  // ═══ RESOLVED QUEST: open quest tab, clear resolved after first view ═══
   if (card && card.questionnementResolved === true) {
     openQuestTab = true;
-    var myEmail = currentUser ? currentUser.email : '';
-    var creatorEmail = card.questionnementByEmail || '';
-    var isCreator = myEmail && creatorEmail && myEmail.toLowerCase() === creatorEmail.toLowerCase();
     
-    // If the quest creator is viewing it, clear resolved status so card goes back to normal
-    if (isCreator) {
-      card.questionnementResolved = false;
-      card.questionnementSent = false;
-      card.questionnementResolvedAt = null;
-      card.questionnementResolvedBy = null;
-      card.questionnementSentAt = null;
-      card._resolvedUnread = false;
-      // Mark all quest chat messages as read — prevents listener from re-setting resolved
-      _markQuestChatRead(id);
-      if (db) {
-        var _clr = {};
-        var _cp = 'psm/' + id + '/';
-        _clr[_cp + 'questionnementResolved'] = null;
-        _clr[_cp + 'questionnementSent'] = null;
-        _clr[_cp + 'questionnementResolvedAt'] = null;
-        _clr[_cp + 'questionnementResolvedBy'] = null;
-        _clr[_cp + 'questionnementSentAt'] = null;
-        db.ref().update(_clr);
-      }
-      setTimeout(function() { renderCards(); }, 200);
+    // Clear resolved status — card goes back to normal after being viewed
+    card.questionnementResolved = false;
+    card.questionnementSent = false;
+    card.questionnementResolvedAt = null;
+    card.questionnementResolvedBy = null;
+    card.questionnementSentAt = null;
+    card.questionnementByEmail = null;
+    card.questionnementBy = null;
+    card.questionnementJobId = null;
+    card._resolvedUnread = false;
+    // Mark all quest chat messages as read — prevents listener from re-setting resolved
+    _markQuestChatRead(id);
+    // Also mark read for both depts
+    var _origDept = currentDept;
+    currentDept = 'atelier'; _markQuestChatRead(id);
+    currentDept = 'couture'; _markQuestChatRead(id);
+    currentDept = _origDept;
+    if (db) {
+      var _clr = {};
+      var _cp = 'psm/' + id + '/';
+      _clr[_cp + 'questionnementResolved'] = null;
+      _clr[_cp + 'questionnementSent'] = null;
+      _clr[_cp + 'questionnementResolvedAt'] = null;
+      _clr[_cp + 'questionnementResolvedBy'] = null;
+      _clr[_cp + 'questionnementSentAt'] = null;
+      _clr[_cp + 'questionnementByEmail'] = null;
+      _clr[_cp + 'questionnementBy'] = null;
+      _clr[_cp + '_lastModifiedAt'] = new Date().toISOString();
+      _clr[_cp + '_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+      _skipSyncUntil = Date.now() + 3000;
+      db.ref().update(_clr).then(function() {
+        console.log('✅ Quest resolved cleared for ' + id);
+        renderCards();
+      });
     }
+    setTimeout(function() { renderCards(); }, 300);
   }
   // Also open quest tab if card is in active questionnement (sent but not resolved)
   if (card && card.questionnementSent === true && !card.questionnementResolved) {
@@ -15572,22 +15583,28 @@ var PChat = (function() {
           psmData[cardId]._resolvedUnread = true;
         } else if (gotResolved && !resolvedUnread) {
           // Resolved messages exist but all are read — don't touch questionnementResolved
-          // (it may have been cleared by selectCard, don't re-set it)
           psmData[cardId]._resolvedUnread = false;
         }
         
-        if (iSent && !gotReply) {
-          psmData[cardId].questionnementSent = true;
-          psmData[cardId]._hasReply = false;
-        } else if (iSent && gotReply) {
-          var allRead = true;
-          Object.values(msgs).forEach(function(msg) {
-            if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail && msg.type !== 'quest-resolved') {
-              if (!msg.readBy || !msg.readBy[myEmailKey]) allRead = false;
-            }
-          });
-          psmData[cardId]._hasReply = true;
-          psmData[cardId]._replyUnread = !allRead;
+        // Only set questionnementSent if it's not already explicitly cleared
+        // (checked via Firebase psm/{cardId}/questionnementSent being truthy)
+        var questAlreadyCleared = (psmData[cardId].questionnementSent === false || 
+                                    psmData[cardId].questionnementSent === null || 
+                                    psmData[cardId].questionnementSent === undefined) &&
+                                   !psmData[cardId].questionnementResolved;
+        if (!questAlreadyCleared) {
+          if (iSent && !gotReply) {
+            psmData[cardId]._hasReply = false;
+          } else if (iSent && gotReply) {
+            var allRead = true;
+            Object.values(msgs).forEach(function(msg) {
+              if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail && msg.type !== 'quest-resolved') {
+                if (!msg.readBy || !msg.readBy[myEmailKey]) allRead = false;
+              }
+            });
+            psmData[cardId]._hasReply = true;
+            psmData[cardId]._replyUnread = !allRead;
+          }
         }
       });
       renderCards();
