@@ -4418,6 +4418,16 @@ if(localStorage.getItem('physipro_last_email')){
               <button class="psm-annot-btn" onclick="setItemAnnotTool('rect')" title="Rectangle">□</button>
               <button class="psm-annot-btn" onclick="setItemAnnotTool('text')" title="Texte">A</button>
               <input type="color" class="psm-annot-color" value="#ff0000" style="width:18px;height:18px;border:1px solid rgba(255,255,255,0.2);border-radius:3px;cursor:pointer;padding:0;">
+              <span style="width:1px;height:14px;background:rgba(255,255,255,0.15);margin:0 4px;flex-shrink:0;"></span>
+              <select id="notesFontSizeSelect" onchange="changeNotesFontSize(this.value)" title="Taille du texte" style="background:#0a1628;border:1px solid rgba(255,255,255,0.2);color:#93c5fd;font-size:9px;padding:1px 2px;border-radius:3px;cursor:pointer;outline:none;">
+                <option value="10">10px</option>
+                <option value="11">11px</option>
+                <option value="12" selected>12px</option>
+                <option value="13">13px</option>
+                <option value="14">14px</option>
+                <option value="16">16px</option>
+                <option value="18">18px</option>
+              </select>
             </span>
             <button class="psm-print-btn-sm" onclick="printPSM()" style="margin-left:auto;">🖨️ Imprimer</button>
           </div>
@@ -5587,7 +5597,7 @@ function buildPairRows(container) {
   
   // Paste/drop zone at TOP to add images
   html += '<div class="pair-add-zone" id="pairAddZone_' + currentDept + '">';
-  html += '<div class="pair-paste-target" contenteditable="true" data-placeholder="📷 Coller (Ctrl+V) ou glisser une image ici..." style="width:100%;min-height:28px;outline:none;text-align:center;color:#4a6a8a;font-size:10px;padding:4px 6px;cursor:text;"></div>';
+  html += '<div class="pair-paste-target" contenteditable="true" data-placeholder="📷 Coller (Ctrl+V) une image ici..." style="width:100%;min-height:28px;outline:none;text-align:center;color:#4a6a8a;font-size:10px;padding:4px 6px;cursor:text;"></div>';
   html += '</div>';
   
   if (imgs.length === 0) {
@@ -5627,37 +5637,18 @@ function buildPairRows(container) {
   // Setup drag & drop on the add zone
   var addZone = pairDiv.querySelector('.pair-add-zone');
   if (addZone) {
-    // Drag & drop handler
+    // Drag & drop handler — BLOCKED, images only via paste (Ctrl+V)
     addZone.addEventListener('dragover', function(e) {
       e.preventDefault();
       e.stopPropagation();
-      addZone.style.background = 'rgba(59,130,246,0.15)';
-      addZone.style.borderColor = '#3b82f6';
     });
     addZone.addEventListener('dragleave', function(e) {
-      addZone.style.background = '';
-      addZone.style.borderColor = '';
+      // no-op
     });
     addZone.addEventListener('drop', function(e) {
       e.preventDefault();
       e.stopPropagation();
-      addZone.style.background = '';
-      addZone.style.borderColor = '';
-      var files = e.dataTransfer ? e.dataTransfer.files : [];
-      if (files.length === 0) return;
-      Array.from(files).forEach(function(file) {
-        if (!file.type.startsWith('image/')) return;
-        var reader = new FileReader();
-        reader.onload = async function(ev) {
-          var compressed = typeof compressPsmImage === 'function' ? await compressPsmImage(ev.target.result) : ev.target.result;
-          if (leftPane) {
-            insertImgIntoEditable(leftPane, compressed);
-            saveCurrentCard();
-            setTimeout(function() { autoPairDetect(); }, 50);
-          }
-        };
-        reader.readAsDataURL(file);
-      });
+      // Drop is blocked — use paste (Ctrl+V) or file picker instead
     });
   }
   
@@ -5845,6 +5836,7 @@ document.addEventListener('DOMContentLoaded', function() {
       initLogoMenu('psm');
       checkAppVersion();
       initPSM();
+      _restoreNotesFontSize();
       initNotifications();
       PChat.startNotifListeners();
       if (typeof DM !== 'undefined') DM.startNotifListener();
@@ -6097,31 +6089,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // No dataTransfer at all? Skip
     if (!e.dataTransfer) return;
     
-    // CRITICAL: If dropped inside a notes zone, handle as inline image — NOT as card file
+    // CRITICAL: If dropped inside a notes zone, BLOCK — do not insert files
+    // Images in notes should only be added via paste (Ctrl+V) or the dedicated add zone
     var notesZone = e.target.closest('.notes-split-text, .notes-split-right, .psm-textarea-lg');
     if (notesZone) {
-      var files = e.dataTransfer.files;
-      if (files && files.length > 0) {
-        Array.from(files).forEach(function(file) {
-          if (!file.type.startsWith('image/')) return;
-          var reader = new FileReader();
-          reader.onload = async function(ev) {
-            // CRITICAL: Compress before inserting to prevent Firebase size explosion
-            var compressed = typeof compressPsmImage === 'function' 
-              ? await compressPsmImage(ev.target.result) 
-              : ev.target.result;
-            insertImgIntoEditable(notesZone, compressed);
-            saveCurrentCard();
-            // Auto-activate pair mode now that image exists
-            setTimeout(function() { autoPairDetect(); }, 100);
-          };
-          reader.readAsDataURL(file);
-        });
-      }
-      return; // Do NOT fall through to card file upload
+      return; // Block all file drops in notes zones
     }
     
-    // Check if dropped on a card devis button
+    // Check if dropped on a card devis button (explicit drop target on card)
     var dropBtn = e.target.closest('.card-devis-drop');
     if (dropBtn) {
       var cardId = dropBtn.getAttribute('data-card-id');
@@ -6131,7 +6106,7 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
     
-    // Check if dropped on overlay dropzone
+    // Check if dropped on overlay dropzone (the dedicated upload zone)
     var dropZone = e.target.closest('.devis-dropzone');
     if (dropZone) {
       if (currentCardId) {
@@ -6140,27 +6115,11 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
     
-    // If dropped anywhere on a psm-card, find its ID from data attribute
-    var psmCard = e.target.closest('.psm-card');
-    if (psmCard) {
-      var cardId2 = psmCard.getAttribute('data-card-id');
-      if (cardId2 && psmData[cardId2]) {
-        processDroppedFiles(e.dataTransfer, cardId2);
-        return;
-      }
-    }
-    
-    // If dropped anywhere on the details zone or dept panel, use current card
-    var detailsZone = e.target.closest('.details-zone') || e.target.closest('.dept-panel') || e.target.closest('.dept-panels');
-    if (detailsZone && currentCardId && psmData[currentCardId]) {
-      processDroppedFiles(e.dataTransfer, currentCardId);
-      return;
-    }
-    
-    // Last resort: if a card is selected and we have files, use current card
-    if (currentCardId && psmData[currentCardId]) {
-      processDroppedFiles(e.dataTransfer, currentCardId);
-    }
+    // All other drops are BLOCKED — files can only be added via:
+    // 1. The dedicated devis dropzone (📁)
+    // 2. The card-devis-drop buttons
+    // 3. The file picker button
+    // 4. Ctrl+V paste in item zones
   }, false);
 });
 
@@ -11195,15 +11154,12 @@ function renderDevisViewerNav() {
   var images = (psmData[currentCardId] && psmData[currentCardId].devisImages) || [];
   
   if (images.length <= 1) {
-    // Single image or none - just show delete button if exists
-    if (images.length === 1) {
-      nav.innerHTML = '<button class="devis-viewer-thumb-delete" onclick="removeDevisFromViewer(0)" title="Supprimer">🗑️</button>';
-    } else {
-      nav.innerHTML = '';
-    }
+    // Single file — no nav needed, no delete allowed
+    nav.innerHTML = '';
     return;
   }
   
+  // Multiple files — show thumbnails only (no delete button)
   nav.innerHTML = images.map(function(src, i) {
     var activeClass = (i === devisViewerIdx) ? 'active' : '';
     var isPdfThumb = src.indexOf('data:application/pdf') === 0 || /\.pdf(\?|$)/i.test(src);
@@ -11212,7 +11168,7 @@ function renderDevisViewerNav() {
       ? '<img src="' + thumbSrc + '" alt="' + (i+1) + '">'
       : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1e293b;color:#94a3b8;font-size:10px;font-weight:700;">PDF</div>';
     return '<div class="devis-viewer-thumb ' + activeClass + '" onclick="renderDevisViewerContent(' + i + ')">' + thumbContent + '</div>';
-  }).join('') + '<button class="devis-viewer-thumb-delete" onclick="removeDevisFromViewer(' + devisViewerIdx + ')" title="Supprimer image active">🗑️</button>';
+  }).join('');
 }
 
 function removeDevisFromViewer(idx) {
@@ -11722,6 +11678,14 @@ function renderDeptAnnotBlocks(dept) {
       }, 50);
     }
   }
+  
+  // Reapply saved font size to newly rendered text zones
+  try {
+    var savedSize = localStorage.getItem('psm_notesFontSize');
+    if (savedSize) {
+      list.querySelectorAll('.psm-dept-annot-text').forEach(function(el) { el.style.fontSize = savedSize + 'px'; });
+    }
+  } catch(e) {}
 }
 
 function addDeptAnnotSlot(dept) {
@@ -12309,6 +12273,27 @@ function handleQuestBottomFiles(input) {
 
 // ═══ RIGHT PANEL: Toggle Notes ↔ Questionnement view ═══
 var _rightQuestActive = false;
+
+// ═══ NOTES FONT SIZE ═══
+function changeNotesFontSize(size) {
+  var px = size + 'px';
+  // Apply to all notes text zones
+  document.querySelectorAll('.notes-split-text, .notes-split-right, .psm-dept-annot-text').forEach(function(el) {
+    el.style.fontSize = px;
+  });
+  // Persist in localStorage
+  try { localStorage.setItem('psm_notesFontSize', size); } catch(e) {}
+}
+function _restoreNotesFontSize() {
+  try {
+    var saved = localStorage.getItem('psm_notesFontSize');
+    if (saved) {
+      var sel = document.getElementById('notesFontSizeSelect');
+      if (sel) sel.value = saved;
+      changeNotesFontSize(saved);
+    }
+  } catch(e) {}
+}
 
 function toggleRightQuestView() {
   _rightQuestActive = !_rightQuestActive;
@@ -13323,7 +13308,7 @@ function refreshInlinePdf() {
     }
   }
   
-  // Nav thumbnails
+  // Nav thumbnails + delete button
   if (navEl) {
     if (allFiles.length > 1) {
       navEl.style.display = 'flex';
@@ -13333,7 +13318,7 @@ function refreshInlinePdf() {
         var thumbHtml = isImg
           ? '<img src="' + s + '" style="width:100%;height:100%;object-fit:cover;">'
           : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1e293b;color:#94a3b8;font-size:8px;font-weight:700;">PDF</div>';
-        return '<div onclick="switchInlinePdf(' + i + ')" style="width:30px;height:30px;border:2px solid;border-radius:4px;overflow:hidden;cursor:pointer;flex-shrink:0;' + active + '">' + thumbHtml + '</div>';
+        return '<div onclick="switchInlinePdf(' + i + ')" style="width:30px;height:30px;border:2px solid;border-radius:4px;overflow:hidden;cursor:pointer;flex-shrink:0;position:relative;' + active + '">' + thumbHtml + '</div>';
       }).join('');
     } else {
       navEl.style.display = 'none';
@@ -13350,6 +13335,13 @@ function refreshInlinePdf() {
     contentEl.addEventListener('click', function() { this.focus(); });
     contentEl.addEventListener('paste', function(ev) {
       if (_activeItemIdx !== -1) return;
+      // BLOCK: If fichier principal already has file(s), do NOT allow adding more via paste
+      var cd = psmData[currentCardId];
+      if (cd && cd.devisImages && cd.devisImages.length > 0) {
+        ev.preventDefault();
+        showToast('📄 Fichier principal déjà présent — utilisez le bouton Fichier pour gérer', 'warning');
+        return;
+      }
       var ci = (ev.clipboardData || ev.originalEvent.clipboardData).items;
       for (var j = 0; j < ci.length; j++) {
         if (ci[j].type.indexOf('image') === 0) {
@@ -13363,7 +13355,6 @@ function refreshInlinePdf() {
               var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
               cv.getContext('2d').drawImage(im, 0, 0, w, h);
               var du = cv.toDataURL('image/jpeg', 0.85);
-              var cd = psmData[currentCardId];
               if (!cd) return;
               if (!cd.devisImages) cd.devisImages = [];
               cd.devisImages.push(du);
@@ -13382,6 +13373,45 @@ function refreshInlinePdf() {
 function switchInlinePdf(idx) {
   pdfInlineIdx = idx;
   refreshInlinePdf();
+}
+
+function removeDevisFromInline(idx) {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var images = psmData[currentCardId].devisImages || [];
+  if (!images[idx]) return;
+  
+  if (!confirm('Supprimer ce fichier ?')) return;
+  
+  // Delete from Storage if it's a URL
+  if (typeof deleteFromStorage === 'function') deleteFromStorage(images[idx]);
+  
+  images.splice(idx, 1);
+  psmData[currentCardId].devisImages = images;
+  
+  // Targeted write
+  _skipSyncUntil = Date.now() + 2000;
+  _pendingSave = true;
+  var updates = {};
+  updates['psm/' + currentCardId + '/devisImages'] = images.length > 0 ? images : null;
+  updates['psm/' + currentCardId + '/_lastModifiedAt'] = new Date().toISOString();
+  updates['psm/' + currentCardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+  db.ref().update(updates).then(function() {
+    _pendingSave = false;
+  }).catch(function(e) {
+    _skipSyncUntil = 0;
+    _pendingSave = false;
+    showToast('❌ Erreur suppression: ' + (e.message || ''), 'error');
+  });
+  
+  renderCards();
+  if (images.length === 0) {
+    pdfInlineIdx = 0;
+  } else {
+    pdfInlineIdx = Math.min(pdfInlineIdx, images.length - 1);
+  }
+  refreshInlinePdf();
+  renderItemsBar();
+  showToast('🗑️ Fichier supprimé', 'info');
 }
 
 function openDevisViewerFromInline() {
@@ -14001,9 +14031,23 @@ function sendPsmFileNotifyEmail(cardId) {
 }
 
 // Paste in devis overlay — only intercept if focus is NOT in a notes/instructions editable zone
+// AND only allow paste when NO files exist yet (prevent accidental duplicate inserts)
 document.addEventListener('paste', function(e) {
   const devisOverlay = document.getElementById('devisOverlay');
   if (!devisOverlay || !devisOverlay.classList.contains('visible')) return;
+  
+  // BLOCK: If fichier principal already has files, do NOT allow adding more via paste
+  if (currentCardId && psmData[currentCardId] && psmData[currentCardId].devisImages && psmData[currentCardId].devisImages.length > 0) {
+    // Only block image paste — allow text paste to pass through
+    for (const item of e.clipboardData.items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        showToast('📄 Fichier déjà présent — supprimez-le d\'abord pour en ajouter un autre', 'warning');
+        return;
+      }
+    }
+    return;
+  }
   
   // CRITICAL: Don't steal paste from notes/instructions contenteditable zones
   const active = document.activeElement;
