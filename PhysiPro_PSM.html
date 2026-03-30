@@ -7589,14 +7589,16 @@ function _loadRightNoteImage() {
 }
 
 function _saveDeptNotes() {
-  if (!currentCardId || !psmData[currentCardId]) return;
+  // Use _dirtyCardId if available (prevents cross-card contamination on blur during card switch)
+  var cardId = window._dirtyCardId || currentCardId;
+  if (!cardId || !psmData[cardId]) return;
   var dept = currentDept || 'atelier';
-  if (!psmData[currentCardId][dept]) psmData[currentCardId][dept] = {};
+  if (!psmData[cardId][dept]) psmData[cardId][dept] = {};
   var editor = document.getElementById('deptNotesEditor');
   if (!editor) return;
   var html = (editor.innerHTML || '').trim();
   if (html === '<br>' || html === '<div><br></div>') html = '';
-  psmData[currentCardId][dept].simpleNotes = html;
+  psmData[cardId][dept].simpleNotes = html;
 }
 
 function changeNotesFontSize(val) {
@@ -7620,9 +7622,12 @@ function _loadItemNotes(idx) {
 }
 
 function _saveCurrentItemNotes() {
-  if (_activeItemIdx < 0 || !currentCardId || !psmData[currentCardId]) return;
+  if (_activeItemIdx < 0) return;
+  // Use _dirtyCardId if available (prevents cross-card contamination on blur during card switch)
+  var cardId = window._dirtyCardId || currentCardId;
+  if (!cardId || !psmData[cardId]) return;
   var dept = currentDept || 'atelier';
-  var item = (psmData[currentCardId][dept].items || [])[_activeItemIdx];
+  var item = (psmData[cardId][dept].items || [])[_activeItemIdx];
   if (!item) return;
   var editor = document.getElementById('itemNotesEditor');
   if (editor) {
@@ -8849,28 +8854,27 @@ function selectCard(id) {
   var wasReplyUnread = card && card._hasReply && card._replyUnread === true;
   
   // Save current card before switching (protected)
+  var _prevCardId = currentCardId;
   try {
     if (currentCardId && currentCardId !== id && psmData[currentCardId]) {
       if (window._notesInputTimer) { clearTimeout(window._notesInputTimer); window._notesInputTimer = null; }
       _flushDomToData();
       saveToFirebaseNow();
       window._dirty = false;
-      window._dirtyCardId = null;
+      // Keep _dirtyCardId pointing to old card so blur handlers save to correct card
+      window._dirtyCardId = currentCardId;
     }
   } catch(e) { console.error('selectCard save error:', e); }
   
   currentCardId = id;
+  // Clear _dirtyCardId after blur events have fired (browser processes them async)
+  setTimeout(function() { if (window._dirtyCardId === _prevCardId) window._dirtyCardId = null; }, 50);
   
   // Remove quest-mode class (will be re-added by switchItemTab if needed)
   document.body.classList.remove('quest-mode');
   
-  // Determine which tab to open
-  var openQuestTab = false;
-  
-  // ═══ RESOLVED QUEST: open quest tab, clear resolved after first view ═══
+  // ═══ RESOLVED QUEST: clear resolved after first view ═══
   if (card && card.questionnementResolved === true && !_questResolvedClearedIds[id]) {
-    openQuestTab = true;
-    
     // Add to blocklist — prevents ALL listeners from re-setting resolved on this card
     _questResolvedClearedIds[id] = Date.now();
     
@@ -8884,7 +8888,6 @@ function selectCard(id) {
     card.questionnementBy = null;
     card.questionnementJobId = null;
     card._resolvedUnread = false;
-    // Mark all quest chat messages as read — prevents listener from re-setting resolved
     _markQuestChatRead(id);
     var _origDept = currentDept;
     currentDept = 'atelier'; _markQuestChatRead(id);
@@ -8910,10 +8913,6 @@ function selectCard(id) {
     }
     setTimeout(function() { renderCards(); }, 300);
   }
-  // Also open quest tab if card is in active questionnement (sent but not resolved)
-  if (card && card.questionnementSent === true && !card.questionnementResolved) {
-    openQuestTab = true;
-  }
   
   // Clear local unread flags for instant UI
   if (card) {
@@ -8927,12 +8926,8 @@ function selectCard(id) {
   PChat.loadForCard();
   updateQuestStatusPill();
   
-  // Now switch to the proper tab — this handles all panel visibility AND data loading
-  if (openQuestTab) {
-    switchItemTab(-2);
-  } else {
-    switchItemTab(-1);
-  }
+  // ALWAYS open Fichier principal when clicking a card
+  switchItemTab(-1);
   
   document.getElementById('noSelection').style.display = 'none';
   const dc = document.getElementById('detailsContent');
