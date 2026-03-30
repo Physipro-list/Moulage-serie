@@ -6258,6 +6258,7 @@ function _initPasteOnlyZone(zone, onImage) {
 
 // ═══ GLOBAL STATE ═══
 var currentDept = 'atelier';
+var _questResolvedClearedIds = {}; // Cards whose resolved status was cleared — prevents listener resurrection
 
 // ═══ SWITCH DEPARTMENT ═══
 // Switches all 3 areas: mat, quest, and notes to the selected dept
@@ -7152,6 +7153,8 @@ function setItemAnnotTool(tool) {
   var cur = _itemAnnotTool ? 'crosshair' : '';
   var z = document.getElementById('itemImgZone');
   if (z) z.style.cursor = cur;
+  var rn = document.getElementById('rightNoteImg');
+  if (rn) rn.style.cursor = cur;
   document.querySelectorAll('.psm-dept-annot-img').forEach(function(d) { d.style.cursor = cur; });
 }
 
@@ -7203,6 +7206,23 @@ function _annFindTarget(target) {
       img.src = url;
       if (typeof _flushDomToData === 'function') _flushDomToData();
       saveToFirebase();
+    };
+    return { zone: zone, img: img, saveFn: saveFn };
+  }
+  
+  // Check rightNoteImg (Fichier principal right panel image)
+  var rightNoteZ = document.getElementById('rightNoteImg');
+  if (rightNoteZ && rightNoteZ.contains(target)) {
+    img = rightNoteZ.querySelector('img');
+    if (!img) return null;
+    zone = rightNoteZ;
+    saveFn = function(url) {
+      var d = currentDept || 'atelier';
+      if (currentCardId && psmData[currentCardId] && psmData[currentCardId][d]) {
+        psmData[currentCardId][d].noteImage = url;
+        saveToFirebase();
+        _loadRightNoteImage();
+      }
     };
     return { zone: zone, img: img, saveFn: saveFn };
   }
@@ -8025,6 +8045,17 @@ function initPSM() {
     // Replace psmData with remote data for card list, counts, etc.
     psmData = remoteData;
     
+    // ENFORCE BLOCKLIST: cards whose resolved was cleared must STAY cleared
+    Object.keys(_questResolvedClearedIds).forEach(function(clearedId) {
+      if (psmData[clearedId]) {
+        psmData[clearedId].questionnementResolved = false;
+        psmData[clearedId].questionnementSent = false;
+        psmData[clearedId].questionnementResolvedAt = null;
+        psmData[clearedId].questionnementResolvedBy = null;
+        psmData[clearedId]._resolvedUnread = false;
+      }
+    });
+    
     // CLEANUP: Remove corrupt/invalid cards (non-objects, missing name)
     var _corruptIds = [];
     Object.keys(psmData).forEach(function(cid) {
@@ -8093,12 +8124,15 @@ function initPSM() {
     // Deep link: check URL for ?card=XXX on first load
     if (!_deepLinkHandled) {
       _deepLinkHandled = true;
+      // Auto-switch dept for specific users (runs once on first data load)
+      if (currentUser && currentUser.email && currentUser.email.toLowerCase() === 'sroy@physipro.com') {
+        if (currentDept !== 'couture') switchDept('couture');
+      }
       var params = new URLSearchParams(window.location.search);
       var deepCard = params.get('card');
       if (deepCard && psmData[deepCard]) {
         selectCard(deepCard);
         showToast('📋 Carte ouverte depuis lien', 'info');
-        // Clean URL
         window.history.replaceState({}, '', window.location.pathname);
         return;
       }
@@ -8830,8 +8864,11 @@ function selectCard(id) {
   var openQuestTab = false;
   
   // ═══ RESOLVED QUEST: open quest tab, clear resolved after first view ═══
-  if (card && card.questionnementResolved === true) {
+  if (card && card.questionnementResolved === true && !_questResolvedClearedIds[id]) {
     openQuestTab = true;
+    
+    // Add to blocklist — prevents ALL listeners from re-setting resolved on this card
+    _questResolvedClearedIds[id] = Date.now();
     
     // Clear resolved status — card goes back to normal after being viewed
     card.questionnementResolved = false;
@@ -8845,7 +8882,6 @@ function selectCard(id) {
     card._resolvedUnread = false;
     // Mark all quest chat messages as read — prevents listener from re-setting resolved
     _markQuestChatRead(id);
-    // Also mark read for both depts
     var _origDept = currentDept;
     currentDept = 'atelier'; _markQuestChatRead(id);
     currentDept = 'couture'; _markQuestChatRead(id);
@@ -8862,7 +8898,7 @@ function selectCard(id) {
       _clr[_cp + 'questionnementBy'] = null;
       _clr[_cp + '_lastModifiedAt'] = new Date().toISOString();
       _clr[_cp + '_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
-      _skipSyncUntil = Date.now() + 3000;
+      _skipSyncUntil = Date.now() + 5000;
       db.ref().update(_clr).then(function() {
         console.log('✅ Quest resolved cleared for ' + id);
         renderCards();
@@ -15602,12 +15638,17 @@ var PChat = (function() {
         });
         
         // Only set questionnementResolved if there's an UNREAD resolved message
-        // Once the creator has seen it (message marked read), stop forcing resolved = true
-        if (gotResolved && resolvedUnread) {
+        // AND the card is NOT in the blocklist (was explicitly cleared by user)
+        if (gotResolved && resolvedUnread && !_questResolvedClearedIds[cardId]) {
           psmData[cardId].questionnementResolved = true;
           psmData[cardId]._resolvedUnread = true;
         } else if (gotResolved && !resolvedUnread) {
-          // Resolved messages exist but all are read — don't touch questionnementResolved
+          psmData[cardId]._resolvedUnread = false;
+        }
+        // If card is in blocklist, force clear
+        if (_questResolvedClearedIds[cardId]) {
+          psmData[cardId].questionnementResolved = false;
+          psmData[cardId].questionnementSent = false;
           psmData[cardId]._resolvedUnread = false;
         }
         
