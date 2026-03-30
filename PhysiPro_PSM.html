@@ -9224,12 +9224,47 @@ function toggleComplete(dept) {
   // Toast
   showToast(newVal ? '✓ Marqué complet' : '✗ Marqué incomplet', 'info');
 
+  // Send email notification when marking complete
+  if (newVal) {
+    _sendDeptCompleteEmail(currentCardId, dept);
+  }
+
   // If fully complete, show notification
   if (newVal && checkCardFullyComplete(card)) {
     showToast('🎉 PSM complet!', 'success');
     var cid = currentCardId;
     setTimeout(function() { _openCompleteNotifyModal(cid); }, 3500);
   }
+}
+
+// ═══ EMAIL NOTIFICATION: Département complété ═══
+function _sendDeptCompleteEmail(cardId, dept) {
+  var card = psmData[cardId];
+  if (!card) return;
+  
+  var deptLabels = { atelier: 'Atelier', couture: 'Couture' };
+  var deptLabel = deptLabels[dept] || dept;
+  var patientName = card.name || 'Patient';
+  var orderNum = card.order || '---';
+  var senderName = currentUser ? getPhysiproDisplayName(currentUser.email) : 'PhysiPro';
+  
+  // Recipients: Sonia + Stéphanie
+  var recipients = [
+    { name: 'Sonia Boulanger', email: 'sonia.boulanger@physipro.com' },
+    { name: 'Stéphanie Roy', email: 'sroy@physipro.com' }
+  ];
+  
+  var emails = recipients.map(function(r) { return r.email; });
+  
+  var subject = 'PSM — ' + deptLabel + ' complété — ' + patientName + ' #' + orderNum;
+  var body = 'Bonjour,\n\n' +
+    'La section ' + deptLabel + ' du PSM a été complétée par ' + senderName + '.\n\n' +
+    'Patient : ' + patientName + '\n' +
+    'Commande : #' + orderNum + '\n\n' +
+    'Merci,\n' +
+    'PhysiPro PSM';
+  
+  window.open('mailto:' + encodeURIComponent(emails.join(';')) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
 }
 
 // Met à jour le bouton Compléter dans le header
