@@ -6688,49 +6688,30 @@ function updateQuestStatusPill() {
   }
   
   var card = psmData[currentCardId];
-  pill.style.display = 'inline-block';
   
-  // Check resolved state first (highest priority)
-  if (card.questionnementResolved) {
-    var resolvedBy = card.questionnementResolvedBy || '';
-    pill.textContent = '✅ Réglé' + (resolvedBy ? ' par ' + resolvedBy : '');
-    pill.style.background = 'linear-gradient(135deg,#059669,#10b981)';
-    pill.style.color = '#fff';
-    pill.style.border = '1px solid #34d399';
-    pill.style.animation = 'none';
-    // Blink if not yet seen
-    if (card._resolvedUnread) {
-      pill.style.animation = 'newCardBlink 0.8s ease-in-out infinite';
-    }
-  } else if (card.questionnementSent || card.questionnementJobId) {
+  if (card.questionnementSent || card.questionnementJobId) {
+    pill.style.display = 'inline-block';
     if (card._hasReply && card._replyUnread) {
-      // Got unread reply
       pill.textContent = '💬 Réponse reçue';
       pill.style.background = 'linear-gradient(135deg,#3b82f6,#2563eb)';
       pill.style.color = '#fff';
       pill.style.border = '1px solid #60a5fa';
       pill.style.animation = 'newCardBlink 0.8s ease-in-out infinite';
     } else if (card._hasReply) {
-      // Reply read
       pill.textContent = '✅ Répondu';
       pill.style.background = 'rgba(34,197,94,0.15)';
       pill.style.color = '#22c55e';
       pill.style.border = '1px solid rgba(34,197,94,0.4)';
       pill.style.animation = 'none';
     } else {
-      // Sent, waiting
-      pill.textContent = '⏳ En attente de questionnement';
-      pill.style.background = 'rgba(34,197,94,0.15)';
-      pill.style.color = '#22c55e';
-      pill.style.border = '1px solid rgba(34,197,94,0.4)';
+      pill.textContent = '⏳ En attente';
+      pill.style.background = 'rgba(245,158,11,0.15)';
+      pill.style.color = '#f59e0b';
+      pill.style.border = '1px solid rgba(245,158,11,0.4)';
       pill.style.animation = 'none';
     }
   } else {
-    pill.textContent = '⚠ Aucun questionnement';
-    pill.style.background = 'rgba(239,68,68,0.15)';
-    pill.style.color = '#f87171';
-    pill.style.border = '1px solid rgba(239,68,68,0.4)';
-    pill.style.animation = 'none';
+    pill.style.display = 'none';
   }
 }
 
@@ -8256,13 +8237,10 @@ function renderCards() {
     const pdfBtnCls = hasDevisImages ? 'psm-card-viewpdf has-pdf card-devis-drop' : 'psm-card-viewpdf card-devis-drop';
     
     const isInQuest = card.questionnementSent === true;
-    const isQuestResolved = card.questionnementResolved === true;
-    const isResolvedUnread = isQuestResolved && card._resolvedUnread === true;
-    const isReplyUnread = isInQuest && !isQuestResolved && card._hasReply && card._replyUnread;
-    const questCls = isQuestResolved ? 'card-quest-resolved' : (isInQuest ? 'card-in-quest' : '');
-    const unreadCls = isResolvedUnread ? 'card-quest-resolved-unread' : (isReplyUnread ? 'card-reply-unread' : '');
-    // Quest overrides complete: if in quest or resolved, don't show complete
-    const finalCompleteCls = (isInQuest || isQuestResolved) ? '' : completeCls;
+    const questCls = isInQuest ? 'card-in-quest' : '';
+    const unreadCls = '';
+    // Quest overrides complete: if in quest, don't show complete
+    const finalCompleteCls = isInQuest ? '' : completeCls;
     
     // Determine PSM/Prix majoré type
     const isPrixMajore = ['mousse','couture','assemblage','finition','atelier'].some(d => card[d] && card[d].prixMajore);
@@ -8298,7 +8276,7 @@ function renderCards() {
           </div>
         </div>
         <div class="psm-card-dept-bar">${deptBarHtml}</div>
-        <div class="psm-card-quest-badge"><span class="quest-badge-text">${isQuestResolved ? '✅ Questionnement réglé' : '❓ En questionnement'}</span></div>
+        <div class="psm-card-quest-badge"><span class="quest-badge-text">❓ En questionnement</span></div>
         <div class="psm-card-complete-badge"><span class="complete-text">✓ COMPLET</span></div>
       </div>
     `;
@@ -8873,48 +8851,7 @@ function selectCard(id) {
   // Remove quest-mode class (will be re-added by switchItemTab if needed)
   document.body.classList.remove('quest-mode');
   
-  // ═══ RESOLVED QUEST: clear resolved after first view ═══
-  if (card && card.questionnementResolved === true && !_questResolvedClearedIds[id]) {
-    // Add to blocklist — prevents ALL listeners from re-setting resolved on this card
-    _questResolvedClearedIds[id] = Date.now();
-    
-    // Clear resolved status — card goes back to normal after being viewed
-    card.questionnementResolved = false;
-    card.questionnementSent = false;
-    card.questionnementResolvedAt = null;
-    card.questionnementResolvedBy = null;
-    card.questionnementSentAt = null;
-    card.questionnementByEmail = null;
-    card.questionnementBy = null;
-    card.questionnementJobId = null;
-    card._resolvedUnread = false;
-    _markQuestChatRead(id);
-    var _origDept = currentDept;
-    currentDept = 'atelier'; _markQuestChatRead(id);
-    currentDept = 'couture'; _markQuestChatRead(id);
-    currentDept = _origDept;
-    if (db) {
-      var _clr = {};
-      var _cp = 'psm/' + id + '/';
-      _clr[_cp + 'questionnementResolved'] = null;
-      _clr[_cp + 'questionnementSent'] = null;
-      _clr[_cp + 'questionnementResolvedAt'] = null;
-      _clr[_cp + 'questionnementResolvedBy'] = null;
-      _clr[_cp + 'questionnementSentAt'] = null;
-      _clr[_cp + 'questionnementByEmail'] = null;
-      _clr[_cp + 'questionnementBy'] = null;
-      _clr[_cp + '_lastModifiedAt'] = new Date().toISOString();
-      _clr[_cp + '_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
-      _skipSyncUntil = Date.now() + 5000;
-      db.ref().update(_clr).then(function() {
-        console.log('✅ Quest resolved cleared for ' + id);
-        renderCards();
-      });
-    }
-    setTimeout(function() { renderCards(); }, 300);
-  }
-  
-  // Clear local unread flags for instant UI
+  // Clear local unread flags
   if (card) {
     card._resolvedUnread = false;
     card._replyUnread = false;
@@ -9555,63 +9492,45 @@ function questResetToOpen() {
 function questMarkCompleted() {
   if (!currentCardId || !psmData[currentCardId] || !db) return;
   var card = psmData[currentCardId];
-  var myName = currentUser ? getPhysiproDisplayName(currentUser.email) : 'PSM';
   
-  if (card.questionnementResolved) {
-    // Already resolved — CLEAR questionnement entirely, card goes back to normal
-    card.questionnementResolved = false;
-    card.questionnementResolvedAt = null;
-    card.questionnementResolvedBy = null;
-    card.questionnementSent = false;
-    card.questionnementSentAt = null;
-    
-    var updates = {};
-    var p = 'psm/' + currentCardId + '/';
-    updates[p + 'questionnementResolved'] = null;
-    updates[p + 'questionnementResolvedAt'] = null;
-    updates[p + 'questionnementResolvedBy'] = null;
-    updates[p + 'questionnementSent'] = null;
-    updates[p + 'questionnementSentAt'] = null;
-    
-    // Also remove resolved from ServiceClient job (card will auto-cleanup)
-    if (card.questionnementJobId) {
-      updates['jobs/' + card.questionnementJobId + '/resolved'] = null;
-      updates['jobs/' + card.questionnementJobId + '/resolvedAt'] = null;
-      updates['jobs/' + card.questionnementJobId + '/resolvedBy'] = null;
-    }
-    
-    db.ref().update(updates).then(function() {
-      renderCards();
-      _updateQuestTabBtn();
-      _updateQuestStatusBar();
-      showToast('🗑️ Questionnement enlevé', 'info');
-    });
-  } else {
-    // Not resolved — mark as resolved (green "Réglé")
-    card.questionnementResolved = true;
-    card.questionnementResolvedAt = new Date().toISOString();
-    card.questionnementResolvedBy = myName;
-    card.questionnementSent = true;
-    
-    var updates = {};
-    updates['psm/' + currentCardId + '/questionnementResolved'] = true;
-    updates['psm/' + currentCardId + '/questionnementResolvedAt'] = new Date().toISOString();
-    updates['psm/' + currentCardId + '/questionnementResolvedBy'] = myName;
-    updates['psm/' + currentCardId + '/questionnementSent'] = true;
-    
-    if (card.questionnementJobId) {
-      updates['jobs/' + card.questionnementJobId + '/resolved'] = true;
-      updates['jobs/' + card.questionnementJobId + '/resolvedAt'] = new Date().toISOString();
-      updates['jobs/' + card.questionnementJobId + '/resolvedBy'] = myName;
-    }
-    
-    db.ref().update(updates).then(function() {
-      renderCards();
-      _updateQuestTabBtn();
-      _updateQuestStatusBar();
-      showToast('✅ Questionnement réglé — la carte service client disparaîtra dans 5 jours', 'success');
-    });
+  // Clear ALL questionnement — card goes back to normal (blue/mauve)
+  card.questionnementResolved = null;
+  card.questionnementResolvedAt = null;
+  card.questionnementResolvedBy = null;
+  card.questionnementSent = null;
+  card.questionnementSentAt = null;
+  card.questionnementByEmail = null;
+  card.questionnementBy = null;
+  card._resolvedUnread = false;
+  
+  // Add to blocklist
+  _questResolvedClearedIds[currentCardId] = Date.now();
+  
+  var updates = {};
+  var p = 'psm/' + currentCardId + '/';
+  updates[p + 'questionnementResolved'] = null;
+  updates[p + 'questionnementResolvedAt'] = null;
+  updates[p + 'questionnementResolvedBy'] = null;
+  updates[p + 'questionnementSent'] = null;
+  updates[p + 'questionnementSentAt'] = null;
+  updates[p + 'questionnementByEmail'] = null;
+  updates[p + 'questionnementBy'] = null;
+  
+  // Also mark job resolved in ServiceClient — auto-delete after 5 days
+  if (card.questionnementJobId) {
+    var myName = currentUser ? getPhysiproDisplayName(currentUser.email) : 'PSM';
+    updates['jobs/' + card.questionnementJobId + '/resolved'] = true;
+    updates['jobs/' + card.questionnementJobId + '/resolvedAt'] = new Date().toISOString();
+    updates['jobs/' + card.questionnementJobId + '/resolvedBy'] = myName;
   }
+  
+  _skipSyncUntil = Date.now() + 5000;
+  db.ref().update(updates).then(function() {
+    renderCards();
+    _updateQuestTabBtn();
+    _updateQuestStatusBar();
+    showToast('✅ Questionnement terminé', 'success');
+  });
 }
 
 function _updateQuestStatusBar() {
@@ -9619,20 +9538,13 @@ function _updateQuestStatusBar() {
   if (!bars.length) return;
   if (!currentCardId || !psmData[currentCardId]) return;
   var card = psmData[currentCardId];
-  var isResolved = card.questionnementResolved === true;
   var isSent = card.questionnementSent === true;
-  // Only update the bar with buttons (right side)
   bars.forEach(function(bar) {
     if (bar.children.length < 2) return;
     var resetBtn = bar.children[0];
     var completeBtn = bar.children[1];
-    if (isResolved) {
-      if (resetBtn) resetBtn.style.opacity = '1';
-      if (completeBtn) { completeBtn.style.opacity = '1'; completeBtn.textContent = '🗑️ Enlever questionnement réglé'; }
-    } else {
-      if (resetBtn) resetBtn.style.opacity = isSent ? '1' : '0.5';
-      if (completeBtn) { completeBtn.style.opacity = '1'; completeBtn.textContent = '✅ Complété et répondu'; }
-    }
+    if (resetBtn) resetBtn.style.opacity = isSent ? '1' : '0.5';
+    if (completeBtn) completeBtn.style.opacity = isSent ? '1' : '0.5';
   });
 }
 
@@ -15636,40 +15548,21 @@ var PChat = (function() {
           }
         });
         
-        // Only set questionnementResolved if there's an UNREAD resolved message
-        // AND the card is NOT in the blocklist (was explicitly cleared by user)
-        if (gotResolved && resolvedUnread && !_questResolvedClearedIds[cardId]) {
-          psmData[cardId].questionnementResolved = true;
-          psmData[cardId]._resolvedUnread = true;
-        } else if (gotResolved && !resolvedUnread) {
-          psmData[cardId]._resolvedUnread = false;
-        }
-        // If card is in blocklist, force clear
-        if (_questResolvedClearedIds[cardId]) {
-          psmData[cardId].questionnementResolved = false;
-          psmData[cardId].questionnementSent = false;
-          psmData[cardId]._resolvedUnread = false;
-        }
+        // Chat listener: ONLY detect replies and read status
+        // questionnementResolved and questionnementSent are NEVER set here
+        // Firebase psm/{cardId}/ is the SOLE source of truth for quest status
         
-        // Only set questionnementSent if it's not already explicitly cleared
-        // (checked via Firebase psm/{cardId}/questionnementSent being truthy)
-        var questAlreadyCleared = (psmData[cardId].questionnementSent === false || 
-                                    psmData[cardId].questionnementSent === null || 
-                                    psmData[cardId].questionnementSent === undefined) &&
-                                   !psmData[cardId].questionnementResolved;
-        if (!questAlreadyCleared) {
-          if (iSent && !gotReply) {
-            psmData[cardId]._hasReply = false;
-          } else if (iSent && gotReply) {
-            var allRead = true;
-            Object.values(msgs).forEach(function(msg) {
-              if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail && msg.type !== 'quest-resolved') {
-                if (!msg.readBy || !msg.readBy[myEmailKey]) allRead = false;
-              }
-            });
-            psmData[cardId]._hasReply = true;
-            psmData[cardId]._replyUnread = !allRead;
-          }
+        if (iSent && gotReply) {
+          var allRead = true;
+          Object.values(msgs).forEach(function(msg) {
+            if (msg.authorEmail && msg.authorEmail.toLowerCase() !== myEmail && msg.type !== 'quest-resolved') {
+              if (!msg.readBy || !msg.readBy[myEmailKey]) allRead = false;
+            }
+          });
+          psmData[cardId]._hasReply = true;
+          psmData[cardId]._replyUnread = !allRead;
+        } else if (iSent) {
+          psmData[cardId]._hasReply = false;
         }
       });
       renderCards();
