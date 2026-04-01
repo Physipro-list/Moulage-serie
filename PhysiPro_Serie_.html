@@ -10781,10 +10781,12 @@ function _cleanPurgedFromMemory() {
 function saveSerieDataToLocalStorage(changedCardId) {
   if (changedCardId && _purgedIds.has(changedCardId)) return;
   try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
-  if (changedCardId) _serieDirtyCards.add(changedCardId);
-  else if (currentSerieId && serieCardsData[currentSerieId]) _serieDirtyCards.add(currentSerieId);
-  if (_serieSyncTimer) clearTimeout(_serieSyncTimer);
-  _serieSyncTimer = setTimeout(_syncDirtyToFirebase, 500);
+  // Push immédiat à Firebase si un cardId est spécifié
+  if (changedCardId && serieCardsData[changedCardId]) {
+    _pushCardToFirebaseNow(changedCardId);
+  } else if (currentSerieId && serieCardsData[currentSerieId]) {
+    _pushCardToFirebaseNow(currentSerieId);
+  }
 }
 
 // ═══ SYNC FIREBASE — pousser les cartes modifiées ═══
@@ -13523,6 +13525,7 @@ function saveSerieCardFiche(cardId) {
   }
 
   saveSerieDataToLocalStorage(cardId);
+  _pushCardToFirebaseNow(cardId);
 
   const overlay = document.getElementById('serieCardEditOverlay');
   if (overlay) overlay.remove();
@@ -15631,6 +15634,8 @@ function _enableSectionDragDrop(secA, secB, prefix) {
       var newStatus = null;
       if (sec.id.includes('Emballe')) newStatus = 'emballe';
       else if (sec.id.includes('Complete')) newStatus = 'complete';
+      else if (sec.id.includes('EncoursAtelier')) newStatus = 'partiel';
+      else if (sec.id.includes('EncoursCouture')) newStatus = 'partiel';
       else if (sec.id.includes('Magasin')) newStatus = 'produire';
       else if (sec.id.includes('Afaire')) newStatus = 'produire';
       if (newStatus) {
@@ -17978,6 +17983,7 @@ function saveSerieNote(cardId) {
     if (el.value.trim()) data._notesEdited = true;
   }
   saveSerieDataToLocalStorage(cardId);
+  _pushCardToFirebaseNow(cardId);
   const overlay = document.getElementById('serieNoteOverlay');
   if (overlay) overlay.remove();
   // Mettre à jour la pastille
