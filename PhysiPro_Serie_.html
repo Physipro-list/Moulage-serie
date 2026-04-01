@@ -11003,8 +11003,22 @@ function _startSerieCommandesListener() {
       }
     });
 
-    if (added > 0 || updated > 0) {
-      console.log('☁️ Firebase: +' + added + ' nouvelles, ' + updated + ' maj');
+    // ═══ RECONCILIATION — supprimer les cartes fantômes (dans localStorage mais plus dans Firebase) ═══
+    var removed = 0;
+    Object.keys(serieCardsData).forEach(function(id) {
+      if (id === 'timestamp' || id === 'date') return;
+      if (_serieDirtyCards.has(id)) return; // Ne pas supprimer les cartes en cours d'édition locale
+      if (!fbData[id]) {
+        // Cette carte existe localement mais plus dans Firebase → fantôme
+        var el = document.querySelector('.mcard[data-id="' + id + '"]');
+        if (el) el.remove();
+        delete serieCardsData[id];
+        removed++;
+      }
+    });
+
+    if (added > 0 || updated > 0 || removed > 0) {
+      console.log('☁️ Firebase: +' + added + ' nouvelles, ' + updated + ' maj, -' + removed + ' fantômes supprimées');
       try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
     }
 
