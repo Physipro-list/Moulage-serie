@@ -163,7 +163,6 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;height:100v
 /* Fix: make page visible as main content */
 #pageSerie{display:flex !important;flex-direction:column;flex:1;overflow:hidden;height:calc(100vh - 75px);min-height:0;}
 
-
 /* ================================================================
    SECTION 4: CSS PAGE SÉRIE+
    Structure avec colonnes fixes + panel détails
@@ -2171,7 +2170,6 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;height:100v
   background: linear-gradient(to bottom, #4ade80, #22c55e);
 }
 
-
 /* Inspection item-row same height as other depts */
 #serieDeptInspection .item-row {
   height: 20px;
@@ -2802,7 +2800,6 @@ tr.item-spacer td { border: none !important; background: transparent !important;
 }
 #serieTypeModal .stm-cancel:hover { background: #475569; color: #fff; }
 
-
 /* ═══ Modal confirmation suppression item ═══ */
 #serieDeleteItemOverlay {
   position: fixed; inset: 0;
@@ -3135,8 +3132,6 @@ tr.item-spacer td { border: none !important; background: transparent !important;
   text-align: center;
   width: 100%;
 }
-
-
 
   width: 15px; /* v952: était 18px */
   height: 15px;
@@ -7853,7 +7848,6 @@ tr.item-spacer td { border: none !important; background: transparent !important;
   background: linear-gradient(to bottom, #facc15, #eab308);
 }
 
-
 /* Print checkbox in send column on item rows */
 .item-print-row {
   display: flex;
@@ -8521,7 +8515,6 @@ if(localStorage.getItem('physipro_last_email')){
   <div class="tb-user-bottom">
     <div class="user-status">
 
-
       <button onclick="openSerieDeletedLog()" title="Commandes effacées" style="background:linear-gradient(to bottom,#7c3aed,#4c1d95);border:1px solid rgba(0,0,0,0.4);color:#fff;font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;cursor:pointer;white-space:nowrap;position:relative;">📋 Log <span id="deletedLogBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#dc2626;color:#fff;font-size:7px;font-weight:800;min-width:12px;height:12px;line-height:12px;text-align:center;border-radius:6px;padding:0 2px;"></span></button>
       <button id="serieRefreshBtn" onclick="serieForceRefresh()" title="Rafraîchir" style="background:linear-gradient(to bottom,#1e40af,#2563eb);border:1px solid rgba(0,0,0,0.4);color:white;font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;cursor:pointer;text-shadow:1px 1px 0 #000;white-space:nowrap;">🔄 Rafraîchir</button>
       <span class="status-dot" id="statusDot"></span><span class="user-name" id="currentUserName">--</span>
@@ -9088,7 +9081,6 @@ if(localStorage.getItem('physipro_last_email')){
       </div>
     </div>
   </div>
-
 
 <script>
 // ===== FIREBASE INIT =====
@@ -10713,223 +10705,125 @@ function escapeHtml(str) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SECTION 24.2 — SAUVEGARDE / SYNC FIREBASE (v3 — réécriture complète)
+// SECTION 24.2 — SYSTÈME DE DONNÉES SÉRIE+ (v4 — réécriture)
 //
-// ARCHITECTURE SIMPLE:
-// - Firebase = source de vérité
-// - localStorage = cache pour chargement rapide
-// - Purge = supprime de Firebase + ignore si encore présent
-// - Pas de rolling backup automatique
-// - Pas d'integrity check qui ressuscite des cartes
-// - Pas de protection anomalie qui re-pousse des données
+// ARCHITECTURE:
+//   Firebase = source de vérité UNIQUE
+//   Pas de localStorage pour les cartes
+//   Pas de dirty cards, pas de timers, pas de syncing flags
 //
-// FONCTIONS:
-// - save()          → sauvegarde en mémoire + localStorage + Firebase
-// - _loadFromLocal  → charge le cache localStorage au démarrage
-// - _rebuildDOM     → crée les cartes DOM depuis serieCardsData
-// - _firebaseSync   → listener Firebase, met à jour local depuis FB
+// FLUX:
+//   Chargement : Firebase .on('value') → serieCardsData → DOM
+//   Sauvegarde : modifier serieCardsData → _saveCard(id) → Firebase
+//   Le listener reçoit l'écho et met à jour le DOM
+//   Suppression : Firebase .remove() → le listener retire du DOM
 // ═══════════════════════════════════════════════════════════════
 
-var _serieIsSyncing = false;
-var _serieDirtyCards = new Set();
-var _serieSyncTimer = null;
-var _serieListenersAttached = false;
-var _purgedIds = new Set();       // IDs purgés — ignorés partout
 var _clearAllPending = false;
-var _clearAllTimestamp = 0;
+var _firebaseReady = false;  // true après le PREMIER callback Firebase
 
-// ─── Charger les IDs purgés depuis localStorage (survit aux reloads) ───
-(function() {
-  try {
-    var saved = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
-    Object.keys(saved).forEach(function(id) { _purgedIds.add(id); });
-    if (_purgedIds.size > 0) console.log('🛡️ ' + _purgedIds.size + ' ID(s) purgé(s) chargés');
-  } catch(e) {}
-  try {
-    var ts = parseInt(localStorage.getItem('physipro_serie_clearAll_ts') || '0');
-    if (ts && Date.now() - ts < 120000) {
-      _clearAllPending = true;
-      _clearAllTimestamp = ts;
-      setTimeout(function() { _clearAllPending = false; }, 120000 - (Date.now() - ts));
-    }
-  } catch(e) {}
-})();
-
-// ─── Est-ce qu'une carte est purgée ? (utilisé partout) ───
-function _isCardPurged(id) { return _purgedIds.has(id); }
-window._isCardPurged = _isCardPurged;
-
-// ─── Nettoyer les cartes purgées de la mémoire et du DOM ───
-function _cleanPurgedFromMemory() {
-  var removed = 0;
-  Object.keys(serieCardsData).forEach(function(id) {
-    if (_purgedIds.has(id)) {
-      delete serieCardsData[id];
-      var el = document.querySelector('.mcard[data-id="' + id + '"]');
-      if (el) el.remove();
-      removed++;
-    }
-  });
-  if (removed > 0) {
-    console.log('🛡️ ' + removed + ' carte(s) purgée(s) nettoyées');
-    try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
-  }
-}
-
-// ═══ SAUVEGARDER ═══
-// Une seule fonction de sauvegarde. Sauvegarde localStorage + planifie Firebase.
+// ─── SAUVEGARDER UNE CARTE DANS FIREBASE ───
+// C'est LA SEULE fonction de sauvegarde. Appelée partout.
 function saveSerieDataToLocalStorage(changedCardId) {
-  if (changedCardId && _purgedIds.has(changedCardId)) return;
-  try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
-  // Push immédiat à Firebase si un cardId est spécifié
-  if (changedCardId && serieCardsData[changedCardId]) {
-    _pushCardToFirebaseNow(changedCardId);
-  } else if (currentSerieId && serieCardsData[currentSerieId]) {
-    _pushCardToFirebaseNow(currentSerieId);
-  }
+  var cardId = changedCardId || currentSerieId;
+  if (!cardId || !serieCardsData[cardId]) return;
+  _saveCard(cardId);
 }
 
-// ═══ SYNC FIREBASE — pousser les cartes modifiées ═══
-function _syncDirtyToFirebase() {
+function _saveCard(cardId) {
   if (!firebaseDb || !isFirebaseEnabled) return;
-  if (_serieDirtyCards.size === 0) return;
-  if (writeBlocked(false)) return;
-
-  _serieIsSyncing = true;
-  var ids = Array.from(_serieDirtyCards);
-  _serieDirtyCards.clear();
-
-  var updates = {};
-  ids.forEach(function(id) {
-    if (_purgedIds.has(id)) return;
-    if (serieCardsData[id]) updates['serieCommandes/' + id] = serieCardsData[id];
-  });
-  if (Object.keys(updates).length === 0) { _serieIsSyncing = false; return; }
-
-  firebaseDb.ref().update(updates)
-    .then(function() {
-      console.log('☁️ Sync ' + Object.keys(updates).length + ' carte(s)');
-      setTimeout(function() { _serieIsSyncing = false; }, 300);
-    })
-    .catch(function(e) {
-      console.error('Sync error:', e);
-      ids.forEach(function(id) { _serieDirtyCards.add(id); });
-      _serieIsSyncing = false;
-    });
-}
-// Alias pour compatibilité
-var _syncDirtyCardsToFirebase = _syncDirtyToFirebase;
-
-// ═══ PUSH IMMÉDIAT — pour une carte spécifique (après import JSON, création) ═══
-function _pushCardToFirebaseNow(cardId) {
-  if (!firebaseDb || !isFirebaseEnabled) { _serieDirtyCards.add(cardId); return; }
   if (!serieCardsData[cardId]) return;
-  if (_purgedIds.has(cardId)) return;
-  if (writeBlocked(false)) { _serieDirtyCards.add(cardId); return; }
-
-  _serieIsSyncing = true;
-  var update = {};
-  update['serieCommandes/' + cardId] = serieCardsData[cardId];
-  firebaseDb.ref().update(update)
-    .then(function() {
-      _serieDirtyCards.delete(cardId);
-      setTimeout(function() { _serieIsSyncing = false; }, 300);
-    })
-    .catch(function(e) {
-      console.error('Push error ' + cardId + ':', e);
-      _serieDirtyCards.add(cardId);
-      _serieIsSyncing = false;
-    });
+  if (writeBlocked(true)) return;
+  firebaseDb.ref('serieCommandes/' + cardId).set(serieCardsData[cardId])
+    .then(function() { console.log('💾 ' + cardId); })
+    .catch(function(e) { console.error('❌ Save error ' + cardId + ':', e); });
 }
 
-// ═══ BULK SYNC — après import JSON ═══
+// ─── SAUVEGARDER TOUTES LES CARTES (après import JSON) ───
 function _syncAllCardsToFirebase() {
   if (!firebaseDb || !isFirebaseEnabled) return;
-  if (Object.keys(serieCardsData).length === 0) return;
-  if (writeBlocked()) return;
-
-  _serieIsSyncing = true;
+  if (writeBlocked(true)) return;
   var updates = {};
   Object.keys(serieCardsData).forEach(function(id) {
-    if (!_purgedIds.has(id)) updates['serieCommandes/' + id] = serieCardsData[id];
+    updates['serieCommandes/' + id] = serieCardsData[id];
   });
-  if (Object.keys(updates).length === 0) { _serieIsSyncing = false; return; }
-
+  if (Object.keys(updates).length === 0) return;
   firebaseDb.ref().update(updates)
-    .then(function() {
-      console.log('☁️ Bulk sync OK (' + Object.keys(updates).length + ')');
-      setTimeout(function() { _serieIsSyncing = false; }, 500);
-    })
-    .catch(function(e) { console.error('Bulk sync error:', e); _serieIsSyncing = false; });
+    .then(function() { console.log('💾 Bulk save OK (' + Object.keys(updates).length + ')'); })
+    .catch(function(e) { console.error('❌ Bulk save error:', e); });
 }
 
-// ═══ MERGE INTELLIGENT — prendre le MAX de qtyFait ═══
-function _mergeSerieCard(local, fb) {
-  ['client','name','order','po','numeroPO','soumission','dateRecue','dateLivraison','codeChargement','notes','isBO','_typeManuel','targetColumn','raisonBO','createdAt','createdBy','isAccessoire','_accessoireComplete','isItem','_itemSkipCouture','_manualStatus','_notesEdited'].forEach(function(f) {
-    if (fb[f] !== undefined) local[f] = fb[f];
-  });
-  if (fb.po && !local.numeroPO) local.numeroPO = fb.po;
-  if (fb.numeroPO && !local.po) local.po = fb.numeroPO;
-  if (!fb.items) return;
-  if (!local.items) { local.items = fb.items; return; }
-  fb.items.forEach(function(fItem, ii) {
-    if (!local.items[ii]) { local.items[ii] = fItem; return; }
-    if (fItem.name) local.items[ii].name = fItem.name;
-    if (fItem.code !== undefined) local.items[ii].code = fItem.code;
-    if (!local.items[ii].grandeurs) local.items[ii].grandeurs = [];
-    (fItem.grandeurs || []).forEach(function(fG, gi) {
-      if (!local.items[ii].grandeurs[gi]) { local.items[ii].grandeurs[gi] = fG; return; }
-      var lG = local.items[ii].grandeurs[gi];
-      if (fG.qty) lG.qty = fG.qty;
-      if (fG.name) lG.name = fG.name;
-      if (fG.notes !== undefined) lG.notes = fG.notes;
-      if (fG._status !== undefined) lG._status = fG._status;
-      ['atelier','couture','inspection'].forEach(function(dept) {
-        if (!fG[dept]) return;
-        if (!lG[dept]) { lG[dept] = fG[dept]; return; }
-        var fQf = parseInt(fG[dept].qtyFait) || 0;
-        var lQf = parseInt(lG[dept].qtyFait) || 0;
-        if (fQf > lQf) { lG[dept] = fG[dept]; }
-        else if (fQf === lQf) {
-          ['note','status','inspected','inspectedAt','inspectedBy','exped','sentToCouture','sentToInventaire','distributed','partiel'].forEach(function(k) {
-            if (fG[dept][k] !== undefined) lG[dept][k] = fG[dept][k];
-          });
-        }
-        ['sentToCouture','sentToInventaire','distributed','inspected'].forEach(function(flag) {
-          if (fG[dept][flag] && !lG[dept][flag]) lG[dept][flag] = true;
-        });
-      });
-    });
-  });
-}
+// ─── LISTENER FIREBASE — source de vérité unique ───
+var _firebaseListenerAttached = false;
 
-// ═══ CHARGER DEPUIS LOCALSTORAGE (cache) ═══
-function _loadSerieFromLocalStorage() {
-  try {
-    var saved = localStorage.getItem('physipro_serie_data');
-    if (!saved) return;
-    var rawData = JSON.parse(saved);
-    if (!rawData || typeof rawData !== 'object') return;
-    var clean = {};
-    Object.keys(rawData).forEach(function(id) {
-      if (!rawData[id] || typeof rawData[id] !== 'object') return;
+function _attachSerieFirebaseListeners() {
+  if (_firebaseListenerAttached) return;
+  if (!firebaseDb || !isFirebaseEnabled) return;
+  _firebaseListenerAttached = true;
+  console.log('🔌 Firebase listener attaché');
+
+  firebaseDb.ref('serieCommandes').on('value', function(snapshot) {
+    if (_clearAllPending) return;
+
+    var fbData = snapshot.exists() ? snapshot.val() : {};
+    if (!fbData || typeof fbData !== 'object') fbData = {};
+
+    // Filtrer les clés système
+    var validIds = {};
+    Object.keys(fbData).forEach(function(id) {
       if (id === 'timestamp' || id === 'date' || id === 'undefined' || id === 'null') return;
       if (id.startsWith('demo-') || id.startsWith('test-') || id.startsWith('sample-')) return;
-      if (_purgedIds.has(id)) return; // Ignorer les purgés
-      clean[id] = rawData[id];
+      if (!fbData[id] || typeof fbData[id] !== 'object') return;
+      validIds[id] = true;
     });
-    serieCardsData = clean;
-    // Re-sauvegarder propre si on a filtré des purgés
-    if (Object.keys(clean).length !== Object.keys(rawData).length) {
-      localStorage.setItem('physipro_serie_data', JSON.stringify(clean));
+
+    // 1. AJOUTER/METTRE À JOUR depuis Firebase
+    var added = 0, updated = 0;
+    Object.keys(validIds).forEach(function(id) {
+      if (!serieCardsData[id]) {
+        serieCardsData[id] = fbData[id];
+        added++;
+      } else {
+        // Firebase = vérité → écraser les données locales
+        serieCardsData[id] = fbData[id];
+        updated++;
+      }
+    });
+
+    // 2. SUPPRIMER les cartes qui ne sont plus dans Firebase
+    var removed = 0;
+    Object.keys(serieCardsData).forEach(function(id) {
+      if (!validIds[id]) {
+        var el = document.querySelector('.mcard[data-id="' + id + '"]');
+        if (el) el.remove();
+        delete serieCardsData[id];
+        removed++;
+      }
+    });
+
+    console.log('☁️ Firebase: ' + Object.keys(serieCardsData).length + ' cartes (+' + added + ' -' + removed + ' ~' + updated + ')');
+
+    // 3. Reconstruire le DOM
+    _rebuildSerieDOM();
+
+    // 4. Sélectionner une carte si nécessaire
+    if (!currentSerieId || !serieCardsData[currentSerieId]) {
+      var f = document.querySelector(SERIE_CARD_SELECTOR + ', #serieCardsList .mcard');
+      if (f && f.dataset.id) selectSerieCard(f.dataset.id, false);
+    } else {
+      renderSerie3Cols(currentSerieId);
     }
-    console.log('📂 localStorage: ' + Object.keys(serieCardsData).length + ' commandes');
-  } catch(e) { console.error('Erreur localStorage:', e); }
+
+    // 5. Premier chargement terminé
+    if (!_firebaseReady) {
+      _firebaseReady = true;
+      console.log('✅ Firebase prêt — ' + Object.keys(serieCardsData).length + ' commandes');
+    }
+  });
 }
 
-// ═══ RECRÉER LES CARTES DOM ═══
+// ─── RECONSTRUIRE LE DOM DEPUIS serieCardsData ───
 function _rebuildSerieDOM() {
-  _cleanPurgedFromMemory();
   Object.keys(serieCardsData).forEach(function(id) {
     if (!document.querySelector('.mcard[data-id="' + id + '"]')) {
       createSerieCardFromData(id, serieCardsData[id]);
@@ -10942,110 +10836,11 @@ function _rebuildSerieDOM() {
   rebuildDateSeparators();
 }
 
-// ═══ LISTENER FIREBASE — simple et propre ═══
-function _attachSerieFirebaseListeners() {
-  if (_serieListenersAttached) return;
-  if (!firebaseDb || !isFirebaseEnabled) return;
-  _serieListenersAttached = true;
-  console.log('🔌 Firebase listeners attachés');
-
-  // ÉTAPE 1: Charger les IDs purgés depuis Firebase AVANT d'écouter les commandes
-  firebaseDb.ref('serieDeletedCards').once('value', function(delSnap) {
-    var delData = delSnap.exists() ? delSnap.val() : {};
-    if (delData && typeof delData === 'object') {
-      var count = 0;
-      Object.keys(delData).forEach(function(id) {
-        _purgedIds.add(id);
-        count++;
-      });
-      if (count > 0) {
-        console.log('🛡️ ' + count + ' ID(s) purgé(s) chargés depuis Firebase');
-        // Nettoyer les cartes déjà chargées depuis localStorage
-        _cleanPurgedFromMemory();
-      }
-    }
-
-    // ÉTAPE 2: Maintenant écouter les commandes
-    _startSerieCommandesListener();
-  });
-
-  // Aussi écouter les changements de serieDeletedCards en temps réel
-  firebaseDb.ref('serieDeletedCards').on('value', function(snap) {
-    var data = snap.exists() ? snap.val() : {};
-    if (data && typeof data === 'object') {
-      Object.keys(data).forEach(function(id) { _purgedIds.add(id); });
-      _cleanPurgedFromMemory();
-    }
-  });
-}
-
-function _startSerieCommandesListener() {
-  firebaseDb.ref('serieCommandes').on('value', function(snapshot) {
-    if (_serieIsSyncing) return;
-    if (_clearAllPending) return;
-
-    var fbData = snapshot.exists() ? snapshot.val() : {};
-    if (!fbData || typeof fbData !== 'object') fbData = {};
-
-    var added = 0, updated = 0;
-
-    Object.keys(fbData).forEach(function(id) {
-      if (id === 'timestamp' || id === 'date' || id === 'undefined' || id === 'null') return;
-      if (id.startsWith('demo-') || id.startsWith('test-') || id.startsWith('sample-')) return;
-      var fd = fbData[id];
-      if (!fd || typeof fd !== 'object') return;
-      if (_purgedIds.has(id)) return; // IGNORER LES PURGÉS
-
-      if (!serieCardsData[id]) {
-        serieCardsData[id] = fd;
-        added++;
-      } else if (!_serieDirtyCards.has(id)) {
-        _mergeSerieCard(serieCardsData[id], fd);
-        updated++;
-      }
-    });
-
-    // ═══ RECONCILIATION — supprimer les cartes fantômes (dans localStorage mais plus dans Firebase) ═══
-    var removed = 0;
-    Object.keys(serieCardsData).forEach(function(id) {
-      if (id === 'timestamp' || id === 'date') return;
-      if (_serieDirtyCards.has(id)) return; // Ne pas supprimer les cartes en cours d'édition locale
-      if (!fbData[id]) {
-        // Cette carte existe localement mais plus dans Firebase → fantôme
-        var el = document.querySelector('.mcard[data-id="' + id + '"]');
-        if (el) el.remove();
-        delete serieCardsData[id];
-        removed++;
-      }
-    });
-
-    if (added > 0 || updated > 0 || removed > 0) {
-      console.log('☁️ Firebase: +' + added + ' nouvelles, ' + updated + ' maj, -' + removed + ' fantômes supprimées');
-      try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
-    }
-
-    _rebuildSerieDOM();
-    _purgeEmptySerieCards();
-    _injectFranceDates();
-    _purgeExcludedItems();
-
-    if (!currentSerieId || !serieCardsData[currentSerieId]) {
-      var f = document.querySelector(SERIE_CARD_SELECTOR + ', #serieCardsList .mcard');
-      if (f && f.dataset.id) selectSerieCard(f.dataset.id, false);
-    } else {
-      renderSerie3Cols(currentSerieId);
-    }
-  });
-}
-
-// ═══ POINT D'ENTRÉE — appelé au chargement et après auth ═══
+// ─── POINT D'ENTRÉE — appelé au chargement et après auth ───
 function loadSerieDataFromLocalStorage() {
-  _loadSerieFromLocalStorage();
-  _rebuildSerieDOM();
   _attachSerieFirebaseListeners();
   _purgeCompletedLog();
   setTimeout(function() { autoPurgeCompletedCards(); }, 15000);
-  // Restore active client tab
   try {
     var savedTab = localStorage.getItem('physipro_serie_active_tab');
     if (savedTab && _clientTabConfig && _clientTabConfig[savedTab]) {
@@ -11055,6 +10850,30 @@ function loadSerieDataFromLocalStorage() {
     }
   } catch(e) { switchClientTab('france'); }
 }
+
+// ─── AUTO-NETTOYAGE v4 — supprime les caches obsolètes au premier chargement ───
+(function() {
+  var cleanupKey = 'physipro_serie_v4_cleaned';
+  if (!localStorage.getItem(cleanupKey)) {
+    var oldKeys = [
+      'physipro_serie_data',
+      'physipro_serie_deleted_cards',
+      'physipro_serie_clearAll_ts',
+      'physipro_serie_clearall_ts',
+      '_bk_serie_data',
+      '_bk_serie_data_2',
+      '_bk_serie_data_3'
+    ];
+    oldKeys.forEach(function(k) { try { localStorage.removeItem(k); } catch(e) {} });
+    localStorage.setItem(cleanupKey, Date.now().toString());
+    console.log('🧹 v4: caches localStorage obsolètes supprimés');
+  }
+})();
+
+// ─── COMPATIBILITÉ — anciennes fonctions supprimées ───
+function _pushCardToFirebaseNow(cardId) { _saveCard(cardId); }
+function _isCardPurged(id) { return false; }
+window._isCardPurged = _isCardPurged;
 
 // === LOG DES CARTES COMPLÉTÉES ===
 // Clé localStorage: 'physipro_serie_completed_log'
@@ -11165,7 +10984,6 @@ function autoPurgeCompletedCards() {
   // Sauvegarder localStorage
   try {
     if (Object.keys(serieCardsData).length > 0) {
-      localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
     }
   } catch(e) {}
 
@@ -11174,8 +10992,6 @@ function autoPurgeCompletedCards() {
     var fbUpdates = {};
     toDelete.forEach(function(cardId) {
       fbUpdates['serieCommandes/' + cardId] = null;
-      var safeKey = cardId.replace(/[.#$\/\[\]]/g, '_');
-      fbUpdates['serieDeletedCards/' + safeKey] = Date.now();
     });
     firebaseDb.ref().update(fbUpdates).then(function() {
       console.log('🧹 autoPurgeCompletedCards: ' + toDelete.length + ' carte(s) archivées dans Firebase');
@@ -11287,7 +11103,6 @@ function initExistingSerieCards() {
   });
 
   // Sauvegarder état local — PAS de bulk sync vers Firebase (le listener Firebase gère ça)
-  try { if(Object.keys(serieCardsData).length>0){localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
   if (Object.keys(serieCardsData).length > 0) {
     console.log('📂 Données existantes: ' + Object.keys(serieCardsData).length + ' commandes');
   } else {
@@ -11296,8 +11111,6 @@ function initExistingSerieCards() {
 }
 
 // === 24.3 METTRE À JOUR L'AFFICHAGE D'UNE CARTE ===
-
-
 
 // ═══ Drag & Drop pour réordonner les cartes dans les colonnes ═══
 (function() {
@@ -11463,7 +11276,6 @@ function autoFitPillText() {
     }
   });
 }
-
 
 // ═══ Switch Série ↔ Client (modal choix) ═══
 function toggleSerieCardType(cardId) {
@@ -12164,7 +11976,6 @@ function selectSerieCard(cardId, fromUserClick = false) {
   // Le modal s'ouvre via le bouton "Fiche" ou "📋 Info" dans l'entête
 }
 
-
 // ================================================================
 // SYSTÈME JSON — Import de commandes Série+ (v2.0 — réécrit)
 // ================================================================
@@ -12547,7 +12358,6 @@ function serieJsonImport() {
   });
 
   // Sauvegarder vers localStorage + Firebase (bulk import)
-  try { if(Object.keys(serieCardsData).length>0){localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
   _syncAllCardsToFirebase();
 
   // Compteurs + tri des cartes dans les bonnes sections
@@ -12609,7 +12419,6 @@ function serieJsonCleanupImported() {
     if (el) el.remove();
   });
 
-  try { if(Object.keys(serieCardsData).length>0){localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled && Object.keys(fbDeletes).length) {
     firebaseDb.ref().update(fbDeletes).catch(function(e){ console.error('Cleanup FB error:', e); });
   }
@@ -12640,22 +12449,8 @@ function serieJsonClearAll() {
     console.log('🛡️ Pre-clear backup saved:', backupKey);
   } catch(bkErr) { console.error('Backup before clear failed:', bkErr); }
 
-  // Marquer TOUS les IDs comme supprimés — persister dans localStorage
-  var deletedMap = {};
-  var now = Date.now();
-  Object.keys(serieCardsData).forEach(function(id) {
-    _purgedIds.add(id);
-    deletedMap[id] = now;
-  });
-  try { localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(deletedMap)); } catch(e) {}
-
+  // Marquer comme en cours de suppression
   _clearAllPending = true;
-  _clearAllTimestamp = now;
-  try { localStorage.setItem('physipro_serie_clearall_ts', String(now)); } catch(e) {}
-
-  // Annuler tout timer de sync en cours
-  if (_serieSyncTimer) { clearTimeout(_serieSyncTimer); _serieSyncTimer = null; }
-  _serieDirtyCards.clear();
 
   // Supprimer les éléments DOM
   Object.keys(serieCardsData).forEach(function(id) {
@@ -12664,43 +12459,23 @@ function serieJsonClearAll() {
   });
 
   serieCardsData = {};
-  try { if(Object.keys(serieCardsData).length>0){localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
-
-  _serieIsSyncing = true;
 
   function _doClearFirebase(attempt) {
-    if (typeof firebaseDb === 'undefined' || !firebaseDb || !isFirebaseEnabled) {
-      _serieIsSyncing = false;
+    if (!firebaseDb || !isFirebaseEnabled) {
       _clearAllPending = false;
       return;
     }
     firebaseDb.ref('serieCommandes').set(null).then(function() {
       console.log('✅ Firebase serieCommandes vidé (tentative ' + attempt + ')');
-      _serieIsSyncing = false;
-      // Garder _clearAllPending pendant 10 secondes pour bloquer le listener
-      setTimeout(function() {
-        _clearAllPending = false;
-        try { localStorage.removeItem('physipro_serie_clearall_ts'); } catch(e) {}
-        // Nettoyer les IDs supprimés après 30 secondes
-        setTimeout(function() {
-          _purgedIds.clear();
-          try { localStorage.removeItem('physipro_serie_deleted_cards'); } catch(e) {}
-        }, 20000);
-      }, 10000);
+      setTimeout(function() { _clearAllPending = false; }, 5000);
     }).catch(function(e) {
       console.error('❌ Clear Firebase échoué (tentative ' + attempt + '):', e);
-      _serieIsSyncing = false;
       if (attempt < 3) {
-        // Réessayer après 2 secondes
         showToast('⚠️ Erreur Firebase — réessai ' + (attempt + 1) + '/3...', 'warning');
         setTimeout(function() { _doClearFirebase(attempt + 1); }, 2000);
       } else {
         showToast('❌ Impossible de supprimer dans Firebase après 3 tentatives', 'error');
-        // Garder _clearAllPending pendant 30 secondes pour empêcher la résurrection
-        setTimeout(function() {
-          _clearAllPending = false;
-          try { localStorage.removeItem('physipro_serie_clearall_ts'); } catch(e) {}
-        }, 30000);
+        setTimeout(function() { _clearAllPending = false; }, 30000);
       }
     });
   }
@@ -12964,7 +12739,6 @@ Génère UNIQUEMENT le JSON brut, sans explications, sans backticks markdown.
 `;
 }
 
-
 // === CRÉER UNE CARTE SÉRIE DEPUIS LES DONNÉES ===
 function createSerieCardFromData(cardId, data) {
   // 🛡️ Rejeter les cartes invalides/test
@@ -13069,7 +12843,6 @@ function toggleAccessoireComplete(cardId) {
     card.classList.toggle('serie-completed', data._accessoireComplete);
   }
   // Sauvegarder
-  try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
     firebaseDb.ref('serieCards/' + cardId + '/_accessoireComplete').set(data._accessoireComplete);
   }
@@ -13077,7 +12850,7 @@ function toggleAccessoireComplete(cardId) {
 }
 window.toggleAccessoireComplete = toggleAccessoireComplete;
 
-// --- PURGE FRANCE : Effacer les cartes France seulement (Firebase + localStorage) ---
+// --- PURGE FRANCE : Effacer les cartes France seulement ---
 function purgeFranceCards() {
   if (!confirm('⚠️ ATTENTION: Ceci va effacer TOUTES les cartes France de façon PERMANENTE.\n\nLes commandes seront archivées dans le Log.\n\nContinuer ?')) return;
 
@@ -13086,10 +12859,7 @@ function purgeFranceCards() {
   var purgedCount = 0;
   var purgedIds = [];
 
-  // Activer la protection anti-résurrection
   _clearAllPending = true;
-  _clearAllTimestamp = Date.now();
-  try { localStorage.setItem('physipro_serie_clearAll_ts', String(_clearAllTimestamp)); } catch(e) {}
 
   // Trouver et archiver toutes les cartes France
   Object.keys(serieCardsData).forEach(function(cardId) {
@@ -13097,7 +12867,6 @@ function purgeFranceCards() {
     if (!data) return;
     var targetCol = data.targetColumn || '';
     if (franceCols.indexOf(targetCol) >= 0) {
-      // Archiver dans le log
       deletedEntries.push({
         id: cardId,
         order: data.order || '',
@@ -13111,24 +12880,11 @@ function purgeFranceCards() {
         deletedAt: new Date().toISOString(),
         deletedBy: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.name : 'Inconnu'
       });
-
-      // Marquer comme supprimé pour que le listener les ignore
-      _purgedIds.add(cardId);
       purgedIds.push(cardId);
-
-      // Supprimer de la mémoire
       delete serieCardsData[cardId];
       purgedCount++;
     }
   });
-
-  // Persister les IDs supprimés dans localStorage (survit aux reloads)
-  try {
-    var savedDel = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
-    var now = Date.now();
-    purgedIds.forEach(function(id) { savedDel[id] = now; });
-    localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(savedDel));
-  } catch(e) {}
 
   // Vider le DOM des colonnes France
   franceCols.forEach(function(id) {
@@ -13136,55 +12892,23 @@ function purgeFranceCards() {
     if (el) el.innerHTML = '';
   });
 
-  // Sauvegarder localStorage
   _saveDeletedLog(deletedEntries);
-  try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
 
-  // Supprimer de Firebase — même méthode que deleteSerieCard (une par une)
-  if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
-    _serieIsSyncing = true;
-    var completed = 0;
-    var total = purgedIds.length;
+  // Supprimer de Firebase
+  if (firebaseDb && isFirebaseEnabled) {
+    var fbUpdates = {};
     purgedIds.forEach(function(id) {
-      var safeKey = id.replace(/[.#$\/\[\]]/g, '_');
-      // 1. Marquer comme supprimée (signal inter-clients)
-      firebaseDb.ref('serieDeletedCards/' + safeKey).set(Date.now()).catch(function(){});
-      // 2. Supprimer de serieCommandes
-      firebaseDb.ref('serieCommandes/' + id).remove().then(function() {
-        completed++;
-        if (completed >= total) {
-          console.log('✅ ' + total + ' cartes France supprimées de Firebase');
-          setTimeout(function() { _serieIsSyncing = false; }, 2000);
-        }
-      }).catch(function(e) {
-        console.error('Erreur suppression Firebase ' + id + ':', e);
-        completed++;
-        if (completed >= total) {
-          setTimeout(function() { _serieIsSyncing = false; }, 2000);
-        }
-      });
+      fbUpdates['serieCommandes/' + id] = null;
     });
+    firebaseDb.ref().update(fbUpdates)
+      .then(function() { console.log('✅ ' + purgedIds.length + ' cartes France supprimées de Firebase'); })
+      .catch(function(e) { console.error('❌ Purge France error:', e); });
   }
 
   if (typeof updateSerieCounters === 'function') updateSerieCounters();
   _updateDeletedBadge();
 
-  // Nettoyer les anciens backups localStorage
-  try {
-    ['_bk_serie_data', '_bk_serie_data_2', '_bk_serie_data_3'].forEach(function(bkKey) {
-      var bk = localStorage.getItem(bkKey);
-      if (!bk) return;
-      var bkData = JSON.parse(bk);
-      var cleaned = false;
-      purgedIds.forEach(function(id) {
-        if (bkData[id]) { delete bkData[id]; cleaned = true; }
-      });
-      if (cleaned) localStorage.setItem(bkKey, JSON.stringify(bkData));
-    });
-  } catch(e) {}
-
-  // Relâcher la protection après 60 secondes
-  setTimeout(function() { _clearAllPending = false; }, 60000);
+  setTimeout(function() { _clearAllPending = false; }, 10000);
 
   showToast('🗑️ ' + purgedCount + ' commande(s) France effacée(s) et archivée(s)', 'success');
 }
@@ -13585,7 +13309,6 @@ function _injectFranceDates() {
     }
   });
   if (updated === 0) return;
-  try { localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData)); } catch(e) {}
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled && _versionOK) {
     firebaseDb.ref().update(fbUpdates).then(function() {
       console.log('📅 ' + updated + ' dates France injectées dans Firebase');
@@ -13655,7 +13378,6 @@ function _purgeEmptySerieCards() {
     delete serieCardsData[cid];
     fbDeletes['serieCommandes/' + cid] = null;
   });
-  try { if(Object.keys(serieCardsData).length>0){localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
   if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled && _versionOK) {
     firebaseDb.ref().update(fbDeletes).then(function() {
       console.log('🧹 ' + toDelete.length + ' carte(s) vide(s) supprimée(s) de Firebase');
@@ -13707,7 +13429,6 @@ function _purgeExcludedItems() {
   }
 }
 window._purgeExcludedItems = _purgeExcludedItems;
-
 
 function rebuildDateSeparators() {
   // Map column → envoi date key
@@ -13948,61 +13669,26 @@ window.closeDeleteConfirmModal = closeDeleteConfirmModal;
 function deleteSerieCard(cardId) {
   if (!hasPermission('S')) { showToast('🔒 Permission insuffisante (Supprimer)', 'error'); return; }
   if (writeBlocked()) return;
-  // ⚠️ Avertissement: les entrées dans Couture/Atelier sont permanentes et ne seront PAS affectées
   var cardData = serieCardsData[cardId];
   var cardOrder = cardData ? (cardData.order || cardData.numeroPO || cardId) : cardId;
   if (!confirm('⚠️ Supprimer la carte Série+ #' + cardOrder + '?\n\nNote: Les entrées déjà créées dans Production Couture et Inspection Atelier sont PERMANENTES et ne seront pas supprimées.')) return;
-  // 🛡️ Backup automatique avant suppression
   if (typeof serieCreateBackup === 'function') { try { serieCreateBackup(); } catch(e) {} }
   console.log('🗑️ Suppression carte:', cardId, serieCardsData[cardId]?.client);
-  _purgedIds.add(cardId); // Empêcher le listener de la re-ajouter
   delete serieCardsData[cardId];
 
-  const card = document.querySelector(`.mcard[data-id="${cardId}"]`);
+  var card = document.querySelector('.mcard[data-id="' + cardId + '"]');
   if (card) card.remove();
-  const card2 = document.querySelector(`.mcard[data-card-id="${cardId}"]`);
+  var card2 = document.querySelector('.mcard[data-card-id="' + cardId + '"]');
   if (card2) card2.remove();
 
-  if (typeof firebaseDb !== 'undefined' && firebaseDb && isFirebaseEnabled) {
-    var safeKey = cardId.replace(/[.#$\/\[\]]/g, '_');
-    firebaseDb.ref('serieDeletedCards/' + safeKey).set(Date.now())
-      .then(function(){ console.log('[DEL] Carte série ' + cardId + ' marquée supprimée'); })
-      .catch(function(e){ console.error('[DEL] Erreur:', e); });
+  if (firebaseDb && isFirebaseEnabled) {
     firebaseDb.ref('serieCommandes/' + cardId).remove()
-      .then(function() {
-        console.log('[DEL] Carte ' + cardId + ' supprimée de Firebase OK');
-        // Garder l'ID bloqué pendant 30 secondes pour empêcher la résurrection
-        // ID gardé bloqué 7 jours via localStorage — pas besoin de delete() ici
-      })
-      .catch(function(e){
-        console.error('[DEL] Remove from FB error:', e);
-        showToast('⚠️ Erreur suppression Firebase — réessai...', 'warning');
-        // Réessayer une fois
-        setTimeout(function() {
-          firebaseDb.ref('serieCommandes/' + cardId).remove()
-            .then(function() {
-              console.log('[DEL] Carte ' + cardId + ' supprimée de Firebase (2e tentative)');
-              // ID gardé bloqué 7 jours via localStorage — pas besoin de delete() ici
-            })
-            .catch(function(e2) {
-              console.error('[DEL] 2e tentative échouée:', e2);
-              // Garder bloqué pendant 60 secondes
-              // ID gardé bloqué 7 jours via localStorage
-            });
-        }, 2000);
-      });
+      .then(function() { console.log('🗑️ ' + cardId + ' supprimée de Firebase'); })
+      .catch(function(e) { console.error('❌ Delete error:', e); });
   }
 
-  try {
-    var delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
-    delIds[cardId] = Date.now();
-    localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(delIds));
-  } catch(e) {}
-
-  // Firebase handled above via .remove() — just save localStorage
-  try { if(Object.keys(serieCardsData).length>0){localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
   if (typeof updateSerieCounters === 'function') updateSerieCounters();
-  showToast('🗑️ Carte supprimée (entrées Couture/Atelier intactes)', 'success');
+  showToast('🗑️ Carte supprimée', 'success');
 }
 window.deleteSerieCard = deleteSerieCard;
 
@@ -14720,9 +14406,6 @@ function renderSerieInspection(cardId, items) {
   // Stub — inspection désactivée
 }
 
-
-
-
 // v616: Fonctions helper qui utilisent les mêmes noms que v610
 function updateSerieGrandeurQty(cardId, itemIdx, gIdx, value) {
   const data = serieCardsData[cardId];
@@ -14982,7 +14665,6 @@ function addSerieGrandeurLast(cardId) {
 }
 window.addSerieGrandeurLast = addSerieGrandeurLast;
 
-
 function initSerieColResize() {
   const handles = document.querySelectorAll('.serie-resize-handle');
   
@@ -15030,7 +14712,6 @@ function initSerieColResize() {
 
 // Initialiser le resize au chargement
 document.addEventListener('DOMContentLoaded', initSerieColResize);
-
 
 // === 24.6 CHANGER DE VUE (structure v38) ===
 // Variable pour mémoriser la vue sélectionnée
@@ -16927,7 +16608,6 @@ function createSerieCommandeFromModal() {
   showToast('✅ Commande ' + order + ' créée', 'success');
 }
 
-
 // Mettre à jour le compteur de commandes
 function updateSerieCommandesCount() {
   // Compter toutes les cartes dans toutes les colonnes
@@ -16945,11 +16625,9 @@ function updateSerieCommandesCount() {
   if (countBadge3) countBadge3.textContent = count;
 }
 
-
 // === createSerieInventory / createSerieInventoryCouture SUPPRIMÉS ===
 function createSerieInventory() { showToast('Inventaire supprimé', 'info'); }
 function createSerieInventoryCouture() { showToast('Inventaire supprimé', 'info'); }
-
 
 // ═══ AUTO-CASCADE: Inspection → Inventaire ═══
 function autoCompleteInventaireFromInspection(cardId, itemIdx, gIdx) { /* inventaire supprimé */ }
@@ -17669,7 +17347,6 @@ function renderListeItemsView() {
   container.innerHTML = html;
 }
 
-
 // === IMPRESSION ITEMS SÉLECTIONNÉS (Atelier/Couture) ===
 function printSerieItems(dept) {
   if (!currentSerieId || !serieCardsData[currentSerieId]) {
@@ -17794,8 +17471,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('✅ Série+ initialisé');
     console.log('✅ Inventaire initialisé');
     
-    // serieDeletedCards est nettoyé au démarrage dans _attachSerieFirebaseListeners
-    try { localStorage.removeItem('physipro_serie_deleted_cards'); } catch(e) {}
+    
   }, 200);
 });
 
@@ -18078,13 +17754,6 @@ function restoreSingleFranceCard(cardId, backupKey) {
   firebaseDb.ref('serieBackups/' + backupKey + '/serieCommandes/' + cardId).once('value', function(snap) {
     var c = snap.val();
     if (!c) { showToast('❌ Données introuvables', 'error'); return; }
-    // Retirer de la liste des supprimés pour permettre la restauration
-    try {
-      var delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
-      delete delIds[cardId];
-      localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(delIds));
-    } catch(e) {}
-    firebaseDb.ref('serieDeletedCards/' + cardId.replace(/[.#$\/\[\]]/g,'_')).remove();
     // Réinsérer dans Firebase et mémoire
     serieCardsData[cardId] = c;
     firebaseDb.ref('serieCommandes/' + cardId).set(c);
@@ -18108,28 +17777,18 @@ function restoreAllMissingFrance(backupKey) {
       var c = data[cid];
       if (!c || !c.client || !c.client.toLowerCase().includes('france')) return;
       if (serieCardsData[cid]) return; // déjà présente
-      // Retirer des supprimés
-      try {
-        var delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}');
-        delete delIds[cid];
-        localStorage.setItem('physipro_serie_deleted_cards', JSON.stringify(delIds));
-      } catch(e) {}
-      firebaseDb.ref('serieDeletedCards/' + cid.replace(/[.#$\/\[\]]/g,'_')).remove();
       serieCardsData[cid] = c;
       fbUpdates['serieCommandes/' + cid] = c;
       createSerieCardFromData(cid, c);
       restored++;
     });
     if (Object.keys(fbUpdates).length > 0) firebaseDb.ref('/').update(fbUpdates);
-    try { if(Object.keys(serieCardsData).length>0){localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
     if (typeof updateSerieCounters === 'function') updateSerieCounters();
     showToast('✅ ' + restored + ' commande(s) France restaurée(s)!', 'success');
     document.getElementById('restoreFranceOverlay')?.remove();
   });
 }
 window.restoreAllMissingFrance = restoreAllMissingFrance;
-
-
 
 function confirmRestoreAtelier(backupKey) {
   if (!confirm('⚠️ Restaurer les données ATELIER depuis ce backup?\n\nCeci va:\n- Remettre les qtyFait Atelier du backup\n- NE PAS toucher Couture/Inspection\n- NE PAS toucher les noms/dates/clients\n\nContinuer?')) return;
@@ -18168,7 +17827,6 @@ function confirmRestoreAtelier(backupKey) {
     
     // Save and push
     if (restored > 0) {
-      localStorage.setItem('physipro_serie_data', JSON.stringify(serieCardsData));
       _syncAllCardsToFirebase();
       
       // Refresh display
@@ -18275,10 +17933,9 @@ function confirmRestoreCards(backupKey) {
       serieCardsData[cid] = bCard;
     });
     // Save locally
-    try { if(Object.keys(serieCardsData).length>0){localStorage.setItem('physipro_serie_data',JSON.stringify(serieCardsData));} } catch(e) {}
     // Clear deleted IDs
-    try { localStorage.removeItem('physipro_serie_deleted_cards'); } catch(e) {}
-    _purgedIds.clear();
+    
+    
     // Push to Firebase
     _syncAllCardsToFirebase();
     // Rebuild DOM
@@ -18294,7 +17951,6 @@ window.confirmRestoreCards = confirmRestoreCards;
 /*================================================================
    FIN SECTION 24: PAGE SÉRIE+
    ================================================================ */
-
 
 // ===== PCHAT - PRIVATE CHAT SYSTEM (ServiceClient-matching) =====
 var PChat = (function() {
