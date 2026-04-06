@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhysiPro — Liste des Matériaux</title>
+<meta name="theme-color" content="#04152c">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{--bg:#0a1628;--blue:#3b82f6;--green:#22c55e;--gold:#fbbf24;}
+body{font-family:'Outfit',system-ui,sans-serif;background:var(--bg);color:#e2e8f0;min-height:100vh;display:flex;flex-direction:column;}
+
+/* ═══ LOGIN ═══ */
+.login-overlay{position:fixed;inset:0;background:linear-gradient(to bottom,#0b1d36,#3f6eb8);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;}
+.login-overlay.hidden{display:none;}
+.login-box{background:linear-gradient(to bottom,#0b2343,#06315a);border-radius:16px;border:1px solid rgba(255,255,255,0.25);box-shadow:0 8px 30px rgba(0,0,0,0.85);padding:28px 32px;max-width:400px;width:100%;text-align:center;color:#fff;}
+.login-box img{height:80px;margin-bottom:12px;}
+.login-box h2{font-size:16px;font-weight:700;margin-bottom:4px;}
+.login-box .sub{font-size:12px;opacity:0.7;margin-bottom:16px;}
+.login-box input{width:100%;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.3);background:rgba(0,0,0,0.3);color:#fff;font-size:14px;text-align:center;margin-bottom:10px;}
+.login-box input::placeholder{color:rgba(255,255,255,0.4);}
+.login-box input:focus{outline:none;border-color:#00aaff;}
+.login-box button{width:100%;padding:12px;border-radius:999px;border:none;background:linear-gradient(to bottom,#00aaff,#0077cc);color:#fff;font-weight:700;font-size:13px;cursor:pointer;}
+.login-box .err{color:#ff6666;font-size:11px;margin-top:6px;min-height:16px;}
+
+/* ═══ TOPBAR ═══ */
+.topbar{height:62px;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);display:flex;align-items:center;padding:0 16px;flex-shrink:0;box-shadow:inset 0 1px 2px rgba(255,255,255,.16),0 2px 6px rgba(0,0,0,.45);}
+.topbar-logo{height:36px;cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3));transition:transform .2s;}
+.topbar-logo:hover{transform:scale(1.05);}
+.topbar-center{flex:1;text-align:left;font-size:18px;font-weight:700;color:#fff;letter-spacing:.5px;padding-left:14px;}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.topbar-user{font-size:11px;color:rgba(255,255,255,.7);}
+.topbar-user strong{color:#fff;}
+.btn-logout{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.7);font-size:10px;padding:5px 12px;border-radius:6px;cursor:pointer;}
+.btn-logout:hover{background:rgba(239,68,68,.2);color:#fca5a5;border-color:rgba(239,68,68,.4);}
+
+/* ═══ MAIN ═══ */
+.main{flex:1;display:flex;flex-direction:column;padding:10px;overflow:hidden;}
+.search-bar{width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.35);color:#fff;font-size:13px;margin-bottom:10px;font-family:'Outfit',sans-serif;}
+.search-bar:focus{outline:none;border-color:var(--blue);}
+.search-bar::placeholder{color:rgba(255,255,255,0.35);}
+
+.columns{flex:1;display:flex;gap:10px;overflow:hidden;}
+.col{flex:1;background:linear-gradient(to bottom,#1e3a5f,#0f172a);border:1px solid rgba(59,130,246,0.25);border-radius:12px;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+.col-header{padding:12px 16px;font-size:16px;font-weight:800;border-bottom:2px solid rgba(59,130,246,0.3);display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.col-header .icon{font-size:22px;}
+.col-header .count{margin-left:auto;font-size:12px;font-weight:500;color:rgba(255,255,255,0.5);}
+.col-scroll{flex:1;overflow-y:auto;padding:8px 12px 12px;}
+.col-scroll::-webkit-scrollbar{width:5px;}
+.col-scroll::-webkit-scrollbar-thumb{background:rgba(59,130,246,0.3);border-radius:3px;}
+
+.group-title{font-size:17px;font-weight:700;color:#60a5fa;padding:10px 4px 4px;border-bottom:1px solid rgba(96,165,250,0.15);margin-top:10px;text-transform:uppercase;letter-spacing:.4px;}
+.group-title:first-child{margin-top:0;}
+.mat-row{display:flex;align-items:center;padding:3px 6px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:18px;transition:background .15s;gap:6px;}
+.mat-row:hover{background:rgba(255,255,255,0.05);border-radius:4px;}
+.mat-code{font-family:'Courier New',monospace;color:var(--gold);min-width:100px;font-size:17px;font-weight:600;flex-shrink:0;}
+.mat-name{flex:1;color:#cbd5e1;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mat-calc{width:28px;height:28px;border-radius:6px;border:1px solid rgba(59,130,246,0.3);background:rgba(59,130,246,0.1);color:#60a5fa;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;}
+.mat-calc:hover{background:rgba(59,130,246,0.3);border-color:#3b82f6;}
+
+/* ═══ SHEET CALC MODAL ═══ */
+.sc-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10001;align-items:center;justify-content:center;}
+.sc-overlay.open{display:flex;}
+.sc-panel{background:#0d1b2a;border:1px solid rgba(59,130,246,0.3);border-radius:14px;width:380px;max-width:94vw;box-shadow:0 8px 32px rgba(0,0,0,0.5);}
+.sc-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.08);}
+.sc-head span{font-size:14px;font-weight:700;color:#fff;}
+.sc-close{background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;}
+.sc-close:hover{color:#ef4444;}
+.sc-mat{padding:10px 16px 2px;font-size:12px;color:#93c5fd;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sc-info{padding:2px 16px;font-size:14px;color:#cbd5e1;font-weight:700;}
+.sc-area{padding:2px 16px 8px;font-size:11px;color:#94a3b8;}
+.sc-input-row{display:flex;align-items:center;gap:8px;padding:10px 16px;background:rgba(255,255,255,0.03);}
+.sc-input-row label{font-size:12px;color:#e2e8f0;flex:1;}
+.sc-input-row input{width:100px;padding:8px 10px;border-radius:6px;border:1px solid rgba(59,130,246,0.3);background:#1e293b;color:#fff;font-size:16px;font-weight:700;text-align:center;font-family:'Outfit',sans-serif;}
+.sc-input-row input:focus{border-color:#3b82f6;outline:none;}
+.sc-input-row span{font-size:12px;color:#94a3b8;}
+.sc-results{padding:12px 16px 16px;}
+.sc-bar-bg{height:22px;background:#1e293b;border-radius:11px;position:relative;overflow:hidden;margin-bottom:12px;}
+.sc-bar-fill{height:100%;background:linear-gradient(90deg,#22c55e,#3b82f6);border-radius:11px;transition:width .3s;width:0%;}
+.sc-bar-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);}
+.sc-row{display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#cbd5e1;}
+.sc-row strong{color:#fff;}
+.sc-qty{padding:8px 0 4px;font-size:13px;border-top:1px solid rgba(255,255,255,0.06);margin-top:4px;display:flex;justify-content:space-between;align-items:center;}
+.sc-qty strong{color:#60a5fa;font-size:18px;}
+.sc-toggle-row{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 16px 14px;}
+.sc-toggle-label{font-size:12px;color:#94a3b8;font-weight:600;min-width:60px;}
+.sc-toggle-label:first-child{text-align:right;}
+.sc-toggle-label.active{color:#60a5fa;}
+.sc-toggle{cursor:pointer;width:44px;height:24px;background:#1e293b;border:2px solid #3d5474;border-radius:12px;position:relative;transition:all .2s;flex-shrink:0;}
+.sc-toggle.on{background:rgba(59,130,246,0.3);border-color:#3b82f6;}
+.sc-toggle-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;background:#94a3b8;border-radius:50%;transition:all .2s;}
+.sc-toggle.on .sc-toggle-knob{left:22px;background:#60a5fa;}
+
+/* ═══ RESPONSIVE MOBILE ═══ */
+@media(max-width:700px){
+  .topbar{height:50px;padding:0 10px;}
+  .topbar-center{font-size:13px;}
+  .topbar-logo{height:28px;}
+  .columns{flex-direction:column;gap:8px;}
+  .col{min-height:0;flex:none;}
+  .col-scroll{max-height:45vh;}
+  .search-bar{font-size:14px;padding:12px;}
+}
+
+/* ═══ PRINT ═══ */
+@media print{
+  .login-overlay,.topbar,.search-bar,.mat-calc,.sc-overlay{display:none!important;}
+  body{background:#fff!important;color:#000!important;}
+  .main{padding:0;}
+  .columns{flex-direction:column;}
+  .col{border:1px solid #ccc!important;background:#fff!important;break-inside:avoid;}
+  .col-header{background:#e5e7eb!important;color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .mat-code{color:#92400e!important;}
+  .mat-name{color:#000!important;}
+  .group-title{color:#1e40af!important;border-color:#ccc!important;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro">
+    <h2>Liste des Matériaux</h2>
+    <div class="sub">Connectez-vous avec votre email d'entreprise</div>
+    <form onsubmit="doLogin(event)">
+      <input type="email" id="loginEmail" placeholder="Email" autocomplete="username">
+      <input type="password" id="loginPassword" placeholder="Mot de passe" autocomplete="current-password">
+      <button type="submit" id="loginBtn">Se connecter</button>
+    </form>
+    <div class="err" id="loginError"></div>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div id="logoFlipContainer" style="display:flex;align-items:center;cursor:pointer;">
+    <img class="topbar-logo" src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro">
+  </div>
+  <div class="topbar-center">📦 Liste des Matériaux</div>
+  <div class="topbar-right">
+    <span class="topbar-user"><strong id="userDisplay">—</strong></span>
+    <button class="btn-logout" onclick="doLogout()">Déconnexion</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <input type="text" class="search-bar" id="searchBar" placeholder="🔍 Rechercher un code ou un nom de matériau..." oninput="render()">
+  <div class="columns">
+    <div class="col">
+      <div class="col-header" style="color:#60a5fa;"><span class="icon">🧽</span> Mousses & Feuilles<span class="count" id="countLeft">—</span></div>
+      <div class="col-scroll" id="colLeft"></div>
+    </div>
+    <div class="col">
+      <div class="col-header" style="color:#22c55e;"><span class="icon">📦</span> Coquilles, Blocs & Autres<span class="count" id="countRight">—</span></div>
+      <div class="col-scroll" id="colRight"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SHEET CALC MODAL -->
+<div class="sc-overlay" id="scOverlay" onclick="if(event.target===this)closeSC()">
+  <div class="sc-panel">
+    <div class="sc-head"><span>📐 Calculateur de feuille</span><button class="sc-close" onclick="closeSC()">✕</button></div>
+    <div class="sc-mat" id="scMat">—</div>
+    <div class="sc-info" id="scInfo">Feuille: — × —</div>
+    <div class="sc-area" id="scArea">Surface totale: —</div>
+    <div class="sc-input-row">
+      <label>Pieds carrés utilisés:</label>
+      <input type="number" id="scInput" min="0" step="0.25" value="0" oninput="calcSC()">
+      <span>pi²</span>
+    </div>
+    <div class="sc-results">
+      <div class="sc-bar-bg"><div class="sc-bar-fill" id="scFill"></div><span class="sc-bar-label" id="scPct">0%</span></div>
+      <div class="sc-row"><span>Consommé:</span><strong id="scUsed">0 po²</strong></div>
+      <div class="sc-row"><span>Restant:</span><strong id="scRemain">— po²</strong></div>
+      <div class="sc-qty"><span>Fraction de feuille:</span><strong id="scQty">—</strong></div>
+      <div class="sc-toggle-row">
+        <span class="sc-toggle-label active" id="scLabelDec">Décimal</span>
+        <div class="sc-toggle" id="scToggle" onclick="toggleMode()"><div class="sc-toggle-knob"></div></div>
+        <span class="sc-toggle-label" id="scLabelFrac">Fraction</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══ FIREBASE ═══
+firebase.initializeApp({
+  apiKey:"AIzaSyCk7bqVnx08Kz1fVq1W24AuW854KY9jPno",
+  authDomain:"liste-des-moulages-physipro.firebaseapp.com",
+  databaseURL:"https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",
+  projectId:"liste-des-moulages-physipro",
+  storageBucket:"liste-des-moulages-physipro.firebasestorage.app",
+  messagingSenderId:"24566847562",
+  appId:"1:24566847562:web:db492bdd33116373e0eeb3"
+});
+var currentUser = null;
+
+firebase.auth().onAuthStateChanged(function(user) {
+  if (user) {
+    currentUser = user;
+    document.getElementById('loginOverlay').classList.add('hidden');
+    document.getElementById('userDisplay').textContent = formatName(user.email);
+    initLogoMenu('calcmat');
+    render();
+  } else {
+    document.getElementById('loginOverlay').classList.remove('hidden');
+  }
+});
+
+function doLogin(e) {
+  e.preventDefault();
+  var email = document.getElementById('loginEmail').value.trim();
+  var pwd = document.getElementById('loginPassword').value;
+  var btn = document.getElementById('loginBtn');
+  var err = document.getElementById('loginError');
+  err.textContent = '';
+  if (!email || !pwd) { err.textContent = 'Email et mot de passe requis'; return; }
+  btn.disabled = true; btn.textContent = 'Connexion...';
+  firebase.auth().signInWithEmailAndPassword(email, pwd).catch(function(error) {
+    var msg = 'Erreur de connexion';
+    if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') msg = 'Mot de passe incorrect';
+    else if (error.code === 'auth/user-not-found') msg = 'Compte non trouvé';
+    else if (error.code === 'auth/too-many-requests') msg = 'Trop de tentatives';
+    err.textContent = msg;
+    btn.disabled = false; btn.textContent = 'Se connecter';
+  });
+}
+function doLogout() { firebase.auth().signOut(); location.reload(); }
+function formatName(email) {
+  var map = {'atelieratp@physipro.com':'Daniel','valerie18@videotron.ca':'Valérie','simdut@physipro.com':'Cassie','sroy@physipro.com':'Stéphanie','michelle.bouchard@physipro.com':'Michelle'};
+  return map[(email||'').toLowerCase()] || email.split('@')[0];
+}
+
+// ═══ DONNÉES ═══
+var LEFT = [
+  {title:'Néocor VF-40',items:['VR10404 - URÉTHANE VF-40 ¼ [22×24] (Néocor)','VR9220 - URÉTHANE VF-40 ¼ [48×88] (Néocor)','VR10341 - URÉTHANE VF-40 ½ [22×24] (Néocor)','VR9230 - URÉTHANE VF-40 ½ [48×88] (Néocor)','VR10077 - URÉTHANE VF-40 1 [22×24] (Néocor)','VR9240 - URÉTHANE VF-40 1 [48×88] (Néocor)','VR10088 - URÉTHANE VF-40 1½ [22×24] (Néocor)','VR10300 - URÉTHANE VF-40 1½ [48×88] (Néocor)','VR10294 - URÉTHANE VF-40 1½ [24×30] (Néocor)']},
+  {title:'VF-60 / VF-75',items:['VR10258 - URÉTHANE VF-60 1 [22×24] (Néocor)','VR10361 - URÉTHANE VF-75 1 [22×24] (Néocor)']},
+  {title:'Viscose',items:['VR10342 - VISCOSE 5010 ½ [22×24]','VR9986 - VISCOSE 5010 ½ [60×80]','VR10362 - VISCOSE 5010 ½ [36×80]','VR10073 - VISCOSE 5010 1 [22×24]','VR10366 - VISCOSE 8010 TURQUOISE 1 [80×60]','VR9987 - VISCOSE 5010 1 [60×80]']},
+  {title:'Mousse Mémoire MOU',items:['VR10407 - MOUSSE MÉMOIRE MOU ¼ [60×80] (Sunmate)','VR9427 - MOUSSE MÉMOIRE MOU ¼ [37×82] (Sunmate)','VR10343 - MOUSSE MÉMOIRE MOU ½ [22×24] (Sunmate)','VR9395 - MOUSSE MÉMOIRE MOU ½ [37×82] (Sunmate)','VR10344 - MOUSSE MÉMOIRE MOU 1 [22×24] (Sunmate)','VR9405 - MOUSSE MÉMOIRE MOU 1 [37×82] (Sunmate)']},
+  {title:'Mousse Mémoire X-MOU',items:['VR10307C - MOUSSE MÉMOIRE X-MOU ½ [22×24 coupé] (Sunmate)','VR9387 - MOUSSE MÉMOIRE X-MOU ½ [37×82] (Sunmate)','VR9391C - MOUSSE MÉMOIRE X-MOU 1 [22×24 coupé] (Sunmate)','VR9389 - MOUSSE MÉMOIRE X-MOU 1 [37×82] (Sunmate)']},
+  {title:'Mousse Mémoire MEDIUM',items:['VR9429 - MOUSSE MÉMOIRE MEDIUM ¼ [37×82] (Sunmate)','VR10099C - MOUSSE MÉMOIRE MEDIUM ½ [22×24 coupé] (Sunmate)','VR9415 - MOUSSE MÉMOIRE MEDIUM ½ [37×82] (Sunmate)','VR10092C - MOUSSE MÉMOIRE MEDIUM 1 [22×24 coupé] (Sunmate)','VR9425 - MOUSSE MÉMOIRE MEDIUM 1 [37×82] (Sunmate)']},
+  {title:'Mousse Mémoire T-36',items:['VR10373 - MOUSSE MÉMOIRE T-36 ½ [22×24]','VR9435 - MOUSSE MÉMOIRE T-36 ½ [36×80]','VR10372 - MOUSSE MÉMOIRE T-36 1 [22×24]','VR9445 - MOUSSE MÉMOIRE T-36 1 [36×80]']},
+  {title:'Mousse Mémoire T-38',items:['VR10375 - MOUSSE MÉMOIRE T-38 FIRM ½ [22×24]','VR9466 - MOUSSE MÉMOIRE T-38 MEDIUM ½ [36×80]','VR10374 - MOUSSE MÉMOIRE T-38 FIRM 1 [22×24]','VR9475 - MOUSSE MÉMOIRE T-38 MEDIUM 1 [36×80]']},
+  {title:'Latex',items:['VR10085C - LATEX 1 [22×24]','VR9257 - LATEX 1 [60×80]','VR10086C - LATEX 2 [22×24]','VR10360 - LATEX TALALAY 2 [60×80]']},
+  {title:'Forma Foam / Ethafoam',items:['VR9575 - FORMA FOAM 1 [42×56]','VR9054 - ETHAFOAM 6 LBS [24×108]']},
+  {title:'EVA / Plastazote',items:['VR9077 - PLASTAZOTE ⅛ [40×80]','VR9085-VNC - EVA ¼ [22×24 coupé]','VR9085 - PLASTAZOTE ¼ [40×80]','VR9097-VNC - EVA ½ [22×24 coupé]','VR9097 - PLASTAZOTE ½ [80×40]','VR9015-VN - EVA 1 [20.5×48.5]','VR9015 - CONSTRUCTA FOAM 1 [24×48]','VR10152-VN - EVA 1½ [20.5×48.5]','VR10152 - CONSTRUCTA FOAM 1½ [24×48]','VR9025-VN - EVA 2 [20.5×48.5]','VR9025 - CONSTRUCTA FOAM 2 [24×48]','VR9035 - CONSTRUCTA FOAM 3 [24×48]','VR10396 - EVA 3 [60×80]']}
+];
+var RIGHT = [
+  {title:'ABS / Lexan [48×96]',items:['VR9505 - ABS NOIR ⅛ [48×96]','VR9515 - ABS NOIR ¼ [48×96]','VR9525 - ABS NOIR ⅜ [48×96]','VR9535 - LEXAN CLAIR ⅛ [48×96]','VR9545 - LEXAN CLAIR ¼ [48×96]','VR9555 - LEXAN CLAIR ⅜ [48×96]']},
+  {title:'Blocs / Coquilles',items:['2SIZER001 - COQUILLE PRESSION ZERO MOU','VR10129 - COQUILLE PZ-UL FERME 74-86 LBS','VR5010 - BLOC MOUSSE SOUPLE 24x26x12 Densité 3.4','VR5030 - BLOC MOUSSE FERME 24x26x12 Densité 4.0','VR5040 - BLOC FERME 22x22x5','VR5050 - BLOC URÉTHANE FERME 24x26x14','VR5060 - BLOC URÉTHANE SOUPLE 24x26x14','VR5075 - BLOC FERME 24x22x4 INSERT','VR5090 - BLOC FERME 20x20x5 COUSSIN PZ','VR5100 - BLOC SOUPLE 20x20x5 COUSSIN PZ','VR5110 - BLOC SOUPLE 20x20x3 SILIKO','VR5115 - BLOC FERME 22x24x3.5','VR5125 - BLOC FERME 70Kg 22x24x2.5','VR5135 - BLOC SOUPLE 20x20x3 LXA','VR5200 - CONTOUR INSERT ROHO 7x5 4po','VR5205 - CONTOUR INSERT ROHO 7x5 3po','VR5207 - CONTOUR INSERT ROHO 8x5 4po','VR5215 - CONTOUR INSERT ROHO 8x5 3po','FO-00118 - KIT DE RÉPARATION KIT003','FO-01045 - PEINTURE LIQUIDE VINYL PLASTIQUE']},
+  {title:'Gel',items:['531818 - GEL 18x18 ⅝','5300 - GEL 16x16 ⅝','5301 - GEL 18x16 ⅝','5302 - GEL 16x16 ½','5303 - GEL 18x16 ½','561616 - GEL 16x16 ¼','561818 - GEL 18x18 ¼','6500 - GEL 20x20 ½','GEL-CABA01 - GEL CARRELÉ ½ BLEU AQUA 14x14','GEL-CABA02 - GEL CARRELÉ ½ BLEU AQUA 18x18','GEL-DG12125 - DEZYNE SILICON GEL 12x12','GEL-DG12855 - DEZYNE SILICON GEL 12x8.5','GEL-DG14145 - DEZYNE SILICON GEL 14x14','GEL-DG18185 - DEZYNE SILICON GEL 18x18','GEL-DG20205 - DEZYNE SILICON GEL 20x20','GEL-PEBA01 - GEL PEBBLE ½ BLEU AQUA 12.6x9.25','GEL-PEBA02 - GEL PEBBLE ½ BLEU AQUA 14.4x9.25','GEL-PEBA03 - GEL PEBBLE ½ BLEU AQUA 20x20','GEL-SIBA02 - GEL SILICONE ½ BLEU AQUA ERGO 12.5x7']}
+];
+
+// ═══ DIMENSIONS FEUILLES ═══
+var SHEETS = {
+  'VR10404':{w:22,h:24},'VR9220':{w:48,h:88},'VR10341':{w:22,h:24},'VR9230':{w:48,h:88},
+  'VR10077':{w:22,h:24},'VR9240':{w:48,h:88},'VR10088':{w:22,h:24},'VR10300':{w:48,h:88},'VR10294':{w:24,h:30},
+  'VR10258':{w:22,h:24},'VR10361':{w:22,h:24},
+  'VR10342':{w:22,h:24},'VR9986':{w:60,h:80},'VR10362':{w:36,h:80},
+  'VR10073':{w:22,h:24},'VR10366':{w:80,h:60},'VR9987':{w:60,h:80},
+  'VR10407':{w:60,h:80},'VR9427':{w:37,h:82},'VR10343':{w:22,h:24},
+  'VR9395':{w:37,h:82},'VR10344':{w:22,h:24},'VR9405':{w:37,h:82},
+  'VR10307C':{w:22,h:24},'VR9387':{w:37,h:82},'VR9391C':{w:22,h:24},'VR9389':{w:37,h:82},
+  'VR9429':{w:37,h:82},'VR10099C':{w:22,h:24},'VR9415':{w:37,h:82},
+  'VR10092C':{w:22,h:24},'VR9425':{w:37,h:82},
+  'VR10373':{w:22,h:24},'VR9435':{w:36,h:80},'VR10372':{w:22,h:24},'VR9445':{w:36,h:80},
+  'VR10375':{w:22,h:24},'VR9466':{w:36,h:80},'VR10374':{w:22,h:24},'VR9475':{w:36,h:80},
+  'VR10085C':{w:22,h:24},'VR9257':{w:60,h:80},'VR10086C':{w:22,h:24},'VR10360':{w:60,h:80},
+  'VR9575':{w:42,h:56},'VR9054':{w:24,h:108},
+  'VR9077':{w:40,h:80},'VR9085-VNC':{w:22,h:24},'VR9085':{w:40,h:80},
+  'VR9097-VNC':{w:22,h:24},'VR9097':{w:80,h:40},
+  'VR9015-VN':{w:20.5,h:48.5},'VR9015':{w:24,h:48},
+  'VR10152-VN':{w:20.5,h:48.5},'VR10152':{w:24,h:48},
+  'VR9025-VN':{w:20.5,h:48.5},'VR9025':{w:24,h:48},
+  'VR9035':{w:24,h:48},'VR10396':{w:60,h:80},
+  'VR9505':{w:48,h:96},'VR9515':{w:48,h:96},'VR9525':{w:48,h:96},
+  'VR9535':{w:48,h:96},'VR9545':{w:48,h:96},'VR9555':{w:48,h:96}
+};
+
+// Seuil minimum pour afficher le bouton 📐 (surface > 22×24 = 528)
+var MIN_SHEET_AREA = 529;
+
+function render() {
+  var q = (document.getElementById('searchBar').value || '').toLowerCase().trim();
+  renderCol(LEFT, 'colLeft', 'countLeft', q);
+  renderCol(RIGHT, 'colRight', 'countRight', q);
+}
+function renderCol(groups, colId, countId, q) {
+  var el = document.getElementById(colId);
+  var html = '', total = 0;
+  groups.forEach(function(g) {
+    var filtered = g.items.filter(function(item) { return !q || item.toLowerCase().indexOf(q) !== -1; });
+    if (!filtered.length) return;
+    html += '<div class="group-title">' + g.title + ' (' + filtered.length + ')</div>';
+    filtered.forEach(function(item) {
+      var d = item.indexOf(' - ');
+      var code = d > -1 ? item.substring(0, d) : item;
+      var name = d > -1 ? item.substring(d + 3) : '';
+      var sheet = SHEETS[code];
+      var isBigSheet = sheet && (sheet.w * sheet.h) >= MIN_SHEET_AREA;
+      var calcBtn = isBigSheet ? '<button class="mat-calc" onclick="openSC(\'' + code + '\',\'' + esc(name) + '\')" title="Calculer la feuille">📐</button>' : '';
+      html += '<div class="mat-row"><span class="mat-code">' + code + '</span><span class="mat-name" title="' + esc(name) + '">' + name + '</span>' + calcBtn + '</div>';
+      total++;
+    });
+  });
+  if (!total) html = '<div style="text-align:center;padding:20px;color:#64748b;font-size:13px;">Aucun résultat</div>';
+  el.innerHTML = html;
+  document.getElementById(countId).textContent = total;
+}
+function esc(s) { return s ? s.replace(/'/g, '&#39;').replace(/"/g, '&quot;') : ''; }
+
+// ═══ SHEET CALCULATOR ═══
+var _sc = null;
+var _fracMode = false;
+
+function openSC(code, name) {
+  var s = SHEETS[code]; if (!s) return;
+  _sc = { w: s.w, h: s.h, sqin: s.w * s.h };
+  document.getElementById('scMat').textContent = code + ' — ' + name;
+  document.getElementById('scInfo').textContent = 'Feuille: ' + s.w + '″ × ' + s.h + '″';
+  document.getElementById('scArea').textContent = 'Surface totale: ' + _sc.sqin + ' po² (' + (_sc.sqin / 144).toFixed(2) + ' pi²)';
+  document.getElementById('scInput').value = 0;
+  updateToggleUI();
+  calcSC();
+  document.getElementById('scOverlay').classList.add('open');
+  setTimeout(function(){ document.getElementById('scInput').focus(); document.getElementById('scInput').select(); }, 100);
+}
+function closeSC() { document.getElementById('scOverlay').classList.remove('open'); _sc = null; }
+
+function toggleMode() {
+  _fracMode = !_fracMode;
+  updateToggleUI();
+  calcSC();
+}
+function updateToggleUI() {
+  var tog = document.getElementById('scToggle');
+  var lblD = document.getElementById('scLabelDec');
+  var lblF = document.getElementById('scLabelFrac');
+  if (_fracMode) { tog.classList.add('on'); lblD.classList.remove('active'); lblF.classList.add('active'); }
+  else { tog.classList.remove('on'); lblD.classList.add('active'); lblF.classList.remove('active'); }
+}
+
+function calcSC() {
+  if (!_sc) return;
+  var sqft = parseFloat(document.getElementById('scInput').value) || 0;
+  var used = sqft * 144, total = _sc.sqin, remain = Math.max(0, total - used);
+  var pct = Math.min(100, (used / total) * 100), frac = used / total;
+  var bar = document.getElementById('scFill');
+  bar.style.width = pct + '%';
+  bar.style.background = pct > 90 ? 'linear-gradient(90deg,#ef4444,#dc2626)' : pct > 70 ? 'linear-gradient(90deg,#f59e0b,#f97316)' : 'linear-gradient(90deg,#22c55e,#3b82f6)';
+  document.getElementById('scPct').textContent = pct.toFixed(1) + '%';
+  document.getElementById('scUsed').textContent = used.toFixed(0) + ' po² (' + sqft.toFixed(2) + ' pi²)';
+  document.getElementById('scRemain').textContent = remain.toFixed(0) + ' po² (' + (remain / 144).toFixed(2) + ' pi²)';
+  document.getElementById('scQty').textContent = frac > 0 ? (_fracMode ? decToFrac(frac) : frac.toFixed(2)) : '—';
+}
+
+// Conversion décimal → fraction
+function decToFrac(dec) {
+  if (dec <= 0) return '0';
+  var whole = Math.floor(dec);
+  var rem = dec - whole;
+  if (rem < 0.01) return whole.toString();
+  var fracPart = findFrac(rem);
+  return whole > 0 ? whole + ' ' + fracPart : fracPart;
+}
+function findFrac(dec) {
+  if (dec <= 0.01) return '0';
+  var fracs = [[1,8],[1,6],[1,5],[1,4],[1,3],[3,8],[2,5],[1,2],[3,5],[5,8],[2,3],[3,4],[4,5],[5,6],[7,8]];
+  for (var i = 0; i < fracs.length; i++) {
+    if (Math.abs(dec - fracs[i][0]/fracs[i][1]) < 0.02) return fracs[i][0] + '/' + fracs[i][1];
+  }
+  var bestN = 1, bestD = 2, bestDiff = 999;
+  for (var d = 2; d <= 16; d++) {
+    var n = Math.round(dec * d);
+    if (n > 0 && n < d) {
+      var diff = Math.abs(dec - n/d);
+      if (diff < bestDiff) { bestDiff = diff; bestN = n; bestD = d; }
+    }
+  }
+  return bestN + '/' + bestD;
+}
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeSC(); });
+document.addEventListener('DOMContentLoaded', function() { render(); });
+</script>
+<script src="PhysiPro_Nav.js"></script>
+</body>
+</html>
