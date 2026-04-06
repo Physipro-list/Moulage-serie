@@ -37,7 +37,6 @@
     jobs:        { icon: '❓', label: 'Service Client',    sub: 'Service Client',             file: 'PhysiPro_ServiceClient.html',           color: '#f59e0b' },
     entrepot:    { icon: '📦', label: 'Entrepôt',          sub: 'Magasin & matériaux',        file: 'PhysiPro_Entrepot.html',                color: '#8b5cf6' },
     calcmat:     { icon: '🧮', label: 'Calc. Matériaux',   sub: 'Calculateur de matériaux',   file: 'PhysiPro_Calculateur_Materiaux.html',   color: '#14b8a6' },
-    calctemps:   { icon: '⏱️', label: 'Calc. Temps',       sub: 'Calculateur de temps',       file: 'PhysiPro_Calculateur_Temps.html',       color: '#0ea5e9' },
     archives:    { icon: '🗄️', label: 'Archives',          sub: 'Historique & archives',      file: 'PhysiPro_Archives.html',                color: '#6366f1' },
     photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' }
   };
@@ -45,7 +44,7 @@
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
     'moulage', 'serie', 'inspection', 'inspcouture', 'psm', 'jobs',
-    'entrepot', 'calcmat', 'calctemps', 'archives', 'photos'
+    'entrepot', 'calcmat', 'archives', 'photos'
   ];
 
   // Modules autorisés sur mobile
@@ -55,10 +54,10 @@
   //  ACCÈS PAR UTILISATEUR (emails en base64)
   // ══════════════════════════════════════
   var HUB_ACCESS = {
-    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':           ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','calctemps','photos','archives'],  // atelieratp
-    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','calctemps','photos','archives'],  // valerie18
-    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','calctemps','archives'],            // simdut
-    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','calctemps','photos','archives'],  // michelle.bouchard
+    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':           ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','photos','archives'],  // atelieratp
+    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','photos','archives'],  // valerie18
+    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','archives'],            // simdut
+    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','photos','archives'],  // michelle.bouchard
     'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','jobs','inspection','inspcouture','serie','psm','archives'],                                            // sroy
     'cGV0ZXJiYXNzNzZAZ21haWwuY29t':                 ['moulage','jobs'],                                                                                                // peterbass76
     'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':         ['moulage','jobs'],                                                                                                // mario.jacques
@@ -73,7 +72,7 @@
     'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':             ['moulage','jobs','archives'],                                                                                     // mplanguedoc
     'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':         ['moulage','jobs','archives'],                                                                                     // mariesoleilr
     'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':     ['moulage','jobs','serie'],                                                                                        // fabrys.frechette
-    'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage','calcmat','calctemps'],                                                                                 // marioouellette
+    'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage','calcmat'],                                                                                 // marioouellette
     'cmhAcGh5c2lwcm8uY29t':                         ['moulage','jobs','archives'],                                                                                     // rh
     'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':         [''],                                                                                                              // elyse.bolduc
     'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':         [''],                                                                                                              // eric.poirier
