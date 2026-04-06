@@ -31,15 +31,15 @@
   var NAV_MODULES = {
     moulage:     { icon: '🏭', label: 'Moulage',          sub: 'Gestion des moulages',      file: 'Physipro_moulage.html',                color: '#3b82f6' },
     serie:       { icon: '📋', label: 'Série+',            sub: 'Commandes de série',         file: 'PhysiPro_Serie_.html',                  color: '#f97316' },
-    inspection:  { icon: '☑️', label: 'Insp. Atelier',     sub: 'Inspection Atelier',         file: 'PhysiPro_Inspection.html',              color: '#22c55e' },
-    inspcouture: { icon: '🧵', label: 'Prod. Couture',     sub: 'Production Couture',         file: 'PhysiPro_Inspection_Couture.html',      color: '#a855f7' },
+    inspection:  { icon: '☑️', label: 'Insp. Atelier',     sub: 'Inspection Atelier',         file: 'PhysiPro_Inspection_Atelier.html',      color: '#22c55e' },
+    inspcouture: { icon: '🧵', label: 'Prod. Couture',     sub: 'Production Couture',         file: 'PhysiPro_Production_Couture.html',      color: '#a855f7' },
     psm:         { icon: '🔧', label: 'PSM',               sub: 'Plan de santé matières',     file: 'PhysiPro_PSM.html',                     color: '#ef4444' },
-    jobs:        { icon: '❓', label: 'Service Client',    sub: 'Service Client',             file: 'PhysiPro_Questionnement.html',          color: '#f59e0b' },
+    jobs:        { icon: '❓', label: 'Service Client',    sub: 'Service Client',             file: 'PhysiPro_ServiceClient.html',           color: '#f59e0b' },
     entrepot:    { icon: '📦', label: 'Entrepôt',          sub: 'Magasin & matériaux',        file: 'PhysiPro_Entrepot.html',                color: '#8b5cf6' },
     calcmat:     { icon: '🧮', label: 'Calc. Matériaux',   sub: 'Calculateur de matériaux',   file: 'PhysiPro_Calculateur_Materiaux.html',   color: '#14b8a6' },
     calctemps:   { icon: '⏱️', label: 'Calc. Temps',       sub: 'Calculateur de temps',       file: 'PhysiPro_Calculateur_Temps.html',       color: '#0ea5e9' },
     archives:    { icon: '🗄️', label: 'Archives',          sub: 'Historique & archives',      file: 'PhysiPro_Archives.html',                color: '#6366f1' },
-    photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_Photo_Recepteur.html',         color: '#06b6d4' }
+    photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' }
   };
 
   // Ordre d'affichage dans le modal
