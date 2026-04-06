@@ -34,7 +34,7 @@
     inspection:  { icon: '☑️', label: 'Insp. Atelier',     sub: 'Inspection Atelier',         file: 'PhysiPro_Inspection_Atelier.html',      color: '#22c55e' },
     inspcouture: { icon: '🧵', label: 'Prod. Couture',     sub: 'Production Couture',         file: 'PhysiPro_Production_Couture.html',      color: '#a855f7' },
     psm:         { icon: '🔧', label: 'PSM',               sub: 'Plan de santé matières',     file: 'PhysiPro_PSM.html',                     color: '#ef4444' },
-    jobs:        { icon: '❓', label: 'Service Client',    sub: 'Service Client',             file: 'PhysiPro_ServiceClient.html',           color: '#f59e0b' },
+    jobs:        { icon: '🎧', label: 'Service Client',    sub: 'Service Client',             file: 'PhysiPro_ServiceClient.html',           color: '#f59e0b' },
     entrepot:    { icon: '📦', label: 'Entrepôt',          sub: 'Magasin & matériaux',        file: 'PhysiPro_Entrepot.html',                color: '#8b5cf6' },
     calcmat:     { icon: '🧮', label: 'Liste Matériaux',    sub: 'Liste des matériaux',        file: 'PhysiPro_Liste_Materiaux.html',         color: '#14b8a6' },
     archives:    { icon: '🗄️', label: 'Archives',          sub: 'Historique & archives',      file: 'PhysiPro_Archives.html',                color: '#6366f1' },
