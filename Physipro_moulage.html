@@ -8,6 +8,19 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
+    v1593 - RALLONGE DURÉE ESSAYAGE SUR LES CARTES
+    ═══════════════════════════════════════════════════════════════════
+    
+    🆕 MODIFICATIONS v1593:
+    
+    1. RALLONGE "PARTI DEPUIS X JOURS" EN BAS DES CARTES ESSAYAGE
+       → Visible UNIQUEMENT dans la colonne Essayage
+       → Calcul basé sur tracking.essayage.entree (date d'entrée)
+       → Couleur de fond assortie à la région de la carte (plus foncé)
+       → S'affiche sous la zone expand si elle est présente
+    
+    ═══════════════════════════════════════════════════════════════════
+
     v1592 - AUDIT LVL12: PERTE DE DONNÉES MERGE + DROP FANTÔME + EXPEDIE ASSOCIÉES
     ═══════════════════════════════════════════════════════════════════
     
@@ -645,6 +658,21 @@
       border-radius: 4px;
     }
     
+    /* Rallonge durée essayage (dans zone expand, couleur selon région) */
+    .mcard-expand-essayage {
+      padding: 3px 6px;
+      font-size: 9px;
+      font-weight: 700;
+      text-align: center;
+      color: #fff;
+      text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+      border: none;
+      border-radius: 4px;
+    }
+    .mcard.region-qc .mcard-expand-essayage { background: linear-gradient(to bottom, #3a6eb5, #1a3a5a); }
+    .mcard.region-on .mcard-expand-essayage { background: linear-gradient(to bottom, #c8a060, #806020); }
+    .mcard.region-ma .mcard-expand-essayage { background: linear-gradient(to bottom, #a0356c, #602040); }
+
     /* Pastille Item */
     .mcard-item-pill { width: calc(100% - 6px); max-width: 100%; padding: 0 4px; font-size: 11px; font-weight: 700; border-radius: 6px; border: 1px solid #000; display: block; text-align: center; margin: 0 3px; white-space: nowrap; overflow: hidden; box-sizing: border-box; height: 18px; line-height: 16px; }
     .mcard.region-qc .mcard-item-pill { background: linear-gradient(to bottom, #4a8ef5, #04152c); }
@@ -4314,7 +4342,7 @@
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260228;
+    var APP_VERSION = 20260409;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -6606,14 +6634,14 @@
           Object.entries(cardsData)
             .filter(([id, card]) => card.colonne === col.id && !card.isNote)
             .sort((a, b) => {
-              // TRI SPÉCIAL: Colonne Essayage triée par date (plus récent en HAUT)
+              // TRI SPÉCIAL: Colonne Essayage triée par durée (plus longtemps en essayage en HAUT)
               if (col.id === 'colEssayage') {
-                const dateA = a[1].dateEssayage || a[1].createdAt || '';
-                const dateB = b[1].dateEssayage || b[1].createdAt || '';
-                // Tri descendant (plus récent en haut): B - A
-                if (dateB && dateA) return dateB.localeCompare(dateA);
-                if (dateB) return 1;  // B a une date, pas A → B en haut
+                const dateA = (a[1].tracking && a[1].tracking.essayage && a[1].tracking.essayage.entree) || '';
+                const dateB = (b[1].tracking && b[1].tracking.essayage && b[1].tracking.essayage.entree) || '';
+                // Tri ascendant par date d'entrée (plus ancien en haut = plus longtemps en essayage)
+                if (dateA && dateB) return dateA.localeCompare(dateB);
                 if (dateA) return -1; // A a une date, pas B → A en haut
+                if (dateB) return 1;  // B a une date, pas A → B en haut
                 return 0;
               }
               // Autres colonnes: tri par sortOrder
@@ -7032,7 +7060,7 @@
         expandContent += `<div class="mcard-expand-message">${escapeHtml(expandMessage)}</div>`;
       }
       
-      // IMPORTANT: La carte est "expanded" SEULEMENT si elle a du contenu réel
+      // IMPORTANT: La carte est "expanded" SEULEMENT si elle a du contenu réel (PAS l'essayage)
       const hasExpandContent = expandContent !== '';
       const checkboxChecked = hasExpandContent ? 'checked' : '';
       
@@ -7043,6 +7071,15 @@
       
       // Ne montrer la zone expand que s'il y a du contenu réel
       const expandZoneHtml = hasExpandContent ? `<div class="mcard-expand-zone">${expandContent}</div>` : '';
+      
+      // Rallonge durée essayage (SÉPARÉE de la zone expand, toujours visible dans colEssayage)
+      let essayageDurationHtml = '';
+      if (card.colonne === 'colEssayage' && card.tracking && card.tracking.essayage && card.tracking.essayage.entree) {
+        const entreeDate = new Date(card.tracking.essayage.entree);
+        const now = new Date();
+        const diffDays = Math.floor((now - entreeDate) / (1000 * 60 * 60 * 24));
+        essayageDurationHtml = `<div class="mcard-expand-essayage">En essayage depuis ${diffDays}jrs</div>`;
+      }
       
       div.innerHTML = `
         ${linkIcon}
@@ -7059,6 +7096,7 @@
         </div>
         <div class="mcard-item-pill ${pillClass}" style="font-size:${itemFontSize}px" ${pillOnclick}>${pillText}</div>
         ${expandZoneHtml}
+        ${essayageDurationHtml}
       `;
       return div;
     }
@@ -12144,7 +12182,7 @@
           
           // Masquer l'écran de connexion
           hideLoginScreen();
-        initLogoMenu('moulage');
+        try { initLogoMenu('moulage'); } catch(e) { console.warn('⚠️ initLogoMenu non disponible:', e.message); }
           
           // Mettre à jour l'affichage utilisateur
           updateUserDisplay(user);
@@ -14370,15 +14408,15 @@
       MOBILE_COL_ORDER.forEach(col => {
         const colCards = allCards.filter(c => c.colonne === col.id);
         
-        // TRI SPÉCIAL: Colonne Essayage triée par date (plus récent en HAUT)
+        // TRI SPÉCIAL: Colonne Essayage triée par durée (plus longtemps en essayage en HAUT)
         if (col.id === 'colEssayage') {
           colCards.sort((a, b) => {
-            const dateA = a.dateEssayage || a.createdAt || '';
-            const dateB = b.dateEssayage || b.createdAt || '';
-            // Tri descendant (plus récent en haut): B - A
-            if (dateB && dateA) return dateB.localeCompare(dateA);
-            if (dateB) return 1;
+            const dateA = (a.tracking && a.tracking.essayage && a.tracking.essayage.entree) || '';
+            const dateB = (b.tracking && b.tracking.essayage && b.tracking.essayage.entree) || '';
+            // Tri ascendant par date d'entrée (plus ancien en haut = plus longtemps en essayage)
+            if (dateA && dateB) return dateA.localeCompare(dateB);
             if (dateA) return -1;
+            if (dateB) return 1;
             return 0;
           });
         } else {
