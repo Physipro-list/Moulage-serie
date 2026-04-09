@@ -8386,76 +8386,39 @@ function checkAppVersion(onVersionOK) {
 
 function serieForceRefresh() {
   // Force purge empty cards before refreshing
-  _purgeHasRun = false;
-  _purgeEmptySerieCards();
+  try {
+    _purgeHasRun = false;
+    _purgeEmptySerieCards();
+  } catch(e) { console.warn('Purge skipped:', e); }
 
-  // Check cross-app data: Inspection Atelier + Production Couture
   if (typeof firebaseDb !== 'undefined' && firebaseDb) {
     showToast('🔄 Vérification des données...', 'info');
-    var checks = [];
     var results = [];
 
-    // Check Inspection Atelier orders
-    checks.push(
-      firebaseDb.ref('inspectionAtelier').once('value').then(function(snap) {
-        var data = snap.val() || {};
-        var orders = Object.keys(data);
-        results.push('☑️ Inspection Atelier: ' + orders.length + ' commande(s)');
-        return orders;
-      }).catch(function() { results.push('❌ Inspection Atelier: inaccessible'); return []; })
-    );
+    var p1 = firebaseDb.ref('inspectionAtelier').once('value').then(function(snap) {
+      var count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      results.push('☑️ Inspection Atelier: ' + count + ' commande(s)');
+    }).catch(function() { results.push('❌ Inspection Atelier: inaccessible'); });
 
-    // Check Production Couture orders
-    checks.push(
-      firebaseDb.ref('productionCouture').once('value').then(function(snap) {
-        var data = snap.val() || {};
-        var orders = Object.keys(data);
-        results.push('🧵 Production Couture: ' + orders.length + ' commande(s)');
-        return orders;
-      }).catch(function() { results.push('❌ Production Couture: inaccessible'); return []; })
-    );
+    var p2 = firebaseDb.ref('productionCouture').once('value').then(function(snap) {
+      var count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      results.push('🧵 Production Couture: ' + count + ' commande(s)');
+    }).catch(function() { results.push('❌ Production Couture: inaccessible'); });
 
-    // Check Série+ orders
-    checks.push(
-      firebaseDb.ref('serieCommandes').once('value').then(function(snap) {
-        var data = snap.val() || {};
-        var orders = Object.keys(data);
-        results.push('📋 Série+: ' + orders.length + ' commande(s)');
-        return orders;
-      }).catch(function() { results.push('❌ Série+: inaccessible'); return []; })
-    );
+    var p3 = firebaseDb.ref('serieCommandes').once('value').then(function(snap) {
+      var count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      results.push('📋 Série+: ' + count + ' commande(s)');
+    }).catch(function() { results.push('❌ Série+: inaccessible'); });
 
-    Promise.all(checks).then(function(allOrders) {
-      var inspOrders = allOrders[0] || [];
-      var coutureOrders = allOrders[1] || [];
-      var serieOrders = allOrders[2] || [];
-
-      // Cross-reference: find orders in Inspection/Couture not in Série+
-      var serieSet = {};
-      serieOrders.forEach(function(id) { serieSet[id] = true; });
-
-      var missingFromSerie = [];
-      inspOrders.concat(coutureOrders).forEach(function(id) {
-        if (!serieSet[id] && missingFromSerie.indexOf(id) < 0) missingFromSerie.push(id);
-      });
-
-      results.push('---');
-      if (missingFromSerie.length > 0) {
-        results.push('⚠️ ' + missingFromSerie.length + ' ID(s) dans Insp/Couture pas dans Série+');
-      } else {
-        results.push('✅ Tous les numéros correspondent');
-      }
-
-      // Show results in a toast or alert
-      alert(results.join('\n'));
-
-      // Force reload
-      setTimeout(function() {
-        window.location.href = window.location.pathname + '?v=' + Date.now();
-      }, 500);
+    Promise.all([p1, p2, p3]).then(function() {
+      showToast(results.join(' | '), 'success');
+      // Force full reload
+      setTimeout(function() { location.reload(true); }, 1000);
+    }).catch(function() {
+      location.reload(true);
     });
   } else {
-    window.location.href = window.location.pathname + '?v=' + Date.now();
+    location.reload(true);
   }
 }
 window.serieForceRefresh = serieForceRefresh;
@@ -13771,13 +13734,18 @@ function _buildCardInfoPanel() {
   if (_serieViewMode !== 'commandes') {
     panel.style.display = 'flex';
     body.style.flexDirection = 'column';
-    // Hide footer
+    // Hide the unified columns view and footer in production mode
+    var clientViewsContainer = document.getElementById('serieClientViewsContainer');
+    if (clientViewsContainer) clientViewsContainer.style.display = 'none';
     var cmdFooter = body.querySelector('.serie-dept-footer.cmd');
     if (cmdFooter) cmdFooter.style.display = 'none';
   } else {
     panel.style.display = 'none';
     if (panel.parentNode) panel.parentNode.removeChild(panel);
     body.style.flexDirection = '';
+    // Restore the unified columns view
+    var clientViewsContainer = document.getElementById('serieClientViewsContainer');
+    if (clientViewsContainer) clientViewsContainer.style.display = '';
     return;
   }
 
@@ -13822,21 +13790,20 @@ function _buildCardInfoPanel() {
   }
 
   panel.innerHTML =
-    '<div style="background:linear-gradient(to bottom,#1e3a5f,#2a6bc9);border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:2px;">' +
-      '<div style="text-align:center;font-size:28px;font-weight:900;color:#fde047;letter-spacing:1px;">' + escapeHtml(displayNum) + '</div>' +
-      '<div style="text-align:center;font-size:12px;font-weight:700;color:#fff;">' + escapeHtml(data.client || '') + '</div>' +
-      purgeHtml +
+    '<div style="display:flex;flex-direction:column;gap:3px;font-size:10px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 6px;background:#e8edf3;border-radius:3px;"><span style="color:#64748b;font-weight:600;">Commande</span><span style="color:#1e293b;font-weight:700;">' + escapeHtml(data.order || '—') + '</span></div>' +
+      (data.po ? '<div style="display:flex;justify-content:space-between;padding:2px 6px;background:#e8edf3;border-radius:3px;"><span style="color:#64748b;font-weight:600;">PO</span><span style="color:#1e293b;font-weight:700;">' + escapeHtml(data.po) + '</span></div>' : '') +
+      (data.soumission ? '<div style="display:flex;justify-content:space-between;padding:2px 6px;background:#e8edf3;border-radius:3px;"><span style="color:#64748b;font-weight:600;">Soum</span><span style="color:#1e293b;font-weight:700;">' + escapeHtml(data.soumission) + '</span></div>' : '') +
+      '<div style="display:flex;justify-content:space-between;padding:2px 6px;background:#e8edf3;border-radius:3px;"><span style="color:#64748b;font-weight:600;">Client</span><span style="color:#1e293b;font-weight:700;">' + escapeHtml(data.client || '—') + '</span></div>' +
+      (data.dateRecue ? '<div style="display:flex;justify-content:space-between;padding:2px 6px;background:#e8edf3;border-radius:3px;"><span style="color:#64748b;font-weight:600;">Reçue</span><span style="color:#1e293b;font-weight:700;">' + escapeHtml(data.dateRecue) + '</span></div>' : '') +
+      (data.dateLivraison ? '<div style="display:flex;justify-content:space-between;padding:2px 6px;background:#e8edf3;border-radius:3px;"><span style="color:#64748b;font-weight:600;">Livraison</span><span style="color:#1e293b;font-weight:700;">' + escapeHtml(data.dateLivraison) + '</span></div>' : '') +
+      '<div style="display:flex;justify-content:flex-end;padding:2px 0;"><button onclick="openSerieCardEditModal(\'' + cid + '\')" style="background:linear-gradient(to bottom,#3b82f6,#1e40af);border:none;color:#fff;font-size:9px;font-weight:700;padding:3px 10px;border-radius:4px;cursor:pointer;">✏️ Modifier</button></div>' +
     '</div>' +
-    '<div style="display:flex;flex-direction:column;gap:4px;font-size:11px;margin-top:4px;">' +
-      (data.po ? '<div style="display:flex;justify-content:space-between;padding:3px 6px;background:#e8edf3;border-radius:3px;"><span style="color:#64748b;font-weight:600;">PO</span><span style="color:#1e293b;font-weight:700;">' + escapeHtml(data.po) + '</span></div>' : '') +
-      (data.dateRecue ? '<div style="display:flex;justify-content:space-between;padding:3px 6px;background:#e8edf3;border-radius:3px;"><span style="color:#64748b;font-weight:600;">Reçue</span><span style="color:#1e293b;font-weight:700;">' + escapeHtml(data.dateRecue) + '</span></div>' : '') +
-      (data.dateLivraison ? '<div style="display:flex;justify-content:space-between;padding:3px 6px;background:#e8edf3;border-radius:3px;"><span style="color:#64748b;font-weight:600;">Livraison</span><span style="color:#1e293b;font-weight:700;">' + escapeHtml(data.dateLivraison) + '</span></div>' : '') +
+    '<div style="margin-top:4px;flex:1;display:flex;flex-direction:column;min-height:80px;">' +
+      '<div style="font-size:9px;font-weight:700;color:#1e40af;text-transform:uppercase;margin-bottom:2px;">📝 Notes</div>' +
+      '<textarea id="infoPanelNotes" style="flex:1;min-height:80px;background:#fff;border:2px solid #93c5fd;border-radius:5px;padding:6px;font-size:11px;color:#1e293b;font-family:inherit;resize:vertical;outline:none;" placeholder="Écrire des notes ici...">' + escapeHtml(notesVal) + '</textarea>' +
     '</div>' +
-    '<div style="margin-top:6px;flex:1;display:flex;flex-direction:column;min-height:120px;">' +
-      '<div style="font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;margin-bottom:3px;">📝 Notes</div>' +
-      '<textarea id="infoPanelNotes" style="flex:1;min-height:120px;background:#fff;border:2px solid #93c5fd;border-radius:5px;padding:8px;font-size:13px;color:#1e293b;font-family:inherit;resize:vertical;outline:none;" placeholder="Écrire des notes ici...">' + escapeHtml(notesVal) + '</textarea>' +
-    '</div>' +
-    '<button onclick="confirmDeleteSerieCard(\'' + cid + '\')" style="margin-top:6px;width:100%;padding:8px;background:linear-gradient(to bottom,#dc2626,#991b1b);border:2px solid #fca5a5;color:white;font-size:12px;font-weight:800;border-radius:6px;cursor:pointer;flex-shrink:0;">🗑️ Supprimer</button>';
+    '<button onclick="confirmDeleteSerieCard(\'' + cid + '\')" style="margin-top:4px;width:100%;padding:6px;background:linear-gradient(to bottom,#dc2626,#991b1b);border:2px solid #fca5a5;color:white;font-size:10px;font-weight:800;border-radius:6px;cursor:pointer;flex-shrink:0;">🗑️ Supprimer</button>';
 
   // Attacher l'événement de sauvegarde des notes
   var notesEl = document.getElementById('infoPanelNotes');
@@ -13860,119 +13827,6 @@ function _buildCardInfoPanel() {
   }
 }
 
-// --- Panneau liste des cartes de la colonne active (à droite de la fiche) ---
-var _activeColId = null;
-function _buildCardListPanel(activeCol) {
-  var wrapper = document.getElementById('serieProductionWrapper');
-  if (!wrapper) return;
-
-  // Trouver l'ID de la colonne active
-  if (activeCol) {
-    var colBody = activeCol.querySelector('.serie-cards-col-body');
-    _activeColId = colBody ? colBody.id : null;
-  }
-
-  var panel = document.getElementById('serieCardListPanel');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'serieCardListPanel';
-    panel.style.cssText = 'width:130px;min-width:130px;display:flex;flex-direction:column;background:rgba(4,21,44,0.8);border-left:2px solid rgba(59,130,246,0.2);min-height:0;overflow:hidden;';
-    wrapper.appendChild(panel);
-  }
-  panel.style.display = 'flex';
-
-  // Déterminer la couleur de l'en-tête selon la colonne
-  var colTitle = '';
-  var headerBg = 'linear-gradient(to bottom, #1e40af, #1e3a5f)';
-  var headerBorder = '#3b82f6';
-  var headerColor = '#fff';
-  var headerShadow = '0 1px 3px rgba(0,0,0,0.5)';
-
-  if (activeCol) {
-    var titleEl = activeCol.querySelector('.serie-cards-col-title');
-    if (titleEl) {
-      colTitle = titleEl.textContent.replace(/[\d\/]/g, '').trim();
-    }
-    
-    // Détecter la colonne par l'ID du body si pas de titre trouvé
-    var colBodyEl = activeCol.querySelector('.serie-cards-col-body');
-    var colBodyId = colBodyEl ? colBodyEl.id : '';
-    
-    if (colBodyId === 'serieFranceSerieList') {
-      colTitle = 'France';
-      headerBg = 'linear-gradient(to bottom, #eab308, #ca8a04)';
-      headerBorder = '#fde047';
-      headerColor = '#000';
-      headerShadow = '0 1px 1px rgba(255,255,255,0.3)';
-    } else if (colBodyId === 'serieCollapsableCards') {
-      colTitle = 'Vermeiren';
-    } else if (colBodyId === 'serieHmeList') {
-      colTitle = 'HME';
-      headerBg = 'linear-gradient(to bottom, #7e22ce, #581c87)';
-      headerBorder = '#a855f7';
-    } else if (colBodyId === 'serieCubroList') {
-      colTitle = (typeof _serieCustomCols !== 'undefined' && _serieCustomCols[1]) ? _serieCustomCols[1].name : 'Autre 1';
-      headerBg = 'linear-gradient(to bottom, #164e63, #0e3a4a)';
-      headerBorder = '#22d3ee';
-    }
-  }
-
-  // Construire le HTML
-  var html = '<div style="font-size:8px;font-weight:800;color:' + headerColor + ';text-transform:uppercase;text-align:center;padding:3px 4px;background:' + headerBg + ';border-bottom:2px solid ' + headerBorder + ';text-shadow:' + headerShadow + ';letter-spacing:0.3px;flex-shrink:0;border-radius:4px 4px 0 0;">' + escapeHtml(colTitle || 'Cartes') + '</div>';
-  html += '<div style="flex:1;overflow-y:auto;padding:3px;display:flex;flex-direction:column;gap:2px;">';
-
-  if (_activeColId) {
-    // Déterminer le groupe pour le toggle numéro
-    var listGroupKey = 'vermeiren';
-    if (_activeColId.includes('France')) listGroupKey = 'france';
-    else if (_activeColId.includes('Hme')) listGroupKey = 'hme';
-    else if (_activeColId.includes('Cubro')) listGroupKey = 'autre1';
-    var listNumMode = (window._colNumModes && window._colNumModes[listGroupKey]) || 'cmd';
-
-    var colContainer = document.getElementById(_activeColId);
-    if (colContainer) {
-      // Couleurs de fond des cartes par client (identiques à la vue normale)
-      var cardBgColors = {
-        'vermeiren': 'linear-gradient(to bottom, #4ade80, #166534)',
-        'france': 'linear-gradient(to bottom, #facc15, #854d0e)',
-        'hme': 'linear-gradient(to bottom, #c084fc, #581c87)',
-        'cubro': 'linear-gradient(to bottom, #67e8f9, #0e7490)',
-        'c1south': 'linear-gradient(to bottom, #9ca3af, #581c87)',
-        'default': 'linear-gradient(to bottom, #3b82f6, #1e3a5f)'
-      };
-
-      var cards = colContainer.querySelectorAll('.mcard');
-      cards.forEach(function(card) {
-        var cid = card.dataset.id || card.dataset.cardId;
-        var data = serieCardsData[cid];
-        if (!data) return;
-        var orderNum = (data.order || '------').replace(/^0+/, '').slice(-6);
-        var displayNum = orderNum;
-        if (listNumMode === 'po' && data.po) displayNum = (data.po || '').replace(/^0+/, '').slice(-8);
-        else if (listNumMode === 'soum' && data.soumission) displayNum = (data.soumission || '').replace(/^0+/, '').slice(-8);
-
-        var isActive = (cid === currentSerieId);
-
-        // Couleur de la carte selon le client
-        var ck = (data.client || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        var cardBg = cardBgColors[ck] || cardBgColors['default'];
-        var isAccessoire = data.isAccessoire === true;
-        if (isAccessoire) cardBg = 'linear-gradient(to bottom, #a855f7, #581c87)';
-
-        var activeBorder = isActive ? 'box-shadow:0 0 0 2px #60a5fa,0 0 8px rgba(96,165,250,0.5);transform:scale(1.03);' : '';
-        var textColor = (ck === 'france') ? '#000' : '#fff';
-
-        html += '<div onclick="selectSerieCard(\'' + cid + '\', false); _buildCardInfoPanel();" style="padding:4px 6px;border-radius:5px;cursor:pointer;background:' + cardBg + ';' + activeBorder + 'transition:all .15s;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 2px rgba(255,255,255,0.3),0 1px 3px rgba(0,0,0,0.3);">' +
-          '<span style="font-size:10px;font-weight:800;color:' + textColor + ';text-shadow:0 1px 2px rgba(0,0,0,0.4);">#' + escapeHtml(displayNum) + '</span>' +
-        '</div>';
-      });
-    }
-  }
-
-  html += '</div>';
-  panel.innerHTML = html;
-}
-window._buildCardListPanel = _buildCardListPanel;
 
 function _updateSerieColCounts() {
   var ids = [
