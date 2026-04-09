@@ -1013,7 +1013,8 @@ function confirmSerie(){
     }
   });
   if(!checked.length){toast('Sélectionnez au moins un item','err');return;}
-  var card=ctx.card;var itemLines=[];var totalQty=0;
+  var card=ctx.card;var cid=ctx.cid;
+  var itemLines=[];var totalQty=0;
   checked.forEach(function(c){
     var item=card.items[c.ii];if(!item)return;
     var g=item.grandeurs[c.gi];if(!g)return;
@@ -1022,6 +1023,8 @@ function confirmSerie(){
     itemLines.push((iName?iName+'|':'')+gName+' '+tQ+'x');
     totalQty+=tQ;
   });
+
+  // ═══ 1. Remplir la ligne dans l'inspection finale ═══
   var el=document.getElementById('insp-month');
   var m=el?el.value:gmk();
   var data=load();
@@ -1055,8 +1058,67 @@ function confirmSerie(){
     }
   }
   save(data);
+
+  // ═══ 2. Mettre à jour Série+ dans Firebase → statut "emballé" ═══
+  if(fbDb&&cid){
+    fbDb.ref('serieCommandes/'+cid).once('value').then(function(snap){
+      var fbCard=snap.val();
+      if(!fbCard||!fbCard.items){console.warn('[EMBALLE] Carte introuvable dans Firebase');return;}
+
+      // Mettre _status='emballe' sur chaque grandeur cochée
+      checked.forEach(function(c){
+        if(fbCard.items[c.ii]&&fbCard.items[c.ii].grandeurs&&fbCard.items[c.ii].grandeurs[c.gi]){
+          fbCard.items[c.ii].grandeurs[c.gi]._status='emballe';
+        }
+      });
+
+      // Recalculer _manualStatus de la carte
+      var allStatuses=[];
+      var showCouture=!(fbCard._itemSkipCouture===true);
+      (fbCard.items||[]).forEach(function(item){
+        (item.grandeurs||[]).forEach(function(g){
+          var s=g._status||'produire';
+          allStatuses.push(s);
+        });
+      });
+      if(allStatuses.length>0){
+        if(allStatuses.every(function(s){return s==='emballe';})){
+          fbCard._manualStatus='emballe';
+        }else if(allStatuses.every(function(s){return s==='complete'||s==='emballe';})){
+          fbCard._manualStatus='complete';
+        }else if(allStatuses.some(function(s){return s!=='produire';})){
+          fbCard._manualStatus='partiel';
+        }else{
+          fbCard._manualStatus='produire';
+        }
+      }
+
+      // Push vers Firebase
+      fbDb.ref('serieCommandes/'+cid).update({
+        items:fbCard.items,
+        _manualStatus:fbCard._manualStatus
+      }).then(function(){
+        console.log('[EMBALLE] ✅ Carte '+cid+' → '+fbCard._manualStatus+' ('+checked.length+' grandeurs emballées)');
+      }).catch(function(e){
+        console.error('[EMBALLE] ❌ Erreur Firebase:',e.message);
+      });
+
+      // Aussi mettre à jour le localStorage des cartes Série+
+      var local=getSerieCards();
+      if(local[cid]){
+        checked.forEach(function(c){
+          if(local[cid].items&&local[cid].items[c.ii]&&local[cid].items[c.ii].grandeurs&&local[cid].items[c.ii].grandeurs[c.gi]){
+            local[cid].items[c.ii].grandeurs[c.gi]._status='emballe';
+          }
+        });
+        local[cid]._manualStatus=fbCard._manualStatus;
+        localStorage.setItem(SK,JSON.stringify(local));
+      }
+    }).catch(function(e){console.error('[EMBALLE] Firebase read error:',e.message);});
+  }
+
   closeModal();_serieCache={};renderTable();
-  toast('✅ #'+ctx.bon+' Série+ ajouté','ok');
+  toast('✅ #'+ctx.bon+' Série+ emballé','ok');
 }
 
 /* ═══ REOPEN SERIE MODAL (clic étoile) ═══ */
