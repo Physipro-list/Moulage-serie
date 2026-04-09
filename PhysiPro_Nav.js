@@ -38,12 +38,13 @@
     entrepot:    { icon: '📦', label: 'Entrepôt',          sub: 'Magasin & matériaux',        file: 'PhysiPro_Entrepot.html',                color: '#8b5cf6' },
     calcmat:     { icon: '🧮', label: 'Liste Matériaux',    sub: 'Liste des matériaux',        file: 'PhysiPro_Liste_Materiaux.html',         color: '#14b8a6' },
     archives:    { icon: '🗄️', label: 'Archives',          sub: 'Historique & archives',      file: 'PhysiPro_Archives.html',                color: '#6366f1' },
-    photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' }
+    photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' },
+    inspfinale:  { icon: '🔍', label: 'Insp. Finale',      sub: 'Inspection finale',          file: 'PhysiPro_Inspection_Finale.html',        color: '#6366f1' }
   };
 
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
-    'moulage', 'serie', 'inspection', 'inspcouture', 'psm', 'jobs',
+    'moulage', 'serie', 'inspection', 'inspcouture', 'inspfinale', 'psm', 'jobs',
     'entrepot', 'calcmat', 'archives', 'photos'
   ];
 
@@ -54,21 +55,21 @@
   //  ACCÈS PAR UTILISATEUR (emails en base64)
   // ══════════════════════════════════════
   var HUB_ACCESS = {
-    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':           ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','photos','archives'],  // atelieratp
-    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','photos','archives'],  // valerie18
-    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','archives'],            // simdut
-    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','photos','archives'],  // michelle.bouchard
-    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','jobs','inspection','inspcouture','serie','psm','archives'],                                            // sroy
-    'cGV0ZXJiYXNzNzZAZ21haWwuY29t':                 ['moulage','jobs'],                                                                                                // peterbass76
-    'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':         ['moulage','jobs'],                                                                                                // mario.jacques
-    'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs'],                                                                                                // cncatp
+    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':           ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','entrepot','calcmat','photos','archives'],  // atelieratp
+    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','entrepot','calcmat','photos','archives'],  // valerie18
+    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','archives'],  // simdut
+    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','entrepot','calcmat','photos','archives'],  // michelle.bouchard
+    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','archives'],                                  // sroy
+    'cGV0ZXJiYXNzNzZAZ21haWwuY29t':                 ['moulage','jobs'],                                                                                      // peterbass76
+    'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':         ['moulage','jobs'],                                                                                      // mario.jacques
+    'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs','inspfinale'],                                                                                      // cncatp
     'bWFnYXNpbmF0cDFAcGh5c2lwcm8uY29t':             ['entrepot','calcmat'],                                                                                            // magasinatp1
     'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':             ['entrepot','calcmat'],                                                                                            // magasinatp2
     'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':             ['entrepot','calcmat'],                                                                                            // magasinatp3
-    'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','jobs'],                                                                                                // service1
-    'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','jobs'],                                                                                                // service3
-    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs'],                                                                                                // ngagne
-    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','jobs'],                                                                                                // sonia.boulanger
+    'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','jobs','inspfinale'],                                                                        // service1
+    'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','jobs','inspfinale'],                                                                        // service3
+    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs','inspfinale'],                                                                        // ngagne
+    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','jobs','inspfinale'],                                                                        // sonia.boulanger
     'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':             ['moulage','jobs','archives'],                                                                                     // mplanguedoc
     'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':         ['moulage','jobs','archives'],                                                                                     // mariesoleilr
     'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':     ['moulage','jobs','serie'],                                                                                        // fabrys.frechette
