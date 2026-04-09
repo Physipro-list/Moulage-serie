@@ -11699,16 +11699,24 @@ function createSerieCardFromData(cardId, data) {
     return false;
   }
 
-  const clientKey = (data.client || 'Autre').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const clientRaw = (data.client || 'Autre').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  const clientKey = clientRaw.replace(/\s+/g, '');
   let clientClass = 'client-default';
-  if (['vermeiren', 'hme', 'c1south', 'cubro', 'france', 'inventaire'].includes(clientKey)) {
+  var _knownClients = ['vermeiren', 'hme', 'c1south', 'cubro', 'france', 'inventaire'];
+  if (_knownClients.includes(clientKey)) {
     clientClass = 'client-' + clientKey;
+  } else {
+    // Vérifier si ça COMMENCE par un client connu (ex: "Vermeiren Chili" → vermeiren)
+    for (var _ki = 0; _ki < _knownClients.length; _ki++) {
+      if (clientRaw.indexOf(_knownClients[_ki]) === 0) { clientClass = 'client-' + _knownClients[_ki]; break; }
+    }
   }
 
   // Tronquer le numéro de commande aux 6 derniers chiffres
   const orderNum = (data.order || '------').replace(/^0+/, '').slice(-6);
   const status = getSerieCardStatus(data);
-  const bannerClass = ['vermeiren', 'hme', 'c1south', 'cubro', 'france'].includes(clientKey) ? 'banner-' + clientKey : 'banner-default';
+  var _bannerKey = clientClass.replace('client-','');
+  const bannerClass = ['vermeiren', 'hme', 'c1south', 'cubro', 'france'].includes(_bannerKey) ? 'banner-' + _bannerKey : 'banner-default';
 
   const dateLiv = data.dateLivraison || '';
   const dateLivDisplay = dateLiv ? formatDateFr(dateLiv) : '—';
@@ -11731,7 +11739,7 @@ function createSerieCardFromData(cardId, data) {
   const poNum = (data.po || data.numeroPO || '').replace(/^0+/, '').slice(-8) || '';
 
   // Affichage selon le mode actif du groupe
-  var groupKey = clientKey;
+  var groupKey = (typeof _bannerKey!=="undefined"?_bannerKey:clientKey);
   if (['vermeiren','france','hme','autre1','autre2'].indexOf(groupKey) < 0) groupKey = 'autre1';
   var numMode = (window._colNumModes && window._colNumModes[groupKey]) || 'cmd';
   var displayNum = orderNum;
@@ -11760,7 +11768,7 @@ function createSerieCardFromData(cardId, data) {
     cubro: { bg: '#06b6d4', color: '#000' },
     inventaire: { bg: '#4b5563', color: '#fff' }
   };
-  var ctTag = clientTagColors[clientKey] || { bg: '#3b82f6', color: '#fff' };
+  var ctTag = clientTagColors[_bannerKey] || { bg: '#3b82f6', color: '#fff' };
   var clientLabel = escapeHtml(data.client || 'Autre');
 
   const cardHtml = `
@@ -13764,7 +13772,7 @@ function _buildCardInfoPanel() {
   else if (clientKey.includes('cubro') || clientKey.includes('autre')) clientColor = '#22d3ee';
 
   // Déterminer le mode d'affichage du numéro selon le toggle
-  var groupKey = clientKey;
+  var groupKey = (typeof _bannerKey!=="undefined"?_bannerKey:clientKey);
   if (['vermeiren','france','hme','autre1','autre2'].indexOf(groupKey) < 0) groupKey = 'autre1';
   var numMode = (window._colNumModes && window._colNumModes[groupKey]) || 'cmd';
   var displayNum = orderNum;
