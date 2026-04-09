@@ -228,6 +228,9 @@ tr:hover .row-x{opacity:.5;}
 
 <!-- TOOLBAR -->
 <div class="toolbar">
+  <label>📋</label>
+  <input type="text" id="insp-bon" placeholder="# commande + Entrée" onkeydown="if(event.key==='Enter')addBon()" style="width:150px;background:rgba(255,255,255,.95);border:2px solid #fbbf24;color:#1e293b;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:700;">
+  <div class="divider"></div>
   <select id="insp-month" class="month-select" onchange="renderTable()"></select>
   <div class="divider"></div>
   <button class="tb-btn" onclick="addDateSep()">📅 Séparation</button>
@@ -726,15 +729,17 @@ function loadSerieCards(){
 
 /* ═══ ADD BON — with Serie+ detection ═══ */
 function addBon(){
-  if(!hasPerm('A')){toast('Permission refusée','err');return;}
+  if(!hasPerm('A')){toast('⛔ Permission refusée (pas connecté?)','err');return;}
   var inp=document.getElementById('insp-bon');var bon=inp.value.trim();
   if(!bon){toast('# commande requis','err');return;}
   inp.value='';inp.focus();
+  toast('🔍 Recherche Série+ pour #'+bon+'...','info');
 
   // Fresh fetch from Firebase then search
   if(fbDb){
     fbDb.ref('serieCommandes').once('value').then(function(snap){
       var fb=snap.val()||{};var local=getSerieCards();
+      var fbCount=Object.keys(fb).length;
       Object.keys(fb).forEach(function(cid){
         if(!local[cid]){local[cid]=fb[cid];return;}
         var l=local[cid],f=fb[cid];
@@ -753,10 +758,18 @@ function addBon(){
         }
       });
       localStorage.setItem(SK,JSON.stringify(local));_serieCache={};
+      console.log('[ADDBON] Firebase: '+fbCount+' cartes, cherche: '+bon);
       var found=findSerie(bon);
-      if(found){openSerieModal(bon,found);}
-      else{addPlainRow(bon);}
-    }).catch(function(){
+      if(found){
+        console.log('[ADDBON] ✅ Trouvé! Client='+found.card.client+', Items='+(found.card.items||[]).length);
+        openSerieModal(bon,found);
+      }else{
+        console.log('[ADDBON] ❌ Non trouvé dans Série+ — ajout ligne simple');
+        addPlainRow(bon);
+      }
+    }).catch(function(err){
+      console.error('[ADDBON] Firebase error:',err);
+      toast('⚠️ Firebase indisponible — recherche locale','err');
       var found=findSerie(bon);
       if(found){openSerieModal(bon,found);}
       else{addPlainRow(bon);}
@@ -886,6 +899,46 @@ function confirmSerie(){
   md.data[md.month]=md.rows;save(md.data);
   closeModal();_serieCache={};renderTable();
   toast('✅ #'+ctx.bon+' Série+ ajouté','ok');
+}
+
+/* ═══ REOPEN SERIE MODAL (clic étoile) ═══ */
+function reopenSerie(bon){
+  if(!bon)return;
+  toast('🔍 Chargement Série+ #'+bon+'...','info');
+  if(fbDb){
+    fbDb.ref('serieCommandes').once('value').then(function(snap){
+      var fb=snap.val()||{};var local=getSerieCards();
+      Object.keys(fb).forEach(function(cid){
+        if(!local[cid]){local[cid]=fb[cid];return;}
+        var l=local[cid],f=fb[cid];
+        if(f.client)l.client=f.client;if(f.order)l.order=f.order;
+        if(f.numeroPO)l.numeroPO=f.numeroPO;if(f.targetColumn)l.targetColumn=f.targetColumn;
+        if(f._typeManuel!==undefined)l._typeManuel=f._typeManuel;
+        if(f.items){if(!l.items)l.items=[];
+          f.items.forEach(function(fi,ii){
+            if(!l.items[ii]){l.items[ii]=fi;return;}if(fi.name)l.items[ii].name=fi.name;
+            if(!l.items[ii].grandeurs)l.items[ii].grandeurs=[];
+            (fi.grandeurs||[]).forEach(function(fg,gi){
+              if(!l.items[ii].grandeurs[gi]){l.items[ii].grandeurs[gi]=fg;return;}
+              var lg=l.items[ii].grandeurs[gi];if(fg.qty)lg.qty=fg.qty;if(fg.name)lg.name=fg.name;
+            });
+          });
+        }
+      });
+      localStorage.setItem(SK,JSON.stringify(local));_serieCache={};
+      var found=findSerie(bon);
+      if(found){openSerieModal(bon,found);}
+      else{toast('⚠️ Carte Série+ introuvable pour #'+bon,'err');}
+    }).catch(function(){
+      var found=findSerie(bon);
+      if(found){openSerieModal(bon,found);}
+      else{toast('⚠️ Carte introuvable','err');}
+    });
+  }else{
+    var found=findSerie(bon);
+    if(found){openSerieModal(bon,found);}
+    else{toast('⚠️ Carte introuvable','err');}
+  }
 }
 
 /* ═══ LISTES (mêmes que inspection atelier) ═══ */
@@ -1046,7 +1099,7 @@ function renderTable(){
     h+='<tr data-idx="'+i+'">';
     vis.forEach(function(c){
       if(c.id==='num'){
-        h+='<td style="color:#94a3b8;font-size:9px;">'+(isSerie?'<span class="serie-star" title="Série+">⭐</span>':num)+'</td>';
+        h+='<td style="color:#94a3b8;font-size:9px;">'+(isSerie?'<span class="serie-star" title="Cliquer pour ouvrir Série+" onclick="reopenSerie(\''+esc(r.cmd).replace(/'/g,"\\'")+'\')">⭐</span>':num)+'</td>';
       }else if(c.id==='del'){
         h+='<td>'+(hasData?'<span class="row-x" onclick="delRow('+i+')">✕</span>':'')+'</td>';
       }else if(c.id==='client'){
