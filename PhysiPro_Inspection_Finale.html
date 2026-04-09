@@ -4,10 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PhysiPro — Inspection Finale</title>
-<link rel="manifest" href="inspfinale_manifest.json">
-<meta name="theme-color" content="#04152c">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
 :root{--bg:#0f172a;--bg2:#1e293b;--bdr:#334155;--gold:#c9a227;--goldL:#fbbf24;--txt:#e2e8f0;--mutd:#94a3b8;--ok:#22c55e;--err:#ef4444;--info:#3b82f6;--purp:#7c3aed;--tbl-zoom:12px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -634,7 +630,17 @@ function editCell(idx,field,el,opts){
   if(opts.align)inp.style.textAlign=opts.align;
   if(opts.ph)inp.placeholder=opts.ph;
   el.textContent='';el.appendChild(inp);inp.focus();inp.select();
-  function sv(){var nv=inp.value.trim();uf(idx,field,nv);renderTable();}
+  var _svDone=false;
+  function sv(){
+    if(_svDone)return;_svDone=true;
+    var nv=inp.value.trim();
+    uf(idx,field,nv);
+    renderTable();
+    // Si c'est la colonne Commande et qu'un numéro a été entré → chercher Série+
+    if(field==='cmd'&&nv){
+      checkSerieForRow(idx,nv);
+    }
+  }
   inp.addEventListener('blur',sv);
   inp.addEventListener('keydown',function(e){
     if(e.key==='Enter'){e.preventDefault();sv();}
@@ -885,25 +891,35 @@ function confirmSerie(){
     itemLines.push((iName?iName+'|':'')+gName+' '+tQ+'x');
     totalQty+=tQ;
   });
-  // Remplir la première ligne vide ou en créer une
   var md=gmd();
-  var filled=false;
-  for(var ri=0;ri<md.rows.length;ri++){
-    var rr=md.rows[ri];
-    if(rr.type==='entry'&&!rr.cmd&&!rr.po&&!rr.client&&!rr.desc&&!rr.item&&!rr.qty&&!rr.comment){
-      rr.cmd=ctx.bon;rr.po=card.numeroPO||'';rr.client=ctx.clientLabel;
-      rr.item=itemLines.join(', ');rr.qty=String(totalQty);rr.serieLinked=true;
-      filled=true;break;
+  var targetIdx=window._serieTargetRow;
+  window._serieTargetRow=null;
+
+  // Si on a une ligne cible (tapé dans une cellule Commande ou clic étoile), remplir cette ligne
+  if(targetIdx!=null&&md.rows[targetIdx]&&md.rows[targetIdx].type==='entry'){
+    var row=md.rows[targetIdx];
+    row.cmd=ctx.bon;row.po=card.numeroPO||'';row.client=ctx.clientLabel;
+    row.item=itemLines.join(', ');row.qty=String(totalQty);row.serieLinked=true;
+  }else{
+    // Sinon remplir la première ligne vide
+    var filled=false;
+    for(var ri=0;ri<md.rows.length;ri++){
+      var rr=md.rows[ri];
+      if(rr.type==='entry'&&!rr.cmd&&!rr.po&&!rr.client&&!rr.desc&&!rr.item&&!rr.qty&&!rr.comment){
+        rr.cmd=ctx.bon;rr.po=card.numeroPO||'';rr.client=ctx.clientLabel;
+        rr.item=itemLines.join(', ');rr.qty=String(totalQty);rr.serieLinked=true;
+        filled=true;break;
+      }
     }
-  }
-  if(!filled){
-    md.rows.push({
-      id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),
-      type:'entry',cmd:ctx.bon,po:card.numeroPO||'',
-      client:ctx.clientLabel,desc:'',
-      item:itemLines.join(', '),qty:String(totalQty),
-      comment:'',serieLinked:true
-    });
+    if(!filled){
+      md.rows.push({
+        id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),
+        type:'entry',cmd:ctx.bon,po:card.numeroPO||'',
+        client:ctx.clientLabel,desc:'',
+        item:itemLines.join(', '),qty:String(totalQty),
+        comment:'',serieLinked:true
+      });
+    }
   }
   md.data[md.month]=md.rows;save(md.data);
   closeModal();_serieCache={};renderTable();
@@ -911,8 +927,9 @@ function confirmSerie(){
 }
 
 /* ═══ REOPEN SERIE MODAL (clic étoile) ═══ */
-function reopenSerie(bon){
+function reopenSerie(bon,rowIdx){
   if(!bon)return;
+  window._serieTargetRow=(rowIdx!=null)?rowIdx:null;
   toast('🔍 Chargement Série+ #'+bon+'...','info');
   if(fbDb){
     fbDb.ref('serieCommandes').once('value').then(function(snap){
@@ -947,6 +964,46 @@ function reopenSerie(bon){
     var found=findSerie(bon);
     if(found){openSerieModal(bon,found);}
     else{toast('⚠️ Carte introuvable','err');}
+  }
+}
+
+/* ═══ CHECK SERIE FOR ROW — appelé quand on tape un numéro dans la colonne Commande ═══ */
+function checkSerieForRow(rowIdx,bon){
+  if(!bon)return;
+  if(fbDb){
+    fbDb.ref('serieCommandes').once('value').then(function(snap){
+      var fb=snap.val()||{};var local=getSerieCards();
+      Object.keys(fb).forEach(function(cid){
+        if(!local[cid]){local[cid]=fb[cid];return;}
+        var l=local[cid],f=fb[cid];
+        if(f.client)l.client=f.client;if(f.order)l.order=f.order;
+        if(f.numeroPO)l.numeroPO=f.numeroPO;if(f.targetColumn)l.targetColumn=f.targetColumn;
+        if(f._typeManuel!==undefined)l._typeManuel=f._typeManuel;
+        if(f.items){if(!l.items)l.items=[];
+          f.items.forEach(function(fi,ii){
+            if(!l.items[ii]){l.items[ii]=fi;return;}if(fi.name)l.items[ii].name=fi.name;
+            if(!l.items[ii].grandeurs)l.items[ii].grandeurs=[];
+            (fi.grandeurs||[]).forEach(function(fg,gi){
+              if(!l.items[ii].grandeurs[gi]){l.items[ii].grandeurs[gi]=fg;return;}
+              var lg=l.items[ii].grandeurs[gi];if(fg.qty)lg.qty=fg.qty;if(fg.name)lg.name=fg.name;
+            });
+          });
+        }
+      });
+      localStorage.setItem(SK,JSON.stringify(local));_serieCache={};
+      var found=findSerie(bon);
+      if(found){
+        // Stocker l'index de la ligne pour que confirmSerie remplisse cette ligne
+        window._serieTargetRow=rowIdx;
+        openSerieModal(bon,found);
+      }
+    }).catch(function(){
+      var found=findSerie(bon);
+      if(found){window._serieTargetRow=rowIdx;openSerieModal(bon,found);}
+    });
+  }else{
+    var found=findSerie(bon);
+    if(found){window._serieTargetRow=rowIdx;openSerieModal(bon,found);}
   }
 }
 
@@ -1108,7 +1165,7 @@ function renderTable(){
     h+='<tr data-idx="'+i+'">';
     vis.forEach(function(c){
       if(c.id==='num'){
-        h+='<td style="color:#94a3b8;font-size:9px;">'+(isSerie?'<span class="serie-star" title="Cliquer pour ouvrir Série+" onclick="reopenSerie(\''+esc(r.cmd).replace(/'/g,"\\'")+'\')">⭐</span>':num)+'</td>';
+        h+='<td style="color:#94a3b8;font-size:9px;">'+(isSerie?'<span class="serie-star" title="Cliquer pour ouvrir Série+" onclick="reopenSerie(\''+esc(r.cmd).replace(/'/g,"\\'")+'\','+i+')">⭐</span>':num)+'</td>';
       }else if(c.id==='del'){
         h+='<td>'+(hasData?'<span class="row-x" onclick="delRow('+i+')">✕</span>':'')+'</td>';
       }else if(c.id==='client'){
