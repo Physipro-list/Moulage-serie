@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PhysiPro — Inspection Finale</title>
+<link rel="manifest" href="inspfinale_manifest.json">
+<meta name="theme-color" content="#04152c">
 <style>
 :root{--bg:#0f172a;--bg2:#1e293b;--bdr:#334155;--gold:#c9a227;--goldL:#fbbf24;--txt:#e2e8f0;--mutd:#94a3b8;--ok:#22c55e;--err:#ef4444;--info:#3b82f6;--purp:#7c3aed;--tbl-zoom:12px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -56,6 +58,12 @@ td{padding:1px 3px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f
 td:last-child{border-right:none;}
 td.td-edit{cursor:pointer;padding:2px 4px;min-height:22px;}
 td.td-edit:hover{background:#eef2ff;}
+/* Delete mode */
+td.td-chk{width:24px;text-align:center;padding:0;}
+td.td-chk input{width:15px;height:15px;accent-color:#ef4444;cursor:pointer;}
+tr.del-selected td{background:#fef2f2 !important;}
+tr.del-selected td.td-chk{background:#fee2e2 !important;}
+.tb-btn.del-active{background:rgba(239,68,68,.15);border-color:#ef4444;color:#ef4444;}
 tr:hover td{background:#f8fafc;}
 /* Date row */
 tr.date-row td{background:#fef3c7;color:#92400e;font-weight:700;font-size:12px;padding:4px 8px;text-align:left;height:auto;border-bottom:1px solid #fcd34d;}
@@ -98,6 +106,25 @@ tr:hover .row-x{opacity:.5;}
 .dd-item:hover{background:#eef2ff;}
 .dd-item.selected{background:#dbeafe;color:#1d4ed8;font-weight:700;}
 .dd-item.clear{color:#ef4444;font-style:italic;}
+
+/* ═══ PRINT MODAL ═══ */
+.print-option{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:all .15s;}
+.print-option:hover{background:#eef2ff;border-color:#3b82f6;}
+.print-option.selected{background:#dbeafe;border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.2);}
+.print-option input[type="radio"]{width:16px;height:16px;accent-color:#2563eb;cursor:pointer;}
+.print-option .po-label{font-size:12px;font-weight:600;color:#1e293b;}
+.print-option .po-sub{font-size:10px;color:#64748b;}
+.print-dates{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;}
+.print-dates select{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;color:#1e293b;background:#fff;cursor:pointer;}
+.print-dates select:focus{border-color:#2563eb;outline:none;}
+.print-dates span{font-size:11px;color:#64748b;font-weight:600;}
+.print-actions{display:flex;gap:8px;margin-top:14px;justify-content:flex-end;}
+.print-actions button{padding:8px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;}
+.print-btn-main{background:#2563eb;border:none;color:#fff;}
+.print-btn-main:hover{background:#1d4ed8;}
+.print-btn-sec{background:none;border:1px solid #cbd5e1;color:#64748b;}
+.print-btn-sec:hover{border-color:#2563eb;color:#2563eb;}
+.print-preview-count{font-size:11px;color:#64748b;margin-top:8px;padding:6px 10px;background:#f8fafc;border-radius:6px;text-align:center;}
 
 /* ═══ COLUMN SETTINGS PANEL — horizontal cards ═══ */
 .col-panel-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-start;justify-content:center;padding-top:90px;}
@@ -237,8 +264,12 @@ tr:hover .row-x{opacity:.5;}
   <input type="text" class="search-sm" id="global-search" placeholder="🔍 Rechercher..." oninput="onSearchInput()">
   <button class="gear-btn" onclick="openColPanel()" title="Colonnes">⚙️</button>
   <div style="margin-left:auto;display:flex;gap:4px;">
+    <button class="tb-btn" id="delModeBtn" onclick="toggleDelMode()" title="Mode suppression">🗑️</button>
+    <button class="tb-btn" id="delConfirmBtn" onclick="confirmDelSelected()" style="display:none;background:rgba(239,68,68,.15);border-color:#ef4444;color:#ef4444;">✕ Supprimer sélection</button>
+    <button class="tb-btn" id="delSelectAllBtn" onclick="toggleSelectAll()" style="display:none;border-color:#3b82f6;color:#3b82f6;">☑ Tout</button>
+    <button class="tb-btn" id="delCancelBtn" onclick="toggleDelMode()" style="display:none;border-color:#94a3b8;color:#94a3b8;">Annuler</button>
     <button class="tb-btn" onclick="doRefresh()">🔄</button>
-    <button class="tb-btn" onclick="window.print()">🖨️</button>
+    <button class="tb-btn" onclick="openPrintModal()">🖨️</button>
   </div>
 </div>
 
@@ -277,6 +308,17 @@ tr:hover .row-x{opacity:.5;}
     <div class="dd-list" id="ddList"></div>
   </div>
 </div>
+
+<!-- PRINT MODAL -->
+<div class="dd-overlay" id="printOverlay" onclick="if(event.target===this)closePrintModal()">
+  <div class="dd-panel" style="width:420px;">
+    <div class="dd-header" style="background:linear-gradient(to right,#04152c,#1e40af);"><span>🖨️ Imprimer / Sauvegarder PDF</span><button onclick="closePrintModal()">✕</button></div>
+    <div id="printBody" style="padding:14px;"></div>
+  </div>
+</div>
+
+<!-- PRINT FRAME (hidden, used for clean printing) -->
+<iframe id="printFrame" style="display:none;"></iframe>
 
 <script>
 /* ═══════════════════════════════════════════════════════
@@ -455,8 +497,30 @@ window.addEventListener('offline',function(){mkOffB();_offB.style.display='block
 fbDb.ref('.info/connected').on('value',function(s){var d=document.getElementById('statusDot');if(s.val()===true){if(d)d.classList.add('connected');}else{if(d)d.classList.remove('connected');}});
 
 /* ═══ DATA ═══ */
-function load(){try{return JSON.parse(localStorage.getItem(LK))||{};}catch(e){return {};}}
-function save(data){if(!hasPerm('M'))return;localStorage.setItem(LK,JSON.stringify(data));debPush();}
+function load(){
+  try{
+    var raw=localStorage.getItem(LK);
+    var data=raw?JSON.parse(raw):{};
+    // DEBUG: log ce qu'on charge
+    var counts={};Object.keys(data).forEach(function(m){
+      var n=0;(data[m]||[]).forEach(function(r){if(r.type==='entry'&&(r.cmd||r.po||r.item))n++;});
+      if(n>0)counts[m]=n;
+    });
+    if(Object.keys(counts).length)console.log('[LOAD] Données:',JSON.stringify(counts));
+    return data;
+  }catch(e){return {};}
+}
+function save(data){
+  if(!hasPerm('M'))return;
+  var counts={};Object.keys(data).forEach(function(m){
+    var n=0;(data[m]||[]).forEach(function(r){if(r.type==='entry'&&(r.cmd||r.po||r.item))n++;});
+    if(n>0)counts[m]=n;
+  });
+  console.log('[SAVE] Données:',JSON.stringify(counts));
+  localStorage.setItem(LK,JSON.stringify(data));
+  _autoBackup();
+  debPush();
+}
 function gmd(){var data=load();var el=document.getElementById('insp-month');var m=el?el.value:gmk();if(!data[m])data[m]=[];return{data:data,month:m,rows:data[m]};}
 
 /* ═══ ENSURE 400 EMPTY ROWS ═══ */
@@ -472,12 +536,57 @@ function ensureRows(md){
   return true;
 }
 
+/* ═══ BACKUP SYSTEM ═══ */
+var _lastBkTime=0;
+var BK_KEY='_bk_'+LK;
+function _autoBackup(){
+  var now=Date.now();
+  if(now-_lastBkTime<60000)return; // Max 1/min
+  _lastBkTime=now;
+  try{
+    var raw=localStorage.getItem(LK);
+    if(!raw)return;
+    var data=JSON.parse(raw);
+    var count=0;
+    Object.keys(data).forEach(function(m){(data[m]||[]).forEach(function(r){if(r.type==='entry'&&(r.cmd||r.po||r.item))count++;});});
+    if(count<1)return;
+    // Slot localStorage
+    localStorage.setItem(BK_KEY,raw);
+    localStorage.setItem(BK_KEY+'_ts',new Date().toISOString());
+    // Firebase backup toutes les 30 min
+    var fbBkKey='_bk_inspfinale_fb_ts';
+    var lastFbBk=parseInt(localStorage.getItem(fbBkKey))||0;
+    if(now-lastFbBk>1800000&&fbDb&&fbUser){
+      fbDb.ref('inspFinaleBackups/'+fbUser.email.replace(/\./g,'_')).set({
+        data:data,
+        timestamp:new Date().toISOString(),
+        count:count
+      }).then(function(){
+        localStorage.setItem(fbBkKey,String(now));
+        console.log('[BACKUP] ✅ Firebase backup: '+count+' entrées');
+      }).catch(function(){});
+    }
+  }catch(e){}
+}
+function restoreBackup(){
+  var bk=localStorage.getItem(BK_KEY);
+  var ts=localStorage.getItem(BK_KEY+'_ts');
+  if(!bk){toast('Aucun backup trouvé','err');return;}
+  var data=JSON.parse(bk);
+  var count=0;
+  Object.keys(data).forEach(function(m){(data[m]||[]).forEach(function(r){if(r.type==='entry'&&(r.cmd||r.po||r.item))count++;});});
+  if(!confirm('Restaurer backup du '+(ts||'?')+' ('+count+' entrées)?'))return;
+  localStorage.setItem(LK,bk);
+  debPush();renderTable();
+  toast('✅ Backup restauré ('+count+' entrées)','ok');
+}
+
 /* ═══ FIREBASE SYNC ═══ */
 function pushFB(){
   if(!fbUser){setSB('offline');return;}
   var data=load();
-  // Ne pusher que les données utiles (lignes non-vides + dates)
   var clean={};
+  var totalEntries=0;
   Object.keys(data).forEach(function(m){
     var rows=data[m]||[];
     var filtered=rows.filter(function(r){
@@ -485,11 +594,32 @@ function pushFB(){
       if(r.type==='entry')return(r.cmd||r.po||r.client||r.desc||r.item||r.qty||r.comment);
       return false;
     });
-    if(filtered.length>0)clean[m]=filtered;
+    if(filtered.length>0){clean[m]=filtered;filtered.forEach(function(r){if(r.type==='entry')totalEntries++;});}
   });
+  console.log('[PUSH] → Firebase: '+totalEntries+' entrées');
+  // 🛡️ Vérifier qu'on n'efface pas tout
   _fbW=true;setSB('syncing');
-  fbDb.ref(FB).set(clean).then(function(){setTimeout(function(){_fbW=false;setSB('online');},1200);})
-  .catch(function(e){_fbW=false;setSB('offline');console.error('FB err:',e.message);});
+  fbDb.ref(FB).once('value').then(function(snap){
+    var fbData=snap.val();
+    var fbCount=0;
+    if(fbData)Object.keys(fbData).forEach(function(m){(fbData[m]||[]).forEach(function(r){if(r.type==='entry')fbCount++;});});
+    if(fbCount>3&&totalEntries<fbCount*0.5){
+      console.error('[PUSH] 🛡️ BLOQUÉ: réduction suspecte FB='+fbCount+' → Local='+totalEntries);
+      _fbW=false;setSB('online');
+      return;
+    }
+    fbDb.ref(FB).set(clean).then(function(){
+      setTimeout(function(){_fbW=false;setSB('online');},1500);
+      console.log('[PUSH] ✅ Sauvegardé');
+    }).catch(function(e){_fbW=false;setSB('offline');console.error('FB err:',e.message);});
+  }).catch(function(){
+    // Firebase unreachable — push quand même si on a des données
+    if(totalEntries>0){
+      fbDb.ref(FB).set(clean).then(function(){
+        setTimeout(function(){_fbW=false;setSB('online');},1500);
+      }).catch(function(e){_fbW=false;setSB('offline');});
+    }else{_fbW=false;setSB('offline');}
+  });
 }
 function debPush(){clearTimeout(_syncT);_syncT=setTimeout(pushFB,800);}
 
@@ -518,10 +648,25 @@ function startSync(){
 function listenFB(){
   if(_fbL)fbDb.ref(FB).off('value',_fbL);
   _fbL=fbDb.ref(FB).on('value',function(s){
-    if(_fbW||_syncPhase==='syncing')return;
-    var fb=s.val();if(!fb)return;
-    var loc=load();var merged=_merge(fb,loc);
-    localStorage.setItem(LK,JSON.stringify(merged));renderTable();
+    if(_fbW||_syncPhase==='syncing'){console.log('[LISTEN] Bloqué (_fbW='+_fbW+')');return;}
+    var fb=s.val();
+    if(!fb){console.log('[LISTEN] Firebase vide — ignoré');return;}
+    var loc=load();
+    var merged=_merge(fb,loc);
+    // 🛡️ PROTECTION: ne jamais perdre de données — vérifier chaque mois
+    var dominated=false;
+    Object.keys(loc).forEach(function(m){
+      var locCount=0;(loc[m]||[]).forEach(function(r){if(r.type==='entry'&&(r.cmd||r.po||r.item))locCount++;});
+      var mergedCount=0;if(merged[m])(merged[m]||[]).forEach(function(r){if(r.type==='entry'&&(r.cmd||r.po||r.item))mergedCount++;});
+      if(locCount>0&&mergedCount<locCount){
+        console.warn('[LISTEN] 🛡️ Protection: '+m+' local='+locCount+' merged='+mergedCount+' — on garde le local');
+        merged[m]=loc[m];
+        dominated=true;
+      }
+    });
+    console.log('[LISTEN] Merge OK'+(dominated?' (protégé)':''));
+    localStorage.setItem(LK,JSON.stringify(merged));
+    renderTable();
   });
 }
 function stopSync(){if(_fbL){fbDb.ref(FB).off('value',_fbL);_fbL=null;}_syncPhase='idle';}
@@ -570,41 +715,69 @@ function initMonths(){
 /* ═══ ACTIONS ═══ */
 function addDateSep(){
   if(!hasPerm('A'))return;
-  var md=gmd();md.rows.push({id:'d-'+Date.now(),type:'date',dateLabel:todayStr()});
-  md.data[md.month]=md.rows;save(md.data);renderTable();toast('📅 Séparation','ok');
+  var el=document.getElementById('insp-month');
+  var m=el?el.value:gmk();
+  var data=load();
+  if(!data[m])data[m]=[];
+  data[m].push({id:'d-'+Date.now(),type:'date',dateLabel:todayStr()});
+  save(data);renderTable();toast('📅 Séparation','ok');
 }
 
 function uf(idx,field,val){
   if(!hasPerm('M'))return;
-  var md=gmd();if(!md.rows[idx]||md.rows[idx].type!=='entry')return;
-  md.rows[idx][field]=val;md.data[md.month]=md.rows;save(md.data);
+  // Relire frais pour ne jamais écraser d'autres mois
+  var el=document.getElementById('insp-month');
+  var m=el?el.value:gmk();
+  var data=load();
+  if(!data[m])data[m]=[];
+  if(!data[m][idx]||data[m][idx].type!=='entry')return;
+  data[m][idx][field]=val;
+  save(data);
 }
 
 /* Lightweight render: only re-render after dropdown or structural changes.
    For text input blur, renderTable is called by the sv() callback. */
 
 function delRow(idx){
-  var md=gmd();var row=md.rows[idx];if(!row)return;
+  var el=document.getElementById('insp-month');
+  var m=el?el.value:gmk();
+  var data=load();
+  if(!data[m])return;
+  var row=data[m][idx];if(!row)return;
   if(row.type==='date'){
     if(!confirm('Supprimer ce séparateur?'))return;
-    md.rows.splice(idx,1);md.data[md.month]=md.rows;save(md.data);renderTable();toast('🗑️','info');
+    data[m].splice(idx,1);
+    save(data);renderTable();toast('🗑️','info');
     return;
   }
   var has=(row.cmd||'')+(row.po||'')+(row.client||'')+(row.desc||'')+(row.item||'')+(row.qty||'')+(row.comment||'');
-  if(!has)return; // Ligne vide, rien à faire
+  if(!has)return;
   if(!confirm('Supprimer?'))return;
-  // Vider la ligne au lieu de la supprimer (garder le slot)
   row.cmd='';row.po='';row.client='';row.desc='';row.item='';row.qty='';row.comment='';row.serieLinked=false;
-  md.data[md.month]=md.rows;save(md.data);renderTable();toast('🗑️','info');
+  save(data);renderTable();toast('🗑️','info');
 }
 
 function editDateSep(ev,idx){
-  var md=gmd();var row=md.rows[idx];if(!row||row.type!=='date')return;
+  var el2=document.getElementById('insp-month');
+  var m=el2?el2.value:gmk();
+  var data=load();
+  if(!data[m]||!data[m][idx]||data[m][idx].type!=='date')return;
+  var row=data[m][idx];
   var el=ev.target;var old=row.dateLabel;
   var inp=document.createElement('input');inp.type='date';inp.className='date-inp';
   var dp=old.split('/');if(dp.length===3)inp.value=dp[2]+'-'+dp[1]+'-'+dp[0];
   el.parentNode.replaceChild(inp,el);inp.focus();
-  function sv(){var v=inp.value;if(v){var pp=v.split('-');if(pp.length===3)row.dateLabel=pp[2]+'/'+pp[1]+'/'+pp[0];md.data[md.month]=md.rows;save(md.data);}renderTable();}
+  function sv(){
+    var v=inp.value;
+    if(v){
+      var pp=v.split('-');if(pp.length===3)v=pp[2]+'/'+pp[1]+'/'+pp[0];
+      // Relire frais
+      var freshData=load();
+      if(freshData[m]&&freshData[m][idx])freshData[m][idx].dateLabel=v;
+      save(freshData);
+    }
+    renderTable();
+  }
   inp.addEventListener('change',sv);inp.addEventListener('blur',sv);
   inp.addEventListener('keydown',function(e){if(e.key==='Enter')sv();if(e.key==='Escape')renderTable();});
 }
@@ -748,69 +921,27 @@ function addBon(){
   var inp=document.getElementById('insp-bon');var bon=inp.value.trim();
   if(!bon){toast('# commande requis','err');return;}
   inp.value='';inp.focus();
-  toast('🔍 Recherche Série+ pour #'+bon+'...','info');
 
-  // Fresh fetch from Firebase then search
-  if(fbDb){
-    fbDb.ref('serieCommandes').once('value').then(function(snap){
-      var fb=snap.val()||{};var local=getSerieCards();
-      var fbCount=Object.keys(fb).length;
-      Object.keys(fb).forEach(function(cid){
-        if(!local[cid]){local[cid]=fb[cid];return;}
-        var l=local[cid],f=fb[cid];
-        if(f.client)l.client=f.client;if(f.order)l.order=f.order;
-        if(f.numeroPO)l.numeroPO=f.numeroPO;if(f.targetColumn)l.targetColumn=f.targetColumn;
-        if(f._typeManuel!==undefined)l._typeManuel=f._typeManuel;
-        if(f.items){if(!l.items)l.items=[];
-          f.items.forEach(function(fi,ii){
-            if(!l.items[ii]){l.items[ii]=fi;return;}if(fi.name)l.items[ii].name=fi.name;
-            if(!l.items[ii].grandeurs)l.items[ii].grandeurs=[];
-            (fi.grandeurs||[]).forEach(function(fg,gi){
-              if(!l.items[ii].grandeurs[gi]){l.items[ii].grandeurs[gi]=fg;return;}
-              var lg=l.items[ii].grandeurs[gi];if(fg.qty)lg.qty=fg.qty;if(fg.name)lg.name=fg.name;
-            });
-          });
-        }
-      });
-      localStorage.setItem(SK,JSON.stringify(local));_serieCache={};
-      console.log('[ADDBON] Firebase: '+fbCount+' cartes, cherche: '+bon);
-      var found=findSerie(bon);
-      if(found){
-        console.log('[ADDBON] ✅ Trouvé! Client='+found.card.client+', Items='+(found.card.items||[]).length);
-        openSerieModal(bon,found);
-      }else{
-        console.log('[ADDBON] ❌ Non trouvé dans Série+ — ajout ligne simple');
-        addPlainRow(bon);
-      }
-    }).catch(function(err){
-      console.error('[ADDBON] Firebase error:',err);
-      toast('⚠️ Firebase indisponible — recherche locale','err');
-      var found=findSerie(bon);
-      if(found){openSerieModal(bon,found);}
-      else{addPlainRow(bon);}
-    });
-  }else{
-    var found=findSerie(bon);
-    if(found){openSerieModal(bon,found);}
-    else{addPlainRow(bon);}
-  }
-}
-function addPlainRow(bon){
-  var md=gmd();
-  // Trouver la première ligne vide et la remplir
-  var filled=false;
-  for(var i=0;i<md.rows.length;i++){
-    var r=md.rows[i];
+  // Relire frais
+  var el=document.getElementById('insp-month');
+  var m=el?el.value:gmk();
+  var data=load();
+  if(!data[m])data[m]=[];
+  var targetIdx=-1;
+  for(var i=0;i<data[m].length;i++){
+    var r=data[m][i];
     if(r.type==='entry'&&!r.cmd&&!r.po&&!r.client&&!r.desc&&!r.item&&!r.qty&&!r.comment){
-      r.cmd=bon;r.serieLinked=false;
-      filled=true;break;
+      r.cmd=bon;
+      targetIdx=i;
+      break;
     }
   }
-  if(!filled){
-    // Aucune ligne vide — en ajouter une
-    md.rows.push({id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),type:'entry',cmd:bon,po:'',client:'',desc:'',item:'',qty:'',comment:'',serieLinked:false});
+  if(targetIdx<0){
+    data[m].push({id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),type:'entry',cmd:bon,po:'',client:'',desc:'',item:'',qty:'',comment:'',serieLinked:false});
+    targetIdx=data[m].length-1;
   }
-  md.data[md.month]=md.rows;save(md.data);renderTable();toast('✅ #'+bon+' ajouté','ok');
+  save(data);renderTable();
+  checkSerieForRow(targetIdx,bon);
 }
 
 /* ═══ SERIE+ MODAL ═══ */
@@ -891,20 +1022,22 @@ function confirmSerie(){
     itemLines.push((iName?iName+'|':'')+gName+' '+tQ+'x');
     totalQty+=tQ;
   });
-  var md=gmd();
+  var el=document.getElementById('insp-month');
+  var m=el?el.value:gmk();
+  var data=load();
+  if(!data[m])data[m]=[];
+  var rows=data[m];
   var targetIdx=window._serieTargetRow;
   window._serieTargetRow=null;
 
-  // Si on a une ligne cible (tapé dans une cellule Commande ou clic étoile), remplir cette ligne
-  if(targetIdx!=null&&md.rows[targetIdx]&&md.rows[targetIdx].type==='entry'){
-    var row=md.rows[targetIdx];
+  if(targetIdx!=null&&rows[targetIdx]&&rows[targetIdx].type==='entry'){
+    var row=rows[targetIdx];
     row.cmd=ctx.bon;row.po=card.numeroPO||'';row.client=ctx.clientLabel;
     row.item=itemLines.join(', ');row.qty=String(totalQty);row.serieLinked=true;
   }else{
-    // Sinon remplir la première ligne vide
     var filled=false;
-    for(var ri=0;ri<md.rows.length;ri++){
-      var rr=md.rows[ri];
+    for(var ri=0;ri<rows.length;ri++){
+      var rr=rows[ri];
       if(rr.type==='entry'&&!rr.cmd&&!rr.po&&!rr.client&&!rr.desc&&!rr.item&&!rr.qty&&!rr.comment){
         rr.cmd=ctx.bon;rr.po=card.numeroPO||'';rr.client=ctx.clientLabel;
         rr.item=itemLines.join(', ');rr.qty=String(totalQty);rr.serieLinked=true;
@@ -912,7 +1045,7 @@ function confirmSerie(){
       }
     }
     if(!filled){
-      md.rows.push({
+      rows.push({
         id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),
         type:'entry',cmd:ctx.bon,po:card.numeroPO||'',
         client:ctx.clientLabel,desc:'',
@@ -921,7 +1054,7 @@ function confirmSerie(){
       });
     }
   }
-  md.data[md.month]=md.rows;save(md.data);
+  save(data);
   closeModal();_serieCache={};renderTable();
   toast('✅ #'+ctx.bon+' Série+ ajouté','ok');
 }
@@ -1045,6 +1178,284 @@ var DD_FIELDS={
   item:{title:'📦 Item',list:'items'}
 };
 
+/* ═══ DELETE MODE — sélection en lot ═══ */
+var _delMode=false;
+var _delSelected={};
+function toggleDelMode(){
+  _delMode=!_delMode;
+  _delSelected={};
+  document.getElementById('delModeBtn').classList.toggle('del-active',_delMode);
+  document.getElementById('delConfirmBtn').style.display=_delMode?'':'none';
+  document.getElementById('delSelectAllBtn').style.display=_delMode?'':'none';
+  document.getElementById('delCancelBtn').style.display=_delMode?'':'none';
+  renderTable();
+}
+function toggleDelCheck(idx){
+  if(_delSelected[idx]){delete _delSelected[idx];}
+  else{_delSelected[idx]=true;}
+  // Mettre à jour visuellement sans re-render complet
+  var tr=document.querySelector('tr[data-idx="'+idx+'"]');
+  if(tr)tr.classList.toggle('del-selected',!!_delSelected[idx]);
+  var chk=document.getElementById('dchk_'+idx);
+  if(chk)chk.checked=!!_delSelected[idx];
+  updateDelCount();
+}
+function toggleSelectAll(){
+  var md=gmd();var rows=md.rows;
+  // Si tout est coché → tout décocher, sinon tout cocher
+  var countData=0,countSel=0;
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i];if(!r||r.type!=='entry')continue;
+    var has=(r.cmd||'')+(r.po||'')+(r.client||'')+(r.desc||'')+(r.item||'')+(r.qty||'')+(r.comment||'');
+    if(has){countData++;if(_delSelected[i])countSel++;}
+  }
+  var selectAll=(countSel<countData);
+  _delSelected={};
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i];if(!r||r.type!=='entry')continue;
+    var has=(r.cmd||'')+(r.po||'')+(r.client||'')+(r.desc||'')+(r.item||'')+(r.qty||'')+(r.comment||'');
+    if(has&&selectAll)_delSelected[i]=true;
+  }
+  renderTable();
+  updateDelCount();
+}
+function updateDelCount(){
+  var n=Object.keys(_delSelected).length;
+  var btn=document.getElementById('delConfirmBtn');
+  if(btn)btn.textContent='✕ Supprimer'+(n>0?' ('+n+')':'');
+}
+function confirmDelSelected(){
+  var keys=Object.keys(_delSelected);
+  if(!keys.length){toast('Aucune ligne sélectionnée','err');return;}
+  if(!confirm('Supprimer '+keys.length+' ligne(s)?'))return;
+  var el=document.getElementById('insp-month');
+  var m=el?el.value:gmk();
+  var data=load();
+  if(!data[m]){_delSelected={};renderTable();return;}
+  keys.forEach(function(k){
+    var idx=parseInt(k);
+    var row=data[m][idx];
+    if(row&&row.type==='entry'){
+      row.cmd='';row.po='';row.client='';row.desc='';row.item='';row.qty='';row.comment='';row.serieLinked=false;
+    }
+  });
+  save(data);
+  _delSelected={};
+  renderTable();
+  toast('🗑️ '+keys.length+' ligne(s) effacée(s)','ok');
+  updateDelCount();
+}
+
+/* ═══ PRINT SYSTEM ═══ */
+function openPrintModal(){
+  var el=document.getElementById('insp-month');
+  var m=el?el.value:gmk();
+  var data=load();
+  var rows=data[m]||[];
+
+  // Collecter toutes les dates de séparation
+  var dates=[];
+  rows.forEach(function(r,i){
+    if(r.type==='date')dates.push({idx:i,label:r.dateLabel});
+  });
+
+  var h='<div style="margin-bottom:12px;font-size:13px;font-weight:700;color:#1e293b;">📅 '+gml(m)+'</div>';
+
+  // Option 1: Tout le mois
+  h+='<div class="print-option selected" onclick="selectPrintMode(\'all\',this)">';
+  h+='<input type="radio" name="pmode" value="all" checked>';
+  h+='<div><div class="po-label">📄 Tout le mois</div><div class="po-sub">Imprimer toutes les lignes de '+gml(m)+'</div></div></div>';
+
+  if(dates.length>0){
+    // Option 2: Une journée spécifique
+    h+='<div class="print-option" onclick="selectPrintMode(\'day\',this)">';
+    h+='<input type="radio" name="pmode" value="day">';
+    h+='<div><div class="po-label">📅 Une journée</div><div class="po-sub">Choisir une date de séparation</div></div></div>';
+    h+='<div class="print-dates" id="printDaySelect" style="display:none;">';
+    h+='<span>Date :</span><select id="printDay1">';
+    dates.forEach(function(d){h+='<option value="'+d.idx+'">'+esc(d.label)+'</option>';});
+    h+='</select></div>';
+
+    if(dates.length>=2){
+      // Option 3: D'une date à une autre
+      h+='<div class="print-option" onclick="selectPrintMode(\'range\',this)">';
+      h+='<input type="radio" name="pmode" value="range">';
+      h+='<div><div class="po-label">📅 De date à date</div><div class="po-sub">Sélectionner une plage</div></div></div>';
+      h+='<div class="print-dates" id="printRangeSelect" style="display:none;">';
+      h+='<span>De :</span><select id="printFrom">';
+      dates.forEach(function(d){h+='<option value="'+d.idx+'">'+esc(d.label)+'</option>';});
+      h+='</select>';
+      h+='<span>À :</span><select id="printTo">';
+      dates.forEach(function(d,i){h+='<option value="'+d.idx+'"'+(i===dates.length-1?' selected':'')+'>'+esc(d.label)+'</option>';});
+      h+='</select></div>';
+    }
+  }
+
+  // Compteur
+  h+='<div class="print-preview-count" id="printCount"></div>';
+
+  // Boutons
+  h+='<div class="print-actions">';
+  h+='<button class="print-btn-sec" onclick="closePrintModal()">Annuler</button>';
+  h+='<button class="print-btn-main" onclick="savePDF()" style="background:#15803d;">💾 Sauvegarder PDF</button>';
+  h+='<button class="print-btn-main" onclick="doPrint()">🖨️ Imprimer</button>';
+  h+='</div>';
+
+  document.getElementById('printBody').innerHTML=h;
+  document.getElementById('printOverlay').classList.add('show');
+  window._printMode='all';
+  updatePrintCount();
+}
+function closePrintModal(){document.getElementById('printOverlay').classList.remove('show');}
+
+function selectPrintMode(mode,el){
+  window._printMode=mode;
+  document.querySelectorAll('.print-option').forEach(function(o){o.classList.remove('selected');o.querySelector('input[type=radio]').checked=false;});
+  el.classList.add('selected');el.querySelector('input[type=radio]').checked=true;
+  var dayEl=document.getElementById('printDaySelect');
+  var rangeEl=document.getElementById('printRangeSelect');
+  if(dayEl)dayEl.style.display=(mode==='day')?'flex':'none';
+  if(rangeEl)rangeEl.style.display=(mode==='range')?'flex':'none';
+  updatePrintCount();
+}
+
+function getPrintRows(){
+  var el=document.getElementById('insp-month');
+  var m=el?el.value:gmk();
+  var data=load();
+  var rows=data[m]||[];
+  var mode=window._printMode||'all';
+
+  if(mode==='all'){
+    return rows.filter(function(r){
+      if(r.type==='date')return true;
+      return r.type==='entry'&&(r.cmd||r.po||r.client||r.desc||r.item||r.qty||r.comment);
+    });
+  }
+
+  // Trouver les index des séparateurs de date
+  if(mode==='day'){
+    var dayIdx=parseInt(document.getElementById('printDay1').value);
+    // Trouver la prochaine date ou la fin
+    var nextDateIdx=rows.length;
+    for(var i=dayIdx+1;i<rows.length;i++){
+      if(rows[i].type==='date'){nextDateIdx=i;break;}
+    }
+    var result=[];
+    for(var j=dayIdx;j<nextDateIdx;j++){
+      var r=rows[j];
+      if(r.type==='date')result.push(r);
+      else if(r.type==='entry'&&(r.cmd||r.po||r.client||r.desc||r.item||r.qty||r.comment))result.push(r);
+    }
+    return result;
+  }
+
+  if(mode==='range'){
+    var fromIdx=parseInt(document.getElementById('printFrom').value);
+    var toIdx=parseInt(document.getElementById('printTo').value);
+    if(fromIdx>toIdx){var tmp=fromIdx;fromIdx=toIdx;toIdx=tmp;}
+    // Aller jusqu'à la prochaine date après toIdx ou la fin
+    var endIdx=rows.length;
+    for(var k=toIdx+1;k<rows.length;k++){
+      if(rows[k].type==='date'){endIdx=k;break;}
+    }
+    var result2=[];
+    for(var l=fromIdx;l<endIdx;l++){
+      var r2=rows[l];
+      if(r2.type==='date')result2.push(r2);
+      else if(r2.type==='entry'&&(r2.cmd||r2.po||r2.client||r2.desc||r2.item||r2.qty||r2.comment))result2.push(r2);
+    }
+    return result2;
+  }
+
+  return [];
+}
+
+function updatePrintCount(){
+  var rows=getPrintRows();
+  var entries=rows.filter(function(r){return r.type==='entry';}).length;
+  var el=document.getElementById('printCount');
+  if(el)el.textContent='📊 '+entries+' ligne(s) à imprimer';
+}
+
+function buildPrintHTML(){
+  var rows=getPrintRows();
+  if(!rows.length)return null;
+
+  var vis=getVisCols().filter(function(c){return c.id!=='del';});
+  var el=document.getElementById('insp-month');
+  var m=el?el.value:gmk();
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Inspection Finale — '+gml(m)+'</title>';
+  html+='<style>';
+  html+='body{font-family:Segoe UI,Tahoma,sans-serif;margin:20px;color:#000;}';
+  html+='.print-header{text-align:center;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #2563eb;}';
+  html+='.print-header h1{font-size:18px;color:#1e293b;margin:0;}';
+  html+='.print-header .sub{font-size:12px;color:#64748b;margin-top:2px;}';
+  html+='table{border-collapse:collapse;width:100%;font-size:11px;}';
+  html+='th{background:#2563eb;color:#fff;padding:6px 8px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;border:1px solid #1d4ed8;-webkit-print-color-adjust:exact;print-color-adjust:exact;}';
+  html+='td{padding:4px 6px;border:1px solid #cbd5e1;vertical-align:middle;}';
+  html+='tr:nth-child(even){background:#f8fafc;}';
+  html+='.date-row td{background:#fef3c7;color:#92400e;font-weight:700;font-size:12px;text-align:left;border-color:#fcd34d;-webkit-print-color-adjust:exact;print-color-adjust:exact;}';
+  html+='.c-cmd{font-weight:700;color:#1d4ed8;font-family:Consolas,monospace;text-align:center;}';
+  html+='.c-po{font-weight:600;color:#6d28d9;text-align:center;}';
+  html+='.c-client{font-weight:600;}';
+  html+='.footer{text-align:center;margin-top:12px;font-size:9px;color:#94a3b8;}';
+  html+='@page{margin:15mm 10mm;}';
+  html+='</style></head><body>';
+  html+='<div class="print-header">';
+  html+='<h1>🔍 PhysiPro — Inspection Finale</h1>';
+  html+='<div class="sub">'+gml(m)+' — '+todayStr()+'</div>';
+  html+='</div>';
+  html+='<table><thead><tr><th>#</th>';
+  vis.forEach(function(c){if(c.id!=='num')html+='<th>'+c.label+'</th>';});
+  html+='</tr></thead><tbody>';
+
+  var num=0;
+  rows.forEach(function(r){
+    if(r.type==='date'){
+      html+='<tr class="date-row"><td colspan="'+vis.length+'">📅 '+esc(r.dateLabel)+'</td></tr>';
+      return;
+    }
+    num++;
+    html+='<tr><td style="text-align:center;color:#94a3b8;font-size:9px;">'+(r.serieLinked?'⭐':num)+'</td>';
+    vis.forEach(function(c){
+      if(c.id==='num')return;
+      html+='<td class="'+(c.cls||'')+'">'+esc(r[c.field]||'')+'</td>';
+    });
+    html+='</tr>';
+  });
+
+  html+='</tbody></table>';
+  html+='<div class="footer">PhysiPro © '+new Date().getFullYear()+' — Inspection Finale</div>';
+  html+='</body></html>';
+  return{html:html,month:m,count:num};
+}
+
+function doPrint(){
+  var result=buildPrintHTML();
+  if(!result){toast('Aucune donnée à imprimer','err');return;}
+  var frame=document.getElementById('printFrame');
+  frame.srcdoc=result.html;
+  frame.onload=function(){frame.contentWindow.print();};
+  closePrintModal();
+}
+
+function savePDF(){
+  var result=buildPrintHTML();
+  if(!result){toast('Aucune donnée','err');return;}
+  // Télécharger comme fichier HTML (que Chrome peut ouvrir et sauvegarder en PDF)
+  var blob=new Blob([result.html],{type:'text/html;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  var fileName='InspFinale_'+gml(result.month).replace(/ /g,'_')+'_'+todayStr().replace(/\//g,'-')+'.html';
+  a.href=url;a.download=fileName;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  closePrintModal();
+  toast('💾 Fichier sauvegardé: '+fileName,'ok');
+}
+
 /* ═══ SEARCH ═══ */
 var _sT=null;
 function onSearchInput(){clearTimeout(_sT);_sT=setTimeout(renderTable,150);}
@@ -1122,16 +1533,51 @@ function buildHead(){
   return vis;
 }
 
+/* ═══ SAVE ACTIVE INPUT — Force save before any re-render ═══ */
+var _lastMonth=null;
+function saveActiveInput(){
+  var inp=document.querySelector('#tbody input.e-inp');
+  if(!inp)return;
+  var td=inp.closest('td[data-field][data-idx]');
+  if(!td)return;
+  var idx=parseInt(td.getAttribute('data-idx'));
+  var field=td.getAttribute('data-field');
+  var nv=inp.value.trim();
+  // Utiliser le mois qui était actif QUAND l'input a été créé (pas le mois courant du select)
+  var monthToUse=_lastMonth||gmk();
+  var data=load();
+  if(!data[monthToUse])data[monthToUse]=[];
+  if(data[monthToUse][idx]&&data[monthToUse][idx].type==='entry'){
+    data[monthToUse][idx][field]=nv;
+    // Sauvegarder
+    if(hasPerm('M')){localStorage.setItem(LK,JSON.stringify(data));debPush();}
+  }
+  // Check Série+ si c'est le champ commande
+  if(field==='cmd'&&nv){
+    setTimeout(function(){checkSerieForRow(idx,nv);},100);
+  }
+}
+
 /* ═══ RENDER ═══ */
 function renderTable(){
   if(_syncPhase==='syncing')return;
+  // TOUJOURS sauvegarder l'input actif avant de reconstruire le tableau
+  saveActiveInput();
+  // Mémoriser le mois courant pour saveActiveInput
+  var el=document.getElementById('insp-month');
+  _lastMonth=el?el.value:gmk();
   var md=gmd();
   var added=ensureRows(md);
-  if(added){md.data[md.month]=md.rows;localStorage.setItem(LK,JSON.stringify(md.data));}
+  if(added){
+    // Relire le localStorage FRAIS et ne modifier QUE le mois courant
+    var freshData=load();
+    freshData[md.month]=md.rows;
+    localStorage.setItem(LK,JSON.stringify(freshData));
+  }
 
   var vis=buildHead();
-  var nc=vis.length;
-  _serieCache={}; /* reset per render */
+  var nc=vis.length+(_delMode?1:0);
+  _serieCache={};
   var rows=md.rows;
   var f=getSF();
   var tb=document.getElementById('tbody');if(!tb)return;
@@ -1159,10 +1605,13 @@ function renderTable(){
     num++;
     var hasData=(r.cmd||'')+(r.po||'')+(r.client||'')+(r.desc||'')+(r.item||'')+(r.qty||'')+(r.comment||'');
     var isSerie=r.serieLinked||false;
-    // Auto-detect serie if cmd matches
     if(!isSerie&&r.cmd){var _sf=_cachedFind(r.cmd);if(_sf)isSerie=true;}
+    var isDelSel=_delSelected[i]||false;
 
-    h+='<tr data-idx="'+i+'">';
+    h+='<tr data-idx="'+i+'"'+(isDelSel?' class="del-selected"':'')+'>';
+    if(_delMode){
+      h+='<td class="td-chk">'+(hasData?'<input type="checkbox" id="dchk_'+i+'"'+(isDelSel?' checked':'')+' onchange="toggleDelCheck('+i+')">':'')+'</td>';
+    }
     vis.forEach(function(c){
       if(c.id==='num'){
         h+='<td style="color:#94a3b8;font-size:9px;">'+(isSerie?'<span class="serie-star" title="Cliquer pour ouvrir Série+" onclick="reopenSerie(\''+esc(r.cmd).replace(/'/g,"\\'")+'\','+i+')">⭐</span>':num)+'</td>';
@@ -1197,10 +1646,12 @@ function renderTable(){
 document.addEventListener('DOMContentLoaded',function(){
   var tb=document.getElementById('tbody');
   if(tb)tb.addEventListener('click',function(e){
-    // Ignore si on clique sur un input déjà ouvert
+    // Ignore si on clique sur un input déjà ouvert ou à l'intérieur d'un td qui en a un
     if(e.target.tagName==='INPUT')return;
     var td=e.target.closest('td[data-field][data-idx]');
     if(!td)return;
+    // Si un input est déjà ouvert dans ce td, ne rien faire
+    if(td.querySelector('input'))return;
     var idx=parseInt(td.getAttribute('data-idx'));
     var field=td.getAttribute('data-field');
     var colDef=ALL_COLS.find(function(c){return c.field===field;});
