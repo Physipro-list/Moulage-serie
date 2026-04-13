@@ -1025,8 +1025,12 @@ body{font-family:'Segoe UI',sans-serif;background:#0b1d36;color:#fff;height:100v
 .sg-row-complete { background: rgba(22,163,74,0.08) !important; }
 .sg-row-partial { background: rgba(245,158,11,0.06) !important; }
 
+/* Item section rows — subtle purple tint */
+.sg-item-section-row td { background-color: rgba(124,58,237,0.04); }
+
 /* Alternating item blocks */
 .sg-item-even td { background-color: rgba(0,0,0,0.02); }
+.sg-item-section-row.sg-item-even td { background-color: rgba(124,58,237,0.07); }
 
 /* Dept column headers in table */
 .sg-table .sg-th-production-group { background: rgba(30,64,175,0.08) !important; border-bottom-color: #3b82f6; }
@@ -8083,7 +8087,7 @@ if(localStorage.getItem('physipro_last_email')){
   <div class="tb-center">
     <span class="top-title">📦 COMMANDES SÉRIE+ <button id="adminGearBtn" onclick="openAdminPanel()" title="Admin — Gestion des colonnes" style="display:none;background:none;border:none;color:rgba(255,255,255,0.6);font-size:14px;cursor:pointer;padding:0 0 0 2px;transition:all .15s;vertical-align:middle;" onmouseover="this.style.color='#fbbf24';this.style.transform='rotate(45deg)'" onmouseout="this.style.color='rgba(255,255,255,0.6)';this.style.transform='rotate(0)'">⚙️</button></span>
   </div>
-  <button class="client-tab-btn client-tab-total active" onclick="switchClientTab('total')" data-tab="total">Total</button>
+  <button class="client-tab-btn client-tab-total active" onclick="switchClientTab('total')" data-tab="total" style="display:none !important;">Total</button>
   <div class="client-tabs" id="clientTabsBar"></div>
   <div class="tb-right">
     <div class="tb-search-row" style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;">
@@ -9730,10 +9734,10 @@ function loadSerieDataFromLocalStorage() {
   setTimeout(function() { autoPurgeCompletedCards(); }, 15000);
   try {
     var savedFilter = localStorage.getItem('physipro_serie_active_tab');
-    if (savedFilter) {
+    if (savedFilter && savedFilter !== 'total') {
       switchClientTab(savedFilter);
-    } else { switchClientTab('total'); }
-  } catch(e) { switchClientTab('total'); }
+    } else { switchClientTab('france'); }
+  } catch(e) { switchClientTab('france'); }
 }
 
 // ─── AUTO-NETTOYAGE v4 ───
@@ -11089,7 +11093,8 @@ function serieJsonImport() {
       var isFranceClient = (c.client || '').toLowerCase().includes('france') ||
         ((c.client || '').toLowerCase().includes('vermeiren') && (c.notes || '').toLowerCase().includes('france'));
 
-      // --- Regrouper les items par nom (séparer accessoires France ET items non-fabrication) ---
+      // --- Regrouper les items par nom — TOUT dans la même carte ---
+      // Les coussins/dossiers en premier, items/accessoires marqués pour tri en bas
       const groupes = {};
       const groupesItems = {};
       const groupesAccessoires = {};
@@ -11106,20 +11111,13 @@ function serieJsonImport() {
         // Si c'est un accessoire et pas France ET pas un item explicite → ignorer complètement
         if (isAccessoire && !isFranceClient && !isItemProduct) return;
 
-        // Routing: item → groupesItems, accessoire France → groupesAccessoires, sinon → groupes
-        let targetGroupes;
-        if (isItemProduct) {
-          targetGroupes = groupesItems;
-        } else if (isAccessoire && isFranceClient) {
-          targetGroupes = groupesAccessoires;
-        } else {
-          targetGroupes = groupes;
-        }
+        // TOUT va dans groupes (carte principale), mais on marque les items/accessoires
         const key = item.nom || item.description || item.code || 'Item';
-        if (!targetGroupes[key]) {
-          targetGroupes[key] = {
+        if (!groupes[key]) {
+          groupes[key] = {
             name: key,
             code: item.code || '',
+            _isItemSection: isItemProduct || (isAccessoire && isFranceClient),
             grandeurs: []
           };
         }
@@ -11128,11 +11126,11 @@ function serieJsonImport() {
         const qty = parseInt(item.quantite) || 1;
 
         // Fusionner si même grandeur
-        const existing = targetGroupes[key].grandeurs.find(g => g.name === gName);
+        const existing = groupes[key].grandeurs.find(g => g.name === gName);
         if (existing) {
           existing.qty += qty;
         } else {
-          targetGroupes[key].grandeurs.push({
+          groupes[key].grandeurs.push({
             name: gName,
             qty: qty,
             notes: item.notes || '',
@@ -11143,9 +11141,12 @@ function serieJsonImport() {
         }
       });
 
-      const itemsArray = Object.values(groupes);
-      const itemsItemsArray = Object.values(groupesItems);
-      const itemsAccessoiresArray = Object.values(groupesAccessoires);
+      // Trier: coussins d'abord, items/accessoires en bas
+      const itemsArray = Object.values(groupes).sort(function(a, b) {
+        var aItem = a._isItemSection ? 1 : 0;
+        var bItem = b._isItemSection ? 1 : 0;
+        return aItem - bItem;
+      });
 
       // --- Construire les données de la carte ---
       // Noms de champs alignés sur initSerieCardData + loadSerieFiche
@@ -11183,83 +11184,22 @@ function serieJsonImport() {
         createdBy: currentUser?.name || 'JSON Import'
       };
 
-      // Ne créer la carte principale que s'il y a des produits de fabrication
-      // Si la commande n'a que des items ou accessoires, on ne crée pas de carte vide
+      // Créer la carte (tout est dans itemsArray — coussins + items/accessoires)
       if (itemsArray.length > 0) {
         if (createSerieCardFromData(cardId, serieCardsData[cardId])) {
           created++;
         } else {
           errors++;
         }
-      } else if (itemsItemsArray.length === 0 && itemsAccessoiresArray.length === 0) {
+      } else {
         // Aucun produit valide — créer quand même pour ne pas perdre la commande
         if (createSerieCardFromData(cardId, serieCardsData[cardId])) {
           created++;
         } else {
           errors++;
         }
-      } else {
-        // Pas de coussins mais il y a des items/accessoires — ne pas créer de carte vide
-        delete serieCardsData[cardId];
       }
 
-      // --- Cartes Item/Accessoires : même colonnes que les autres, avec badge ---
-      if (itemsItemsArray.length > 0) {
-        const itemCardId = cardId + '-item';
-        serieCardsData[itemCardId] = {
-          id: itemCardId,
-          client: importClient,
-          targetColumn: importTargetCol,
-          _typeManuel: importIsClient ? 'client' : 'serie',
-          name: importClient + ' (Items)',
-          order: c.numero || '',
-          po: c.po || '',
-          numeroPO: c.po || '',
-          soumission: c.soumission || '',
-          dateRecue: c.dateCommande || c.dateRecue || new Date().toISOString().split('T')[0],
-          dateLivraison: c.dateLivraison || '',
-          notes: '',
-          isBO: importIsClient,
-          raisonBO: '',
-          items: itemsItemsArray,
-          materiaux: {},
-          isItem: true,
-          createdAt: new Date().toISOString(),
-          createdBy: currentUser?.name || 'JSON Import'
-        };
-        if (createSerieCardFromData(itemCardId, serieCardsData[itemCardId])) {
-          created++;
-        }
-      }
-
-      // --- Carte accessoires France ---
-      if (isFranceClient && itemsAccessoiresArray.length > 0) {
-        const accCardId = cardId + '-acc';
-        serieCardsData[accCardId] = {
-          id: accCardId,
-          client: importClient,
-          targetColumn: importTargetCol,
-          _typeManuel: importIsClient ? 'client' : 'serie',
-          name: importClient + ' (Accessoires)',
-          order: c.numero || '',
-          po: c.po || '',
-          numeroPO: c.po || '',
-          soumission: c.soumission || '',
-          dateRecue: c.dateCommande || c.dateRecue || new Date().toISOString().split('T')[0],
-          dateLivraison: c.dateLivraison || '',
-          notes: '',
-          isBO: importIsClient,
-          raisonBO: '',
-          items: itemsAccessoiresArray,
-          materiaux: {},
-          isAccessoire: true,
-          createdAt: new Date().toISOString(),
-          createdBy: currentUser?.name || 'JSON Import'
-        };
-        if (createSerieCardFromData(accCardId, serieCardsData[accCardId])) {
-          created++;
-        }
-      }
     } catch (e) {
       console.error('❌ Import commande ' + idx + ':', e);
       errors++;
@@ -12411,10 +12351,12 @@ function _purgeExcludedItems() {
   Object.keys(serieCardsData).forEach(function(cid) {
     const card = serieCardsData[cid];
     if (!card || !Array.isArray(card.items)) return;
-    // NE PAS purger les cartes Item ou Accessoire — elles DOIVENT contenir ces items
+    // NE PAS purger les cartes Item ou Accessoire (legacy)
     if (card.isItem === true || card.isAccessoire === true) return;
     const before = card.items.length;
     card.items = card.items.filter(function(item) {
+      // Protéger les items marqués _isItemSection (items/accessoires fusionnés)
+      if (item._isItemSection) return true;
       const nom = (item.name || item.nom || '').toLowerCase().trim();
       const isExclu = EXCLUS_MOTS.some(function(m) { return nom.includes(m); });
       if (isExclu) console.log('🧹 Item exclus retiré:', nom, 'de', cid);
@@ -12969,13 +12911,30 @@ function renderSerieUnifiedTable(cardId, items) {
   html += '<th class="sg-th-statut">Statut</th>';
   html += '</tr></thead><tbody>';
 
-  items.forEach(function(item, itemIdx) {
+  // Trier: coussins en premier, items/accessoires en bas
+  var sortedItems = items.slice().sort(function(a, b) {
+    var aItem = a._isItemSection ? 1 : 0;
+    var bItem = b._isItemSection ? 1 : 0;
+    return aItem - bItem;
+  });
+  // Mapper les index triés vers les index originaux pour les callbacks
+  var sortedIndexMap = sortedItems.map(function(si) { return items.indexOf(si); });
+
+  var itemSectionStarted = false;
+  sortedItems.forEach(function(item, sortIdx) {
+    var itemIdx = sortedIndexMap[sortIdx]; // Index réel dans data.items
     var grandeurs = item.grandeurs || [];
     var nomItem = item.name || item.code || 'Item';
     var nbG = grandeurs.length;
-    var evenClass = itemIdx % 2 === 0 ? '' : ' sg-item-even';
+    var evenClass = sortIdx % 2 === 0 ? '' : ' sg-item-even';
 
-    if (itemIdx > 0) html += '<tr class="sg-item-sep"><td colspan="6"></td></tr>';
+    // Séparateur "Items / Accessoires" avant la première section item
+    if (item._isItemSection && !itemSectionStarted) {
+      itemSectionStarted = true;
+      html += '<tr><td colspan="6" style="padding:6px 10px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;border-top:2px solid #5b21b6;border-bottom:2px solid #5b21b6;">📦 Items / Accessoires</td></tr>';
+    } else if (sortIdx > 0) {
+      html += '<tr class="sg-item-sep"><td colspan="6"></td></tr>';
+    }
 
     if (nbG === 0) {
       html += '<tr class="' + evenClass + '"><td class="sg-td-item">' + escapeHtml(nomItem) + '</td>';
@@ -12995,6 +12954,7 @@ function renderSerieUnifiedTable(cardId, items) {
 
       var gStatus = g._status || _calcGrandeurStatus(aFait, cFait, gQty, showCouture);
       var rowClass = evenClass;
+      if (item._isItemSection) rowClass += ' sg-item-section-row';
       if (gStatus === 'complete' || gStatus === 'emballe') rowClass += ' sg-row-complete';
       else if (gStatus === 'partiel') rowClass += ' sg-row-partial';
 
@@ -13871,7 +13831,7 @@ window._updateSerieColCounts = _updateSerieColCounts;
 
 // === CLIENT TAB SYSTEM — full-page per-client view ===
 // === UNIFIED VIEW — single view with client filter ===
-var _activeClientFilter = 'total'; // 'total' = show all, or client key like 'france'
+var _activeClientFilter = 'france'; // Default: France (plus de 'total')
 
 var _clientTabConfig = {
   unified: { containerId: 'serieUnifiedCardStore', viewId: 'clientViewUnified', prefix: 'Unified' }
