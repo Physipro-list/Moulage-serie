@@ -274,7 +274,8 @@ tr:hover .row-x{opacity:.5;}
     <button class="tb-btn" id="delConfirmBtn" onclick="confirmDelSelected()" style="display:none;background:rgba(239,68,68,.15);border-color:#ef4444;color:#ef4444;">✕ Supprimer sélection</button>
     <button class="tb-btn" id="delSelectAllBtn" onclick="toggleSelectAll()" style="display:none;border-color:#3b82f6;color:#3b82f6;">☑ Tout</button>
     <button class="tb-btn" id="delCancelBtn" onclick="toggleDelMode()" style="display:none;border-color:#94a3b8;color:#94a3b8;">Annuler</button>
-    <button class="tb-btn" onclick="doRefresh()">🔄</button>
+    <button class="tb-btn" onclick="doRefresh()" title="Rafraîchir ce mois">🔄</button>
+    <button class="tb-btn" onclick="doFullSync()" title="Vérifier tout le classeur + Série+" style="background:rgba(124,58,237,0.15);border-color:rgba(124,58,237,0.4);color:#c084fc;">📊 Classeur</button>
     <button class="tb-btn" onclick="openPrintModal()">🖨️</button>
   </div>
 </div>
@@ -631,13 +632,36 @@ function pushFB(){
 }
 function debPush(){clearTimeout(_syncT);_syncT=setTimeout(pushFB,800);}
 
+/* Force push — bypass la protection anti-perte (pour les suppressions intentionnelles) */
+function forcePushFB(){
+  if(!fbUser)return;
+  var data=load();
+  var clean={};
+  Object.keys(data).forEach(function(m){
+    var rows=data[m]||[];
+    var filtered=rows.filter(function(r){
+      if(r.type==='date')return true;
+      if(r.type==='entry')return(r.cmd||r.po||r.client||r.desc||r.item||r.qty||r.noboite||r.comment);
+      return false;
+    });
+    if(filtered.length>0)clean[m]=filtered;
+  });
+  _fbW=true;setSB('syncing');
+  fbDb.ref(FB).set(clean).then(function(){
+    setTimeout(function(){_fbW=false;setSB('online');},1500);
+    console.log('[FORCE PUSH] ✅ Suppression synchronisée');
+  }).catch(function(e){_fbW=false;setSB('offline');console.error('[FORCE PUSH] ❌',e.message);});
+}
+
 function _merge(fb,loc){
   var m={};
-  if(fb)Object.keys(fb).forEach(function(k){m[k]=(fb[k]||[]).slice();});
-  if(loc)Object.keys(loc).forEach(function(k){
-    if(!m[k]){m[k]=(loc[k]||[]).slice();return;}
+  // Start with local as base (local wins for existing IDs — respects deletions)
+  if(loc)Object.keys(loc).forEach(function(k){m[k]=(loc[k]||[]).slice();});
+  // Add from Firebase only IDs that don't exist in local
+  if(fb)Object.keys(fb).forEach(function(k){
+    if(!m[k]){m[k]=(fb[k]||[]).slice();return;}
     var ids={};m[k].forEach(function(r){if(r.id)ids[r.id]=true;});
-    (loc[k]||[]).forEach(function(r){if(r.id&&!ids[r.id])m[k].push(r);});
+    (fb[k]||[]).forEach(function(r){if(r.id&&!ids[r.id])m[k].push(r);});
   });
   return m;
 }
@@ -684,7 +708,94 @@ function doRefresh(){
   fbDb.ref(FB).once('value').then(function(s){
     var fb=s.val();if(fb){var loc=load();var m=_merge(fb,loc);localStorage.setItem(LK,JSON.stringify(m));}
     renderTable();setSB('online');toast('🔄 OK','ok');
+    loadSerieCards();
   }).catch(function(){renderTable();setSB('offline');toast('⚠️ Erreur','err');});
+}
+
+/* ═══ FULL CLASSEUR SYNC — vérifie tous les mois + Série+ ═══ */
+function doFullSync(){
+  if(!fbDb||!fbUser){toast('⚠️ Non connecté','err');return;}
+  toast('📊 Vérification du classeur...','info');
+  setSB('syncing');
+  
+  var stats={months:0,entries:0,serieLinked:0,serieUpdated:0,errors:0};
+  
+  // 1. Sync Firebase → local (tous les mois)
+  fbDb.ref(FB).once('value').then(function(snap){
+    var fb=snap.val();
+    var loc=load();
+    if(fb){
+      var merged=_merge(fb,loc);
+      // Compter les stats
+      Object.keys(merged).forEach(function(m){
+        stats.months++;
+        (merged[m]||[]).forEach(function(r){
+          if(r.type==='entry'&&(r.cmd||r.po||r.item))stats.entries++;
+        });
+      });
+      localStorage.setItem(LK,JSON.stringify(merged));
+    }
+    
+    // 2. Recharger toutes les cartes Série+ depuis Firebase
+    fbDb.ref('serieCommandes').once('value').then(function(sSnap){
+      var serieData=sSnap.val()||{};
+      var localSerie=getSerieCards();
+      
+      // Sync complet des cartes Série+
+      Object.keys(serieData).forEach(function(cid){
+        var f=serieData[cid];
+        if(!localSerie[cid]){localSerie[cid]=f;stats.serieUpdated++;return;}
+        var l=localSerie[cid];
+        if(f.client)l.client=f.client;
+        if(f.order)l.order=f.order;
+        if(f.numeroPO)l.numeroPO=f.numeroPO;
+        if(f.targetColumn)l.targetColumn=f.targetColumn;
+        if(f._typeManuel!==undefined)l._typeManuel=f._typeManuel;
+        if(f._manualStatus)l._manualStatus=f._manualStatus;
+        if(f.items){
+          l.items=f.items; // Prendre la version Firebase complète
+          stats.serieUpdated++;
+        }
+      });
+      localStorage.setItem(SK,JSON.stringify(localSerie));
+      _serieCache={};
+      
+      // 3. Vérifier les liens Série+ dans toutes les lignes d'inspection
+      var allData=load();
+      var updated=false;
+      Object.keys(allData).forEach(function(month){
+        (allData[month]||[]).forEach(function(row){
+          if(row.type!=='entry'||!row.cmd)return;
+          var match=findSerie(row.cmd);
+          if(match){
+            stats.serieLinked++;
+            var card=match.card;
+            // Mettre à jour client et PO depuis Série+
+            if(card.client&&!row.client){row.client=getSerieAutoClient(card);updated=true;}
+            if(card.numeroPO&&!row.po){row.po=card.numeroPO;updated=true;}
+          }
+        });
+      });
+      if(updated){
+        localStorage.setItem(LK,JSON.stringify(allData));
+        debPush();
+      }
+      
+      renderTable();setSB('online');
+      toast('📊 Classeur: '+stats.months+' mois, '+stats.entries+' entrées, '+stats.serieLinked+' liées à Série+','ok');
+      
+    }).catch(function(e){
+      console.error('[FULL SYNC] Série+ error:',e.message);
+      stats.errors++;
+      renderTable();setSB('online');
+      toast('📊 Classeur sync OK (Série+ indisponible)','info');
+    });
+    
+  }).catch(function(e){
+    console.error('[FULL SYNC] Firebase error:',e.message);
+    setSB('offline');
+    toast('⚠️ Erreur de connexion','err');
+  });
 }
 
 /* ═══ AUTH ═══ */
@@ -727,7 +838,16 @@ function addDateSep(){
   var m=el?el.value:gmk();
   var data=load();
   if(!data[m])data[m]=[];
-  data[m].push({id:'d-'+Date.now(),type:'date',dateLabel:todayStr()});
+  var rows=data[m];
+  // Trouver la dernière ligne remplie (entry avec du contenu ou date)
+  var insertAt=-1;
+  for(var i=rows.length-1;i>=0;i--){
+    var r=rows[i];
+    if(r.type==='date'){insertAt=i+1;break;}
+    if(r.type==='entry'&&(r.cmd||r.po||r.client||r.desc||r.item||r.qty||r.noboite||r.comment)){insertAt=i+1;break;}
+  }
+  if(insertAt<0)insertAt=0;
+  rows.splice(insertAt,0,{id:'d-'+Date.now(),type:'date',dateLabel:todayStr()});
   save(data);renderTable();toast('📅 Séparation','ok');
 }
 
@@ -755,14 +875,14 @@ function delRow(idx){
   if(row.type==='date'){
     if(!confirm('Supprimer ce séparateur?'))return;
     data[m].splice(idx,1);
-    save(data);renderTable();toast('🗑️','info');
+    save(data);forcePushFB();renderTable();toast('🗑️','info');
     return;
   }
   var has=(row.cmd||'')+(row.po||'')+(row.client||'')+(row.desc||'')+(row.item||'')+(row.qty||'')+(row.comment||'');
   if(!has)return;
   if(!confirm('Supprimer?'))return;
   row.cmd='';row.po='';row.client='';row.desc='';row.item='';row.qty='';row.noboite='';row.comment='';row.serieLinked=false;
-  save(data);renderTable();toast('🗑️','info');
+  save(data);forcePushFB();renderTable();toast('🗑️','info');
 }
 
 function editDateSep(ev,idx){
@@ -936,7 +1056,16 @@ function addBon(){
   var data=load();
   if(!data[m])data[m]=[];
   var targetIdx=-1;
+  // Trouver la dernière ligne remplie ou le dernier séparateur
+  var lastFilledIdx=-1;
   for(var i=0;i<data[m].length;i++){
+    var r=data[m][i];
+    if(r.type==='date')lastFilledIdx=i;
+    else if(r.type==='entry'&&(r.cmd||r.po||r.client||r.desc||r.item||r.qty||r.noboite||r.comment))lastFilledIdx=i;
+  }
+  // Chercher la première ligne vide juste après
+  var startSearch=lastFilledIdx+1;
+  for(var i=startSearch;i<data[m].length;i++){
     var r=data[m][i];
     if(r.type==='entry'&&!r.cmd&&!r.po&&!r.client&&!r.desc&&!r.item&&!r.qty&&!r.noboite&&!r.comment){
       r.cmd=bon;
@@ -945,8 +1074,11 @@ function addBon(){
     }
   }
   if(targetIdx<0){
-    data[m].push({id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),type:'entry',cmd:bon,po:'',client:'',desc:'',item:'',qty:'',noboite:'',comment:'',serieLinked:false});
-    targetIdx=data[m].length-1;
+    // Insérer juste après la dernière ligne remplie
+    var insertAt=lastFilledIdx+1;
+    var newRow={id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),type:'entry',cmd:bon,po:'',client:'',desc:'',item:'',qty:'',noboite:'',comment:'',serieLinked:false};
+    data[m].splice(insertAt,0,newRow);
+    targetIdx=insertAt;
   }
   save(data);renderTable();
   checkSerieForRow(targetIdx,bon);
