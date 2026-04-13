@@ -879,9 +879,15 @@ function delRow(idx){
     return;
   }
   var has=(row.cmd||'')+(row.po||'')+(row.client||'')+(row.desc||'')+(row.item||'')+(row.qty||'')+(row.comment||'');
-  if(!has)return;
+  if(!has){
+    // Ligne vide — supprimer silencieusement (pas de confirm)
+    data[m].splice(idx,1);
+    save(data);forcePushFB();renderTable();
+    return;
+  }
   if(!confirm('Supprimer?'))return;
-  row.cmd='';row.po='';row.client='';row.desc='';row.item='';row.qty='';row.noboite='';row.comment='';row.serieLinked=false;
+  // Supprimer la ligne complètement (splice au lieu de vider)
+  data[m].splice(idx,1);
   save(data);forcePushFB();renderTable();toast('🗑️','info');
 }
 
@@ -1463,17 +1469,17 @@ function confirmDelSelected(){
   var m=el?el.value:gmk();
   var data=load();
   if(!data[m]){_delSelected={};renderTable();return;}
-  keys.forEach(function(k){
-    var idx=parseInt(k);
-    var row=data[m][idx];
-    if(row&&row.type==='entry'){
-      row.cmd='';row.po='';row.client='';row.desc='';row.item='';row.qty='';row.noboite='';row.comment='';row.serieLinked=false;
+  // Trier les index en ordre décroissant pour splice sans décalage
+  var indices=keys.map(function(k){return parseInt(k);}).sort(function(a,b){return b-a;});
+  indices.forEach(function(idx){
+    if(data[m][idx]){
+      data[m].splice(idx,1);
     }
   });
-  save(data);
+  save(data);forcePushFB();
   _delSelected={};
   renderTable();
-  toast('🗑️ '+keys.length+' ligne(s) effacée(s)','ok');
+  toast('🗑️ '+keys.length+' ligne(s) supprimée(s)','ok');
   updateDelCount();
 }
 
@@ -1891,13 +1897,13 @@ function renderTable(){
 
     h+='<tr data-idx="'+i+'"'+(isDelSel?' class="del-selected"':'')+'>';
     if(_delMode){
-      h+='<td class="td-chk">'+(hasData?'<input type="checkbox" id="dchk_'+i+'"'+(isDelSel?' checked':'')+' onchange="toggleDelCheck('+i+')">':'')+'</td>';
+      h+='<td class="td-chk"><input type="checkbox" id="dchk_'+i+'"'+(isDelSel?' checked':'')+' onchange="toggleDelCheck('+i+')"></td>';
     }
     vis.forEach(function(c){
       if(c.id==='num'){
         h+='<td style="color:#94a3b8;font-size:9px;">'+(isSerie?'<span class="serie-star" title="Cliquer pour ouvrir Série+" onclick="reopenSerie(\''+esc(r.cmd).replace(/'/g,"\\'")+'\','+i+')">⭐</span>':num)+'</td>';
       }else if(c.id==='del'){
-        h+='<td>'+(hasData?'<span class="row-x" onclick="delRow('+i+')">✕</span>':'')+'</td>';
+        h+='<td><span class="row-x" onclick="delRow('+i+')" title="Supprimer">✕</span></td>';
       }else if(c.id==='client'){
         var cv=r.client||'';
         if(!cv&&r.cmd){var _sc=_cachedFind(r.cmd);if(_sc){cv=getSerieAutoClient(_sc.card)||_sc.card.client||'';}}
