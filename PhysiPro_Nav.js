@@ -48,8 +48,9 @@
     'entrepot', 'calcmat', 'archives', 'photos'
   ];
 
-  // Modules autorisés sur mobile
+  // Modules autorisés sur mobile (atelieratp voit aussi 'photos')
   var MOBILE_ALLOWED = ['moulage'];
+  var MOBILE_ALLOWED_ADMIN = ['moulage', 'photos'];
 
   // ══════════════════════════════════════
   //  ACCÈS PAR UTILISATEUR (emails en base64)
@@ -184,12 +185,13 @@
 
     var access = _getAccess(email);
     var mobile = _isMobile();
+    var mobileList = (email && email.toLowerCase() === 'atelieratp@physipro.com') ? MOBILE_ALLOWED_ADMIN : MOBILE_ALLOWED;
 
     grid.innerHTML = '';
 
     DISPLAY_ORDER.forEach(function (mod) {
       if (access.indexOf(mod) === -1) return;
-      if (mobile && MOBILE_ALLOWED.indexOf(mod) === -1) return;
+      if (mobile && mobileList.indexOf(mod) === -1) return;
       var m = NAV_MODULES[mod];
       if (!m) return;
 
