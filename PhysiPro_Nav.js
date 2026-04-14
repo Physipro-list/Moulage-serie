@@ -35,47 +35,46 @@
     inspcouture: { icon: '🧵', label: 'Prod. Couture',     sub: 'Production Couture',         file: 'PhysiPro_Production_Couture.html',      color: '#a855f7' },
     psm:         { icon: '🔧', label: 'PSM',               sub: 'Plan de santé matières',     file: 'PhysiPro_PSM.html',                     color: '#ef4444' },
     jobs:        { icon: '🎧', label: 'Service Client',    sub: 'Service Client',             file: 'PhysiPro_ServiceClient.html',           color: '#f59e0b' },
-    entrepot:    { icon: '📦', label: 'Entrepôt',          sub: 'Magasin & matériaux',        file: 'PhysiPro_Entrepot.html',                color: '#8b5cf6' },
     calcmat:     { icon: '🧮', label: 'Liste Matériaux',    sub: 'Liste des matériaux',        file: 'PhysiPro_Liste_Materiaux.html',         color: '#14b8a6' },
-    archives:    { icon: '🗄️', label: 'Archives',          sub: 'Historique & archives',      file: 'PhysiPro_Archives.html',                color: '#6366f1' },
     photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' },
+    jobsattente: { icon: '⏳', label: 'Jobs en attente',   sub: 'Commandes en attente',       file: 'PhysiPro_Jobs_Attente.html',             color: '#f59e0b' },
     inspfinale:  { icon: '🔍', label: 'Insp. Finale',      sub: 'Inspection finale',          file: 'PhysiPro_Inspection_Finale.html',        color: '#6366f1' }
   };
 
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
     'moulage', 'serie', 'inspection', 'inspcouture', 'inspfinale', 'psm', 'jobs',
-    'entrepot', 'calcmat', 'archives', 'photos'
+    'jobsattente', 'calcmat'
   ];
 
-  // Modules autorisés sur mobile (atelieratp voit aussi 'photos')
+  // Modules autorisés sur mobile
   var MOBILE_ALLOWED = ['moulage'];
-  var MOBILE_ALLOWED_ADMIN = ['moulage', 'photos'];
+  var MOBILE_ALLOWED_ADMIN = ['moulage'];
 
   // ══════════════════════════════════════
   //  ACCÈS PAR UTILISATEUR (emails en base64)
   // ══════════════════════════════════════
   var HUB_ACCESS = {
-    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':           ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','entrepot','calcmat','photos','archives'],  // atelieratp
-    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','entrepot','calcmat','photos','archives'],  // valerie18
-    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','calcmat','archives'],  // simdut
-    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','entrepot','calcmat','photos','archives'],  // michelle.bouchard
-    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','archives'],                                  // sroy
+    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':           ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','calcmat','jobsattente'],  // atelieratp
+    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','calcmat','jobsattente'],  // valerie18
+    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs','inspection','inspcouture','serie','psm','calcmat','jobsattente'],  // simdut
+    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','calcmat','jobsattente'],  // michelle.bouchard
+    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','jobs','inspection','inspcouture','inspfinale','serie','psm','jobsattente'],                                  // sroy
     'cGV0ZXJiYXNzNzZAZ21haWwuY29t':                 ['moulage','jobs'],                                                                                      // peterbass76
     'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':         ['moulage','jobs'],                                                                                      // mario.jacques
     'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs','inspfinale'],                                                                                      // cncatp
-    'bWFnYXNpbmF0cDFAcGh5c2lwcm8uY29t':             ['entrepot','calcmat'],                                                                                            // magasinatp1
-    'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':             ['entrepot','calcmat'],                                                                                            // magasinatp2
-    'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':             ['entrepot','calcmat'],                                                                                            // magasinatp3
-    'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','jobs','inspfinale'],                                                                        // service1
-    'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','jobs','inspfinale'],                                                                        // service3
-    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs','inspfinale'],                                                                        // ngagne
-    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','jobs','inspfinale'],                                                                        // sonia.boulanger
-    'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':             ['moulage','jobs','archives'],                                                                                     // mplanguedoc
-    'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':         ['moulage','jobs','archives'],                                                                                     // mariesoleilr
+    'bWFnYXNpbmF0cDFAcGh5c2lwcm8uY29t':             ['calcmat'],                                                                                            // magasinatp1
+    'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':             ['calcmat'],                                                                                            // magasinatp2
+    'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':             ['calcmat'],                                                                                            // magasinatp3
+    'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','jobs','inspfinale','jobsattente'],                                                                        // service1
+    'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','jobs','inspfinale','jobsattente'],                                                                        // service3
+    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','jobs','inspfinale','jobsattente'],                                                                        // ngagne
+    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','jobs','inspfinale','jobsattente'],                                                                        // sonia.boulanger
+    'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':             ['moulage','jobs','jobsattente'],                                                                                     // mplanguedoc
+    'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':         ['moulage','jobs','jobsattente'],                                                                                     // mariesoleilr
     'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':     ['moulage','jobs','serie'],                                                                                        // fabrys.frechette
     'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage','calcmat'],                                                                                 // marioouellette
-    'cmhAcGh5c2lwcm8uY29t':                         ['moulage','jobs','archives'],                                                                                     // rh
+    'cmhAcGh5c2lwcm8uY29t':                         ['moulage','jobs'],                                                                                     // rh
     'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':         [''],                                                                                                              // elyse.bolduc
     'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':         [''],                                                                                                              // eric.poirier
     'cGJvdWNoYXJkQHBoeXNpcHJvLmNvbQ==':             ['']                                                                                                               // pbouchard
