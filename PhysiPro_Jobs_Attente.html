@@ -144,6 +144,15 @@ textarea.form-input{min-height:70px;resize:vertical;}
 .login-remember{display:flex;align-items:center;justify-content:center;gap:6px;margin:6px 0 14px 0;font-size:12px;color:rgba(255,255,255,.55);}
 .login-remember input[type="checkbox"]{width:15px;height:15px;cursor:pointer;accent-color:#4a8ef5;}
 
+/* ═══ AUTOCOMPLETE ═══ */
+.autocomplete-list{position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:linear-gradient(160deg,#0f2847,#1a3a5c);border:1px solid rgba(74,142,245,.4);border-radius:0 0 10px 10px;z-index:100;display:none;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+.autocomplete-list.active{display:block;}
+.autocomplete-item{padding:9px 14px;font-size:13px;color:rgba(255,255,255,.85);cursor:pointer;transition:all .15s;border-bottom:1px solid rgba(255,255,255,.04);}
+.autocomplete-item:hover,.autocomplete-item.selected{background:rgba(74,142,245,.2);color:#fff;}
+.autocomplete-item:last-child{border-bottom:none;}
+.autocomplete-item mark{background:rgba(251,191,36,.3);color:#fbbf24;border-radius:2px;padding:0 1px;}
+.autocomplete-empty{padding:10px 14px;font-size:12px;color:rgba(255,255,255,.35);font-style:italic;}
+
 /* ═══ RESPONSIVE ═══ */
 @media(max-width:768px){
   .topbar{padding:0 12px;height:50px;min-height:50px;}
@@ -224,11 +233,6 @@ textarea.form-input{min-height:70px;resize:vertical;}
     </div>
   </div>
 
-  <!-- STATS -->
-  <div class="stats-bar" id="statsBar">
-    <div class="stat-chip"><span class="stat-count" id="statTotal">0</span><span class="stat-label">en attente</span></div>
-  </div>
-
   <!-- TABLE -->
   <div class="table-wrapper">
     <table>
@@ -267,13 +271,10 @@ textarea.form-input{min-height:70px;resize:vertical;}
       <input type="text" class="form-input" id="inputNumero" placeholder="Ex: 12345" maxlength="30">
     </div>
 
-    <div class="form-group">
+    <div class="form-group" style="position:relative;">
       <label class="form-label">Client *</label>
-      <select class="form-select" id="inputClientSelect" onchange="onClientSelectChange()">
-        <option value="">— Sélectionnez un client —</option>
-        <option value="__custom__">✏️ Saisie libre...</option>
-      </select>
-      <input type="text" class="form-input" id="inputClientCustom" placeholder="Nom du client (saisie libre)" style="display:none;margin-top:6px;">
+      <input type="text" class="form-input" id="inputClient" placeholder="Tapez le nom du client..." autocomplete="off" oninput="onClientInput()" onfocus="onClientInput()">
+      <div class="autocomplete-list" id="clientAutocomplete"></div>
     </div>
 
     <div class="form-group">
@@ -298,6 +299,7 @@ textarea.form-input{min-height:70px;resize:vertical;}
         <option value="Jonathan">Jonathan</option>
         <option value="Sonia">Sonia</option>
         <option value="France">France</option>
+        <option value="Daniel">Daniel</option>
       </select>
     </div>
 
@@ -334,7 +336,8 @@ var SERVICE_TEAM = [
   {name:'Nadia'},
   {name:'Jonathan'},
   {name:'Sonia'},
-  {name:'France'}
+  {name:'France'},
+  {name:'Daniel'}
 ];
 
 var NAME_MAP = {
@@ -422,71 +425,88 @@ auth.onAuthStateChanged(function(user){
   // Listen to Firebase
   db.ref(FB_PATH).on('value', function(snap){
     _allEntries = snap.val() || {};
+    console.log('[JobsAttente] Firebase data received:', Object.keys(_allEntries).length, 'entries');
     renderTable();
+  }, function(err){
+    console.error('[JobsAttente] Firebase listener error:', err.message);
+    alert('Erreur Firebase: ' + err.message + '\n\nVérifiez les règles de sécurité Firebase pour "jobsEnAttente".');
   });
 });
 
 function loadClientsFromFirebase(){
-  // Load clients from the service client jobs
   db.ref('jobs').once('value', function(snap){
     var jobs = snap.val() || {};
     var clientSet = {};
     Object.keys(jobs).forEach(function(id){
       var j = jobs[id];
-      if(j && j.name){
-        // Extract client name from job name (remove # prefix and job number)
-        var name = (j.name || '').trim();
-        if(name) clientSet[name] = true;
-      }
-      if(j && j.client){
-        var cl = (j.client || '').trim();
-        if(cl) clientSet[cl] = true;
-      }
+      if(j && j.name){ var name = (j.name || '').trim(); if(name) clientSet[name] = true; }
+      if(j && j.client){ var cl = (j.client || '').trim(); if(cl) clientSet[cl] = true; }
     });
-    // Also collect from existing jobs en attente
     Object.keys(_allEntries).forEach(function(id){
       var e = _allEntries[id];
-      if(e && e.client){
-        clientSet[e.client.trim()] = true;
-      }
+      if(e && e.client) clientSet[e.client.trim()] = true;
     });
     _clientList = Object.keys(clientSet).sort(function(a,b){
       return a.toLowerCase().localeCompare(b.toLowerCase());
     });
-    populateClientDropdown();
   });
 }
 
-function populateClientDropdown(){
-  var sel = document.getElementById('inputClientSelect');
-  // Keep first 2 options (placeholder + custom)
-  var html = '<option value="">— Sélectionnez un client —</option>';
-  _clientList.forEach(function(name){
-    html += '<option value="'+esc(name)+'">'+esc(name)+'</option>';
+// ═══ AUTOCOMPLETE CLIENT ═══
+var _acSelected = -1;
+
+function onClientInput(){
+  var input = document.getElementById('inputClient');
+  var list = document.getElementById('clientAutocomplete');
+  var val = (input.value || '').trim().toLowerCase();
+
+  if(!val){
+    if(_clientList.length === 0){
+      list.innerHTML = '<div class="autocomplete-empty">Aucun client trouvé</div>';
+    } else {
+      list.innerHTML = _clientList.map(function(c){
+        return '<div class="autocomplete-item" onmousedown="selectClient(this)">'+esc(c)+'</div>';
+      }).join('');
+    }
+    list.classList.add('active');
+    _acSelected = -1;
+    return;
+  }
+
+  var matches = _clientList.filter(function(c){
+    return c.toLowerCase().indexOf(val) !== -1;
   });
-  html += '<option value="__custom__">✏️ Saisie libre...</option>';
-  sel.innerHTML = html;
+
+  if(matches.length === 0){
+    list.innerHTML = '<div class="autocomplete-empty">Aucun résultat — le nom sera utilisé tel quel</div>';
+    list.classList.add('active');
+    _acSelected = -1;
+    return;
+  }
+
+  list.innerHTML = matches.map(function(c){
+    var idx = c.toLowerCase().indexOf(val);
+    var before = esc(c.substring(0, idx));
+    var match = esc(c.substring(idx, idx + val.length));
+    var after = esc(c.substring(idx + val.length));
+    return '<div class="autocomplete-item" onmousedown="selectClient(this)">'+before+'<mark>'+match+'</mark>'+after+'</div>';
+  }).join('');
+  list.classList.add('active');
+  _acSelected = -1;
 }
 
-function onClientSelectChange(){
-  var sel = document.getElementById('inputClientSelect');
-  var custom = document.getElementById('inputClientCustom');
-  if(sel.value === '__custom__'){
-    custom.style.display = 'block';
-    custom.focus();
-  } else {
-    custom.style.display = 'none';
-    custom.value = '';
-  }
+function selectClient(el){
+  document.getElementById('inputClient').value = el.textContent;
+  document.getElementById('clientAutocomplete').classList.remove('active');
 }
 
-function getSelectedClient(){
-  var sel = document.getElementById('inputClientSelect');
-  if(sel.value === '__custom__'){
-    return document.getElementById('inputClientCustom').value.trim();
+document.addEventListener('click', function(e){
+  var list = document.getElementById('clientAutocomplete');
+  var input = document.getElementById('inputClient');
+  if(list && input && !input.contains(e.target) && !list.contains(e.target)){
+    list.classList.remove('active');
   }
-  return sel.value;
-}
+});
 
 function populateResponsableFilter(){
   var filterSel = document.getElementById('filterResponsable');
@@ -508,19 +528,21 @@ function renderTable(){
   var filterRaison = document.getElementById('filterRaison').value;
 
   var entries = [];
+  var totalRaw = 0;
+  var skippedResolved = 0;
+  var skippedFilter = 0;
   Object.keys(_allEntries).forEach(function(id){
     var e = _allEntries[id];
-    if(!e || e.resolved) return;
-    if(filterResp !== 'all' && e.responsable !== filterResp) return;
-    if(filterRaison !== 'all' && e.raison !== filterRaison) return;
+    totalRaw++;
+    if(!e) return;
+    if(e.resolved){ skippedResolved++; return; }
+    if(filterResp !== 'all' && e.responsable !== filterResp){ skippedFilter++; return; }
+    if(filterRaison !== 'all' && e.raison !== filterRaison){ skippedFilter++; return; }
     entries.push({id:id, data:e});
   });
+  console.log('[JobsAttente] renderTable: total='+totalRaw+', resolved='+skippedResolved+', filtered='+skippedFilter+', showing='+entries.length);
 
-  // Sort by date desc (newest first)
   entries.sort(function(a,b){return (b.data.createdAt||0) - (a.data.createdAt||0);});
-
-  // Update stats
-  document.getElementById('statTotal').textContent = entries.length;
 
   if(entries.length === 0){
     tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">✅</div><div class="empty-state-text">Aucune commande en attente</div><div class="empty-state-hint">Tout est à jour!</div></div></td></tr>';
@@ -562,9 +584,8 @@ function openAddModal(){
   document.getElementById('modalTitle').textContent = '➕ Nouvelle commande en attente';
   document.getElementById('modalSaveBtn').textContent = '💾 Enregistrer';
   document.getElementById('inputNumero').value = '';
-  document.getElementById('inputClientSelect').value = '';
-  document.getElementById('inputClientCustom').value = '';
-  document.getElementById('inputClientCustom').style.display = 'none';
+  document.getElementById('inputClient').value = '';
+  document.getElementById('clientAutocomplete').classList.remove('active');
   document.getElementById('inputRaison').value = '';
   document.getElementById('inputResponsable').value = '';
   document.getElementById('inputNote').value = '';
@@ -579,23 +600,8 @@ function editEntry(id){
   document.getElementById('modalTitle').textContent = '✏️ Modifier la commande';
   document.getElementById('modalSaveBtn').textContent = '💾 Sauvegarder';
   document.getElementById('inputNumero').value = e.numero || '';
-  // Set client — check if it's in the dropdown, otherwise use custom
-  var clientSel = document.getElementById('inputClientSelect');
-  var clientCustom = document.getElementById('inputClientCustom');
-  var clientVal = e.client || '';
-  var found = false;
-  for(var i=0;i<clientSel.options.length;i++){
-    if(clientSel.options[i].value === clientVal){found=true;break;}
-  }
-  if(found){
-    clientSel.value = clientVal;
-    clientCustom.style.display = 'none';
-    clientCustom.value = '';
-  } else {
-    clientSel.value = '__custom__';
-    clientCustom.style.display = 'block';
-    clientCustom.value = clientVal;
-  }
+  document.getElementById('inputClient').value = e.client || '';
+  document.getElementById('clientAutocomplete').classList.remove('active');
   document.getElementById('inputRaison').value = e.raison || '';
   document.getElementById('inputResponsable').value = e.responsable || '';
   document.getElementById('inputNote').value = e.note || '';
@@ -609,7 +615,7 @@ function closeModal(){
 
 function saveEntry(){
   var numero = document.getElementById('inputNumero').value.trim();
-  var client = getSelectedClient();
+  var client = document.getElementById('inputClient').value.trim();
   var raison = document.getElementById('inputRaison').value;
   var responsable = document.getElementById('inputResponsable').value;
   var note = document.getElementById('inputNote').value.trim();
@@ -633,18 +639,21 @@ function saveEntry(){
 
   if(_editingId){
     db.ref(FB_PATH + '/' + _editingId).update(data).then(function(){
+      console.log('[JobsAttente] Entry updated:', _editingId);
       closeModal();
     }).catch(function(err){
-      alert('Erreur: ' + err.message);
+      console.error('[JobsAttente] Update error:', err);
+      alert('Erreur lors de la sauvegarde: ' + err.message);
     });
   } else {
     data.createdAt = Date.now();
-    db.ref(FB_PATH).push(data).then(function(){
+    db.ref(FB_PATH).push(data).then(function(ref){
+      console.log('[JobsAttente] Entry created:', ref.key, data);
       closeModal();
-      // Refresh client list to include the new client
       loadClientsFromFirebase();
     }).catch(function(err){
-      alert('Erreur: ' + err.message);
+      console.error('[JobsAttente] Create error:', err);
+      alert('Erreur lors de la création: ' + err.message);
     });
   }
 }
