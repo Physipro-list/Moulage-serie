@@ -701,39 +701,22 @@ function _merge(fb,loc){
 
 function startSync(){
   if(_syncPhase!=='idle')return;_syncPhase='syncing';
-  // Lire Firebase ET le timestamp pour savoir qui est le plus récent
-  Promise.all([
-    fbDb.ref(FB).once('value'),
-    fbDb.ref(FB_TS).once('value')
-  ]).then(function(results){
-    var fb=results[0].val();
-    var fbTsData=results[1].val();
-    var fbTs=(fbTsData&&fbTsData.ts)||0;
-    var localTs=parseInt(localStorage.getItem(LK+'_wts'))||0;
-    var loc=load();
-
+  fbDb.ref(FB).once('value').then(function(snap){
+    var fb=snap.val();
     if(fb){
-      if(localTs>fbTs&&localTs>0){
-        // Local est plus récent que Firebase → merger en gardant le local comme priorité
-        // (cas rare: l'utilisateur a travaillé hors-ligne)
-        console.log('[SYNC] Local plus récent (local='+localTs+' fb='+fbTs+') — merge local-first');
-        var merged=_merge(fb,loc);
-        // Mais même ici, on vérifie les entrées locales
-        localStorage.setItem(LK,JSON.stringify(merged));
-        // Re-push vers Firebase
-        debPush();
-      }else{
-        // Firebase est plus récent ou égal → Firebase gagne
-        console.log('[SYNC] Firebase est maître (fb='+fbTs+' local='+localTs+')');
-        localStorage.setItem(LK,JSON.stringify(fb));
-        localStorage.setItem(LK+'_wts',String(fbTs));
-        _localWriteTs=fbTs;
-      }
+      // Firebase est maître au démarrage
+      console.log('[SYNC] Firebase est maître — écrasement local');
+      localStorage.setItem(LK,JSON.stringify(fb));
+      _localWriteTs=Date.now();
+      localStorage.setItem(LK+'_wts',String(_localWriteTs));
     }
     _syncPhase='live';renderTable();
     setTimeout(listenFB,1500);
-    loadSerieCards();
-  }).catch(function(){_syncPhase='live';renderTable();});
+    reVerifyAllSerieRows();
+  }).catch(function(e){
+    console.error('[SYNC] Erreur:',e.message||e);
+    _syncPhase='live';renderTable();
+  });
   setTimeout(function(){if(_syncPhase==='syncing'){_syncPhase='live';renderTable();}},8000);
 }
 function listenFB(){
@@ -742,54 +725,33 @@ function listenFB(){
     if(_fbW||_syncPhase==='syncing'){console.log('[LISTEN] Bloqué (_fbW='+_fbW+')');return;}
     var fb=s.val();
     if(!fb){console.log('[LISTEN] Firebase vide — ignoré');return;}
-    
-    // 🛡️ PROTECTION STALE-DATA: Lire le timestamp Firebase
-    fbDb.ref(FB_TS).once('value').then(function(tsSnap){
-      var fbTsData=tsSnap.val();
-      var fbTs=(fbTsData&&fbTsData.ts)||0;
-      var localTs=parseInt(localStorage.getItem(LK+'_wts'))||0;
-      
-      if(localTs>fbTs&&_localWriteTs>fbTs){
-        // CET onglet a écrit plus récemment que Firebase — ne pas écraser
-        // (cas: le push est en transit)
-        console.log('[LISTEN] Local plus récent que FB (local='+localTs+' fb='+fbTs+') — ignoré');
-        return;
-      }
-      
-      // Firebase est plus récent → écraser le local
-      console.log('[LISTEN] Firebase maître (fb='+fbTs+' local='+localTs+') — écrasement local');
-      localStorage.setItem(LK,JSON.stringify(fb));
-      localStorage.setItem(LK+'_wts',String(fbTs));
-      _localWriteTs=fbTs;
-      renderTable();
-    }).catch(function(){
-      // Pas de timestamp disponible — fallback: prendre Firebase quand même
-      console.log('[LISTEN] Pas de timestamp — Firebase maître par défaut');
-      localStorage.setItem(LK,JSON.stringify(fb));
-      renderTable();
-    });
+    // Firebase est maître — écraser le local
+    console.log('[LISTEN] Firebase maître — écrasement local');
+    localStorage.setItem(LK,JSON.stringify(fb));
+    _localWriteTs=Date.now();
+    localStorage.setItem(LK+'_wts',String(_localWriteTs));
+    renderTable();
   });
 }
 function stopSync(){if(_fbL){fbDb.ref(FB).off('value',_fbL);_fbL=null;}_syncPhase='idle';}
 function doRefresh(){
   if(!fbDb||!fbUser){renderTable();toast('🔄 Local','info');return;}
   setSB('syncing');
-  Promise.all([
-    fbDb.ref(FB).once('value'),
-    fbDb.ref(FB_TS).once('value')
-  ]).then(function(results){
-    var fb=results[0].val();
-    var fbTsData=results[1].val();
-    var fbTs=(fbTsData&&fbTsData.ts)||0;
+  fbDb.ref(FB).once('value').then(function(snap){
+    var fb=snap.val();
     if(fb){
-      // Firebase est maître sur un refresh explicite
       localStorage.setItem(LK,JSON.stringify(fb));
-      localStorage.setItem(LK+'_wts',String(fbTs));
-      _localWriteTs=fbTs;
+      _localWriteTs=Date.now();
+      localStorage.setItem(LK+'_wts',String(_localWriteTs));
     }
-    renderTable();setSB('online');toast('🔄 OK','ok');
-    loadSerieCards();
-  }).catch(function(){renderTable();setSB('offline');toast('⚠️ Erreur','err');});
+    // Recharger les cartes Série+ et re-vérifier les liens
+    reVerifyAllSerieRows(function(){
+      renderTable();setSB('online');toast('🔄 OK','ok');
+    });
+  }).catch(function(e){
+    console.error('[REFRESH] Erreur:',e.message||e);
+    renderTable();setSB('offline');toast('⚠️ Erreur','err');
+  });
 }
 
 /* ═══ FULL CLASSEUR SYNC — vérifie tous les mois + Série+ ═══ */
@@ -798,22 +760,14 @@ function doFullSync(){
   toast('📊 Vérification du classeur...','info');
   setSB('syncing');
   
-  var stats={months:0,entries:0,serieLinked:0,serieUpdated:0,errors:0};
-  
   // 1. Sync Firebase → local (Firebase est maître)
-  Promise.all([
-    fbDb.ref(FB).once('value'),
-    fbDb.ref(FB_TS).once('value')
-  ]).then(function(results){
-    var fb=results[0].val();
-    var fbTsData=results[1].val();
-    var fbTs=(fbTsData&&fbTsData.ts)||0;
+  fbDb.ref(FB).once('value').then(function(snap){
+    var fb=snap.val();
+    var stats={months:0,entries:0};
     if(fb){
-      // Firebase maître — écraser le local
       localStorage.setItem(LK,JSON.stringify(fb));
-      localStorage.setItem(LK+'_wts',String(fbTs));
-      _localWriteTs=fbTs;
-      // Compter les stats
+      _localWriteTs=Date.now();
+      localStorage.setItem(LK+'_wts',String(_localWriteTs));
       Object.keys(fb).forEach(function(m){
         stats.months++;
         (fb[m]||[]).forEach(function(r){
@@ -822,63 +776,14 @@ function doFullSync(){
       });
     }
     
-    // 2. Recharger toutes les cartes Série+ depuis Firebase
-    fbDb.ref('serieCommandes').once('value').then(function(sSnap){
-      var serieData=sSnap.val()||{};
-      var localSerie=getSerieCards();
-      
-      // Sync complet des cartes Série+
-      Object.keys(serieData).forEach(function(cid){
-        var f=serieData[cid];
-        if(!localSerie[cid]){localSerie[cid]=f;stats.serieUpdated++;return;}
-        var l=localSerie[cid];
-        if(f.client)l.client=f.client;
-        if(f.order)l.order=f.order;
-        if(f.numeroPO)l.numeroPO=f.numeroPO;
-        if(f.targetColumn)l.targetColumn=f.targetColumn;
-        if(f._typeManuel!==undefined)l._typeManuel=f._typeManuel;
-        if(f._manualStatus)l._manualStatus=f._manualStatus;
-        if(f.items){
-          l.items=f.items; // Prendre la version Firebase complète
-          stats.serieUpdated++;
-        }
-      });
-      localStorage.setItem(SK,JSON.stringify(localSerie));
-      _serieCache={};
-      
-      // 3. Vérifier les liens Série+ dans toutes les lignes d'inspection
-      var allData=load();
-      var updated=false;
-      Object.keys(allData).forEach(function(month){
-        (allData[month]||[]).forEach(function(row){
-          if(row.type!=='entry'||!row.cmd)return;
-          var match=findSerie(row.cmd);
-          if(match){
-            stats.serieLinked++;
-            var card=match.card;
-            // Mettre à jour client et PO depuis Série+
-            if(card.client&&!row.client){row.client=getSerieAutoClient(card);updated=true;}
-            if(card.numeroPO&&!row.po){row.po=card.numeroPO;updated=true;}
-          }
-        });
-      });
-      if(updated){
-        localStorage.setItem(LK,JSON.stringify(allData));
-        debPush();
-      }
-      
+    // 2. Re-vérifier toutes les cartes Série+ (comme Inspection Atelier)
+    reVerifyAllSerieRows(function(){
       renderTable();setSB('online');
-      toast('📊 Classeur: '+stats.months+' mois, '+stats.entries+' entrées, '+stats.serieLinked+' liées à Série+','ok');
-      
-    }).catch(function(e){
-      console.error('[FULL SYNC] Série+ error:',e.message);
-      stats.errors++;
-      renderTable();setSB('online');
-      toast('📊 Classeur sync OK (Série+ indisponible)','info');
+      toast('📊 Classeur: '+stats.months+' mois, '+stats.entries+' entrées','ok');
     });
     
   }).catch(function(e){
-    console.error('[FULL SYNC] Firebase error:',e.message);
+    console.error('[FULL SYNC] Firebase error:',e.message||e);
     setSB('offline');
     toast('⚠️ Erreur de connexion','err');
   });
@@ -1070,14 +975,6 @@ function getSerieCards(){try{return JSON.parse(localStorage.getItem(SK))||{};}ca
 function findSerie(num){
   var cards=getSerieCards();var n=String(num).trim();if(!n)return null;
   var nStrip=n.replace(/^0+/,'');var nL6=nStrip.slice(-6);
-  var cardCount=Object.keys(cards).length;
-  console.log('[findSerie] Cherche "'+n+'" (strip="'+nStrip+'", L6="'+nL6+'") dans '+cardCount+' cartes');
-  // Log les 3 premières cartes pour debug
-  var sample=Object.keys(cards).slice(0,3);
-  sample.forEach(function(id){
-    var c=cards[id];
-    console.log('[findSerie] Carte: id='+id+' order="'+(c.order||'')+'" numeroPO="'+(c.numeroPO||'')+'" client="'+(c.client||'')+'"');
-  });
   for(var id in cards){
     var o=String(cards[id].order||'').trim();var p=String(cards[id].numeroPO||'').trim();
     var oS=o.replace(/^0+/,'');var pS=p.replace(/^0+/,'');
@@ -1086,7 +983,6 @@ function findSerie(num){
     if(oS.slice(-6)===nL6&&nL6.length>=4)return{cardId:id,card:cards[id]};
     if(pS.slice(-6)===nL6&&nL6.length>=4)return{cardId:id,card:cards[id]};
   }
-  console.log('[findSerie] ❌ Aucun match');
   return null;
 }
 function _cachedFind(bon){var k=String(bon).trim();if(!k)return null;if(_serieCache.hasOwnProperty(k))return _serieCache[k];var r=findSerie(k);_serieCache[k]=r;return r;}
@@ -1827,6 +1723,115 @@ function renderSerieItemCell(val){
   });
   h+='</div>';
   return h;
+}
+
+/* ═══ RE-VERIFY ALL SÉRIE+ ROWS — comme Inspection Atelier ═══ */
+function reVerifyAllSerieRows(callback){
+  if(!fbDb){if(callback)callback();return;}
+  fbDb.ref('serieCommandes').once('value').then(function(snap){
+    var fbCards=snap.val()||{};
+    // Mettre à jour le cache local avec les cartes Firebase
+    var localCards=getSerieCards();
+    Object.keys(fbCards).forEach(function(cid){
+      if(!localCards[cid]){localCards[cid]=fbCards[cid];return;}
+      var l=localCards[cid],f=fbCards[cid];
+      if(f.client)l.client=f.client;
+      if(f.order)l.order=f.order;
+      if(f.numeroPO)l.numeroPO=f.numeroPO;
+      if(f.targetColumn)l.targetColumn=f.targetColumn;
+      if(f._typeManuel!==undefined)l._typeManuel=f._typeManuel;
+      if(f._manualStatus)l._manualStatus=f._manualStatus;
+      if(f.items){
+        if(!l.items)l.items=[];
+        f.items.forEach(function(fi,ii){
+          if(!l.items[ii]){l.items[ii]=fi;return;}
+          if(fi.name)l.items[ii].name=fi.name;
+          if(!l.items[ii].grandeurs)l.items[ii].grandeurs=[];
+          (fi.grandeurs||[]).forEach(function(fg,gi){
+            if(!l.items[ii].grandeurs[gi]){l.items[ii].grandeurs[gi]=fg;return;}
+            var lg=l.items[ii].grandeurs[gi];
+            if(fg.qty)lg.qty=fg.qty;
+            if(fg.name)lg.name=fg.name;
+            if(fg._status)lg._status=fg._status;
+          });
+        });
+      }
+    });
+    localStorage.setItem(SK,JSON.stringify(localCards));
+    _serieCache={};
+
+    // Scanner toutes les lignes d'inspection et corriger les labels/liens
+    var allData=load();
+    var anyChanged=false;
+    var stats={linked:0,labelsFixed:0,emballed:0};
+
+    Object.keys(allData).forEach(function(month){
+      var rows=allData[month]||[];
+      var monthChanged=false;
+      rows.forEach(function(row){
+        if(!row||row.type!=='entry')return;
+        var cmd=(row.cmd||'').trim();
+        if(!cmd)return;
+
+        // Chercher dans les cartes Firebase directement (plus fiable que le cache)
+        var n=cmd;var nStrip=n.replace(/^0+/,'');var nL6=nStrip.slice(-6);
+        var found=null;
+        for(var cid in fbCards){
+          var c=fbCards[cid];
+          var o=String(c.order||'').trim();var p=String(c.numeroPO||'').trim();
+          var os=o.replace(/^0+/,'');var ps=p.replace(/^0+/,'');
+          if(o===n||p===n||os===nStrip||ps===nStrip||(os.slice(-6)===nL6&&nL6.length>=4)||(ps.slice(-6)===nL6&&nL6.length>=4)){
+            found={cardId:cid,card:c};break;
+          }
+        }
+        if(!found)return;
+        stats.linked++;
+        row.serieLinked=true;
+
+        // Corriger le label client
+        var correctLabel=getSerieAutoClient(found.card);
+        if(correctLabel&&row.client!==correctLabel){
+          row.client=correctLabel;
+          monthChanged=true;
+          stats.labelsFixed++;
+        }
+        // Corriger le PO
+        if(found.card.numeroPO&&!row.po){
+          row.po=found.card.numeroPO;
+          monthChanged=true;
+        }
+
+        // Vérifier que les grandeurs marquées emballées dans Série+ sont reflétées
+        var card=found.card;
+        var allEmballe=true;
+        var anyEmballe=false;
+        (card.items||[]).forEach(function(item){
+          (item.grandeurs||[]).forEach(function(g){
+            if((g._status||'')==='emballe')anyEmballe=true;
+            else allEmballe=false;
+          });
+        });
+        // Si la carte est entièrement emballée, marquer _manualStatus
+        if(anyEmballe&&allEmballe&&card._manualStatus!=='emballe'){
+          stats.emballed++;
+          // Mettre à jour Firebase
+          fbDb.ref('serieCommandes/'+found.cardId+'/').update({_manualStatus:'emballe'}).catch(function(){});
+        }
+      });
+      if(monthChanged){allData[month]=rows;anyChanged=true;}
+    });
+
+    if(anyChanged){
+      localStorage.setItem(LK,JSON.stringify(allData));
+      debPush();
+    }
+
+    console.log('[VERIFY] ✅ '+stats.linked+' Série+, '+stats.labelsFixed+' labels, '+stats.emballed+' emballées');
+    if(callback)callback();
+  }).catch(function(e){
+    console.error('[VERIFY] Erreur:',e.message||e);
+    if(callback)callback();
+  });
 }
 
 /* ═══ SEARCH ═══ */
