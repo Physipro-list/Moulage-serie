@@ -349,7 +349,6 @@ var fbDb=firebase.database(),fbAuth=firebase.auth(),fbUser=null;
 var _fbW=false,_syncPhase='idle',_syncStarted=false,_syncT=null,_fbL=null;
 var FB='inspectionFinaleData',LK='physipro_inspfinale_v1';
 var EMPTY_ROWS=20;
-var FB_TS='inspFinaleTimestamp'; // Timestamp de dernière écriture Firebase
 var _localWriteTs=0; // Timestamp local de la dernière écriture de CET onglet
 
 /* ═══ COLUMN DEFINITIONS ═══ */
@@ -611,15 +610,11 @@ function pushFB(){
   });
   console.log('[PUSH] → Firebase: '+totalEntries+' entrées');
   _fbW=true;setSB('syncing');
-  var writeTs=Date.now();
-  var updates={};
-  updates[FB]=clean;
-  updates[FB_TS]={ts:writeTs,user:fbUser.email,entries:totalEntries};
-  fbDb.ref().update(updates).then(function(){
-    _localWriteTs=writeTs;
-    localStorage.setItem(LK+'_wts',String(writeTs));
+  fbDb.ref(FB).set(clean).then(function(){
+    _localWriteTs=Date.now();
+    localStorage.setItem(LK+'_wts',String(_localWriteTs));
     setTimeout(function(){_fbW=false;setSB('online');},1500);
-    console.log('[PUSH] ✅ Sauvegardé (ts='+writeTs+')');
+    console.log('[PUSH] ✅ Sauvegardé');
   }).catch(function(e){_fbW=false;setSB('offline');console.error('FB err:',e.message);});
 }
 function debPush(){clearTimeout(_syncT);_syncT=setTimeout(pushFB,800);}
@@ -638,16 +633,12 @@ function forcePushFB(){
     });
     if(filtered.length>0)clean[m]=filtered;
   });
-  var writeTs=Date.now();
   _fbW=true;setSB('syncing');
-  var updates={};
-  updates[FB]=clean;
-  updates[FB_TS]={ts:writeTs,user:fbUser.email,entries:Object.keys(clean).reduce(function(s,m){return s+(clean[m]||[]).filter(function(r){return r.type==='entry';}).length;},0),forceDelete:true};
-  fbDb.ref().update(updates).then(function(){
-    _localWriteTs=writeTs;
-    localStorage.setItem(LK+'_wts',String(writeTs));
+  fbDb.ref(FB).set(clean).then(function(){
+    _localWriteTs=Date.now();
+    localStorage.setItem(LK+'_wts',String(_localWriteTs));
     setTimeout(function(){_fbW=false;setSB('online');},1500);
-    console.log('[FORCE PUSH] ✅ Suppression synchronisée (ts='+writeTs+')');
+    console.log('[FORCE PUSH] ✅ Suppression synchronisée');
   }).catch(function(e){_fbW=false;setSB('offline');console.error('[FORCE PUSH] ❌',e.message);});
 }
 
