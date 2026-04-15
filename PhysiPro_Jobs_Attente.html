@@ -58,10 +58,10 @@ thead th{background:linear-gradient(135deg,#0f2847,#1a3a5c);color:rgba(255,255,2
 thead th:first-child{border-radius:10px 0 0 0;}
 thead th:last-child{border-radius:0 10px 0 0;}
 
-tbody tr{transition:all .15s;border-bottom:1px solid rgba(74,142,245,.18);}
+tbody tr{transition:all .15s;border-bottom:1px solid rgba(74,142,245,.35);}
 tbody tr:nth-child(even){background:rgba(255,255,255,.02);}
 tbody tr:hover{background:rgba(74,142,245,.08);}
-tbody td{padding:7px 10px;font-size:12px;color:rgba(255,255,255,.85);vertical-align:middle;}
+tbody td{padding:5px 8px;font-size:12px;color:rgba(255,255,255,.85);vertical-align:middle;}
 tbody tr:last-child{border-bottom:none;}
 
 /* Numéro de commande - style badge */
@@ -172,8 +172,8 @@ textarea.form-input{min-height:70px;resize:vertical;}
   .toolbar-btn{padding:6px 12px;font-size:12px;}
   .stats-bar{padding:8px 12px;gap:10px;}
   .table-wrapper{padding:0 10px 10px;}
-  thead th{padding:7px 8px;font-size:9px;}
-  tbody td{padding:6px 8px;font-size:11px;}
+  thead th{padding:5px 6px;font-size:9px;}
+  tbody td{padding:4px 6px;font-size:11px;}
   .modal{padding:20px 16px 16px;}
 }
 </style>
@@ -296,6 +296,17 @@ textarea.form-input{min-height:70px;resize:vertical;}
         <option value="Attente d'approbation">Attente d'approbation</option>
         <option value="Délai fournisseur">Délai fournisseur</option>
         <option value="Autre">Autre</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Localisation</label>
+      <select class="form-select" id="inputLocalisation">
+        <option value="">— Automatique —</option>
+        <option value="Magasin">Magasin</option>
+        <option value="Atelier">Atelier</option>
+        <option value="Couture">Couture</option>
+        <option value="Insp. finale">Insp. finale</option>
       </select>
     </div>
 
@@ -690,10 +701,17 @@ function renderTable(){
     var num = String(e.numero||'').trim();
     var loc = _locTracker[num] || _locTracker[num.replace(/^0+/,'')] || {};
 
-    // Build localisation — single badge showing furthest completed step
+    // Build localisation — manual (from Firebase field) takes priority, then auto-tracker
     var locLabel = '—';
     var locClass = 'loc-none';
-    if(loc.inspFinale){ locLabel = 'Insp. finale'; locClass = 'loc-inspfinale'; }
+    if(e.localisation){
+      // Manual localisation set by user
+      locLabel = e.localisation;
+      if(locLabel === 'Magasin') locClass = 'loc-magasin';
+      else if(locLabel === 'Atelier') locClass = 'loc-atelier';
+      else if(locLabel === 'Couture') locClass = 'loc-couture';
+      else if(locLabel === 'Insp. finale') locClass = 'loc-inspfinale';
+    } else if(loc.inspFinale){ locLabel = 'Insp. finale'; locClass = 'loc-inspfinale'; }
     else if(loc.couture){ locLabel = 'Couture'; locClass = 'loc-couture'; }
     else if(loc.atelier){ locLabel = 'Atelier'; locClass = 'loc-atelier'; }
     else if(loc.magasin){ locLabel = 'Magasin'; locClass = 'loc-magasin'; }
@@ -737,6 +755,7 @@ function openAddModal(){
   document.getElementById('inputClient').value = '';
   document.getElementById('clientAutocomplete').classList.remove('active');
   document.getElementById('inputRaison').value = '';
+  document.getElementById('inputLocalisation').value = '';
   document.getElementById('inputResponsable').value = '';
   document.getElementById('inputDestinataire').value = '';
   document.getElementById('inputNote').value = '';
@@ -754,6 +773,7 @@ function editEntry(id){
   document.getElementById('inputClient').value = e.client || '';
   document.getElementById('clientAutocomplete').classList.remove('active');
   document.getElementById('inputRaison').value = e.raison || '';
+  document.getElementById('inputLocalisation').value = e.localisation || '';
   document.getElementById('inputResponsable').value = e.responsable || '';
   document.getElementById('inputDestinataire').value = e.destinataire || '';
   document.getElementById('inputNote').value = e.note || '';
@@ -906,6 +926,7 @@ function saveEntry(){
   var numero = document.getElementById('inputNumero').value.trim();
   var client = document.getElementById('inputClient').value.trim();
   var raison = document.getElementById('inputRaison').value;
+  var localisation = document.getElementById('inputLocalisation').value || '';
   var responsable = document.getElementById('inputResponsable').value;
   var destinataire = document.getElementById('inputDestinataire').value || '';
   var note = document.getElementById('inputNote').value.trim();
@@ -922,6 +943,7 @@ function saveEntry(){
     numero: numero,
     client: client,
     raison: raison,
+    localisation: localisation,
     responsable: responsable,
     destinataire: destinataire,
     note: note,
