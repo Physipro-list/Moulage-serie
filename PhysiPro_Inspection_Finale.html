@@ -1091,6 +1091,7 @@ function addBon(){
   }
   save(data);renderTable();
   checkSerieForRow(targetIdx,bon);
+  _checkJobsAttente(bon);
 }
 
 /* ═══ SERIE+ MODAL (Emballage) ═══ */
@@ -1588,6 +1589,77 @@ document.addEventListener('DOMContentLoaded',function(){
 
 /* ═══ PChat STUB ═══ */
 var PChat=PChat||(function(){function n(){}return{open:n,close:n,openContactModal:function(){toast('💬 Chat: charger PhysiPro_Nav.js','info');},closeContactModal:n,toggleDept:n,openCompose:n,closeCompose:n,replyTo:n,send:n,deleteMsg:n,editMsg:n,resetConvo:n,attachImage:n,clearImage:n,handlePaste:n,fmt:n,fmtSize:n,fmtColor:n,openLightbox:n,closeLightbox:n,toggleNotifPopup:n,closeNotifPopup:n,markAllRead:n,clearAllNotifs:n,_markCrossNotifRead:n,startNotifListener:n};})();
+
+// ═══ DÉTECTION JOBS EN ATTENTE ═══
+// Quand un bon est ajouté dans Inspection Finale, vérifier s'il existe dans jobsEnAttente
+// Si oui : retirer de Jobs Attente, retirer de ServiceClient, et dans Série+ mettre en "Emballé"
+
+function _checkJobsAttente(bon){
+  if(!bon || !fbDb) return;
+  var numStr = String(bon).trim();
+  if(!numStr) return;
+  
+  fbDb.ref('jobsEnAttente').once('value', function(snap){
+    var entries = snap.val() || {};
+    var found = false;
+    Object.keys(entries).forEach(function(jaId){
+      var e = entries[jaId];
+      if(!e || e.resolved) return;
+      if(String(e.numero||'').trim() === numStr){
+        found = true;
+        console.log('[InspFinale→JA] 🔍 Détecté #'+numStr+' dans Jobs Attente, nettoyage...');
+        
+        // 1. Marquer comme résolu dans Jobs Attente
+        fbDb.ref('jobsEnAttente/' + jaId).update({
+          resolved: true,
+          resolvedAt: Date.now(),
+          resolvedBy: fbUser ? fbUser.email : 'inspection_finale',
+          _resolvedByApp: 'inspection_finale'
+        }).then(function(){
+          console.log('[InspFinale→JA] ✅ #'+numStr+' résolu dans Jobs Attente');
+        });
+        
+        // 2. Retirer de ServiceClient (seulement si créé par Jobs Attente)
+        fbDb.ref('jobs').orderByChild('order').equalTo(numStr).once('value', function(scSnap){
+          if(!scSnap.exists()) return;
+          scSnap.forEach(function(child){
+            var job = child.val();
+            if(job && job._fromJobsAttente){
+              fbDb.ref('jobs/' + child.key).remove().then(function(){
+                console.log('[InspFinale→SC] 🗑️ Job #'+numStr+' retiré de ServiceClient');
+              });
+            }
+          });
+        });
+        
+        // 3. Dans Série+ : mettre en "Emballé" puisque détecté en Inspection Finale
+        fbDb.ref('serieCommandes').once('value', function(serieSnap){
+          var cards = serieSnap.val() || {};
+          for(var cid in cards){
+            var c = cards[cid];
+            if(!c) continue;
+            var o = String(c.order||'').trim();
+            var p = String(c.numeroPO||c.po||'').trim();
+            var oStrip = o.replace(/^0+/,'');
+            var nStrip = numStr.replace(/^0+/,'');
+            if(o === numStr || p === numStr || oStrip === nStrip){
+              var updates = {};
+              updates['serieCommandes/' + cid + '/_manualStatus'] = 'emballe';
+              updates['serieCommandes/' + cid + '/_fromJobsAttente'] = null;
+              updates['serieCommandes/' + cid + '/_jaResolvedAt'] = new Date().toISOString();
+              updates['serieCommandes/' + cid + '/_jaResolvedBy'] = 'inspection_finale';
+              fbDb.ref().update(updates).then(function(){
+                console.log('[InspFinale→Série] ✅ Carte #'+numStr+' mise en "Emballé"');
+              });
+              break;
+            }
+          }
+        });
+      }
+    });
+    if(found) toast('📋 #'+numStr+' retiré des Jobs en attente','ok');
+  });
+}
 </script>
 <script src="PhysiPro_Nav.js"></script>
 </body>

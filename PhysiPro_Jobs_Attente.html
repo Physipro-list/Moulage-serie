@@ -613,6 +613,143 @@ function closeModal(){
   _editingId = null;
 }
 
+// ═══ ÉCRITURE CROISÉE — PROPAGATION VERS SERVICE CLIENT & SÉRIE+ ═══
+
+// Clients connus dans Série+ (onglets existants)
+var SERIE_KNOWN_CLIENTS = ['vermeiren','france','hme','c1south','cubro'];
+
+function _detectSerieClient(clientName){
+  if(!clientName) return null;
+  var cl = clientName.toLowerCase().replace(/[^a-z0-9]/g,'');
+  for(var i=0;i<SERIE_KNOWN_CLIENTS.length;i++){
+    if(cl.indexOf(SERIE_KNOWN_CLIENTS[i])===0 || SERIE_KNOWN_CLIENTS[i].indexOf(cl)===0) return clientName;
+  }
+  // Match partiel : "Vermeiren Chili" → détecte "vermeiren"
+  for(var j=0;j<SERIE_KNOWN_CLIENTS.length;j++){
+    if(cl.indexOf(SERIE_KNOWN_CLIENTS[j])>=0) return clientName;
+  }
+  return null;
+}
+
+function _propagateToServiceClient(numero, client, responsable, note, raison){
+  // Vérifier si un job avec ce numéro existe déjà dans ServiceClient
+  db.ref('jobs').orderByChild('order').equalTo(numero).once('value', function(snap){
+    if(snap.exists()){
+      console.log('[JobsAttente→SC] Job #'+numero+' existe déjà dans ServiceClient, skip');
+      return;
+    }
+    var scId = 'job_ja_' + Date.now();
+    var scData = {
+      order: numero,
+      client: client,
+      assignee: responsable || 'Jacynthe',
+      numeroPO: '',
+      representant: '',
+      dateRecue: new Date().toISOString().split('T')[0],
+      dateLivraison: '',
+      createdBy: currentUser.email || '',
+      createdByName: formatUserName(currentUser.email) || '',
+      createdAt: new Date().toISOString(),
+      _fromJobsAttente: true,
+      _jaRaison: raison || '',
+      _jaNote: note || '',
+      _appVersion: 1,
+      _lastModifiedBy: currentUser.email || '',
+      _lastModifiedAt: new Date().toISOString()
+    };
+    db.ref('jobs/' + scId).set(scData).then(function(){
+      console.log('[JobsAttente→SC] ✅ Job #'+numero+' créé dans ServiceClient:', scId);
+    }).catch(function(err){
+      console.error('[JobsAttente→SC] ❌ Erreur:', err.message);
+    });
+  });
+}
+
+function _propagateToSerie(numero, client, note, raison){
+  var serieClient = _detectSerieClient(client);
+  if(!serieClient){
+    console.log('[JobsAttente→Série] Client "'+client+'" ne correspond à aucun onglet Série+, skip');
+    return;
+  }
+  // Vérifier si une carte avec ce numéro existe déjà dans Série+
+  db.ref('serieCommandes').once('value', function(snap){
+    var existing = snap.val() || {};
+    for(var cid in existing){
+      var c = existing[cid];
+      if(!c) continue;
+      var o = String(c.order||'').trim();
+      var p = String(c.numeroPO||c.po||'').trim();
+      if(o === numero || p === numero){
+        console.log('[JobsAttente→Série] Carte #'+numero+' existe déjà dans Série+, mise en attente');
+        // Mettre la carte existante en statut "attente"
+        db.ref('serieCommandes/' + cid + '/_manualStatus').set('attente').then(function(){
+          console.log('[JobsAttente→Série] ✅ Carte existante mise en attente');
+        });
+        return;
+      }
+    }
+    // Créer une nouvelle carte dans Série+
+    var cardId = 'ja_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+    var cardData = {
+      id: cardId,
+      client: serieClient,
+      name: serieClient,
+      order: numero,
+      po: '',
+      numeroPO: '',
+      soumission: '',
+      dateRecue: new Date().toISOString().split('T')[0],
+      dateLivraison: '',
+      notes: '',
+      isBO: true,
+      raisonBO: raison || '',
+      items: [],
+      materiaux: {},
+      _manualStatus: 'attente',
+      _fromJobsAttente: true,
+      _jaNote: note || '',
+      createdAt: new Date().toISOString(),
+      createdBy: formatUserName(currentUser.email) || 'Jobs Attente'
+    };
+    db.ref('serieCommandes/' + cardId).set(cardData).then(function(){
+      console.log('[JobsAttente→Série] ✅ Carte #'+numero+' créée dans Série+ (client: '+serieClient+')');
+    }).catch(function(err){
+      console.error('[JobsAttente→Série] ❌ Erreur:', err.message);
+    });
+  });
+}
+
+function _removeFromServiceClient(numero){
+  db.ref('jobs').orderByChild('order').equalTo(numero).once('value', function(snap){
+    if(!snap.exists()) return;
+    snap.forEach(function(child){
+      var job = child.val();
+      if(job && job._fromJobsAttente){
+        db.ref('jobs/' + child.key).remove().then(function(){
+          console.log('[JobsAttente→SC] 🗑️ Job #'+numero+' retiré de ServiceClient');
+        });
+      }
+    });
+  });
+}
+
+function _removeFromSerie(numero){
+  db.ref('serieCommandes').once('value', function(snap){
+    var existing = snap.val() || {};
+    for(var cid in existing){
+      var c = existing[cid];
+      if(!c || !c._fromJobsAttente) continue;
+      var o = String(c.order||'').trim();
+      if(o === numero){
+        db.ref('serieCommandes/' + cid).remove().then(function(){
+          console.log('[JobsAttente→Série] 🗑️ Carte #'+numero+' retirée de Série+');
+        });
+        return;
+      }
+    }
+  });
+}
+
 function saveEntry(){
   var numero = document.getElementById('inputNumero').value.trim();
   var client = document.getElementById('inputClient').value.trim();
@@ -649,6 +786,9 @@ function saveEntry(){
     data.createdAt = Date.now();
     db.ref(FB_PATH).push(data).then(function(ref){
       console.log('[JobsAttente] Entry created:', ref.key, data);
+      // ═══ PROPAGATION CROISÉE ═══
+      _propagateToServiceClient(numero, client, responsable, note, raison);
+      _propagateToSerie(numero, client, note, raison);
       closeModal();
       loadClientsFromFirebase();
     }).catch(function(err){
@@ -660,10 +800,18 @@ function saveEntry(){
 
 function resolveEntry(id){
   if(!confirm('Marquer cette commande comme réglée?')) return;
+  var entry = _allEntries[id];
+  var numero = entry ? entry.numero : '';
   db.ref(FB_PATH + '/' + id).update({
     resolved: true,
     resolvedAt: Date.now(),
     resolvedBy: currentUser.email
+  }).then(function(){
+    // Retirer aussi de ServiceClient et Série+ quand résolu manuellement
+    if(numero){
+      _removeFromServiceClient(numero);
+      _removeFromSerie(numero);
+    }
   }).catch(function(err){
     alert('Erreur: ' + err.message);
   });
@@ -671,7 +819,15 @@ function resolveEntry(id){
 
 function deleteEntry(id){
   if(!confirm('Supprimer cette commande en attente?')) return;
-  db.ref(FB_PATH + '/' + id).remove().catch(function(err){
+  var entry = _allEntries[id];
+  var numero = entry ? entry.numero : '';
+  db.ref(FB_PATH + '/' + id).remove().then(function(){
+    // Retirer aussi de ServiceClient et Série+ quand supprimé
+    if(numero){
+      _removeFromServiceClient(numero);
+      _removeFromSerie(numero);
+    }
+  }).catch(function(err){
     alert('Erreur: ' + err.message);
   });
 }

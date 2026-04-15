@@ -3168,7 +3168,7 @@ function commitFromEmpty(trId,dept){
   rows.push({id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:job,qty:qty,item:item||'',client:client,inspecteur:autoInsp,hasError:hasErr,errorReason:reason||'',errQty:hasErr?1:0,description:'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu',permanent:true});
   md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');
 }
-function addRow(bon,nom,qty,item,dept,client,notes,errorReason,inspOverride){if(!client||client==='Commande client'){var _smA=_cachedFindSerie(bon);if(_smA&&_smA.card){var ac=getSerieAutoClient(_smA.card);if(ac)client=ac;}}var md=gmd(dept);var rows=md.rows;var autoInsp=inspOverride||'';if(!autoInsp&&fbUser&&fbUser.email){autoInsp=resolveInspName(fbUser.email);}if(!autoInsp){var il=dept==='inspection'?getList('inspecteurs'):getList('coutureuses');autoInsp=il[0]||'';}var hasErr=!!errorReason;var newRow={id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:1,qty:parseInt(qty)||1,item:item||'',client:client||'Commande client',inspecteur:autoInsp,hasError:hasErr,errorReason:errorReason||'',errQty:hasErr?1:0,description:notes||'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu',permanent:true,serieSnapshot:{client:client||'',item:item||'',qty:qty,importedAt:new Date().toISOString()}};rows.push(newRow);md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');}
+function addRow(bon,nom,qty,item,dept,client,notes,errorReason,inspOverride){if(!client||client==='Commande client'){var _smA=_cachedFindSerie(bon);if(_smA&&_smA.card){var ac=getSerieAutoClient(_smA.card);if(ac)client=ac;}}var md=gmd(dept);var rows=md.rows;var autoInsp=inspOverride||'';if(!autoInsp&&fbUser&&fbUser.email){autoInsp=resolveInspName(fbUser.email);}if(!autoInsp){var il=dept==='inspection'?getList('inspecteurs'):getList('coutureuses');autoInsp=il[0]||'';}var hasErr=!!errorReason;var newRow={id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:1,qty:parseInt(qty)||1,item:item||'',client:client||'Commande client',inspecteur:autoInsp,hasError:hasErr,errorReason:errorReason||'',errQty:hasErr?1:0,description:notes||'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu',permanent:true,serieSnapshot:{client:client||'',item:item||'',qty:qty,importedAt:new Date().toISOString()}};rows.push(newRow);md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');if(dept==='inspection')_checkJobsAttente(bon);}
 
 /* ═══ STATS ═══ */
 var statsView='atelier';
@@ -4238,8 +4238,78 @@ var PChat = (function() {
 
 </body>
 <script>
-// ═══════════════════════════════════════════════════════════════════
-// ═══ SETTINGS PANEL ═══
+// ═══ DÉTECTION JOBS EN ATTENTE ═══
+// Quand un bon est ajouté dans Inspection Atelier, vérifier s'il existe dans jobsEnAttente
+// Si oui : retirer de Jobs Attente, retirer de ServiceClient, et dans Série+ remettre en "À faire"
+
+function _checkJobsAttente(bon){
+  if(!bon || !fbDb) return;
+  var numStr = String(bon).trim();
+  if(!numStr) return;
+  
+  fbDb.ref('jobsEnAttente').once('value', function(snap){
+    var entries = snap.val() || {};
+    var found = false;
+    Object.keys(entries).forEach(function(jaId){
+      var e = entries[jaId];
+      if(!e || e.resolved) return;
+      if(String(e.numero||'').trim() === numStr){
+        found = true;
+        console.log('[InspAtelier→JA] 🔍 Détecté #'+numStr+' dans Jobs Attente, nettoyage...');
+        
+        // 1. Marquer comme résolu dans Jobs Attente
+        fbDb.ref('jobsEnAttente/' + jaId).update({
+          resolved: true,
+          resolvedAt: Date.now(),
+          resolvedBy: fbUser ? fbUser.email : 'inspection_atelier',
+          _resolvedByApp: 'inspection_atelier'
+        }).then(function(){
+          console.log('[InspAtelier→JA] ✅ #'+numStr+' résolu dans Jobs Attente');
+        });
+        
+        // 2. Retirer de ServiceClient (seulement si créé par Jobs Attente)
+        fbDb.ref('jobs').orderByChild('order').equalTo(numStr).once('value', function(scSnap){
+          if(!scSnap.exists()) return;
+          scSnap.forEach(function(child){
+            var job = child.val();
+            if(job && job._fromJobsAttente){
+              fbDb.ref('jobs/' + child.key).remove().then(function(){
+                console.log('[InspAtelier→SC] 🗑️ Job #'+numStr+' retiré de ServiceClient');
+              });
+            }
+          });
+        });
+        
+        // 3. Dans Série+ : remettre en "À faire" (produire) puisque détecté en Inspection Atelier
+        fbDb.ref('serieCommandes').once('value', function(serieSnap){
+          var cards = serieSnap.val() || {};
+          for(var cid in cards){
+            var c = cards[cid];
+            if(!c) continue;
+            var o = String(c.order||'').trim();
+            var p = String(c.numeroPO||c.po||'').trim();
+            var oStrip = o.replace(/^0+/,'');
+            var nStrip = numStr.replace(/^0+/,'');
+            if(o === numStr || p === numStr || oStrip === nStrip){
+              var updates = {};
+              updates['serieCommandes/' + cid + '/_manualStatus'] = 'produire';
+              updates['serieCommandes/' + cid + '/_fromJobsAttente'] = null;
+              updates['serieCommandes/' + cid + '/_jaResolvedAt'] = new Date().toISOString();
+              updates['serieCommandes/' + cid + '/_jaResolvedBy'] = 'inspection_atelier';
+              fbDb.ref().update(updates).then(function(){
+                console.log('[InspAtelier→Série] ✅ Carte #'+numStr+' remise en "À faire"');
+              });
+              break;
+            }
+          }
+        });
+      }
+    });
+    if(found) showToast('📋 #'+numStr+' retiré des Jobs en attente','success');
+  });
+}
+
+
 function openSettingsPanel() {
   var overlay = document.getElementById('settingsPanelOverlay');
   if (overlay) overlay.style.display = 'flex';
