@@ -578,10 +578,24 @@ function save(data){
 function gmd(){var data=load();var el=document.getElementById('insp-month');var m=el?el.value:gmk();if(!data[m])data[m]=[];return{data:data,month:m,rows:data[m]};}
 
 /* ═══ ENSURE EMPTY ROWS ═══ */
+/* Garantit toujours 20 lignes vides APRÈS la dernière ligne remplie */
 function ensureRows(md){
-  var rows=md.rows;var entryCount=0;
-  for(var i=0;i<rows.length;i++){if(rows[i].type==='entry')entryCount++;}
-  var need=EMPTY_ROWS-entryCount;if(need<=0)return false;
+  var rows=md.rows;
+  // Trouver l'index de la dernière ligne remplie (entry avec au moins un champ)
+  var lastFilledIdx=-1;
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i];
+    if(r.type==='date'){lastFilledIdx=i;continue;}
+    if(r.type==='entry'&&(r.cmd||r.po||r.client||r.desc||r.item||r.qty||r.noboite||r.comment)){lastFilledIdx=i;}
+  }
+  // Compter les lignes vides existantes après lastFilledIdx
+  var emptyAfter=0;
+  for(var k=lastFilledIdx+1;k<rows.length;k++){
+    var rr=rows[k];
+    if(rr.type==='entry'&&!rr.cmd&&!rr.po&&!rr.client&&!rr.desc&&!rr.item&&!rr.qty&&!rr.noboite&&!rr.comment){emptyAfter++;}
+  }
+  var need=EMPTY_ROWS-emptyAfter;
+  if(need<=0)return false;
   for(var j=0;j<need;j++){
     rows.push({id:'e-'+Date.now()+'-'+j+'-'+Math.random().toString(36).substr(2,4),type:'entry',cmd:'',po:'',client:'',desc:'',item:'',qty:'',noboite:'',comment:''});
   }
@@ -785,20 +799,10 @@ function listenSerieCards(){
       if(f._typeManuel!==undefined&&f._typeManuel!==l._typeManuel){l._typeManuel=f._typeManuel;changed=true;}
       if(f.targetColumn&&f.targetColumn!==l.targetColumn){l.targetColumn=f.targetColumn;changed=true;}
       if(f._manualStatus&&f._manualStatus!==l._manualStatus){l._manualStatus=f._manualStatus;changed=true;}
+      // ITEMS: prendre Firebase tel quel (source de vérité)
       if(f.items){
-        if(!l.items)l.items=[];
-        f.items.forEach(function(fi,ii){
-          if(!l.items[ii]){l.items[ii]=fi;changed=true;return;}
-          if(fi.name&&fi.name!==l.items[ii].name){l.items[ii].name=fi.name;changed=true;}
-          if(!l.items[ii].grandeurs)l.items[ii].grandeurs=[];
-          (fi.grandeurs||[]).forEach(function(fg,gi){
-            if(!l.items[ii].grandeurs[gi]){l.items[ii].grandeurs[gi]=fg;changed=true;return;}
-            var lg=l.items[ii].grandeurs[gi];
-            if(fg.qty&&fg.qty!==lg.qty){lg.qty=fg.qty;changed=true;}
-            if(fg.name&&fg.name!==lg.name){lg.name=fg.name;changed=true;}
-            if(fg._status&&fg._status!==lg._status){lg._status=fg._status;changed=true;}
-          });
-        });
+        l.items=JSON.parse(JSON.stringify(f.items));
+        changed=true;
       }
     });
     if(changed){safeLSSet(SK,JSON.stringify(local));_serieCache={};renderTable();}
@@ -956,6 +960,9 @@ function uf(idx,field,val){
   var data=load();if(!data[m])data[m]=[];
   if(!data[m][idx]||data[m][idx].type!=='entry')return;
   data[m][idx][field]=val;
+  // Garantir 20 lignes vides après chaque modification
+  var md={data:data,month:m,rows:data[m]};
+  ensureRows(md);
   save(data);
 }
 
@@ -1089,6 +1096,9 @@ function addBon(){
     var newRow={id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),type:'entry',cmd:bon,po:'',client:'',desc:'',item:'',qty:'',noboite:'',comment:'',serieLinked:false};
     data[m].splice(insertAt,0,newRow);targetIdx=insertAt;
   }
+  // Garantir 20 lignes vides après la dernière remplie
+  var md={data:data,month:m,rows:data[m]};
+  ensureRows(md);
   save(data);renderTable();
   checkSerieForRow(targetIdx,bon);
   _checkJobsAttente(bon);
@@ -1225,7 +1235,8 @@ function reopenSerie(bon,rowIdx){
         if(f.client)l.client=f.client;if(f.order)l.order=f.order;
         if(f.numeroPO)l.numeroPO=f.numeroPO;if(f.targetColumn)l.targetColumn=f.targetColumn;
         if(f._typeManuel!==undefined)l._typeManuel=f._typeManuel;
-        if(f.items){if(!l.items)l.items=[];f.items.forEach(function(fi,ii){if(!l.items[ii]){l.items[ii]=fi;return;}if(fi.name)l.items[ii].name=fi.name;if(!l.items[ii].grandeurs)l.items[ii].grandeurs=[];(fi.grandeurs||[]).forEach(function(fg,gi){if(!l.items[ii].grandeurs[gi]){l.items[ii].grandeurs[gi]=fg;return;}var lg=l.items[ii].grandeurs[gi];if(fg.qty)lg.qty=fg.qty;if(fg.name)lg.name=fg.name;if(fg._status)lg._status=fg._status;});});}
+        // ITEMS: prendre Firebase tel quel (pas de merge partiel)
+        if(f.items) l.items=JSON.parse(JSON.stringify(f.items));
       });
       safeLSSet(SK,JSON.stringify(local));_serieCache={};
       var found=findSerie(bon);
@@ -1240,7 +1251,16 @@ function checkSerieForRow(rowIdx,bon){
   if(fbDb){
     fbDb.ref('serieCommandes').once('value').then(function(snap){
       var fb=snap.val()||{};var local=getSerieCards();
-      Object.keys(fb).forEach(function(cid){if(!local[cid]){local[cid]=fb[cid];return;}var l=local[cid],f=fb[cid];if(f.client)l.client=f.client;if(f.order)l.order=f.order;if(f.numeroPO)l.numeroPO=f.numeroPO;if(f.targetColumn)l.targetColumn=f.targetColumn;if(f._typeManuel!==undefined)l._typeManuel=f._typeManuel;if(f.items){if(!l.items)l.items=[];f.items.forEach(function(fi,ii){if(!l.items[ii]){l.items[ii]=fi;return;}if(fi.name)l.items[ii].name=fi.name;if(!l.items[ii].grandeurs)l.items[ii].grandeurs=[];(fi.grandeurs||[]).forEach(function(fg,gi){if(!l.items[ii].grandeurs[gi]){l.items[ii].grandeurs[gi]=fg;return;}var lg=l.items[ii].grandeurs[gi];if(fg.qty)lg.qty=fg.qty;if(fg.name)lg.name=fg.name;if(fg._status)lg._status=fg._status;});});}});
+      // Écraser les items locaux avec Firebase (source de vérité pour les items)
+      Object.keys(fb).forEach(function(cid){
+        if(!local[cid]){local[cid]=fb[cid];return;}
+        var l=local[cid],f=fb[cid];
+        if(f.client)l.client=f.client;if(f.order)l.order=f.order;
+        if(f.numeroPO)l.numeroPO=f.numeroPO;if(f.targetColumn)l.targetColumn=f.targetColumn;
+        if(f._typeManuel!==undefined)l._typeManuel=f._typeManuel;
+        // ITEMS: prendre Firebase tel quel (pas de merge partiel)
+        if(f.items) l.items=JSON.parse(JSON.stringify(f.items));
+      });
       safeLSSet(SK,JSON.stringify(local));_serieCache={};
       var found=findSerie(bon);
       if(found){window._serieTargetRow=rowIdx;openSerieModal(bon,found);}
