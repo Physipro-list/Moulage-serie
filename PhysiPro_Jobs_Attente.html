@@ -448,7 +448,7 @@ auth.onAuthStateChanged(function(user){
 });
 
 // ═══ LOCALISATION TRACKER ═══
-// Scanne inspectionData, inspectionCoutureData/productionCouture, inspectionFinaleData
+// Scanne serieCommandes/jobs (Magasin), inspectionData, inspectionCoutureData, inspectionFinaleData
 // pour déterminer où en est chaque commande
 
 function _initLocTracker(){
@@ -458,6 +458,34 @@ function _initLocTracker(){
   var prevMonthKey = prevDate.getFullYear() + '-' + String(prevDate.getMonth()+1).padStart(2,'0');
 
   function _normBon(b){ var n=String(b||'').trim().replace(/^0+/,''); if(n.length>6) n=n.slice(-6); return n; }
+
+  // Magasin : si la commande existe dans serieCommandes ou jobs → magasin fait
+  function _processMagasin(){
+    // Scan serieCommandes
+    db.ref('serieCommandes').once('value', function(snap){
+      var cards = snap.val() || {};
+      Object.keys(cards).forEach(function(cid){
+        var c = cards[cid];
+        if(!c) return;
+        var o = _normBon(c.order);
+        var p = _normBon(c.numeroPO || c.po);
+        if(o){ if(!_locTracker[o]) _locTracker[o] = {}; _locTracker[o].magasin = true; }
+        if(p && p !== o){ if(!_locTracker[p]) _locTracker[p] = {}; _locTracker[p].magasin = true; }
+      });
+      renderTable();
+    });
+    // Scan jobs (ServiceClient)
+    db.ref('jobs').once('value', function(snap){
+      var jobs = snap.val() || {};
+      Object.keys(jobs).forEach(function(jid){
+        var j = jobs[jid];
+        if(!j) return;
+        var o = _normBon(j.order);
+        if(o){ if(!_locTracker[o]) _locTracker[o] = {}; _locTracker[o].magasin = true; }
+      });
+      renderTable();
+    });
+  }
 
   function _processInspection(snapData){
     var arr = Array.isArray(snapData) ? snapData : Object.values(snapData||{});
@@ -494,6 +522,9 @@ function _initLocTracker(){
       }
     });
   }
+
+  // Magasin (from serieCommandes + jobs)
+  _processMagasin();
 
   // Load current + previous month for each department
   var months = [monthKey, prevMonthKey];
@@ -647,6 +678,7 @@ function renderTable(){
 
     // Build localisation steps
     var steps = [
+      {key:'magasin', label:'Magasin', done:!!loc.magasin},
       {key:'atelier', label:'Atelier', done:!!loc.atelier},
       {key:'couture', label:'Couture', done:!!loc.couture},
       {key:'inspFinale', label:'Insp. finale', done:!!loc.inspFinale}
