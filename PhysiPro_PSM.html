@@ -4592,9 +4592,9 @@ if(localStorage.getItem('physipro_last_email')){
                   <div id="pdfInlineFrame" style="display:none;position:absolute;inset:0;z-index:1;"></div>
                   <div id="pdfInlineNav" style="display:none;position:absolute;bottom:0;left:0;right:0;z-index:3;padding:3px 8px;background:rgba(0,0,0,0.7);gap:4px;flex-wrap:wrap;align-items:center;justify-content:center;"></div>
                 </div>
-                <div style="display:flex;gap:4px;padding:4px 6px;background:rgba(15,23,42,0.9);border-top:1px solid rgba(255,255,255,0.1);flex-shrink:0;align-items:center;justify-content:center;">
-                  <button id="btnPdfPrint" onclick="printCardPdfFromInline()" style="padding:5px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:600;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:10px;">🖨️ Imprimer</button>
-                  <button id="btnPdfAgrandir" onclick="openDevisViewerFromInline()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:5px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:600;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:10px;">🔍 Agrandir</button>
+                <div style="display:flex;gap:6px;padding:6px 8px;background:linear-gradient(to bottom, #04152c, #1a3a5c);border-top:2px solid rgba(59,130,246,0.4);flex-shrink:0;align-items:center;justify-content:center;min-height:34px;">
+                  <button id="btnPdfPrint" onclick="printCardPdfFromInline()" style="padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:11px;letter-spacing:.3px;">🖨️ Imprimer</button>
+                  <button id="btnPdfAgrandir" onclick="openDevisViewerFromInline()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:11px;letter-spacing:.3px;">🔍 Agrandir</button>
                   <input type="file" id="psmFilePickerInput" accept="image/*,application/pdf" multiple style="display:none;" onchange="handleFilePickerFiles(this)">
                 </div>
               </div>
@@ -11563,35 +11563,22 @@ function archivePsmThenDelete(cardId) {
   }
   renderCards();
   
-  // 5. Save archive + delete card from Firebase (atomic)
+  // 5. Delete card from Firebase (plus d'archivage — géré par BackupStation sur OneDrive)
   var updates = {};
   updates['psm/' + cardId] = null; // CRITICAL: explicitly delete card from Firebase
-  updates['archives/psm/' + month + '/' + cardId] = archiveData;
-  updates['archiveLogs/archLog_' + Date.now() + '_psm'] = {
-    module: 'psm',
-    cardId: cardId,
-    name: card.name || '',
-    order: card.order || '',
-    filename: filename,
-    archivedAt: new Date().toISOString(),
-    archivedBy: currentUser ? currentUser.email : 'unknown'
-  };
   
   _pendingSave = true;
   _skipSyncUntil = Date.now() + 2000;
   db.ref().update(updates).then(function() {
-    
     _pendingSave = false;
-    // Remove from _deletedCardIds since we already handled it
     _deletedCardIds = _deletedCardIds.filter(function(id) { return id !== cardId; });
-    showToast('📦 PSM archivé + supprimé', 'success');
-    console.log('PSM: card archived and deleted:', cardId);
+    showToast('📦 PSM supprimé (fichier archive téléchargé)', 'success');
+    console.log('PSM: card deleted:', cardId);
   }).catch(function(e) {
     _skipSyncUntil = 0;
     _pendingSave = false;
-    console.error('PSM archive error:', e);
-    showToast('⚠️ Archive Firebase échouée, fichier téléchargé', 'error');
-    // Fallback: try to sync remaining data
+    console.error('PSM delete error:', e);
+    showToast('⚠️ Erreur suppression', 'error');
     saveToFirebase();
   });
 }
@@ -15517,13 +15504,13 @@ function compressImage(dataUrl) {
     img.onload = function() {
       var canvas = document.createElement('canvas');
       var w = img.width, h = img.height;
-      if (w > 800) { h = (h * 800) / w; w = 800; }
-      if (h > 600) { w = (w * 600) / h; h = 600; }
+      if (w > 700) { h = (h * 700) / w; w = 700; }
+      if (h > 500) { w = (w * 500) / h; h = 500; }
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      var quality = 0.6;
+      var quality = 0.5;
       var result = canvas.toDataURL('image/jpeg', quality);
-      while (result.length > 100000 && quality > 0.1) { quality -= 0.1; result = canvas.toDataURL('image/jpeg', quality); }
+      while (result.length > 60000 && quality > 0.1) { quality -= 0.1; result = canvas.toDataURL('image/jpeg', quality); }
       resolve(result);
     };
     img.src = dataUrl;
@@ -15539,20 +15526,10 @@ function showToast(msg, type = 'info') {
   setTimeout(() => toast.remove(), 3000);
 }
 
-// ═══ BACKUP ═══
-function psmCreateBackup() {
-  if (!db) return;
-  var backup = { timestamp: new Date().toISOString(), psm: psmData };
-  var backupKey = 'backup_' + new Date().toISOString().replace(/[:.]/g, '-');
-  db.ref('psmBackups/' + backupKey).set(backup).then(function() {
-    console.log('💾 PSM backup créé:', backupKey);
-  }).catch(function(err) { console.error('❌ PSM backup error:', err.message); });
-}
-setInterval(function() { psmCreateBackup(); }, 30 * 60 * 1000);
+// ═══ BACKUP: géré par BackupStation uniquement ═══
 window.addEventListener('beforeunload', function() {
   // _emergencySave handles: cancel timers, flush DOM, direct Firebase write
   window._emergencySave();
-  psmCreateBackup();
 });
 // ===== PCHAT — Questionnement par carte PSM =====
 // ═══════════════════════════════════════════════════════════
