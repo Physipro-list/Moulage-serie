@@ -87,6 +87,16 @@ tbody tr:last-child td{border-bottom:none;}
 /* Date */
 .job-date{font-size:11px;color:rgba(255,255,255,.4);white-space:nowrap;}
 
+/* Localisation steps */
+.loc-steps{display:flex;gap:2px;align-items:center;}
+.loc-step{display:flex;flex-direction:column;align-items:center;gap:1px;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.2);min-width:42px;transition:all .2s;}
+.loc-step.done{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.3);}
+.loc-step.next{background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.3);}
+.loc-step-icon{font-size:10px;line-height:1;}
+.loc-step-label{font-size:7px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,.35);letter-spacing:.2px;text-align:center;line-height:1.1;}
+.loc-step.done .loc-step-label{color:#4ade80;}
+.loc-step.next .loc-step-label{color:#fbbf24;}
+
 /* Actions */
 .action-btn{padding:4px 10px;border-radius:6px;border:none;cursor:pointer;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;transition:all .2s;margin-right:4px;}
 .action-btn.resolve{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.25);}
@@ -241,9 +251,9 @@ textarea.form-input{min-height:70px;resize:vertical;}
           <th style="width:120px;">No. Job</th>
           <th style="width:160px;">Client</th>
           <th style="width:170px;">Raison</th>
-          <th>Note</th>
+          <th style="width:210px;">Localisation</th>
           <th style="width:130px;">Responsable</th>
-          <th style="width:100px;">Date</th>
+          <th>Note</th>
           <th style="width:140px;">Actions</th>
         </tr>
       </thead>
@@ -367,6 +377,7 @@ var RAISON_CLASS = {
 // ═══ FIREBASE PATH ═══
 var FB_PATH = 'jobsEnAttente';
 var _clientList = []; // loaded from Firebase jobs
+var _locTracker = {}; // localisation tracker: _locTracker[bonNum] = {atelier:true, couture:true, inspFinale:true}
 
 // ═══ AUTH ═══
 async function handleLogin(e){
@@ -431,7 +442,84 @@ auth.onAuthStateChanged(function(user){
     console.error('[JobsAttente] Firebase listener error:', err.message);
     alert('Erreur Firebase: ' + err.message + '\n\nVérifiez les règles de sécurité Firebase pour "jobsEnAttente".');
   });
+
+  // Init localisation tracker
+  _initLocTracker();
 });
+
+// ═══ LOCALISATION TRACKER ═══
+// Scanne inspectionData, inspectionCoutureData/productionCouture, inspectionFinaleData
+// pour déterminer où en est chaque commande
+
+function _initLocTracker(){
+  var now = new Date();
+  var monthKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  var prevDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  var prevMonthKey = prevDate.getFullYear() + '-' + String(prevDate.getMonth()+1).padStart(2,'0');
+
+  function _normBon(b){ var n=String(b||'').trim().replace(/^0+/,''); if(n.length>6) n=n.slice(-6); return n; }
+
+  function _processInspection(snapData){
+    var arr = Array.isArray(snapData) ? snapData : Object.values(snapData||{});
+    arr.forEach(function(row){
+      if(row && row.bon){
+        var n = _normBon(row.bon);
+        if(!n) return;
+        if(!_locTracker[n]) _locTracker[n] = {};
+        _locTracker[n].atelier = true;
+      }
+    });
+  }
+
+  function _processCouture(snapData){
+    var arr = Array.isArray(snapData) ? snapData : Object.values(snapData||{});
+    arr.forEach(function(row){
+      if(row && row.bonCmd){
+        var n = _normBon(row.bonCmd);
+        if(!n) return;
+        if(!_locTracker[n]) _locTracker[n] = {};
+        _locTracker[n].couture = true;
+      }
+    });
+  }
+
+  function _processInspFinale(snapData){
+    var arr = Array.isArray(snapData) ? snapData : Object.values(snapData||{});
+    arr.forEach(function(row){
+      if(row && (row.cmd || row.bon)){
+        var n = _normBon(row.cmd || row.bon);
+        if(!n) return;
+        if(!_locTracker[n]) _locTracker[n] = {};
+        _locTracker[n].inspFinale = true;
+      }
+    });
+  }
+
+  // Load current + previous month for each department
+  var months = [monthKey, prevMonthKey];
+
+  months.forEach(function(mk){
+    // Inspection Atelier
+    db.ref('inspectionData/' + mk).once('value', function(snap){
+      _processInspection(snap.val() || {});
+      renderTable();
+    });
+
+    // Production Couture (inspectionCoutureData)
+    db.ref('inspectionCoutureData/' + mk).once('value', function(snap){
+      _processCouture(snap.val() || {});
+      renderTable();
+    });
+
+    // Inspection Finale
+    db.ref('inspectionFinaleData/' + mk).once('value', function(snap){
+      _processInspFinale(snap.val() || {});
+      renderTable();
+    });
+  });
+
+  console.log('[JobsAttente] Localisation tracker initialized');
+}
 
 function loadClientsFromFirebase(){
   db.ref('jobs').once('value', function(snap){
@@ -554,28 +642,54 @@ function renderTable(){
     var e = item.data;
     var raisonCls = RAISON_CLASS[e.raison] || 'raison-autre';
     var respName = e.responsable || '—';
-    var dateStr = '';
-    if(e.createdAt){
-      var d = new Date(e.createdAt);
-      dateStr = String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+    var num = String(e.numero||'').trim();
+    var loc = _locTracker[num] || _locTracker[num.replace(/^0+/,'')] || {};
+
+    // Build localisation steps
+    var steps = [
+      {key:'atelier', label:'Atelier', done:!!loc.atelier},
+      {key:'couture', label:'Couture', done:!!loc.couture},
+      {key:'inspFinale', label:'Insp. finale', done:!!loc.inspFinale}
+    ];
+    var nextIdx = -1;
+    for(var si=0;si<steps.length;si++){
+      if(!steps[si].done){ nextIdx=si; break; }
     }
+    var locHtml = '<div class="loc-steps">';
+    steps.forEach(function(s,idx){
+      var cls = s.done ? 'done' : (idx===nextIdx ? 'next' : '');
+      var icon = s.done ? '✅' : (idx===nextIdx ? '🟡' : '⬜');
+      locHtml += '<div class="loc-step '+cls+'"><span class="loc-step-icon">'+icon+'</span><span class="loc-step-label">'+s.label+'</span></div>';
+    });
+    locHtml += '</div>';
 
     html += '<tr>';
     html += '<td><span class="job-number">'+esc(e.numero||'—')+'</span></td>';
     html += '<td><span class="job-client">'+esc(e.client||'—')+'</span></td>';
     html += '<td><span class="raison-badge '+raisonCls+'">'+esc(e.raison||'—')+'</span></td>';
-    html += '<td><span class="job-note">'+esc(e.note||'—')+'</span></td>';
+    html += '<td>'+locHtml+'</td>';
     html += '<td><span class="responsable-name">'+esc(respName)+'</span></td>';
-    html += '<td><span class="job-date">'+dateStr+'</span></td>';
+    html += '<td><span class="job-note">'+esc(e.note||'—')+'</span></td>';
     html += '<td>';
-    html += '<button class="action-btn resolve" onclick="resolveEntry(\''+item.id+'\')" title="Marquer comme réglé">✅</button>';
-    html += '<button class="action-btn edit" onclick="editEntry(\''+item.id+'\')" title="Modifier">✏️</button>';
-    html += '<button class="action-btn delete" onclick="deleteEntry(\''+item.id+'\')" title="Supprimer">🗑️</button>';
+    html += '<button class="action-btn resolve" data-action="resolve" data-id="'+item.id+'" title="Marquer comme réglé">✅</button>';
+    html += '<button class="action-btn edit" data-action="edit" data-id="'+item.id+'" title="Modifier">✏️</button>';
+    html += '<button class="action-btn delete" data-action="delete" data-id="'+item.id+'" title="Supprimer">🗑️</button>';
     html += '</td>';
     html += '</tr>';
   });
 
   tbody.innerHTML = html;
+
+  // Attach event listeners (avoid inline onclick with apostrophe issues)
+  tbody.querySelectorAll('.action-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var action = this.getAttribute('data-action');
+      var id = this.getAttribute('data-id');
+      if(action==='resolve') resolveEntry(id);
+      else if(action==='edit') editEntry(id);
+      else if(action==='delete') deleteEntry(id);
+    });
+  });
 }
 
 // ═══ MODAL ═══
