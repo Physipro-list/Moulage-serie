@@ -1968,7 +1968,10 @@ var INSP_COLS=[
 ];
 function getDefs(dept){return INSP_COLS;}
 function getColCfg(dept){var s=localStorage.getItem('physipro_colcfg_'+dept);if(s)try{return JSON.parse(s);}catch(e){}return null;}
-function saveColCfg(dept,cfg){localStorage.setItem('physipro_colcfg_'+dept,JSON.stringify(cfg));pushColCfgToFB(dept);}
+function saveColCfg(dept,cfg){
+  try{localStorage.setItem('physipro_colcfg_'+dept,JSON.stringify(cfg));}catch(e){}
+  try{if(typeof pushColCfgToFB==='function')pushColCfgToFB(dept);}catch(e){}
+}
 function getOrderedCols(dept){
   var defs=getDefs(dept);var cfg=getColCfg(dept);
   if(!cfg)return defs.map(function(d){return{id:d.id,visible:true};});
@@ -2010,7 +2013,10 @@ function resetCols(dept){localStorage.removeItem('physipro_colcfg_'+dept);localS
 
 /* ═══ COLUMN WIDTHS (resize via colgroup) ═══ */
 function getColWidths(dept){var s=localStorage.getItem('physipro_colwidths_'+dept);if(s)try{return JSON.parse(s);}catch(e){}return {};}
-function saveColWidths(dept,w){localStorage.setItem('physipro_colwidths_'+dept,JSON.stringify(w));pushColCfgToFB(dept);}
+function saveColWidths(dept,w){
+  try{localStorage.setItem('physipro_colwidths_'+dept,JSON.stringify(w));}catch(e){}
+  try{if(typeof pushColCfgToFB==='function')pushColCfgToFB(dept);}catch(e){}
+}
 function getColPx(dept,colId){
   var saved=getColWidths(dept);
   if(saved[colId])return parseInt(saved[colId]);
@@ -2089,20 +2095,25 @@ function _onDocMove(e){
 
 function _colResizeEnd(e){
   if(!_colResize.active)return;
-  if(e&&e.clientX!==undefined){
-    var diff=e.clientX-_colResize.startX;
-    var newW=Math.max(30,_colResize.startW+diff);
-    setColWidth(_colResize.dept,_colResize.colId,newW);
-    var w=getColWidths(_colResize.dept);
-    w[_colResize.colId]=newW+'px';
-    saveColWidths(_colResize.dept,w);
+  try{
+    if(e&&e.clientX!==undefined){
+      var diff=e.clientX-_colResize.startX;
+      var newW=Math.max(30,_colResize.startW+diff);
+      setColWidth(_colResize.dept,_colResize.colId,newW);
+      var w=getColWidths(_colResize.dept);
+      w[_colResize.colId]=newW+'px';
+      saveColWidths(_colResize.dept,w);
+    }
+  }catch(err){
+    console.warn('[resize] save error:',err);
+  }finally{
+    // Le cleanup se fait TOUJOURS, même si la sauvegarde a planté
+    document.body.classList.remove('col-resizing');
+    if(_colResize.th){try{_colResize.th.style.cursor='';}catch(e){}}
+    var thead=document.getElementById('insp-thead');
+    if(thead){thead.querySelectorAll('th').forEach(function(t){try{t.style.cursor='';}catch(e){}});}
+    _colResize={active:false,dept:null,colId:null,startX:0,startW:0,th:null};
   }
-  document.body.classList.remove('col-resizing');
-  if(_colResize.th)_colResize.th.style.cursor='';
-  // Nettoyer tous les curseurs forcés qui pourraient rester sur n'importe quel th
-  var thead=document.getElementById('insp-thead');
-  if(thead){thead.querySelectorAll('th').forEach(function(t){t.style.cursor='';});}
-  _colResize={active:false,dept:null,colId:null,startX:0,startW:0,th:null};
 }
 
 function _onDocUp(e){_colResizeEnd(e);}
