@@ -4590,14 +4590,15 @@ if(localStorage.getItem('physipro_last_email')){
             <div style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;" id="leftContent">
               <div class="psm-pdf-view" id="pdfView" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
                 <div id="pdfInlineContent" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;background:#0a0f1a;position:relative;">
-                  <div id="pdfInlineEmpty" style="text-align:center;color:#64748b;font-size:11px;padding:20px;z-index:2;">📄 Ctrl+V pour coller une image</div>
+                  <div id="pdfInlineEmpty" style="text-align:center;color:#64748b;font-size:11px;padding:20px;z-index:2;">📄 Ctrl+V pour coller une image<br><span style="font-size:9px;">ou utilisez 📁 Fichier pour ajouter PDF, Word, Excel, courriel...</span></div>
                   <div id="pdfInlineFrame" style="display:none;position:absolute;inset:0;z-index:1;"></div>
                   <div id="pdfInlineNav" style="display:none;position:absolute;bottom:0;left:0;right:0;z-index:3;padding:3px 8px;background:rgba(0,0,0,0.7);gap:4px;flex-wrap:wrap;align-items:center;justify-content:center;"></div>
                 </div>
                 <div style="display:flex;gap:6px;padding:6px 8px;background:linear-gradient(to bottom, #04152c, #1a3a5c);border-top:2px solid rgba(59,130,246,0.4);flex-shrink:0;align-items:center;justify-content:center;min-height:34px;">
                   <button id="btnPdfPrint" onclick="printCardPdfFromInline()" style="padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:11px;letter-spacing:.3px;">🖨️ Imprimer</button>
                   <button id="btnPdfAgrandir" onclick="openDevisViewerFromInline()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:11px;letter-spacing:.3px;">🔍 Agrandir</button>
-                  <input type="file" id="psmFilePickerInput" accept="image/*,application/pdf" multiple style="display:none;" onchange="handleFilePickerFiles(this)">
+                  <button onclick="pasteEmailAsImage()" title="Copiez un courriel (Ctrl+C) puis cliquez ici" style="padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:11px;letter-spacing:.3px;">📧 Courriel</button>
+                  <input type="file" id="psmFilePickerInput" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.pptx,.ppt,.eml,.msg,.txt,.rtf,.csv,.zip,.rar" multiple style="display:none;" onchange="handleFilePickerFiles(this)">
                 </div>
               </div>
               <div class="psm-item-view" id="itemView" style="display:none;flex:1;flex-direction:column;min-height:0;overflow:hidden;">
@@ -4803,7 +4804,8 @@ if(localStorage.getItem('physipro_last_email')){
         <div class="devis-dropzone-icon">📁</div>
         <div class="devis-dropzone-text" style="cursor:pointer;" onclick="document.getElementById('devisFilePickerInput').click()">Cliquez ici pour choisir un fichier</div>
         <div class="devis-dropzone-hint">ou glissez-déposez / Ctrl+V pour coller</div>
-        <input type="file" id="devisFilePickerInput" accept="image/*,application/pdf" multiple style="display:none;" onchange="handleFilePickerFiles(this)">
+        <div style="font-size:10px;color:#64748b;margin-top:6px;">Images, PDF, Word, Excel, PowerPoint, courriels (.eml/.msg), texte</div>
+        <input type="file" id="devisFilePickerInput" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.pptx,.ppt,.eml,.msg,.txt,.rtf,.csv,.zip,.rar" multiple style="display:none;" onchange="handleFilePickerFiles(this)">
       </div>
     </div>
     
@@ -4946,9 +4948,10 @@ if(localStorage.getItem('physipro_last_email')){
           <div style="font-size:20px;margin-bottom:4px;">📁</div>
           <div style="font-size:11px;color:#93c5fd;font-weight:600;">Cliquez pour parcourir</div>
           <div style="font-size:10px;color:#64748b;margin-top:2px;">ou glissez vos fichiers ici</div>
+          <div style="font-size:9px;color:#64748b;margin-top:4px;">Images, PDF, Word, Excel, PowerPoint, courriels, texte</div>
           <div id="addFileList" style="margin-top:8px;font-size:10px;color:#fbbf24;text-align:left;"></div>
         </div>
-        <input type="file" id="addFileInput" multiple accept="image/*,application/pdf" style="display:none;" onchange="_addModalFilesSelected(this.files)">
+        <input type="file" id="addFileInput" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.pptx,.ppt,.eml,.msg,.txt,.rtf,.csv,.zip,.rar" style="display:none;" onchange="_addModalFilesSelected(this.files)">
       </div>
     </div>
     <div class="modal-footer">
@@ -6502,7 +6505,7 @@ function cardFilePicker(cardId) {
   // Use a temporary file input
   var inp = document.createElement('input');
   inp.type = 'file';
-  inp.accept = 'image/*,application/pdf';
+  inp.accept = 'image/*,application/pdf,.doc,.docx,.xls,.xlsx,.pptx,.ppt,.eml,.msg,.txt,.rtf,.csv,.zip,.rar';
   inp.multiple = true;
   inp.style.display = 'none';
   inp.onchange = function() {
@@ -12262,14 +12265,22 @@ function renderDevisViewerContent(idx) {
   
   devisViewerIdx = idx;
   var src = images[idx];
+  var ftype = _detectFileType(src);
   
-  // Check if it's a PDF (base64 data URI OR Firebase Storage URL with .pdf extension)
-  var isPdf = src.indexOf('data:application/pdf') === 0 || /\.pdf(\?|$)/i.test(src);
-  if (isPdf) {
-    // #toolbar=0 hides the top toolbar, overflow trick hides bottom bar
+  if (ftype.type === 'pdf') {
     container.innerHTML = '<div class="devis-pdf-wrap"><iframe src="' + src + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH"></iframe></div>';
-  } else {
+  } else if (ftype.type === 'image') {
     container.innerHTML = '<img src="' + src + '" alt="Devis ' + (idx+1) + '">';
+  } else {
+    // Non-previewable file — large icon + download
+    var downloadUrl = src.startsWith('https://') ? src : '#';
+    var downloadAttr = src.startsWith('data:') ? ' download="fichier' + (ftype.type === 'word' ? '.docx' : ftype.type === 'excel' ? '.xlsx' : ftype.type === 'ppt' ? '.pptx' : ftype.type === 'email' ? '.eml' : '.bin') + '"' : '';
+    container.innerHTML = '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">' +
+      '<div style="font-size:72px;">' + ftype.icon + '</div>' +
+      '<div style="font-size:18px;font-weight:700;color:#fff;">' + ftype.label + '</div>' +
+      '<div style="font-size:12px;color:#94a3b8;">Ce type de fichier ne peut pas être prévisualisé</div>' +
+      '<a href="' + downloadUrl + '"' + downloadAttr + ' target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:10px 24px;border-radius:8px;background:linear-gradient(to bottom,#3b82f6,#2563eb);color:#fff;text-decoration:none;font-size:13px;font-weight:700;box-shadow:0 4px 12px rgba(59,130,246,0.4);margin-top:6px;">⬇️ Télécharger / Ouvrir</a>' +
+    '</div>';
   }
   
   // Update nav highlights
@@ -12290,11 +12301,10 @@ function renderDevisViewerNav() {
   // Multiple files — show thumbnails only (no delete button)
   nav.innerHTML = images.map(function(src, i) {
     var activeClass = (i === devisViewerIdx) ? 'active' : '';
-    var isPdfThumb = src.indexOf('data:application/pdf') === 0 || /\.pdf(\?|$)/i.test(src);
-    var thumbSrc = isPdfThumb ? '' : src;
-    var thumbContent = thumbSrc 
-      ? '<img src="' + thumbSrc + '" alt="' + (i+1) + '">'
-      : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1e293b;color:#94a3b8;font-size:10px;font-weight:700;">PDF</div>';
+    var ft = _detectFileType(src);
+    var thumbContent = (ft.type === 'image')
+      ? '<img src="' + src + '" alt="' + (i+1) + '">'
+      : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1e293b;color:#94a3b8;font-size:12px;" title="' + ft.label + '">' + ft.icon + '</div>';
     return '<div class="devis-viewer-thumb ' + activeClass + '" onclick="renderDevisViewerContent(' + i + ')">' + thumbContent + '</div>';
   }).join('');
 }
@@ -14407,6 +14417,268 @@ function _initDeptAnnotPaste(dept) {
   });
 }
 
+// ═══ FILE TYPE DETECTION UTILITY ═══
+function _detectFileType(src) {
+  if (!src) return { type: 'unknown', icon: '❓', label: 'Fichier', canPreview: false };
+  var s = src.toLowerCase();
+  // Images
+  if (s.indexOf('data:image/') === 0 || /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i.test(s))
+    return { type: 'image', icon: '🖼️', label: 'Image', canPreview: true };
+  // PDF
+  if (s.indexOf('data:application/pdf') === 0 || /\.pdf(\?|$)/i.test(s))
+    return { type: 'pdf', icon: '📕', label: 'PDF', canPreview: true };
+  // Word
+  if (s.indexOf('data:application/msword') === 0 || s.indexOf('data:application/vnd.openxmlformats-officedocument.wordprocessingml') === 0 || /\.(docx?|rtf)(\?|$)/i.test(s))
+    return { type: 'word', icon: '📝', label: 'Word', canPreview: false };
+  // Excel
+  if (s.indexOf('data:application/vnd.ms-excel') === 0 || s.indexOf('data:application/vnd.openxmlformats-officedocument.spreadsheetml') === 0 || /\.(xlsx?|csv)(\?|$)/i.test(s))
+    return { type: 'excel', icon: '📊', label: 'Excel', canPreview: false };
+  // PowerPoint
+  if (s.indexOf('data:application/vnd.ms-powerpoint') === 0 || s.indexOf('data:application/vnd.openxmlformats-officedocument.presentationml') === 0 || /\.pptx?(\?|$)/i.test(s))
+    return { type: 'ppt', icon: '📽️', label: 'PowerPoint', canPreview: false };
+  // Email
+  if (s.indexOf('data:message/rfc822') === 0 || s.indexOf('data:application/vnd.ms-outlook') === 0 || /\.(eml|msg)(\?|$)/i.test(s))
+    return { type: 'email', icon: '📧', label: 'Courriel', canPreview: false };
+  // Text
+  if (s.indexOf('data:text/plain') === 0 || /\.txt(\?|$)/i.test(s))
+    return { type: 'text', icon: '📄', label: 'Texte', canPreview: false };
+  // Archive
+  if (s.indexOf('data:application/zip') === 0 || s.indexOf('data:application/x-rar') === 0 || /\.(zip|rar|7z)(\?|$)/i.test(s))
+    return { type: 'archive', icon: '📦', label: 'Archive', canPreview: false };
+  // Fallback
+  return { type: 'other', icon: '📎', label: 'Fichier', canPreview: false };
+}
+
+// ═══ PASTE EMAIL AS IMAGE ═══
+// Reads clipboard (HTML or text), renders it in an offscreen container, converts to JPEG via canvas
+function pasteEmailAsImage() {
+  if (!currentCardId || !psmData[currentCardId]) {
+    showToast('⚠️ Sélectionnez une carte d\'abord', 'warning');
+    return;
+  }
+  
+  if (!navigator.clipboard || !navigator.clipboard.read) {
+    // Fallback: prompt user to paste manually
+    _pasteEmailFallback();
+    return;
+  }
+  
+  showToast('📧 Lecture du presse-papier...', 'info');
+  
+  navigator.clipboard.read().then(function(items) {
+    var htmlBlob = null, textBlob = null, imageBlob = null;
+    
+    for (var i = 0; i < items.length; i++) {
+      var types = items[i].types;
+      if (types.indexOf('image/png') !== -1) {
+        imageBlob = items[i].getType('image/png');
+      }
+      if (types.indexOf('text/html') !== -1) {
+        htmlBlob = items[i].getType('text/html');
+      }
+      if (types.indexOf('text/plain') !== -1) {
+        textBlob = items[i].getType('text/plain');
+      }
+    }
+    
+    // Priority: image > html > text
+    if (imageBlob) {
+      imageBlob.then(function(blob) {
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          compressDevisImage(ev.target.result).then(function(c) {
+            addDevisImageToCard(currentCardId, c);
+          }).catch(function() {
+            addDevisImageToCard(currentCardId, ev.target.result);
+          });
+        };
+        reader.readAsDataURL(blob);
+      });
+    } else if (htmlBlob) {
+      htmlBlob.then(function(blob) { return blob.text(); }).then(function(html) {
+        _renderHtmlToImage(html);
+      });
+    } else if (textBlob) {
+      textBlob.then(function(blob) { return blob.text(); }).then(function(text) {
+        if (!text || !text.trim()) {
+          showToast('⚠️ Presse-papier vide', 'warning');
+          return;
+        }
+        // Wrap plain text in styled HTML
+        var html = '<div style="font-family:Segoe UI,Arial,sans-serif;font-size:13px;padding:20px;max-width:700px;white-space:pre-wrap;color:#222;background:#fff;">' +
+          text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>';
+        _renderHtmlToImage(html);
+      });
+    } else {
+      showToast('⚠️ Aucun contenu trouvé dans le presse-papier. Copiez d\'abord un courriel (Ctrl+C).', 'warning');
+    }
+  }).catch(function(err) {
+    console.warn('Clipboard API failed, using fallback:', err);
+    _pasteEmailFallback();
+  });
+}
+
+// Render HTML content to a JPEG image and add to card
+function _renderHtmlToImage(html) {
+  showToast('📧 Conversion du courriel en image...', 'info');
+  
+  // Create offscreen container
+  var container = document.createElement('div');
+  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:#fff;color:#222;font-family:Segoe UI,Arial,sans-serif;font-size:13px;padding:16px;z-index:-1;overflow:visible;';
+  
+  // Sanitize: remove scripts, iframes, etc.
+  var sanitized = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<link[^>]*>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/on\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/on\w+\s*=\s*'[^']*'/gi, '');
+  
+  container.innerHTML = sanitized;
+  document.body.appendChild(container);
+  
+  // Wait for rendering
+  setTimeout(function() {
+    var w = Math.min(container.scrollWidth, 900);
+    var h = Math.min(container.scrollHeight, 6000); // Cap at ~6000px height
+    
+    // Use canvas to render
+    var canvas = document.createElement('canvas');
+    var scale = 2; // Higher quality
+    canvas.width = w * scale;
+    canvas.height = h * scale;
+    var ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    
+    // Convert HTML to SVG foreignObject for canvas rendering
+    var svgData = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+      '<foreignObject width="100%" height="100%">' +
+      '<div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Segoe UI,Arial,sans-serif;font-size:13px;color:#222;background:#fff;padding:16px;width:' + (w - 32) + 'px;overflow:hidden;">' +
+      sanitized +
+      '</div></foreignObject></svg>';
+    
+    var svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    var url = URL.createObjectURL(svgBlob);
+    var img = new Image();
+    img.onload = function() {
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      document.body.removeChild(container);
+      
+      var jpeg = canvas.toDataURL('image/jpeg', 0.85);
+      addDevisImageToCard(currentCardId, jpeg);
+    };
+    img.onerror = function() {
+      URL.revokeObjectURL(url);
+      document.body.removeChild(container);
+      // Fallback: store HTML as-is with a text wrapper
+      showToast('⚠️ Conversion image échouée — contenu sauvegardé en texte', 'warning');
+      _storeEmailAsText(html);
+    };
+    img.src = url;
+  }, 200);
+}
+
+// Store email HTML as a rendered text snapshot when image conversion fails
+function _storeEmailAsText(html) {
+  // Strip HTML tags for plain text fallback
+  var tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  var text = (tmp.textContent || tmp.innerText || '').trim();
+  if (!text) { showToast('⚠️ Contenu vide', 'warning'); return; }
+  
+  // Render plain text to canvas
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
+  var maxW = 800, padding = 20, lineH = 18, fontSize = 13;
+  ctx.font = fontSize + 'px Segoe UI, Arial, sans-serif';
+  
+  // Word-wrap text
+  var words = text.split(/\s+/);
+  var lines = [];
+  var line = '';
+  for (var i = 0; i < words.length; i++) {
+    var test = line ? line + ' ' + words[i] : words[i];
+    if (ctx.measureText(test).width > maxW - padding * 2) {
+      if (line) lines.push(line);
+      line = words[i];
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  if (lines.length > 300) lines = lines.slice(0, 300); // Cap
+  
+  canvas.width = maxW;
+  canvas.height = padding * 2 + lines.length * lineH + 30;
+  ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Header
+  ctx.fillStyle = '#2563eb';
+  ctx.fillRect(0, 0, canvas.width, 28);
+  ctx.font = 'bold 12px Segoe UI, Arial, sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('📧 Contenu courriel collé', padding, 18);
+  
+  // Body text
+  ctx.font = fontSize + 'px Segoe UI, Arial, sans-serif';
+  ctx.fillStyle = '#222222';
+  for (var j = 0; j < lines.length; j++) {
+    ctx.fillText(lines[j], padding, 28 + padding + j * lineH);
+  }
+  
+  var jpeg = canvas.toDataURL('image/jpeg', 0.85);
+  addDevisImageToCard(currentCardId, jpeg);
+}
+
+// Fallback when Clipboard API isn't available — open a paste modal
+function _pasteEmailFallback() {
+  var existing = document.getElementById('emailPasteModal');
+  if (existing) existing.remove();
+  
+  var modal = document.createElement('div');
+  modal.id = 'emailPasteModal';
+  modal.className = 'modal-overlay';
+  modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = '<div class="modal" style="max-width:500px;">' +
+    '<div class="modal-header" style="background:linear-gradient(to bottom,#f59e0b,#d97706);">' +
+      '<span class="modal-title">📧 Coller un courriel</span>' +
+      '<button class="modal-close" onclick="document.getElementById(\'emailPasteModal\').remove()">✕</button>' +
+    '</div>' +
+    '<div class="modal-body" style="padding:16px;">' +
+      '<div style="font-size:12px;color:#94a3b8;margin-bottom:10px;">Ouvrez votre courriel, sélectionnez tout (Ctrl+A), copiez (Ctrl+C), puis collez ici (Ctrl+V) :</div>' +
+      '<div id="emailPasteZone" contenteditable="true" style="min-height:150px;max-height:400px;overflow-y:auto;background:#fff;color:#222;border:2px solid #f59e0b;border-radius:8px;padding:12px;font-size:12px;font-family:Segoe UI,Arial,sans-serif;outline:none;" data-placeholder="Ctrl+V ici..."></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button class="modal-btn cancel" onclick="document.getElementById(\'emailPasteModal\').remove()">Annuler</button>' +
+      '<button class="modal-btn confirm" onclick="_captureEmailPasteZone()">📷 Convertir en image</button>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(modal);
+  modal.style.display = 'flex';
+  
+  setTimeout(function() {
+    var zone = document.getElementById('emailPasteZone');
+    if (zone) zone.focus();
+  }, 200);
+}
+
+function _captureEmailPasteZone() {
+  var zone = document.getElementById('emailPasteZone');
+  if (!zone || !zone.innerHTML.trim() || zone.innerHTML.trim() === '<br>') {
+    showToast('⚠️ Collez d\'abord le contenu du courriel', 'warning');
+    return;
+  }
+  var html = zone.innerHTML;
+  document.getElementById('emailPasteModal').remove();
+  _renderHtmlToImage(html);
+}
+
 // ═══ INLINE PDF VIEWER (in left panel) ═══
 var pdfInlineIdx = 0;
 
@@ -14432,7 +14704,7 @@ function refreshInlinePdf() {
   }
   
   if (allFiles.length === 0) {
-    if (emptyEl) { emptyEl.style.display = 'block'; emptyEl.innerHTML = '\u{1f4c4} Ctrl+V pour coller une image'; }
+    if (emptyEl) { emptyEl.style.display = 'block'; emptyEl.innerHTML = '\u{1f4c4} Ctrl+V pour coller une image<br><span style="font-size:9px;">ou utilisez 📁 Fichier pour ajouter PDF, Word, Excel, courriel...</span>'; }
     if (navEl) navEl.style.display = 'none';
     return;
   }
@@ -14444,12 +14716,23 @@ function refreshInlinePdf() {
   // Always show in iframe (no annotation on fichier principal)
   if (frameEl) {
     frameEl.style.display = 'block';
-    if (src.indexOf('data:image') === 0) {
-      // Base64 image — show directly in iframe
+    var ftype = _detectFileType(src);
+    if (ftype.type === 'image') {
+      // Image — show directly
       frameEl.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:auto;"><img src="' + src + '" style="max-width:100%;max-height:100%;object-fit:contain;"></div>';
-    } else {
-      // PDF or URL — iframe
+    } else if (ftype.type === 'pdf') {
+      // PDF — iframe
       frameEl.innerHTML = '<iframe style="width:100%;height:100%;border:none;" src="' + src + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH"></iframe>';
+    } else {
+      // Non-previewable file (Word, Excel, Email, etc.) — show icon + download link
+      var downloadUrl = src.startsWith('https://') ? src : '#';
+      var downloadAttr = src.startsWith('data:') ? ' download="fichier' + (ftype.type === 'word' ? '.docx' : ftype.type === 'excel' ? '.xlsx' : ftype.type === 'ppt' ? '.pptx' : ftype.type === 'email' ? '.eml' : '.bin') + '"' : '';
+      frameEl.innerHTML = '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#0f172a;">' +
+        '<div style="font-size:48px;">' + ftype.icon + '</div>' +
+        '<div style="font-size:13px;font-weight:700;color:#fff;">' + ftype.label + '</div>' +
+        '<div style="font-size:10px;color:#94a3b8;">Fichier ' + (pdfInlineIdx + 1) + ' / ' + allFiles.length + '</div>' +
+        '<a href="' + downloadUrl + '"' + downloadAttr + ' target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:6px 14px;border-radius:6px;background:linear-gradient(to bottom,#3b82f6,#2563eb);color:#fff;text-decoration:none;font-size:11px;font-weight:600;margin-top:4px;">⬇️ Télécharger / Ouvrir</a>' +
+      '</div>';
     }
   }
   
@@ -14459,10 +14742,10 @@ function refreshInlinePdf() {
       navEl.style.display = 'flex';
       navEl.innerHTML = allFiles.map(function(s, i) {
         var active = (i === pdfInlineIdx) ? 'border-color:#fbbf24;box-shadow:0 0 6px rgba(251,191,36,0.5);' : 'border-color:rgba(255,255,255,0.15);';
-        var isImg = (s.indexOf('data:image') === 0);
-        var thumbHtml = isImg
+        var ft = _detectFileType(s);
+        var thumbHtml = (ft.type === 'image')
           ? '<img src="' + s + '" style="width:100%;height:100%;object-fit:cover;">'
-          : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1e293b;color:#94a3b8;font-size:8px;font-weight:700;">PDF</div>';
+          : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1e293b;color:#94a3b8;font-size:10px;" title="' + ft.label + '">' + ft.icon + '</div>';
         return '<div onclick="switchInlinePdf(' + i + ')" style="width:30px;height:30px;border:2px solid;border-radius:4px;overflow:hidden;cursor:pointer;flex-shrink:0;position:relative;' + active + '">' + thumbHtml + '</div>';
       }).join('');
     } else {
@@ -15266,10 +15549,25 @@ function uploadToStorage(cardId, base64) {
       var storageRef = firebase.storage();
       var fileName = 'psm-devis/' + cardId + '/' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
       
-      // Detect mime type from base64
+      // Detect mime type from base64 and map to proper extension
       var match = base64.match(/^data:([^;]+);base64,/);
       var mime = match ? match[1] : 'application/octet-stream';
-      var ext = mime === 'application/pdf' ? '.pdf' : '.jpg';
+      var mimeExtMap = {
+        'application/pdf': '.pdf',
+        'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
+        'image/webp': '.webp', 'image/bmp': '.bmp', 'image/svg+xml': '.svg',
+        'application/msword': '.doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+        'application/vnd.ms-excel': '.xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+        'application/vnd.ms-powerpoint': '.ppt',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+        'message/rfc822': '.eml',
+        'application/vnd.ms-outlook': '.msg',
+        'text/plain': '.txt', 'text/csv': '.csv', 'application/rtf': '.rtf',
+        'application/zip': '.zip', 'application/x-rar-compressed': '.rar'
+      };
+      var ext = mimeExtMap[mime] || (mime.indexOf('image/') === 0 ? '.jpg' : '.bin');
       
       var ref = storageRef.ref(fileName + ext);
       
