@@ -2080,23 +2080,34 @@ function _onTheadDown(e){
 
 function _onDocMove(e){
   if(!_colResize.active)return;
+  // Si le bouton souris n'est plus enfoncé (ex: relâché hors fenêtre), on arrête
+  if(e.buttons!==undefined&&e.buttons===0){_colResizeEnd(e);return;}
   var diff=e.clientX-_colResize.startX;
   var newW=Math.max(30,_colResize.startW+diff);
   setColWidth(_colResize.dept,_colResize.colId,newW);
 }
 
-function _onDocUp(e){
+function _colResizeEnd(e){
   if(!_colResize.active)return;
-  var diff=e.clientX-_colResize.startX;
-  var newW=Math.max(30,_colResize.startW+diff);
-  setColWidth(_colResize.dept,_colResize.colId,newW);
-  var w=getColWidths(_colResize.dept);
-  w[_colResize.colId]=newW+'px';
-  saveColWidths(_colResize.dept,w);
+  if(e&&e.clientX!==undefined){
+    var diff=e.clientX-_colResize.startX;
+    var newW=Math.max(30,_colResize.startW+diff);
+    setColWidth(_colResize.dept,_colResize.colId,newW);
+    var w=getColWidths(_colResize.dept);
+    w[_colResize.colId]=newW+'px';
+    saveColWidths(_colResize.dept,w);
+  }
   document.body.classList.remove('col-resizing');
   if(_colResize.th)_colResize.th.style.cursor='';
+  // Nettoyer tous les curseurs forcés qui pourraient rester sur n'importe quel th
+  var thead=document.getElementById('insp-thead');
+  if(thead){thead.querySelectorAll('th').forEach(function(t){t.style.cursor='';});}
   _colResize={active:false,dept:null,colId:null,startX:0,startW:0,th:null};
 }
+
+function _onDocUp(e){_colResizeEnd(e);}
+function _onWinBlur(){_colResizeEnd(null);}
+function _onKeyEsc(e){if(e.key==='Escape')_colResizeEnd(null);}
 
 function initColumnResize(){
   if(_colResizeInit)return;
@@ -2107,6 +2118,8 @@ function initColumnResize(){
   thead.addEventListener('mousedown',_onTheadDown);
   document.addEventListener('mousemove',_onDocMove);
   document.addEventListener('mouseup',_onDocUp);
+  window.addEventListener('blur',_onWinBlur);
+  document.addEventListener('keydown',_onKeyEsc);
 }
 
 
