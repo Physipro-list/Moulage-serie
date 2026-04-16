@@ -51,6 +51,17 @@
   var MOBILE_ALLOWED = ['moulage'];
   var MOBILE_ALLOWED_ADMIN = ['moulage'];
 
+  // Emails qui voient TOUS leurs modules sur mobile (pas limités à MOBILE_ALLOWED)
+  // Daniel, Valérie, Michelle Bouchard, Stéphanie, Sylvain, Stéphane Delorme
+  var MOBILE_FULL_ACCESS = [
+    'atelieratp@physipro.com',
+    'valerie18@videotron.ca',
+    'michelle.bouchard@physipro.com',
+    'sroy@physipro.com',
+    'magasinatp2@physipro.com',
+    'magasinatp3@physipro.com'
+  ];
+
   // ══════════════════════════════════════
   //  ACCÈS PAR UTILISATEUR (emails en base64)
   // ══════════════════════════════════════
@@ -185,13 +196,16 @@
 
     var access = _getAccess(email);
     var mobile = _isMobile();
-    var mobileList = (email && email.toLowerCase() === 'atelieratp@physipro.com') ? MOBILE_ALLOWED_ADMIN : MOBILE_ALLOWED;
+    var emailLower = (email || '').toLowerCase();
+    var hasFullMobile = MOBILE_FULL_ACCESS.indexOf(emailLower) !== -1;
+    var mobileList = (emailLower === 'atelieratp@physipro.com') ? MOBILE_ALLOWED_ADMIN : MOBILE_ALLOWED;
 
     grid.innerHTML = '';
 
     DISPLAY_ORDER.forEach(function (mod) {
       if (access.indexOf(mod) === -1) return;
-      if (mobile && mobileList.indexOf(mod) === -1) return;
+      // Filtre mobile appliqué seulement si l'utilisateur n'est PAS dans la liste d'accès complet
+      if (mobile && !hasFullMobile && mobileList.indexOf(mod) === -1) return;
       var m = NAV_MODULES[mod];
       if (!m) return;
 
