@@ -6980,8 +6980,12 @@ document.addEventListener('DOMContentLoaded', function() {
       var dept = currentDept || 'atelier';
       var d = psmData[currentCardId][dept];
       if (d) {
-        var rightTxt = (d.notesRightHtml || '').substring(0, 80);
-        console.log('💾 [PSM] Debounced save — ' + dept + '.notesRightHtml = "' + rightTxt + '..."');
+        var snTxt = (d.simpleNotes || '').substring(0, 80);
+        var itTxt = '';
+        if (_activeItemIdx >= 0 && d.items && d.items[_activeItemIdx]) {
+          itTxt = (d.items[_activeItemIdx].notes || '').substring(0, 80);
+        }
+        console.log('💾 [PSM] Debounced save — ' + dept + '.simpleNotes="' + snTxt + '" item[' + _activeItemIdx + '].notes="' + itTxt + '"');
       }
       saveToFirebase(); // 100ms debounce inside
     }, 150); // Flush 150ms after last keystroke
@@ -7002,8 +7006,12 @@ document.addEventListener('DOMContentLoaded', function() {
     var dept = currentDept || 'atelier';
     var d = psmData[currentCardId][dept];
     if (d) {
-      var rightTxt = (d.notesRightHtml || '').substring(0, 80);
-      console.log('💾 [PSM] Blur save — ' + dept + '.notesRightHtml = "' + rightTxt + '..."');
+      var snTxt = (d.simpleNotes || '').substring(0, 80);
+      var itTxt = '';
+      if (_activeItemIdx >= 0 && d.items && d.items[_activeItemIdx]) {
+        itTxt = (d.items[_activeItemIdx].notes || '').substring(0, 80);
+      }
+      console.log('💾 [PSM] Blur save — ' + dept + '.simpleNotes="' + snTxt + '" item[' + _activeItemIdx + '].notes="' + itTxt + '"');
     }
     saveToFirebaseNow(); // Bypasses debounce entirely
   };
@@ -10751,6 +10759,26 @@ function loadCard(id) {
     renderPsmPhotos(dept, 'notes', data.photosNotes || []);
   });
   
+  // ═══ CRITICAL FIX — Load the right-panel notes editors for the CURRENT dept ═══
+  // loadCard used to only reload standard fields and leave deptNotesEditor/itemNotesEditor
+  // with stale content from the previous card. That stale content was then auto-saved
+  // BACK into the current card by the 2s safety-net interval → "all cards showed the same note".
+  // Now we always refresh both right-panel editors from data during loadCard.
+  var _lcDept = currentDept || 'atelier';
+  var _lcDeptData = card[_lcDept] || {};
+  var _lcDeptEditor = document.getElementById('deptNotesEditor');
+  if (_lcDeptEditor) {
+    _lcDeptEditor.innerHTML = _lcDeptData.simpleNotes || '';
+  }
+  var _lcItemEditor = document.getElementById('itemNotesEditor');
+  if (_lcItemEditor) {
+    if (_activeItemIdx >= 0 && _lcDeptData.items && _lcDeptData.items[_activeItemIdx]) {
+      _lcItemEditor.innerHTML = _lcDeptData.items[_activeItemIdx].notes || '';
+    } else {
+      _lcItemEditor.innerHTML = '';
+    }
+  }
+  
   // CRITICAL: Release the guard — DOM writes are complete.
   // Use setTimeout(0) to ensure all browser-triggered input events from innerHTML
   // assignments are processed BEFORE we allow saves again.
@@ -11954,7 +11982,12 @@ function _sendCompleteEmail(cardId) {
 // This prevents data loss when Firebase on('value') fires while user is editing,
 // or when switching cards/departments without triggering blur.
 function _flushDomToData() {
-  if (!currentCardId || !psmData[currentCardId]) return;
+  // CRITICAL FIX: Use _dirtyCardId when available (same pattern as _saveDeptNotes / _saveCurrentItemNotes).
+  // This prevents a race where a debounced timer fires AFTER the user switched cards:
+  // without this, _flushDomToData would read the DOM (still showing old content) and write
+  // it into the NEW currentCardId → cross-card contamination.
+  var targetCardId = window._dirtyCardId || currentCardId;
+  if (!targetCardId || !psmData[targetCardId]) return;
   var isDevisMode = document.body.classList.contains('devis-open');
   
   // CRITICAL FIX: Also flush service notes (cdServiceNotes) which is a .psm-textarea-lg
@@ -11962,15 +11995,15 @@ function _flushDomToData() {
   // so edits in the Fiche overlay service notes field were lost unless closeFicheOverlay was called.
   var serviceNotesEl = document.getElementById('cdServiceNotes');
   if (serviceNotesEl) {
-    psmData[currentCardId].serviceNotesHtml = serviceNotesEl.innerHTML;
-    psmData[currentCardId].serviceNotes = serviceNotesEl.innerText || '';
+    psmData[targetCardId].serviceNotesHtml = serviceNotesEl.innerHTML;
+    psmData[targetCardId].serviceNotes = serviceNotesEl.innerText || '';
   }
   
   ['atelier', 'couture'].forEach(function(dept) {
     try {
-      if (!psmData[currentCardId]) return; // card may have been deleted mid-flush
-      if (!psmData[currentCardId][dept]) psmData[currentCardId][dept] = {};
-      var data = psmData[currentCardId][dept];
+      if (!psmData[targetCardId]) return; // card may have been deleted mid-flush
+      if (!psmData[targetCardId][dept]) psmData[targetCardId][dept] = {};
+      var data = psmData[targetCardId][dept];
       
       // PSM / Prix toggle for current dept
       if (dept === currentDept) {
@@ -12104,13 +12137,17 @@ function _doSaveToFirebase() {
     var _postSkip = Date.now() + 2000;
     if (_postSkip > _skipSyncUntil) _skipSyncUntil = _postSkip;
     console.log('✅ [PSM] Saved to Firebase (' + Object.keys(psmData).length + ' cards)');
-    // DEBUG: Verify notesRightHtml was included in save
+    // DEBUG: Verify simpleNotes/items.notes were included in save
     if (currentCardId && psmData[currentCardId]) {
       var _dbgDept = currentDept || 'atelier';
       var _dbgD = psmData[currentCardId][_dbgDept];
       if (_dbgD) {
-        console.log('   → ' + _dbgDept + '.notesRightHtml len=' + (_dbgD.notesRightHtml || '').length + 
-          ', notesHtml len=' + (_dbgD.notesHtml || '').length);
+        var _itNotes = '';
+        if (_activeItemIdx >= 0 && _dbgD.items && _dbgD.items[_activeItemIdx]) {
+          _itNotes = (_dbgD.items[_activeItemIdx].notes || '').substring(0, 40);
+        }
+        console.log('   → ' + _dbgDept + '.simpleNotes len=' + ((_dbgD.simpleNotes||'').length) +
+          ', item[' + _activeItemIdx + '].notes="' + _itNotes + '"');
       }
     }
     // Visual save indicator — brief green flash on the fiche date
