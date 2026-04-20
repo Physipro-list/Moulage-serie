@@ -43,7 +43,7 @@
 
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
-    'moulage', 'serie', 'inspection', 'inspcouture', 'inspfinale', 'jobs',
+    'moulage', 'serie', 'inspection', 'inspcouture', 'inspfinale', 'psm', 'jobs',
     'jobsattente', 'calcmat'
   ];
 
@@ -66,30 +66,30 @@
   //  ACCÈS PAR UTILISATEUR (emails en base64)
   // ══════════════════════════════════════
   var HUB_ACCESS = {
-    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],        // atelieratp (Daniel)
-    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],        // valerie18 (Valérie)
-    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','jobs','calcmat','jobsattente'],                      // simdut (Cassie)
-    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],        // michelle.bouchard
-    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],        // sroy (Stéphanie)
-    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','jobs'],                                                                                // sonia.boulanger (moulage = lecture seule, jobs = Service Client)
-    'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','jobs','calcmat','jobsattente'],                                                         // service3 (Jacynthe)
-    'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','jobs','calcmat','jobsattente'],                                                         // service1 (Jonathan)
-    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','inspfinale','jobs','calcmat','jobsattente'],                                            // ngagne (Nadia)
+    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente'],  // atelieratp (Daniel)
+    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente'],  // valerie18 (Valérie)
+    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','psm','jobs','calcmat','jobsattente'],                // simdut (Cassie)
+    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente'],  // michelle.bouchard
+    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente'],  // sroy (Stéphanie)
+    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','serie','inspfinale','psm','jobs','calcmat','jobsattente'],                             // sonia.boulanger
+    'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','psm','jobs','calcmat','jobsattente'],                                                  // service3 (Jacynthe)
+    'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','psm','jobs','calcmat','jobsattente'],                                                  // service1 (Jonathan)
+    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','inspfinale','psm','jobs','calcmat','jobsattente'],                                     // ngagne (Nadia)
     'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':             ['moulage','jobs','calcmat','jobsattente'],                                                        // mplanguedoc (Marie-Pier)
     'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':         ['moulage','jobs','calcmat','jobsattente'],                                                        // mariesoleilr (Marie-Soleil)
-    'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':     ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],        // fabrys.frechette
+    'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':     ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente'],  // fabrys.frechette
     'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':                 ['moulage','inspfinale','jobs','calcmat','jobsattente'],                                            // cncatp (Sina)
     'cGV0ZXJiYXNzNzZAZ21haWwuY29t':                 ['moulage','jobs','calcmat','jobsattente'],                                                        // peterbass76 (Pierre)
     'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':         ['moulage','jobs','calcmat','jobsattente'],                                                        // mario.jacques (Mario J.)
-    'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],        // marioouellette (Mario O.)
+    'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente'],  // marioouellette (Mario O.)
     'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':             ['calcmat','jobsattente'],                                                                         // magasinatp2 (Sylvain)
     'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':             ['calcmat','jobsattente'],                                                                         // magasinatp3 (Stéphane Del.)
-    'cmhAcGh5c2lwcm8uY29t':                         ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],        // rh (Roxanne)
+    'cmhAcGh5c2lwcm8uY29t':                         ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente'],  // rh (Roxanne)
     'Y29vcmRvLm1hZy5hdHBAcGh5c2lwcm8uY29t':         ['calcmat','jobsattente'],                                                                         // coordo.mag.atp (Patrick C.)
     'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':         ['calcmat','jobsattente'],                                                                         // elyse.bolduc (Élyse)
     'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':         ['calcmat','jobsattente'],                                                                         // eric.poirier (Éric)
     'Y29udGFjdEBwaHlzaXByby5mcg==':                 ['calcmat','jobsattente'],                                                                         // contact (France)
-    'amVhbmNocmlzdG9waGVkYW5qb3VAcGh5c2lwcm8uY29t': ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente']         // jeanchristophedanjou (Jean-Christophe)
+    'amVhbmNocmlzdG9waGVkYW5qb3VAcGh5c2lwcm8uY29t': ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente']   // jeanchristophedanjou (Jean-Christophe)
   };
 
   // ══════════════════════════════════════
