@@ -11,6 +11,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 *, *::before, *::after { box-sizing: border-box; }
@@ -2415,6 +2416,16 @@ body.couture-mode #btnPdfPrint {
   background: linear-gradient(135deg, #a855f7, #9333ea) !important;
   border-color: #7c3aed !important;
 }
+/* Bouton appareil photo mauve en mode couture */
+body.couture-mode #btnPdfCamera {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
+  border-color: #4c1d95 !important;
+}
+/* Bouton PDF mauve foncé en mode couture */
+body.couture-mode #btnPhotosToPdf {
+  background: linear-gradient(135deg, #9333ea, #6b21a8) !important;
+  border-color: #4c1d95 !important;
+}
 /* Barre du bas sous le PDF (contenant les boutons) */
 body.couture-mode .psm-content-left > div:last-child {
   background: linear-gradient(to bottom, #1a0a2e, #3a1a5e) !important;
@@ -2695,7 +2706,9 @@ body.couture-mode.quest-drawer-open .psm-content-right::after {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-body.quest-drawer-open #btnPdfAgrandir {
+body.quest-drawer-open #btnPdfAgrandir,
+body.quest-drawer-open #btnPdfCamera,
+body.quest-drawer-open #btnPhotosToPdf {
   display: none !important;
 }
 /* Séparation visible entre centre (quest) et zone notes (droite voilée) */
@@ -5396,9 +5409,12 @@ if(localStorage.getItem('physipro_last_email')){
                   <div id="pdfInlineNav" style="display:none;position:absolute;bottom:0;left:0;right:0;z-index:3;padding:3px 8px;background:rgba(0,0,0,0.7);gap:4px;flex-wrap:wrap;align-items:center;justify-content:center;"></div>
                 </div>
                 <div class="psm-pdf-btns-bar" style="display:flex;gap:6px;padding:6px 8px;background:linear-gradient(to bottom, #04152c, #1a3a5c);border-top:2px solid rgba(59,130,246,0.4);flex-shrink:0;align-items:center;justify-content:center;min-height:34px;">
+                  <button id="btnPdfCamera" onclick="openCameraForCard()" title="Prendre une photo avec l'appareil" style="flex-shrink:0;padding:6px 12px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:4px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">📷</button>
+                  <button id="btnPhotosToPdf" onclick="saveCardPhotosToPdf()" title="Sauvegarder toutes les photos en un seul PDF" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;font-size:13px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:4px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">📄</button>
                   <button id="btnPdfAgrandir" onclick="openDevisViewerFromInline()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:11px;letter-spacing:.3px;">🔍 Agrandir</button>
                   <button id="btnPdfPrint" onclick="printCardPdfFromInline()" style="padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;font-size:11px;letter-spacing:.3px;">🖨️ Imprimer</button>
                   <input type="file" id="psmFilePickerInput" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.pptx,.ppt,.eml,.msg,.txt,.rtf,.csv,.zip,.rar" multiple style="display:none;" onchange="handleFilePickerFiles(this)">
+                  <input type="file" id="psmCameraInput" accept="image/*" capture="environment" style="display:none;" onchange="handleCameraCapture(this)">
                 </div>
               </div>
               <div class="psm-item-view" id="itemView" style="display:none;flex:1;flex-direction:column;min-height:0;overflow:hidden;">
@@ -9489,6 +9505,7 @@ function initPSM() {
       psmData[currentCardId].questionnementSentAt = localCardSnapshot.questionnementSentAt;
       if (localCardSnapshot.devisImages) psmData[currentCardId].devisImages = localCardSnapshot.devisImages;
       if (localCardSnapshot.devisImages2) psmData[currentCardId].devisImages2 = localCardSnapshot.devisImages2;
+      if (localCardSnapshot.cardCameraPhotos) psmData[currentCardId].cardCameraPhotos = localCardSnapshot.cardCameraPhotos;
       if (localCardSnapshot.notesServiceClient !== undefined) psmData[currentCardId].notesServiceClient = localCardSnapshot.notesServiceClient;
       if (localCardSnapshot.serviceNotesHtml !== undefined) psmData[currentCardId].serviceNotesHtml = localCardSnapshot.serviceNotesHtml;
       if (localCardSnapshot.serviceNotes !== undefined) psmData[currentCardId].serviceNotes = localCardSnapshot.serviceNotes;
@@ -16729,15 +16746,62 @@ function refreshInlinePdf() {
     allFiles = card[fileKey];
   }
   
-  if (allFiles.length === 0) {
+  // Photos caméra empilées (seulement pour fichier principal, pas secondaire)
+  var cameraPhotos = (!isSecondary && card && card.cardCameraPhotos) ? card.cardCameraPhotos : [];
+  
+  // Cas 1 : aucun fichier ni photo caméra
+  if (allFiles.length === 0 && cameraPhotos.length === 0) {
     var emptyLabel = isSecondary ? '📎 Fichier secondaire — Ctrl+V pour coller' : '\u{1f4c4} Ctrl+V pour coller une image';
-    if (emptyEl) { emptyEl.style.display = 'block'; emptyEl.innerHTML = emptyLabel + '<br><span style="font-size:9px;">ou utilisez 📁 Fichier pour ajouter PDF, Word, Excel, courriel...</span>'; }
+    if (emptyEl) { emptyEl.style.display = 'block'; emptyEl.innerHTML = emptyLabel + '<br><span style="font-size:9px;">ou utilisez 📁 Fichier pour ajouter PDF, Word, Excel, courriel... ou 📷 pour prendre une photo</span>'; }
     if (navEl) navEl.style.display = 'none';
     return;
   }
   
   if (emptyEl) emptyEl.style.display = 'none';
   if (pdfInlineIdx >= allFiles.length) pdfInlineIdx = 0;
+  
+  // Cas 2 : il y a des photos caméra → on les empile avec le PDF/image courante en bas
+  if (cameraPhotos.length > 0 && frameEl) {
+    frameEl.style.display = 'block';
+    // Construction HTML : chaque photo prend toute la largeur, empilées verticalement
+    var stackHtml = '<div style="width:100%;height:100%;overflow-y:auto;background:#0a0f1a;padding:8px;box-sizing:border-box;">';
+    // Les photos caméra EN HAUT (la plus récente en premier)
+    cameraPhotos.forEach(function(src, i) {
+      stackHtml += '<div style="position:relative;margin-bottom:8px;border:2px solid rgba(139,92,246,0.4);border-radius:6px;overflow:hidden;background:#000;">';
+      stackHtml += '<img src="' + src + '" style="width:100%;height:auto;display:block;">';
+      stackHtml += '<div style="position:absolute;top:6px;left:6px;background:rgba(139,92,246,0.9);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;pointer-events:none;">📷 Photo ' + (i + 1) + '</div>';
+      stackHtml += '<button onclick="removeCameraPhoto(' + i + ')" title="Supprimer cette photo" style="position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;border:none;background:rgba(239,68,68,0.9);color:#fff;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,0.4);">✕</button>';
+      stackHtml += '</div>';
+    });
+    // S'il y a aussi un PDF/image principal, l'ajouter EN BAS
+    if (allFiles.length > 0) {
+      var src = allFiles[pdfInlineIdx];
+      var ftype = _detectFileType(src);
+      stackHtml += '<div style="margin-top:10px;border:2px solid rgba(59,130,246,0.4);border-radius:6px;overflow:hidden;background:#000;min-height:400px;position:relative;">';
+      stackHtml += '<div style="position:absolute;top:6px;left:6px;background:rgba(59,130,246,0.9);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;z-index:2;pointer-events:none;">📄 Document principal</div>';
+      if (ftype.type === 'image') {
+        stackHtml += '<img src="' + src + '" style="width:100%;height:auto;display:block;">';
+      } else if (ftype.type === 'pdf') {
+        stackHtml += '<iframe style="width:100%;height:600px;border:none;display:block;" src="' + src + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH"></iframe>';
+      } else {
+        var downloadUrl = src.startsWith('https://') ? src : '#';
+        var downloadAttr = src.startsWith('data:') ? ' download="fichier' + (ftype.type === 'word' ? '.docx' : ftype.type === 'excel' ? '.xlsx' : ftype.type === 'ppt' ? '.pptx' : ftype.type === 'email' ? '.eml' : '.bin') + '"' : '';
+        stackHtml += '<div style="padding:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;">' +
+          '<div style="font-size:48px;">' + ftype.icon + '</div>' +
+          '<div style="font-size:13px;font-weight:700;color:#fff;">' + ftype.label + '</div>' +
+          '<a href="' + downloadUrl + '"' + downloadAttr + ' target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:6px 14px;border-radius:6px;background:linear-gradient(to bottom,#3b82f6,#2563eb);color:#fff;text-decoration:none;font-size:11px;font-weight:600;">⬇️ Télécharger / Ouvrir</a>' +
+        '</div>';
+      }
+      stackHtml += '</div>';
+    }
+    stackHtml += '</div>';
+    frameEl.innerHTML = stackHtml;
+    // Nav cachée en mode empilé (on scrolle à la place)
+    if (navEl) navEl.style.display = 'none';
+    return;
+  }
+  
+  // Cas 3 : pas de photos caméra, juste le PDF/image normal (comportement original)
   var src = allFiles[pdfInlineIdx];
   
   // Always show in iframe (no annotation on fichier principal)
@@ -17197,6 +17261,409 @@ function handleFilePickerFiles(input) {
     reader.readAsDataURL(file);
   };
   processNext(0);
+}
+
+// ═══ APPAREIL PHOTO : bouton 📷 → connexion avec PhysiPro PhotoSender (téléphone) ═══
+// Le PC crée une "demande photo" dans Firebase. Le téléphone (PhotoSender) la détecte,
+// prend la photo, et la renvoie via la même demande. Le PC écoute et récupère la photo.
+// Tout se fait via Firebase Realtime DB : jobs/{photoJobId} + photoRequests/{photoJobId}
+var _psmPhotoJobId = null;
+var _psmPhotoRequestListener = null;
+var _psmPhotoJobListener = null;
+var _psmPhotoTimeoutId = null;
+
+function openCameraForCard() {
+  if (!currentCardId || !psmData[currentCardId]) {
+    showToast('⚠️ Sélectionnez une carte d\'abord', 'warning');
+    return;
+  }
+  if (!db) {
+    showToast('⚠️ Firebase non disponible', 'error');
+    return;
+  }
+  var card = psmData[currentCardId];
+  var existing = (card.cardCameraPhotos || []).length;
+  if (existing >= 8) {
+    showToast('⚠️ Maximum 8 photos atteintes. Supprimez-en une avant.', 'warning');
+    return;
+  }
+  
+  // Créer un ID unique pour cette demande photo
+  var jobId = 'psmPhoto_' + currentCardId + '_' + Date.now();
+  var myEmail = currentUser ? (currentUser.email || '').toLowerCase() : '';
+  var myName = currentUser ? getPhysiproDisplayName(currentUser.email) : 'PSM';
+  var patientName = card.name || 'Patient';
+  
+  // Créer un "job temporaire" pour que PhotoSender l'affiche dans sa liste
+  // (PhotoSender se base sur db.ref('jobs') pour trouver les tâches à photographier)
+  var jobData = {
+    order: 'PSM-' + patientName,
+    client: patientName,
+    assignee: myName,
+    assigneeEmail: myEmail,
+    createdAt: new Date().toISOString(),
+    createdBy: myName,
+    source: 'psm',
+    psmCardId: currentCardId,
+    isPhotoRequest: true,  // Marqueur : c'est une demande photo temporaire, pas un vrai job
+    status: 'photoRequest'
+  };
+  
+  // Créer la photoRequest que PhotoSender va détecter automatiquement
+  var requestData = {
+    status: 'waiting',
+    requestedBy: myName,
+    requestedByEmail: myEmail,
+    timestamp: Date.now(),
+    source: 'psm',
+    psmCardId: currentCardId,
+    patientName: patientName
+  };
+  
+  var updates = {};
+  updates['jobs/' + jobId] = jobData;
+  updates['photoRequests/' + jobId] = requestData;
+  
+  db.ref().update(updates).then(function() {
+    _psmPhotoJobId = jobId;
+    _showPhotoRequestModal(jobId, patientName, myName);
+    _startPhotoRequestListener(jobId);
+    // Timeout de 5 minutes pour nettoyer si rien ne vient
+    _psmPhotoTimeoutId = setTimeout(function() {
+      _cancelPhotoRequest(jobId, 'Délai dépassé (5 min)');
+    }, 5 * 60 * 1000);
+  }).catch(function(err) {
+    console.error('Erreur création demande photo:', err);
+    showToast('❌ Impossible de créer la demande photo', 'error');
+  });
+}
+
+// Affiche un modal qui attend la photo du téléphone
+function _showPhotoRequestModal(jobId, patientName, userName) {
+  var modal = document.getElementById('psmPhotoRequestModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'psmPhotoRequestModal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(4,21,44,0.92);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = 
+    '<div style="background:linear-gradient(to bottom,#1e3a5f,#0f172a);border:2px solid #3b82f6;border-radius:12px;max-width:440px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.7);">' +
+      '<div style="padding:16px 20px;background:linear-gradient(to bottom,#04152c,#4a8ef5);border-bottom:2px solid #3b82f6;display:flex;align-items:center;justify-content:space-between;">' +
+        '<div style="font-size:15px;font-weight:800;color:#fff;display:flex;align-items:center;gap:8px;">' +
+          '<span style="font-size:20px;">📷</span>' +
+          '<span>Demande photo envoyée</span>' +
+        '</div>' +
+        '<button onclick="_cancelPhotoRequest(\'' + jobId + '\', \'Annulé par l\\\'utilisateur\')" style="background:#ef4444;border:none;border-radius:6px;color:#fff;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">✕ Annuler</button>' +
+      '</div>' +
+      '<div style="padding:20px;text-align:center;">' +
+        '<div style="display:inline-flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;background:rgba(34,197,94,0.15);border:1.5px solid rgba(34,197,94,0.4);margin-bottom:16px;">' +
+          '<div style="width:12px;height:12px;border-radius:50%;background:#22c55e;animation:psmPhotoPulse 1s ease-in-out infinite;"></div>' +
+          '<span style="font-size:13px;font-weight:700;color:#86efac;">En attente de la photo...</span>' +
+        '</div>' +
+        '<div style="font-size:12px;color:#bfdbfe;line-height:1.6;margin-bottom:10px;">' +
+          '<strong style="color:#fde047;">' + escapeHtml(userName) + '</strong>, ouvrez <strong>PhysiPro PhotoSender</strong> sur votre téléphone.' +
+        '</div>' +
+        '<div style="font-size:11px;color:#94a3b8;line-height:1.5;padding:10px;border-radius:6px;background:rgba(0,0,0,0.3);margin-bottom:10px;">' +
+          'La tâche <strong style="color:#fde047;">PSM-' + escapeHtml(patientName) + '</strong> apparaîtra automatiquement dans l\'app. Prenez la photo et envoyez-la.' +
+        '</div>' +
+        '<div style="font-size:10px;color:#64748b;">Délai maximum : 5 minutes</div>' +
+      '</div>' +
+    '</div>' +
+    '<style>@keyframes psmPhotoPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.4)}}</style>';
+  modal.style.display = 'flex';
+}
+
+// Écoute la réponse du téléphone sur photoRequests/{jobId}
+function _startPhotoRequestListener(jobId) {
+  if (_psmPhotoRequestListener) {
+    try { db.ref('photoRequests/' + _psmPhotoJobId).off('value', _psmPhotoRequestListener); } catch(e) {}
+  }
+  _psmPhotoRequestListener = db.ref('photoRequests/' + jobId).on('value', function(snap) {
+    var req = snap.val();
+    if (!req) return;
+    
+    if (req.status === 'answering') {
+      // Le téléphone a vu la demande et a commencé à y répondre
+      var statusEl = document.querySelector('#psmPhotoRequestModal .psm-photo-status-text');
+      // Juste un indicateur visuel, pas d'action
+    }
+    
+    if (req.status === 'done') {
+      // La photo est arrivée !
+      var photos = [];
+      if (req.photo) photos.push(req.photo);
+      if (req.photos && Array.isArray(req.photos)) photos = photos.concat(req.photos);
+      
+      if (photos.length === 0) {
+        console.warn('PhotoRequest done sans photo');
+        return;
+      }
+      
+      // Ajouter toutes les photos à la carte
+      _savePhotosFromPhotoSender(photos, req.sentBy || 'Téléphone');
+      
+      // Nettoyer
+      _cleanupPhotoRequest(jobId);
+    }
+  });
+}
+
+// Sauvegarde les photos reçues du PhotoSender dans la carte PSM
+function _savePhotosFromPhotoSender(photos, senderName) {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var card = psmData[currentCardId];
+  if (!card.cardCameraPhotos) card.cardCameraPhotos = [];
+  
+  var added = 0;
+  var addNext = function(idx) {
+    if (idx >= photos.length || card.cardCameraPhotos.length >= 8) {
+      // Fini ou limite atteinte — sauvegarder sur Firebase
+      if (db && added > 0) {
+        var updates = {};
+        updates['psm/' + currentCardId + '/cardCameraPhotos'] = card.cardCameraPhotos;
+        db.ref().update(updates).catch(function(e) { console.error('Erreur save:', e); });
+      }
+      if (added > 0) {
+        showToast('📷 ' + added + ' photo' + (added > 1 ? 's' : '') + ' reçue' + (added > 1 ? 's' : '') + ' de ' + senderName, 'success');
+      }
+      if (typeof refreshInlinePdf === 'function') refreshInlinePdf();
+      return;
+    }
+    var src = photos[idx];
+    var saveIt = function(compressed) {
+      card.cardCameraPhotos.push(compressed);
+      if (card.cardCameraPhotos.length > 8) card.cardCameraPhotos = card.cardCameraPhotos.slice(0, 8);
+      added++;
+      addNext(idx + 1);
+    };
+    if (typeof compressDevisImage === 'function') {
+      compressDevisImage(src).then(saveIt).catch(function() { saveIt(src); });
+    } else {
+      saveIt(src);
+    }
+  };
+  addNext(0);
+}
+
+// Supprime les références Firebase et ferme le modal
+function _cleanupPhotoRequest(jobId) {
+  // Fermer le modal
+  var modal = document.getElementById('psmPhotoRequestModal');
+  if (modal) modal.style.display = 'none';
+  
+  // Détacher le listener
+  if (_psmPhotoRequestListener && jobId) {
+    try { db.ref('photoRequests/' + jobId).off('value', _psmPhotoRequestListener); } catch(e) {}
+    _psmPhotoRequestListener = null;
+  }
+  
+  // Clear timeout
+  if (_psmPhotoTimeoutId) {
+    clearTimeout(_psmPhotoTimeoutId);
+    _psmPhotoTimeoutId = null;
+  }
+  
+  // Supprimer les données Firebase (job temporaire + photoRequest)
+  if (db && jobId) {
+    var updates = {};
+    updates['jobs/' + jobId] = null;
+    updates['photoRequests/' + jobId] = null;
+    db.ref().update(updates).catch(function(e) { console.error('Erreur cleanup:', e); });
+  }
+  
+  _psmPhotoJobId = null;
+}
+
+// Annulation manuelle (bouton ✕ ou timeout)
+function _cancelPhotoRequest(jobId, reason) {
+  if (reason) showToast('ℹ️ Demande photo annulée : ' + reason, 'info');
+  _cleanupPhotoRequest(jobId);
+}
+
+// Sauvegarde la photo (base64) dans card.cardCameraPhotos + Firebase
+function _saveCameraPhoto(base64) {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var card = psmData[currentCardId];
+  if (!card.cardCameraPhotos) card.cardCameraPhotos = [];
+  if (card.cardCameraPhotos.length >= 8) {
+    showToast('⚠️ Maximum 8 photos atteintes', 'warning');
+    return;
+  }
+  
+  var saveIt = function(src) {
+    card.cardCameraPhotos.push(src); // Ajout à la fin : la première reste en haut
+    if (card.cardCameraPhotos.length > 8) card.cardCameraPhotos = card.cardCameraPhotos.slice(0, 8);
+    if (db) {
+      var updates = {};
+      updates['psm/' + currentCardId + '/cardCameraPhotos'] = card.cardCameraPhotos;
+      db.ref().update(updates).catch(function(e) {
+        console.error('Erreur sauvegarde photo:', e);
+        showToast('⚠️ Photo ajoutée localement mais Firebase a échoué', 'warning');
+      });
+    }
+    showToast('📷 Photo ajoutée (' + card.cardCameraPhotos.length + '/8)', 'success');
+    if (typeof refreshInlinePdf === 'function') refreshInlinePdf();
+  };
+  
+  if (typeof compressDevisImage === 'function') {
+    compressDevisImage(base64).then(saveIt).catch(function() { saveIt(base64); });
+  } else {
+    saveIt(base64);
+  }
+}
+
+// Handler appelé quand une photo est prise (ou un fichier image sélectionné)
+function handleCameraCapture(input) {
+  if (!input.files || !input.files.length) return;
+  if (!currentCardId || !psmData[currentCardId]) {
+    showToast('⚠️ Sélectionnez une carte d\'abord', 'warning');
+    input.value = '';
+    return;
+  }
+  var file = input.files[0];
+  if (!file || file.type.indexOf('image/') !== 0) {
+    showToast('❌ Format invalide : image attendue', 'error');
+    input.value = '';
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    _saveCameraPhoto(ev.target.result);
+    input.value = '';
+  };
+  reader.onerror = function() {
+    showToast('❌ Erreur de lecture de la photo', 'error');
+    input.value = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+// Supprime une photo caméra (appelée depuis le bouton ✕ sur chaque photo)
+function removeCameraPhoto(idx) {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var card = psmData[currentCardId];
+  if (!card.cardCameraPhotos || !card.cardCameraPhotos[idx]) return;
+  if (!confirm('Supprimer cette photo ?')) return;
+  card.cardCameraPhotos.splice(idx, 1);
+  if (db) {
+    var updates = {};
+    updates['psm/' + currentCardId + '/cardCameraPhotos'] = card.cardCameraPhotos.length > 0 ? card.cardCameraPhotos : null;
+    db.ref().update(updates).catch(function(e) { console.error('Erreur suppression:', e); });
+  }
+  showToast('🗑️ Photo supprimée', 'info');
+  if (typeof refreshInlinePdf === 'function') refreshInlinePdf();
+}
+
+// ═══ EXPORT PDF : toutes les photos de la carte → 1 seul PDF ═══
+// Crée un PDF A4 avec une photo par page, téléchargé automatiquement
+function saveCardPhotosToPdf() {
+  if (!currentCardId || !psmData[currentCardId]) {
+    showToast('⚠️ Sélectionnez une carte d\'abord', 'warning');
+    return;
+  }
+  var card = psmData[currentCardId];
+  var photos = card.cardCameraPhotos || [];
+  if (photos.length === 0) {
+    showToast('⚠️ Aucune photo à sauvegarder en PDF', 'warning');
+    return;
+  }
+  
+  // Vérifier que jsPDF est bien chargé
+  if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF) {
+    showToast('❌ Librairie PDF non chargée — rafraîchissez la page', 'error');
+    return;
+  }
+  
+  var jsPDF = window.jspdf.jsPDF;
+  var btn = document.getElementById('btnPhotosToPdf');
+  var originalBtnHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.innerHTML = '⏳';
+    btn.disabled = true;
+  }
+  
+  try {
+    // Format A4 portrait : 210 x 297 mm
+    var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    var pageW = 210;
+    var pageH = 297;
+    var margin = 10;
+    var availW = pageW - 2 * margin;
+    var availH = pageH - 2 * margin - 15; // -15 pour laisser place au titre
+    
+    // Ordre chronologique (la plus ancienne en premier dans le PDF pour ordre de prise de photo)
+    // Les photos sont stockées avec la plus récente en index 0, on inverse pour les avoir chronologiques
+    var orderedPhotos = photos.slice().reverse();
+    
+    // Traitement séquentiel avec promesses pour charger les images et préserver leurs dimensions
+    var processPhoto = function(idx) {
+      return new Promise(function(resolve, reject) {
+        var img = new Image();
+        img.onload = function() {
+          var imgW = img.naturalWidth;
+          var imgH = img.naturalHeight;
+          // Calcul des dimensions pour tenir dans la page (ratio préservé)
+          var ratio = Math.min(availW / (imgW * 0.264583), availH / (imgH * 0.264583));
+          // 0.264583 = conversion pixel → mm à 96 dpi
+          var finalW = imgW * 0.264583 * ratio;
+          var finalH = imgH * 0.264583 * ratio;
+          // Centrer sur la page
+          var x = (pageW - finalW) / 2;
+          var y = margin + 15 + (availH - finalH) / 2;
+          
+          if (idx > 0) pdf.addPage();
+          
+          // Titre en haut
+          pdf.setFontSize(12);
+          pdf.setTextColor(30, 58, 138); // Bleu foncé
+          pdf.setFont('helvetica', 'bold');
+          pdf.text('PSM — ' + (card.name || 'Patient'), pageW / 2, margin + 5, { align: 'center' });
+          pdf.setFontSize(9);
+          pdf.setTextColor(100, 116, 139); // Gris
+          pdf.setFont('helvetica', 'normal');
+          pdf.text('Photo ' + (idx + 1) + ' / ' + orderedPhotos.length, pageW / 2, margin + 11, { align: 'center' });
+          
+          // Image
+          pdf.addImage(orderedPhotos[idx], 'JPEG', x, y, finalW, finalH, undefined, 'FAST');
+          
+          resolve();
+        };
+        img.onerror = function() {
+          console.error('Erreur chargement image ' + idx);
+          resolve(); // Ne pas bloquer, continuer quand même
+        };
+        img.src = orderedPhotos[idx];
+      });
+    };
+    
+    // Traiter toutes les photos en séquence
+    var chain = Promise.resolve();
+    for (var i = 0; i < orderedPhotos.length; i++) {
+      (function(idx) {
+        chain = chain.then(function() { return processPhoto(idx); });
+      })(i);
+    }
+    
+    chain.then(function() {
+      // Nom du fichier : PSM_NomDuPatient_AAAA-MM-JJ.pdf
+      var d = new Date();
+      var dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      var safeName = (card.name || 'Patient').replace(/[^a-zA-Z0-9À-ÿ\-_]/g, '_').substring(0, 40);
+      var filename = 'PSM_' + safeName + '_' + dateStr + '.pdf';
+      pdf.save(filename);
+      showToast('📄 PDF créé : ' + orderedPhotos.length + ' photo' + (orderedPhotos.length > 1 ? 's' : ''), 'success');
+      if (btn) { btn.innerHTML = originalBtnHtml; btn.disabled = false; }
+    }).catch(function(err) {
+      console.error('Erreur création PDF:', err);
+      showToast('❌ Erreur création PDF', 'error');
+      if (btn) { btn.innerHTML = originalBtnHtml; btn.disabled = false; }
+    });
+  } catch(e) {
+    console.error('Erreur PDF:', e);
+    showToast('❌ Erreur création PDF : ' + (e.message || e), 'error');
+    if (btn) { btn.innerHTML = originalBtnHtml; btn.disabled = false; }
+  }
 }
 
 // When user exits fullscreen (Escape or F11), close devis viewer too
