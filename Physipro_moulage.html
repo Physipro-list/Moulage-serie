@@ -306,6 +306,70 @@
   
   <!-- Firebase Storage remplace OneDrive pour les photos (v1585) -->
   <style>
+    /* ══════════════════════════════════════
+       MODE LECTURE SEULE — Blocage complet UI
+       ══════════════════════════════════════ */
+    body.readonly-mode { padding-top: 30px !important; }
+    
+    /* Désactiver tous les inputs, textareas, selects */
+    body.readonly-mode input:not([type="radio"]):not([type="checkbox"]),
+    body.readonly-mode textarea,
+    body.readonly-mode select,
+    body.readonly-mode [contenteditable="true"] {
+      pointer-events: none !important;
+      user-select: text !important;
+      background-color: rgba(255,255,255,0.03) !important;
+      cursor: not-allowed !important;
+    }
+    body.readonly-mode [contenteditable="true"] { -webkit-user-modify: read-only !important; }
+    
+    /* Cacher les boutons d'action (ajouter, sauvegarder, supprimer, modifier, etc) */
+    body.readonly-mode button[onclick*="add"],
+    body.readonly-mode button[onclick*="Add"],
+    body.readonly-mode button[onclick*="save"],
+    body.readonly-mode button[onclick*="Save"],
+    body.readonly-mode button[onclick*="delete"],
+    body.readonly-mode button[onclick*="Delete"],
+    body.readonly-mode button[onclick*="remove"],
+    body.readonly-mode button[onclick*="Remove"],
+    body.readonly-mode button[onclick*="archive"],
+    body.readonly-mode button[onclick*="Archive"],
+    body.readonly-mode button[onclick*="edit"],
+    body.readonly-mode button[onclick*="Edit"],
+    body.readonly-mode button[onclick*="create"],
+    body.readonly-mode button[onclick*="Create"],
+    body.readonly-mode button[onclick*="new"],
+    body.readonly-mode button[onclick*="New"],
+    body.readonly-mode button[onclick*="upload"],
+    body.readonly-mode button[onclick*="Upload"],
+    body.readonly-mode button[onclick*="photo"],
+    body.readonly-mode button[onclick*="Photo"],
+    body.readonly-mode .btn-add,
+    body.readonly-mode .btn-save,
+    body.readonly-mode .btn-delete,
+    body.readonly-mode .add-btn,
+    body.readonly-mode .save-btn,
+    body.readonly-mode .delete-btn,
+    body.readonly-mode .edit-btn { display: none !important; }
+    
+    /* Désactiver tous les autres boutons par sécurité (sauf navigation/fermeture/logout) */
+    body.readonly-mode button:not([data-readonly-allow]):not(.close-btn):not(.ppnav-close):not(#logoutBtn):not(.nav-btn):not(.tab-btn):not([onclick*="close"]):not([onclick*="Close"]):not([onclick*="toggle"]):not([onclick*="Toggle"]):not([onclick*="show"]):not([onclick*="Show"]):not([onclick*="open"]):not([onclick*="Open"]):not([onclick*="filter"]):not([onclick*="Filter"]):not([onclick*="search"]):not([onclick*="Search"]):not([onclick*="switch"]):not([onclick*="Switch"]):not([onclick*="export"]):not([onclick*="Export"]):not([onclick*="print"]):not([onclick*="Print"]):not([onclick*="refresh"]):not([onclick*="Refresh"]):not([onclick*="logout"]):not([onclick*="Logout"]):not([onclick*="login"]):not([onclick*="Login"]) {
+      opacity: 0.4 !important;
+      pointer-events: none !important;
+      cursor: not-allowed !important;
+    }
+    
+    /* Bloquer le drag-and-drop */
+    body.readonly-mode [draggable="true"] { pointer-events: auto !important; }
+    body.readonly-mode .draggable,
+    body.readonly-mode .drag-handle { cursor: default !important; }
+    
+    /* Visuel : petit cadenas discret sur les zones normalement éditables */
+    body.readonly-mode input:not([type="radio"]):not([type="checkbox"]):not([type="search"]),
+    body.readonly-mode textarea {
+      border-color: rgba(220,38,38,0.3) !important;
+    }
+    
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; background: linear-gradient(135deg, #0a0f1a 0%, #1a1f2e 50%, #0d1420 100%); color: #e2e8f0; height: 100vh; overflow: hidden; }
 
@@ -4328,9 +4392,113 @@
     const storage = firebase.storage();
     const auth = firebase.auth();
     
+    // ══════════════════════════════════════
+    //  INTERCEPTEUR FIREBASE LECTURE SEULE
+    //  Bloque set/update/push/remove/transaction/setWithPriority
+    //  si isReadOnly === true. Les lectures (on/once/orderBy...) restent OK.
+    // ══════════════════════════════════════
+    (function installReadOnlyGuard() {
+      const WRITE_METHODS = ['set','update','push','remove','transaction','setWithPriority','setPriority'];
+      const originalRef = firebaseDb.ref.bind(firebaseDb);
+      firebaseDb.ref = function(path) {
+        const ref = originalRef(path);
+        WRITE_METHODS.forEach(method => {
+          const original = ref[method];
+          if (typeof original === 'function') {
+            ref[method] = function(...args) {
+              if (typeof isReadOnly !== 'undefined' && isReadOnly) {
+                console.warn('🔒 Écriture Firebase bloquée (lecture seule):', method, 'sur', path);
+                // Retourner une promise résolue pour ne pas casser le code appelant
+                return Promise.resolve();
+              }
+              return original.apply(this, args);
+            };
+          }
+        });
+        // Pour push, on doit aussi intercepter le .set() qui suit sur le ThenableReference
+        return ref;
+      };
+      // Intercepter aussi les écritures Storage
+      const originalStorageRef = storage.ref.bind(storage);
+      storage.ref = function(path) {
+        const sref = originalStorageRef(path);
+        const originalPut = sref.put;
+        const originalPutString = sref.putString;
+        const originalDelete = sref.delete;
+        if (typeof originalPut === 'function') {
+          sref.put = function(...args) {
+            if (typeof isReadOnly !== 'undefined' && isReadOnly) {
+              console.warn('🔒 Upload Storage bloqué (lecture seule):', path);
+              return { on: () => {}, then: (cb) => Promise.resolve(), snapshot: { ref: { getDownloadURL: () => Promise.resolve('') } } };
+            }
+            return originalPut.apply(this, args);
+          };
+        }
+        if (typeof originalPutString === 'function') {
+          sref.putString = function(...args) {
+            if (typeof isReadOnly !== 'undefined' && isReadOnly) {
+              console.warn('🔒 Upload Storage bloqué (lecture seule):', path);
+              return { on: () => {}, then: (cb) => Promise.resolve(), snapshot: { ref: { getDownloadURL: () => Promise.resolve('') } } };
+            }
+            return originalPutString.apply(this, args);
+          };
+        }
+        if (typeof originalDelete === 'function') {
+          sref.delete = function(...args) {
+            if (typeof isReadOnly !== 'undefined' && isReadOnly) {
+              console.warn('🔒 Suppression Storage bloquée (lecture seule):', path);
+              return Promise.resolve();
+            }
+            return originalDelete.apply(this, args);
+          };
+        }
+        return sref;
+      };
+      console.log('🛡️ Intercepteur lecture seule installé');
+    })();
+    
     // Variables d'authentification
     let currentUser = null;
     let isAuthenticated = false;
+    
+    // ══════════════════════════════════════
+    //  MODE LECTURE SEULE (consultation uniquement)
+    //  Les emails listés ici pourront voir Moulage mais pas modifier
+    // ══════════════════════════════════════
+    const READONLY_EMAILS = [
+      'sonia.boulanger@physipro.com'
+    ];
+    let isReadOnly = false;
+    
+    function checkReadOnlyMode(email) {
+      if (!email) { isReadOnly = false; return; }
+      isReadOnly = READONLY_EMAILS.includes(email.toLowerCase().trim());
+      if (isReadOnly) {
+        document.body.classList.add('readonly-mode');
+        console.warn('🔒 MODE LECTURE SEULE activé pour', email);
+        showReadOnlyBanner();
+      } else {
+        document.body.classList.remove('readonly-mode');
+      }
+    }
+    
+    function showReadOnlyBanner() {
+      if (document.getElementById('readOnlyBanner')) return;
+      const banner = document.createElement('div');
+      banner.id = 'readOnlyBanner';
+      banner.innerHTML = '🔒 MODE CONSULTATION — Aucune modification possible';
+      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:linear-gradient(90deg,#dc2626,#b91c1c);color:#fff;text-align:center;padding:6px 12px;font-size:13px;font-weight:700;letter-spacing:0.5px;z-index:999999;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;';
+      document.body.appendChild(banner);
+    }
+    
+    // Wrapper anti-écriture : bloque toute écriture Firebase en mode lecture seule
+    function blockIfReadOnly(operation) {
+      if (isReadOnly) {
+        console.warn('🔒 Écriture Firebase bloquée (mode lecture seule):', operation || 'opération');
+        return true;
+      }
+      return false;
+    }
     
     // Variables pour les logs
     let activityLogs = [];
@@ -12177,6 +12345,9 @@
           console.log('✅ Utilisateur authentifié:', user.email);
           currentUser = user;
           isAuthenticated = true;
+          
+          // Vérifier si l'utilisateur est en mode lecture seule
+          checkReadOnlyMode(user.email);
           
           // Charger les logs depuis le localStorage
           loadLogs();
