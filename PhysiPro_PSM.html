@@ -12,6 +12,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
 <style>
 *, *::before, *::after { box-sizing: border-box; }
@@ -314,21 +315,30 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   margin-bottom: 2px;
-  padding: 5px 6px;
+  padding: 3px 4px;
   background: linear-gradient(to bottom, #04152c, #4a8ef5);
   border: 2px solid #000;
-  border-radius: 6px;
+  border-radius: 5px;
   cursor: pointer;
   transition: filter 0.15s;
-  line-height: 1.15;
+  line-height: 1.1;
   overflow: hidden;
-  height: 52px;
-  min-height: 52px;
-  max-height: 52px;
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
   box-sizing: border-box;
   box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+/* Cartes complètes : hauteur auto pour afficher TOUT le contenu
+   (nom + statut+depts + bouton Imprimer/Supprimer).
+   L'ancienne hauteur fixe coupait le bouton Imprimer. */
+.psmc.is-complete {
+  height: auto;
+  min-height: 42px;
+  max-height: none;
+  padding-bottom: 0; /* le bouton action touche le bas */
 }
 .psmc:hover { filter: brightness(1.15); }
 .psmc.selected {
@@ -336,6 +346,20 @@ body {
   border-width: 2px !important;
   box-shadow: 0 0 6px rgba(251,191,36,0.6), 0 0 0 2px #000;
 }
+/* Moitié gauche verte = Atelier seul complété.
+   On garde le dégradé bleu d'origine à droite pour la moitié Couture pas encore faite. */
+.psmc.half-atelier {
+  background: linear-gradient(to right,
+    #064e3b 0%, #16a34a 50%,
+    #04152c 50%, #4a8ef5 100%) !important;
+}
+/* Moitié droite verte = Couture seul complété. */
+.psmc.half-couture {
+  background: linear-gradient(to right,
+    #04152c 0%, #4a8ef5 50%,
+    #064e3b 50%, #16a34a 100%) !important;
+}
+/* Deux départements complétés = carte totalement verte (état "Complet"). */
 .psmc.is-complete {
   background: linear-gradient(to bottom, #064e3b, #16a34a);
   border-color: #000 !important;
@@ -371,40 +395,41 @@ body.couture-mode .psmc.is-quest {
 }
 
 .psmc-name {
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 700;
   color: #fff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.2;
+  line-height: 1.15;
   text-align: center;
-  text-shadow: -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px 1.5px 0 #000, 0 2px 3px rgba(0,0,0,0.4);
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 3px rgba(0,0,0,0.4);
 }
 
 .psmc-row2 {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 2px;
   min-width: 0;
+  width: 100%;
 }
 .psmc-status {
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 800;
-  line-height: 1.2;
+  line-height: 1.15;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
   text-transform: uppercase;
   color: #fff;
   background: linear-gradient(135deg, #1e3a8a, #1e40af);
   border: 1px solid #0f1e4a;
-  padding: 3px 10px;
-  border-radius: 4px;
+  padding: 2px 7px;
+  border-radius: 3px;
   text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
   flex-shrink: 0;
   min-width: 0;
   display: inline-block;
@@ -435,35 +460,34 @@ body.couture-mode .psmc.is-quest {
 }
 .psmc-print:hover { background: #f0fdf4; }
 
-/* Row 3: Atelier | Couture dept completion bar — hidden until at least one dept is done */
-.psmc-depts {
-  display: none;
-  gap: 2px;
-  border-top: 1px solid rgba(255,255,255,0.1);
-  padding: 2px;
-}
-.psmc.has-dept-done .psmc-depts {
-  display: flex;
-}
+/* Ancienne barre Atelier/Couture en dessous supprimée — les badges
+   .psmc-dept-left et .psmc-dept-right sont maintenant directement
+   dans .psmc-row2, de chaque côté du statut. */
 /* Row 4: Action button below card (print → delete) — only for complete cards */
 .psmc-action {
   display: none;
-  margin-top: 1px;
-  border-top: 1px solid rgba(255,255,255,0.15);
+  margin-top: 2px;
+  /* Déborde jusqu'aux bords de la carte en compensant le padding horizontal (4px) */
+  margin-left: -4px;
+  margin-right: -4px;
+  margin-bottom: -3px;
+  width: calc(100% + 8px);
+  border-top: 1px solid rgba(0,0,0,0.4);
 }
 .psmc.is-complete .psmc-action { display: block; }
 .psmc-action-btn {
   display: block;
   width: 100%;
-  padding: 4px 0;
-  border: 1px solid #000;
-  font-size: 9px;
+  padding: 3px 0;
+  border: none;
+  border-top: 1px solid #000;
+  font-size: 8px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.2px;
   cursor: pointer;
   text-align: center;
-  border-radius: 0 0 5px 5px;
+  border-radius: 0 0 3px 3px;
   text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
 }
 .psmc-action-btn.act-print {
@@ -476,6 +500,25 @@ body.couture-mode .psmc.is-quest {
   color: #fff;
 }
 .psmc-action-btn.act-delete:hover { filter: brightness(1.15); }
+
+/* Split mode: après impression, on garde Imprimer (large) + Supprimer (compact) côte à côte */
+.psmc-action-split {
+  display: flex;
+  width: 100%;
+}
+.psmc-action-btn.act-print-split {
+  flex: 1;
+  border-radius: 0 0 0 3px;
+  border-right: 1px solid rgba(0,0,0,0.5);
+}
+.psmc-action-btn.act-delete-compact {
+  width: auto;
+  flex: 0 0 28px;
+  padding: 3px 0;
+  border-radius: 0 0 3px 0;
+  font-size: 9px;
+}
+.psmc-action-btn.act-delete-compact:hover { filter: brightness(1.15); }
 /* Small delete button in main header */
 .psm-header-delete-btn {
   flex-shrink: 0;
@@ -490,25 +533,29 @@ body.couture-mode .psmc.is-quest {
   cursor: pointer;
 }
 .psm-header-delete-btn:hover { background: rgba(239,68,68,0.3); color: #fca5a5; }
+/* Badges Atelier/Couture de chaque côté du statut dans .psmc-row2
+   - Compacts pour tenir sur la même ligne
+   - Vert si le dept est complété */
 .psmc-dept {
-  flex: 1;
+  flex: 0 0 auto;
   text-align: center;
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.2px;
-  padding: 3px 0;
-  color: rgba(255,255,255,0.7);
-  background: rgba(255,255,255,0.08);
-  border-radius: 4px;
+  letter-spacing: 0.15px;
+  padding: 2px 4px;
+  color: rgba(255,255,255,0.85);
+  background: rgba(0,0,0,0.25);
+  border-radius: 3px;
   border: 1px solid #000;
   text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+  white-space: nowrap;
+  line-height: 1.15;
 }
 .psmc-dept.done {
-  background: rgba(34,197,94,0.5);
+  background: linear-gradient(135deg, #22c55e, #16a34a);
   color: #fff;
-  border-radius: 4px;
-  border: 1px solid #000;
+  border-color: #14532d;
 }
 
 /* Pastille fiche à gauche de la carte */
@@ -2144,27 +2191,54 @@ body.has-materials .psm-header-right {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 3px 10px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 5px;
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
-  border: 1.5px solid rgba(255,255,255,0.2);
-  background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.6);
+  border: 2px solid rgba(74, 142, 245, 0.5);
+  background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%);
+  color: #fff;
   white-space: nowrap;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   flex-shrink: 0;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 3px 8px rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(255, 255, 255, 0.25) inset;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
-.psm-htab:hover { background: rgba(74,142,245,0.15); border-color: rgba(74,142,245,0.5); color: #cbd5e1; }
-.psm-htab.active { background: rgba(74,142,245,0.3); border-color: rgba(74,142,245,0.8); color: #fff; box-shadow: 0 0 6px rgba(59,130,246,0.3); }
-.psm-htab.has-content { background: rgba(74,142,245,0.15); border-color: rgba(74,142,245,0.5); color: #93c5fd; }
-.psm-htab .htab-del { font-size: 8px; color: #dc2626; margin-left: 3px; opacity: 0; transition: opacity 0.15s; cursor: pointer; background:none; border:none; padding:0; }
-.psm-htab:hover .htab-del { opacity: 0.8; }
-.psm-htab .htab-del:hover { opacity: 1; }
+.psm-htab:hover {
+  border-color: rgba(74, 142, 245, 0.85);
+  filter: brightness(1.15);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 4px 12px rgba(74, 142, 245, 0.7),
+    0 0 12px rgba(74, 142, 245, 0.35),
+    0 1px 2px rgba(255, 255, 255, 0.35) inset;
+}
+.psm-htab.active {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: linear-gradient(to bottom, #1e40af 0%, #60a5fa 100%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 4px 12px rgba(74, 142, 245, 0.6),
+    0 0 14px rgba(74, 142, 245, 0.5),
+    0 1px 2px rgba(255, 255, 255, 0.4) inset;
+}
+.psm-htab.has-content {
+  border-color: rgba(147, 197, 253, 0.6);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 3px 10px rgba(74, 142, 245, 0.45),
+    0 1px 2px rgba(255, 255, 255, 0.3) inset;
+}
+.psm-htab .htab-del { font-size: 8px; color: #fca5a5; margin-left: 3px; opacity: 0; transition: opacity 0.15s; cursor: pointer; background:none; border:none; padding:0; }
+.psm-htab:hover .htab-del { opacity: 0.9; }
+.psm-htab .htab-del:hover { opacity: 1; color: #ef4444; }
 @keyframes psm-flash-secondary {
-  0%, 100% { background: rgba(139,92,246,0.3); border-color: rgba(139,92,246,0.8); box-shadow: 0 0 6px rgba(139,92,246,0.3); }
-  50% { background: rgba(251,191,36,0.4); border-color: rgba(251,191,36,0.8); box-shadow: 0 0 12px rgba(251,191,36,0.5); }
+  0%, 100% { border-color: rgba(139,92,246,0.8); box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 3px 10px rgba(139,92,246,0.6), 0 1px 2px rgba(255,255,255,0.3) inset; }
+  50% { border-color: rgba(251,191,36,0.9); box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 4px 14px rgba(251,191,36,0.7), 0 0 16px rgba(251,191,36,0.5), 0 1px 2px rgba(255,255,255,0.4) inset; }
 }
 .psm-htab.flash-secondary {
   animation: psm-flash-secondary 1s ease-in-out infinite;
@@ -2345,8 +2419,13 @@ body.couture-mode .cards-col {
   background: linear-gradient(to bottom, #2d1a4e, #1a0a2e);
 }
 body.couture-mode .psm-htab.active {
-  background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
-  border-color: rgba(168,85,247,0.6) !important;
+  background: linear-gradient(to bottom, #5b21b6 0%, #a855f7 100%) !important;
+  border-color: rgba(168, 85, 247, 0.85) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 4px 12px rgba(168, 85, 247, 0.6),
+    0 0 14px rgba(168, 85, 247, 0.5),
+    0 1px 2px rgba(255, 255, 255, 0.4) inset !important;
 }
 body.couture-mode .psm-items-controls {
   background: linear-gradient(to bottom, #1a0a2e, #7c3aed) !important;
@@ -2382,6 +2461,292 @@ body.couture-mode #notesScPanel {
 body.couture-mode #notesScPanel > div:first-child {
   background: linear-gradient(to bottom, #1a0a2e, #7c3aed) !important;
 }
+/* ═══ BOUTON "◀ RETOUR AUX SOUMISSIONS" ═══
+   Bordure blanche lumineuse + ombre portée pour bien ressortir comme bouton cliquable */
+.btn-retour-soumissions {
+  width: 100%;
+  height: 100%;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 2px solid rgba(74, 142, 245, 0.5) !important;
+  background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 3px 8px rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(255, 255, 255, 0.25) inset;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  transition: all 0.2s ease;
+}
+.btn-retour-soumissions:hover {
+  border-color: rgba(74, 142, 245, 0.85) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 4px 12px rgba(74, 142, 245, 0.7),
+    0 0 12px rgba(74, 142, 245, 0.35),
+    0 1px 2px rgba(255, 255, 255, 0.35) inset;
+  filter: brightness(1.1);
+}
+.btn-retour-soumissions:active {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 1px 3px rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.2) inset;
+  filter: brightness(0.95);
+}
+
+/* ═══ SPLITTER RESIZABLE entre Matériaux et Notes ═══ */
+.notes-split-handle {
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: linear-gradient(to right,
+    rgba(59,130,246,0.15) 0%,
+    rgba(59,130,246,0.6) 50%,
+    rgba(59,130,246,0.15) 100%);
+  border-left: 1px solid rgba(59,130,246,0.35);
+  border-right: 1px solid rgba(59,130,246,0.35);
+  position: relative;
+  z-index: 5;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.notes-split-handle:hover,
+.notes-split-handle.dragging {
+  background: linear-gradient(to right,
+    rgba(59,130,246,0.5) 0%,
+    rgba(59,130,246,1) 50%,
+    rgba(59,130,246,0.5) 100%);
+  box-shadow: 0 0 10px rgba(59,130,246,0.6);
+}
+/* Petite poignée grip au milieu (3 barres verticales) */
+.notes-split-handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 28px;
+  background:
+    linear-gradient(to bottom,
+      rgba(255,255,255,0.5) 0%,
+      rgba(255,255,255,0.5) 100%);
+  border-radius: 1px;
+  box-shadow:
+    -3px 0 0 rgba(255,255,255,0.5),
+     3px 0 0 rgba(255,255,255,0.5);
+  pointer-events: none;
+}
+.notes-split-handle:hover::before,
+.notes-split-handle.dragging::before {
+  background: rgba(255,255,255,0.9);
+  box-shadow:
+    -3px 0 0 rgba(255,255,255,0.9),
+     3px 0 0 rgba(255,255,255,0.9);
+}
+/* Pendant le drag, désactive la sélection de texte */
+body.notes-split-dragging {
+  user-select: none !important;
+  cursor: col-resize !important;
+}
+body.notes-split-dragging * {
+  user-select: none !important;
+  cursor: col-resize !important;
+}
+/* Mode Couture : splitter mauve */
+body.couture-mode .notes-split-handle {
+  background: linear-gradient(to right,
+    rgba(168,85,247,0.15) 0%,
+    rgba(168,85,247,0.6) 50%,
+    rgba(168,85,247,0.15) 100%);
+  border-left-color: rgba(168,85,247,0.35);
+  border-right-color: rgba(168,85,247,0.35);
+}
+body.couture-mode .notes-split-handle:hover,
+body.couture-mode .notes-split-handle.dragging {
+  background: linear-gradient(to right,
+    rgba(168,85,247,0.5) 0%,
+    rgba(168,85,247,1) 50%,
+    rgba(168,85,247,0.5) 100%);
+  box-shadow: 0 0 10px rgba(168,85,247,0.6);
+}
+/* Par défaut : afficher le texte long, cacher le court */
+.btn-retour-soumissions .btn-retour-full { display: inline; }
+.btn-retour-soumissions .btn-retour-short { display: none; }
+
+/* ═══ MODE COLLAPSED du panneau Notes Service Client ═══ */
+#notesScPanel.collapsed {
+  width: 48px !important;
+  min-width: 48px !important;
+}
+/* Cache la pastille titre, l'éditeur et le bouton Questionnement quand collapsé */
+#notesScPanel.collapsed #notesScTitleBar,
+#notesScPanel.collapsed #notesScEditorWrap,
+#notesScPanel.collapsed #notesScBottomBar {
+  display: none !important;
+}
+/* Barre du haut ultra-compacte en mode collapsed */
+#notesScPanel.collapsed > div:first-child {
+  padding: 2px !important;
+  height: auto !important;
+  flex-direction: column !important;
+  gap: 3px;
+}
+/* Le bouton Retour devient compact avec flèche + "Retour" en 2 lignes */
+#notesScPanel.collapsed .btn-retour-soumissions {
+  padding: 3px 0 !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+  height: auto !important;
+}
+#notesScPanel.collapsed .btn-retour-soumissions .btn-retour-full { display: none; }
+#notesScPanel.collapsed .btn-retour-soumissions .btn-retour-short { display: block; }
+/* Bouton "▶" pour ré-expand en mode collapsed (apparait sous la flèche retour) */
+.btn-expand-notes-sc {
+  display: none; /* caché par défaut */
+  width: 100%;
+  padding: 3px 0;
+  border-radius: 4px;
+  border: 1.5px solid rgba(191, 219, 254, 0.5);
+  background: rgba(0, 0, 0, 0.3);
+  color: #bfdbfe;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.btn-expand-notes-sc:hover {
+  border-color: #fff;
+  color: #fff;
+  background: rgba(74, 142, 245, 0.3);
+}
+#notesScPanel.collapsed .btn-expand-notes-sc { display: block; }
+
+/* ═══ SÉPARATEUR DRAGGABLE entre Matériaux et Notes ═══ */
+.mat-notes-resizer {
+  flex: 0 0 6px;
+  background: linear-gradient(to right, rgba(59,130,246,0.7), rgba(59,130,246,1), rgba(59,130,246,0.7));
+  cursor: col-resize;
+  position: relative;
+  transition: background 0.15s, flex 0.15s;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(59,130,246,0.4);
+  z-index: 5;
+}
+.mat-notes-resizer:hover {
+  flex: 0 0 8px;
+  background: linear-gradient(to right, rgba(251,191,36,0.6), rgba(251,191,36,1), rgba(251,191,36,0.6));
+  box-shadow: 0 0 12px rgba(251,191,36,0.6);
+}
+.mat-notes-resizer.is-dragging {
+  flex: 0 0 8px;
+  background: linear-gradient(to right, rgba(251,191,36,0.8), #fbbf24, rgba(251,191,36,0.8));
+  box-shadow: 0 0 16px rgba(251,191,36,0.8);
+}
+/* Petit indicateur visuel ⋮ au centre du séparateur */
+.mat-notes-resizer::before {
+  content: '⋮';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255,255,255,0.85);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+/* Pendant le drag, on désactive la sélection de texte */
+body.resizing-mat-notes {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+body.resizing-mat-notes * {
+  user-select: none !important;
+  pointer-events: none !important;
+}
+body.resizing-mat-notes .mat-notes-resizer {
+  pointer-events: auto !important;
+}
+/* Version mauve en mode Couture */
+body.couture-mode .mat-notes-resizer {
+  background: linear-gradient(to right, rgba(168,85,247,0.7), rgba(168,85,247,1), rgba(168,85,247,0.7));
+  box-shadow: 0 0 8px rgba(168,85,247,0.4);
+}
+body.couture-mode .mat-notes-resizer:hover {
+  background: linear-gradient(to right, rgba(251,191,36,0.6), rgba(251,191,36,1), rgba(251,191,36,0.6));
+}
+
+/* ═══ CLASSE UTILITAIRE — Bouton bleu subtil (style unifié) ═══ */
+.btn-blue-subtle {
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 2px solid rgba(74, 142, 245, 0.5);
+  background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 3px 8px rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(255, 255, 255, 0.25) inset;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.btn-blue-subtle:hover {
+  border-color: rgba(74, 142, 245, 0.85);
+  filter: brightness(1.15);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 4px 12px rgba(74, 142, 245, 0.7),
+    0 0 12px rgba(74, 142, 245, 0.35),
+    0 1px 2px rgba(255, 255, 255, 0.35) inset;
+}
+.btn-blue-subtle:active {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 1px 3px rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.2) inset;
+  filter: brightness(0.95);
+}
+body.couture-mode .btn-blue-subtle {
+  background: linear-gradient(to bottom, #1a0a2e 0%, #7c3aed 100%) !important;
+  border-color: rgba(168, 85, 247, 0.5) !important;
+}
+body.couture-mode .btn-blue-subtle:hover {
+  border-color: rgba(168, 85, 247, 0.85) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 4px 12px rgba(124, 58, 237, 0.7),
+    0 0 12px rgba(168, 85, 247, 0.35),
+    0 1px 2px rgba(255, 255, 255, 0.35) inset !important;
+}
+/* Bouton "Retour aux soumissions" en mode Couture : dégradé mauve top cover */
+body.couture-mode .btn-retour-soumissions {
+  background: linear-gradient(to bottom, #1a0a2e 0%, #7c3aed 100%) !important;
+  border-color: rgba(168, 85, 247, 0.5) !important;
+}
+body.couture-mode .btn-retour-soumissions:hover {
+  border-color: rgba(168, 85, 247, 0.85) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 4px 12px rgba(124, 58, 237, 0.7),
+    0 0 12px rgba(168, 85, 247, 0.35),
+    0 1px 2px rgba(255, 255, 255, 0.35) inset !important;
+}
+/* Ancienne règle conservée pour compatibilité */
+body.couture-mode #notesScPanel > div:first-child > button {
+  background: linear-gradient(to bottom, #1a0a2e 0%, #7c3aed 100%) !important;
+}
 /* Pastille "Note pour Service Client" : fond mauve + bordures mauves */
 body.couture-mode #notesScPanel > div:nth-child(2) {
   background: linear-gradient(to bottom, rgba(168,85,247,0.25), rgba(124,58,237,0.15)) !important;
@@ -2407,23 +2772,22 @@ body.couture-mode #notesScPanel > div:last-child {
 body.couture-mode #notesScDivider {
   background: linear-gradient(to bottom, #7c3aed, #4c1d95) !important;
 }
-/* Boutons Agrandir + Imprimer — mauve (Agrandir mauve foncé, Imprimer mauve clair) */
+/* Boutons du bas (Camera, PhotosToPdf, Agrandir, Imprimer) :
+   même dégradé que le top cover Couture (mauve foncé en haut → mauve en bas) */
 body.couture-mode #btnPdfAgrandir {
-  background: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
+  background: linear-gradient(to bottom, #1a0a2e 0%, #7c3aed 100%) !important;
   border-color: #4c1d95 !important;
 }
 body.couture-mode #btnPdfPrint {
-  background: linear-gradient(135deg, #a855f7, #9333ea) !important;
-  border-color: #7c3aed !important;
-}
-/* Bouton appareil photo mauve en mode couture */
-body.couture-mode #btnPdfCamera {
-  background: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
+  background: linear-gradient(to bottom, #1a0a2e 0%, #7c3aed 100%) !important;
   border-color: #4c1d95 !important;
 }
-/* Bouton PDF mauve foncé en mode couture */
+body.couture-mode #btnPdfCamera {
+  background: linear-gradient(to bottom, #1a0a2e 0%, #7c3aed 100%) !important;
+  border-color: #4c1d95 !important;
+}
 body.couture-mode #btnPhotosToPdf {
-  background: linear-gradient(135deg, #9333ea, #6b21a8) !important;
+  background: linear-gradient(to bottom, #1a0a2e 0%, #7c3aed 100%) !important;
   border-color: #4c1d95 !important;
 }
 /* Barre du bas sous le PDF (contenant les boutons) */
@@ -2449,14 +2813,18 @@ body.couture-mode #itemNotesEditor {
 }
 /* Zone image : laissée intouchée (c'est normal, c'est le PDF/image) */
 
-/* Boutons du header PSM (PDF principal, Notes/Photos, + Item, 🗑️) */
+/* Boutons du header PSM (Email/Photos, PDF principal, + Item, 🗑️) en mode Couture */
 body.couture-mode .psm-htab {
-  border-color: rgba(168,85,247,0.4) !important;
+  background: linear-gradient(to bottom, #1a0a2e 0%, #7c3aed 100%) !important;
+  border-color: rgba(168, 85, 247, 0.5) !important;
 }
-body.couture-mode #itemAddBtnHeader {
-  background: rgba(168,85,247,0.25) !important;
-  border-color: rgba(168,85,247,0.5) !important;
-  color: #e9d5ff !important;
+body.couture-mode .psm-htab:hover {
+  border-color: rgba(168, 85, 247, 0.85) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 4px 12px rgba(124, 58, 237, 0.7),
+    0 0 12px rgba(168, 85, 247, 0.35),
+    0 1px 2px rgba(255, 255, 255, 0.35) inset !important;
 }
 /* Barre de navigation des items */
 body.couture-mode #itemNavGroup button,
@@ -3724,9 +4092,22 @@ body.quest-drawer-open .psm-content-divider {
 .psm-type-toggle {
   display: flex;
   gap: 0;
-  border-radius: 4px;
+  border-radius: 5px;
   overflow: hidden;
-  border: 2px solid #3d5474;
+  border: 2px solid rgba(74, 142, 245, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 3px 8px rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(255, 255, 255, 0.25) inset;
+  transition: all 0.2s ease;
+}
+
+.psm-type-toggle:hover {
+  border-color: rgba(74, 142, 245, 0.85);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 4px 12px rgba(74, 142, 245, 0.5),
+    0 1px 2px rgba(255, 255, 255, 0.3) inset;
 }
 
 .psm-type-btn {
@@ -3735,17 +4116,25 @@ body.quest-drawer-open .psm-content-divider {
   font-weight: 700;
   cursor: pointer;
   border: none;
-  background: #1a2740;
-  color: #8899ad;
-  transition: all 0.2s;
+  background: linear-gradient(to bottom, #04152c 0%, #2d5a8a 100%);
+  color: rgba(255, 255, 255, 0.65);
+  transition: all 0.2s ease;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.psm-type-btn:hover {
+  color: #fff;
+  filter: brightness(1.15);
 }
 
 .psm-type-btn.active {
-  background: linear-gradient(to bottom, #3b82f6, #1d4ed8);
+  background: linear-gradient(to bottom, #1e40af 0%, #60a5fa 100%);
   color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 10px rgba(74, 142, 245, 0.4) inset;
 }
 
-.psm-type-btn:first-child { border-right: 1px solid #3d5474; }
+.psm-type-btn:first-child { border-right: 1px solid rgba(74, 142, 245, 0.4); }
 
 .psm-eval-group {
   display: none;
@@ -5249,26 +5638,6 @@ if(localStorage.getItem('physipro_last_email')){
       <div class="user-status"><span class="status-dot" id="statusDot"></span><span class="user-name" id="currentUserDisplay">--</span></div>
       <a href="#" onclick="doLogout();return false;" class="tb-logout-btn" title="Déconnexion">🚪</a>
     </div>
-    <div class="tb-search-row">
-        <div style="position:relative;">
-          <button class="tb-bell-btn" id="bellBtn" onclick="toggleNotifDropdown()">🔔<span class="tb-bell-badge" id="bellBadge">0</span></button>
-          <div class="notif-dropdown" id="notifDropdown">
-            <div class="notif-dropdown-header">
-              <span class="notif-dropdown-title">🔔 Notifications</span>
-              <button onclick="toggleNotifDropdown()" style="width:28px;height:28px;border:none;background:rgba(255,255,255,0.2);color:#fff;border-radius:6px;cursor:pointer;font-size:14px;">✕</button>
-            </div>
-            <div class="notif-dropdown-list" id="notifList"><div class="notif-empty" style="text-align:center;color:#64748b;padding:40px 20px;font-size:11px;">Aucune notification</div></div>
-            <div class="notif-dropdown-footer">
-              <button onclick="event.stopPropagation();markAllNotifsRead()" style="flex:1;">✓ Tout lu</button>
-              <button onclick="event.stopPropagation();clearAllNotifs()" style="flex:1;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);">🗑️ Effacer tout</button>
-            </div>
-          </div>
-        </div>
-        <button class="tb-bell-btn" id="pChatContactBtn" onclick="toggleContactModal()" title="Chat personnel" style="font-size:13px;position:relative;">💬<span class="dm-badge" id="dmBadge">0</span></button>
-      <div class="search-box-small">
-        <input type="text" id="globalSearch" placeholder="🔍 Rechercher..." oninput="handleGlobalSearch(this.value)">
-      </div>
-    </div>
   </div>
 </header>
 
@@ -5286,6 +5655,32 @@ if(localStorage.getItem('physipro_last_email')){
     </div>
     <div class="cards-col-body" id="cardsList"></div>
   </div>
+  
+  <!-- NOTES SERVICE CLIENT — prend la place de cardsCol quand carte sélectionnée -->
+  <div id="notesScPanel" style="display:none;width:220px;min-width:220px;flex-shrink:0;flex-direction:column;background:linear-gradient(to bottom,#1e3a5f,#0f172a);border:2px solid #3b82f6;border-radius:8px;overflow:hidden;transition:width 0.2s ease, min-width 0.2s ease;">
+    <div style="padding:6px;flex-shrink:0;background:linear-gradient(to bottom,#04152c,#4a8ef5);height:34px;display:flex;align-items:center;">
+      <button onclick="showCardsCol()" id="btnRetourSoumissions" class="btn-retour-soumissions"><span class="btn-retour-full">◀ Retour aux soumissions</span><span class="btn-retour-short" title="Retour aux soumissions"><span style="display:block;font-size:13px;line-height:1;">◀</span><span style="display:block;font-size:7px;font-weight:700;letter-spacing:0.3px;margin-top:1px;line-height:1;">Retour</span></span></button>
+      <button onclick="toggleNotesScCollapse()" class="btn-expand-notes-sc" title="Agrandir la colonne"><span style="display:block;font-size:13px;line-height:1;">▶</span><span style="display:block;font-size:7px;font-weight:700;letter-spacing:0.3px;margin-top:1px;line-height:1;">Agrandir</span></button>
+    </div>
+    <!-- Pastille fusionnée : Note + Soumission (pleine largeur, collée en haut) -->
+    <div id="notesScTitleBar" style="padding:8px 10px;background:linear-gradient(to bottom,rgba(59,130,246,0.2),rgba(59,130,246,0.1));border-top:1.5px solid rgba(59,130,246,0.5);border-bottom:1.5px solid rgba(59,130,246,0.5);flex-shrink:0;display:flex;align-items:center;gap:8px;">
+      <button id="btnNotesScCollapse" onclick="toggleNotesScCollapse()" title="Réduire la colonne" style="flex-shrink:0;padding:3px 8px;border:1.5px solid rgba(191,219,254,0.6);background:rgba(0,0,0,0.25);color:#bfdbfe;border-radius:4px;cursor:pointer;font-size:9px;font-weight:800;letter-spacing:0.3px;line-height:1;display:inline-flex;align-items:center;gap:3px;transition:all 0.15s;white-space:nowrap;" onmouseover="this.style.borderColor='#fff';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(191,219,254,0.6)';this.style.color='#bfdbfe'">⤢ Réduire</button>
+      <div style="flex:1;min-width:0;text-align:center;">
+        <div style="font-size:13px;font-weight:800;color:#bfdbfe;letter-spacing:0.3px;line-height:1.25;margin-bottom:4px;white-space:nowrap;">Note du Service Client</div>
+        <div style="font-size:10px;font-weight:700;color:#bfdbfe;letter-spacing:0.3px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📋 Soumission : <span id="notesScCardName" style="color:#fff;font-weight:800;"></span></div>
+      </div>
+    </div>
+    <div id="notesScEditorWrap" class="thin-scroll" style="flex:1;overflow-y:auto;padding:6px;min-height:0;display:flex;flex-direction:column;">
+      <div class="notes-sc-editor" id="notesScEditor" contenteditable="true" data-placeholder="Cliquez ici pour écrire une note..." oninput="_notesScChanged()" onpaste="_notesScPaste(event)" onfocus="_notesScOnFocus()" style="flex:1;border:1px solid rgba(59,130,246,0.25);border-radius:6px;padding:6px;box-sizing:border-box;background:rgba(0,0,0,0.2);overflow-y:auto;min-height:200px;"></div>
+    </div>
+    <!-- Bouton Questionnement — en bas du panneau gauche -->
+    <div id="notesScBottomBar" style="padding:6px;flex-shrink:0;background:linear-gradient(to bottom,#04152c,#0a1a2c);border-top:1px solid rgba(59,130,246,0.3);">
+      <button id="btnQuestTabLeft" onclick="toggleQuestDrawer()" style="width:100%;padding:8px;border-radius:6px;border:1.5px solid rgba(234,179,8,0.5);background:linear-gradient(to bottom,rgba(234,179,8,0.2),rgba(202,138,4,0.15));color:#fde047;font-size:12px;font-weight:800;cursor:pointer;text-align:center;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s;" onmouseover="this.style.background='linear-gradient(to bottom,rgba(234,179,8,0.35),rgba(202,138,4,0.25))'" onmouseout="this.style.background='linear-gradient(to bottom,rgba(234,179,8,0.2),rgba(202,138,4,0.15))'">❓ Questionnement</button>
+    </div>
+  </div>
+  
+  <!-- Séparateur (invisible par défaut) -->
+  <div id="notesScDivider" style="display:none;width:3px;flex-shrink:0;background:#3b82f6;"></div>
   
   
   <!-- ZONE DÉTAILS -->
@@ -5315,32 +5710,7 @@ if(localStorage.getItem('physipro_last_email')){
     
     <!-- DÉTAILS CONTENT -->
     <div id="detailsContent">
-      <div style="display:flex;flex:1;min-height:0;overflow:hidden;">
-        
-        <!-- NOTES SERVICE CLIENT — panneau gauche intégré -->
-        <div id="notesScPanel" style="display:none;width:220px;min-width:220px;flex-shrink:0;flex-direction:column;background:linear-gradient(to bottom,#1e3a5f,#0f172a);overflow:hidden;">
-          <div style="padding:3px;flex-shrink:0;background:linear-gradient(to bottom,#04152c,#4a8ef5);height:26px;display:flex;align-items:center;">
-            <button onclick="showCardsCol()" style="width:100%;height:100%;padding:0 6px;border-radius:4px;border:none;background:linear-gradient(to bottom,#f59e0b,#d97706);color:#fff;font-size:9px;font-weight:800;cursor:pointer;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1;">◀ Retour aux soumissions</button>
-          </div>
-          <!-- Pastille fusionnée : Note + Soumission (pleine largeur, collée en haut) -->
-          <div style="padding:8px 10px;background:linear-gradient(to bottom,rgba(59,130,246,0.2),rgba(59,130,246,0.1));border-top:1.5px solid rgba(59,130,246,0.5);border-bottom:1.5px solid rgba(59,130,246,0.5);flex-shrink:0;text-align:center;">
-            <div style="font-size:13px;font-weight:800;color:#bfdbfe;letter-spacing:0.3px;line-height:1.25;margin-bottom:4px;white-space:nowrap;">Note du Service Client</div>
-            <div style="font-size:10px;font-weight:700;color:#bfdbfe;letter-spacing:0.3px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📋 Soumission : <span id="notesScCardName" style="color:#fff;font-weight:800;"></span></div>
-          </div>
-          <div class="thin-scroll" style="flex:1;overflow-y:auto;padding:6px;min-height:0;display:flex;flex-direction:column;">
-            <div class="notes-sc-editor" id="notesScEditor" contenteditable="true" data-placeholder="Cliquez ici pour écrire une note..." oninput="_notesScChanged()" onpaste="_notesScPaste(event)" onfocus="_notesScOnFocus()" style="flex:1;border:1px solid rgba(59,130,246,0.25);border-radius:6px;padding:6px;box-sizing:border-box;background:rgba(0,0,0,0.2);overflow-y:auto;min-height:200px;"></div>
-          </div>
-          <!-- Bouton Questionnement — en bas du panneau gauche -->
-          <div style="padding:6px;flex-shrink:0;background:linear-gradient(to bottom,#04152c,#0a1a2c);border-top:1px solid rgba(59,130,246,0.3);">
-            <button id="btnQuestTabLeft" onclick="toggleQuestDrawer()" style="width:100%;padding:8px;border-radius:6px;border:1.5px solid rgba(234,179,8,0.5);background:linear-gradient(to bottom,rgba(234,179,8,0.2),rgba(202,138,4,0.15));color:#fde047;font-size:12px;font-weight:800;cursor:pointer;text-align:center;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s;" onmouseover="this.style.background='linear-gradient(to bottom,rgba(234,179,8,0.35),rgba(202,138,4,0.25))'" onmouseout="this.style.background='linear-gradient(to bottom,rgba(234,179,8,0.2),rgba(202,138,4,0.15))'">❓ Questionnement</button>
-          </div>
-        </div>
-        
-        <!-- Séparateur vertical -->
-        <div id="notesScDivider" style="display:none;width:3px;flex-shrink:0;background:#3b82f6;"></div>
-        
-        <!-- Contenu principal -->
-        <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;">
+      <!-- Contenu principal (notesScPanel et divider ont été déplacés dans main-container) -->
       
       <!-- ═══ FENÊTRE UNIQUE UNIFIÉE ═══ -->
       <div class="psm-unified-window">
@@ -5349,9 +5719,9 @@ if(localStorage.getItem('physipro_last_email')){
         <div class="psm-window-header">
           <!-- COLONNE GAUCHE : même ratio que .psm-content-left (62% ou 45% si matériaux) -->
           <div class="psm-header-left">
-            <button class="psm-htab active" id="btnFichierPrincipal" onclick="switchItemTab(-1)">📄 PDF principal</button>
-            <button class="psm-htab" id="btnFichierSecondaire" onclick="switchToSecondaryFile()">📎 Notes / Photos</button>
-            <button id="itemAddBtnHeader" onclick="addNewItem()" title="Ajouter un nouvel item" style="flex-shrink:0;padding:3px 10px;margin-left:2px;border-radius:4px;border:1.5px solid rgba(74,142,245,0.5);background:rgba(74,142,245,0.15);color:#93c5fd;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:3px;">➕ Item</button>
+            <button class="psm-htab active" id="btnFichierSecondaire" onclick="switchToSecondaryFile()">📧 Email / Photos</button>
+            <button class="psm-htab" id="btnFichierPrincipal" onclick="switchItemTab(-1)">📄 PDF principal</button>
+            <button id="itemAddBtnHeader" class="btn-blue-subtle" onclick="addNewItem()" title="Ajouter un nouvel item" style="flex-shrink:0;margin-left:2px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:3px;">➕ Item</button>
             <button class="psm-header-delete-btn" onclick="_quickDeleteCurrentCard()" title="Supprimer cette carte" style="padding:3px 10px;font-size:10px;border:1.5px solid rgba(239,68,68,0.3);margin-left:2px;">🗑️</button>
             <span style="flex:1;"></span>
           </div>
@@ -5409,10 +5779,10 @@ if(localStorage.getItem('physipro_last_email')){
                   <div id="pdfInlineNav" style="display:none;position:absolute;bottom:0;left:0;right:0;z-index:3;padding:3px 8px;background:rgba(0,0,0,0.7);gap:4px;flex-wrap:wrap;align-items:center;justify-content:center;"></div>
                 </div>
                 <div class="psm-pdf-btns-bar" style="display:flex;gap:6px;padding:6px 8px;background:linear-gradient(to bottom, #04152c, #1a3a5c);border-top:2px solid rgba(59,130,246,0.4);flex-shrink:0;align-items:center;justify-content:center;min-height:34px;">
-                  <button id="btnPdfCamera" onclick="openCameraForCard()" title="Prendre une photo avec l'appareil" style="flex-shrink:0;padding:6px 12px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:4px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">📷</button>
-                  <button id="btnPhotosToPdf" onclick="saveCardPhotosToPdf()" title="Sauvegarder toutes les photos en un seul PDF" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;font-size:13px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:4px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">📄</button>
-                  <button id="btnPdfAgrandir" onclick="openDevisViewerFromInline()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:11px;letter-spacing:.3px;">🔍 Agrandir</button>
-                  <button id="btnPdfPrint" onclick="printCardPdfFromInline()" style="padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;font-size:11px;letter-spacing:.3px;">🖨️ Imprimer</button>
+                  <button id="btnPdfCamera" onclick="openCameraForCard()" title="Prendre une photo avec l'appareil" style="flex-shrink:0;padding:6px 12px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:4px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">📷</button>
+                  <button id="btnPhotosToPdf" onclick="saveCardPhotosToPdf()" title="Sauvegarder toutes les photos en un seul PDF" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:13px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:4px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">📄</button>
+                  <button id="btnPdfAgrandir" onclick="openDevisViewerFromInline()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:11px;letter-spacing:.3px;">🔍 Agrandir</button>
+                  <button id="btnPdfPrint" onclick="printNotesAndImages()" style="padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:11px;letter-spacing:.3px;">🖨️ Imprimer</button>
                   <input type="file" id="psmFilePickerInput" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.pptx,.ppt,.eml,.msg,.txt,.rtf,.csv,.zip,.rar" multiple style="display:none;" onchange="handleFilePickerFiles(this)">
                   <input type="file" id="psmCameraInput" accept="image/*" capture="environment" style="display:none;" onchange="handleCameraCapture(this)">
                 </div>
@@ -5511,9 +5881,10 @@ if(localStorage.getItem('physipro_last_email')){
                     </span>
                   </div>
                   <div id="deptNotesSplit" style="flex:1;display:flex;flex-direction:row;min-height:0;overflow:hidden;">
-                    <div id="deptMatZone" style="display:none;flex:0 0 40%;flex-direction:column;background:linear-gradient(to bottom,#1e3a5f,#0f172a);border-right:3px solid #3b82f6;min-width:0;overflow:hidden;box-shadow:2px 0 8px rgba(59,130,246,0.3);">
+                    <div id="deptMatZone" class="mat-zone-resizable" style="display:none;flex:0 0 50%;flex-direction:column;background:linear-gradient(to bottom,#1e3a5f,#0f172a);min-width:0;overflow:hidden;box-shadow:2px 0 8px rgba(59,130,246,0.3);">
                       <div id="deptMatList" style="flex:1;overflow-y:auto;padding:6px;font-size:11px;color:#e2e8f0;"></div>
                     </div>
+                    <div id="deptResizer" class="mat-notes-resizer" data-target="dept" title="Glisser pour ajuster" style="display:none;"></div>
                     <div id="deptNotesEditor" contenteditable="true" onfocus="_deptNotesOnFocus()" onpaste="_deptNotesPaste(event)" onblur="_saveDeptNotes();saveToFirebase();" style="flex:1;min-height:0;padding:10px;background:linear-gradient(to bottom,#1e3a5f,#0f172a);color:#e2e8f0;font-size:12px;line-height:1.5;outline:none;overflow-y:auto;" data-placeholder="Cliquez ici pour écrire une note..."></div>
                   </div>
                 </div>
@@ -5545,9 +5916,10 @@ if(localStorage.getItem('physipro_last_email')){
                     </span>
                   </div>
                   <div id="itemNotesSplit" style="flex:1;display:flex;flex-direction:row;min-height:0;overflow:hidden;">
-                    <div id="itemMatZone" style="display:none;flex:0 0 40%;flex-direction:column;background:linear-gradient(to bottom,#1e3a5f,#0f172a);border-right:3px solid #3b82f6;min-width:0;overflow:hidden;box-shadow:2px 0 8px rgba(59,130,246,0.3);">
+                    <div id="itemMatZone" class="mat-zone-resizable" style="display:none;flex:0 0 50%;flex-direction:column;background:linear-gradient(to bottom,#1e3a5f,#0f172a);min-width:0;overflow:hidden;box-shadow:2px 0 8px rgba(59,130,246,0.3);">
                       <div id="itemMatList" style="flex:1;overflow-y:auto;padding:6px;font-size:11px;color:#e2e8f0;"></div>
                     </div>
+                    <div id="itemResizer" class="mat-notes-resizer" data-target="item" title="Glisser pour ajuster" style="display:none;"></div>
                     <div id="itemNotesEditor" contenteditable="true" onfocus="_itemNotesOnFocus()" onpaste="_itemNotesPaste(event)" onblur="_saveCurrentItemNotes();saveToFirebase();" style="flex:1;min-height:0;padding:10px;background:linear-gradient(to bottom,#1e3a5f,#0f172a);color:#e2e8f0;font-size:12px;line-height:1.5;outline:none;overflow-y:auto;" data-placeholder="Cliquez ici pour écrire une note..."></div>
                   </div>
                 </div>
@@ -5595,8 +5967,6 @@ if(localStorage.getItem('physipro_last_email')){
         </div>
       </div>
       
-        </div><!-- /contenu principal -->
-      </div><!-- /flex wrapper -->
     </div><!-- /detailsContent -->
 
   </div><!-- /details-zone -->
@@ -8872,6 +9242,109 @@ function _loadRightNoteImage() {
   }
 }
 
+// ═══ SÉPARATEUR DRAGGABLE entre Matériaux et Notes ═══
+// Permet à l'utilisateur de redimensionner la zone Matériaux en glissant le séparateur
+(function() {
+  var MIN_PCT = 20;  // Matériaux min 20% de largeur
+  var MAX_PCT = 80;  // Matériaux max 80% de largeur
+  var STORAGE_KEY_DEPT = 'psm_matZoneRatio_dept';
+  var STORAGE_KEY_ITEM = 'psm_matZoneRatio_item';
+  
+  // Restaurer la position sauvegardée au chargement
+  function _applyStoredRatio(which) {
+    var key = which === 'item' ? STORAGE_KEY_ITEM : STORAGE_KEY_DEPT;
+    var zoneId = which === 'item' ? 'itemMatZone' : 'deptMatZone';
+    try {
+      var stored = localStorage.getItem(key);
+      if (stored) {
+        var pct = parseFloat(stored);
+        if (!isNaN(pct) && pct >= MIN_PCT && pct <= MAX_PCT) {
+          var zone = document.getElementById(zoneId);
+          if (zone) zone.style.flex = '0 0 ' + pct + '%';
+        }
+      }
+    } catch(e) {}
+  }
+  
+  function _initResizer(resizerId, zoneId, splitId, storageKey) {
+    var resizer = document.getElementById(resizerId);
+    if (!resizer) return;
+    if (resizer._initialized) return;
+    resizer._initialized = true;
+    
+    resizer.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      var split = document.getElementById(splitId);
+      var zone = document.getElementById(zoneId);
+      if (!split || !zone) return;
+      
+      resizer.classList.add('is-dragging');
+      document.body.classList.add('resizing-mat-notes');
+      
+      var splitRect = split.getBoundingClientRect();
+      var startX = e.clientX;
+      var startPct = (zone.getBoundingClientRect().width / splitRect.width) * 100;
+      
+      function onMove(ev) {
+        var deltaX = ev.clientX - startX;
+        var newPct = startPct + (deltaX / splitRect.width) * 100;
+        if (newPct < MIN_PCT) newPct = MIN_PCT;
+        if (newPct > MAX_PCT) newPct = MAX_PCT;
+        zone.style.flex = '0 0 ' + newPct + '%';
+      }
+      
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        resizer.classList.remove('is-dragging');
+        document.body.classList.remove('resizing-mat-notes');
+        // Sauvegarder la position finale
+        try {
+          var finalPct = (zone.getBoundingClientRect().width / split.getBoundingClientRect().width) * 100;
+          localStorage.setItem(storageKey, finalPct.toFixed(1));
+        } catch(e) {}
+      }
+      
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    
+    // Double-clic = reset à 50/50
+    resizer.addEventListener('dblclick', function() {
+      var zone = document.getElementById(zoneId);
+      if (zone) zone.style.flex = '0 0 50%';
+      try { localStorage.setItem(storageKey, '50'); } catch(e) {}
+    });
+  }
+  
+  // Initialiser les 2 resizers quand le DOM est prêt
+  function _initAll() {
+    _initResizer('deptResizer', 'deptMatZone', 'deptNotesSplit', STORAGE_KEY_DEPT);
+    _initResizer('itemResizer', 'itemMatZone', 'itemNotesSplit', STORAGE_KEY_ITEM);
+    _applyStoredRatio('dept');
+    _applyStoredRatio('item');
+  }
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _initAll);
+  } else {
+    _initAll();
+  }
+  
+  // Exposer pour que openMatPickerForNotes puisse afficher le resizer en même temps que la zone
+  window._showMatResizer = function(which) {
+    var resizerId = which === 'item' ? 'itemResizer' : 'deptResizer';
+    var r = document.getElementById(resizerId);
+    if (r) r.style.display = 'block';
+    _applyStoredRatio(which);
+  };
+  window._hideMatResizer = function(which) {
+    var resizerId = which === 'item' ? 'itemResizer' : 'deptResizer';
+    var r = document.getElementById(resizerId);
+    if (r) r.style.display = 'none';
+  };
+})();
+
 function _saveDeptNotes() {
   // Use _dirtyCardId if available (prevents cross-card contamination on blur during card switch)
   var cardId = window._dirtyCardId || currentCardId;
@@ -9335,8 +9808,10 @@ function _autoQuestDrawerForCard(cardId) {
 }
 
 function filterCards(val) {
-  document.getElementById('globalSearch').value = val;
-  document.getElementById('cardsSearch').value = val;
+  var gs = document.getElementById('globalSearch');
+  if (gs) gs.value = val;
+  var cs = document.getElementById('cardsSearch');
+  if (cs) cs.value = val;
   if (_filterTimer) clearTimeout(_filterTimer);
   _filterTimer = setTimeout(function() {
     var q = val.toLowerCase().trim();
@@ -9642,27 +10117,51 @@ function renderCards() {
       var isInQuest = card.questionnementSent === true;
       
       // State class: quest takes priority over complete
+      // - is-quest       : questionnement en cours (jaune)
+      // - is-complete    : tous les dept inclus sont complétés → carte verte complète
+      // - half-atelier   : SEUL l'Atelier est fait (et Couture est incluse) → moitié gauche verte
+      // - half-couture   : SEULE la Couture est faite (et Atelier est incluse) → moitié droite verte
       var stateCls = '';
-      if (isInQuest) stateCls = 'is-quest';
-      else if (isCardComplete) stateCls = 'is-complete';
+      // Dept completion status (needed both for stateCls and for badges below)
+      var atelierDone = card.atelier && card.atelier.complete === true;
+      var coutureDone = card.couture && card.couture.complete === true;
+      var inc = card.includeDepts || { atelier: true, couture: true };
+      var atelierIncluded = inc.atelier !== false;
+      var coutureIncluded = inc.couture !== false;
+      
+      if (isInQuest) {
+        stateCls = 'is-quest';
+      } else if (isCardComplete) {
+        stateCls = 'is-complete';
+      } else {
+        // Half-complete visual feedback when exactly ONE of the two (included) depts is done
+        if (atelierDone && !coutureDone && coutureIncluded) {
+          stateCls = 'half-atelier';
+        } else if (coutureDone && !atelierDone && atelierIncluded) {
+          stateCls = 'half-couture';
+        }
+      }
       var selectedCls = isSelected ? 'selected' : '';
       
       // Status line text
       var statusCls = '';
-      var statusTxt = 'Soumission à faire';
+      var statusTxt = 'À faire';
       if (isInQuest) { statusCls = 'is-quest'; statusTxt = 'Questionnement'; }
       else if (isCardComplete) { statusCls = 'is-complete'; statusTxt = 'Complet'; }
       
-      // Dept completion status
-      var atelierDone = card.atelier && card.atelier.complete === true;
-      var coutureDone = card.couture && card.couture.complete === true;
       var hasDeptDone = (atelierDone || coutureDone) ? 'has-dept-done' : '';
       
-      // Action button below card: Print (if not printed) or Delete (if printed)
+      // Action button below card:
+      // - Avant impression : juste "🖨️ Imprimer" (pleine largeur)
+      // - Après impression : "🖨️ Imprimer" (principal, à gauche) + "🗑️" (compact, à droite)
+      //   pour permettre de réimprimer autant que nécessaire avant de supprimer
       var actionBtn = '';
       if (isCardComplete && !isInQuest) {
         if (card._printed) {
-          actionBtn = '<button class="psmc-action-btn act-delete" onclick="event.stopPropagation();_quickDeleteCard(\'' + safeId + '\')">🗑️ Supprimer</button>';
+          actionBtn = '<div class="psmc-action-split">' +
+            '<button class="psmc-action-btn act-print act-print-split" onclick="event.stopPropagation();_printThenEnableDelete(\'' + safeId + '\')">🖨️ Imprimer</button>' +
+            '<button class="psmc-action-btn act-delete act-delete-compact" onclick="event.stopPropagation();_quickDeleteCard(\'' + safeId + '\')" title="Supprimer la carte">🗑️</button>' +
+          '</div>';
         } else {
           actionBtn = '<button class="psmc-action-btn act-print" onclick="event.stopPropagation();_printThenEnableDelete(\'' + safeId + '\')">🖨️ Imprimer</button>';
         }
@@ -9672,11 +10171,9 @@ function renderCards() {
                '<div class="psmc ' + stateCls + ' ' + selectedCls + ' ' + hasDeptDone + '" data-card-id="' + id + '" onclick="selectCard(\'' + safeId + '\')">' +
                '<div class="psmc-name">' + escapeHtml(card.name || 'Patient') + '</div>' +
                '<div class="psmc-row2">' +
+                 '<div class="psmc-dept psmc-dept-left' + (atelierDone ? ' done' : '') + '">Atelier</div>' +
                  '<div class="psmc-status ' + statusCls + '">' + statusTxt + '</div>' +
-               '</div>' +
-               '<div class="psmc-depts">' +
-                 '<div class="psmc-dept' + (atelierDone ? ' done' : '') + '">Atelier</div>' +
-                 '<div class="psmc-dept' + (coutureDone ? ' done' : '') + '">Couture</div>' +
+                 '<div class="psmc-dept psmc-dept-right' + (coutureDone ? ' done' : '') + '">Couture</div>' +
                '</div>' +
                '<div class="psmc-action">' + actionBtn + '</div>' +
              '</div>' +
@@ -10324,6 +10821,39 @@ function showNotesScCol(cardId) {
   if (headerNameEl) headerNameEl.textContent = card.name || 'Patient';
   var editor = document.getElementById('notesScEditor');
   if (editor) editor.innerHTML = card.notesServiceClient || '';
+  // Restaurer l'état de collapse sauvegardé
+  try {
+    var wasCollapsed = localStorage.getItem('psm_notesSc_collapsed') === '1';
+    if (panel) {
+      if (wasCollapsed) panel.classList.add('collapsed');
+      else panel.classList.remove('collapsed');
+      _updateNotesScCollapseBtn();
+    }
+  } catch(e) {}
+}
+
+// Bascule l'état collapsed du panneau Notes Service Client
+function toggleNotesScCollapse() {
+  var panel = document.getElementById('notesScPanel');
+  if (!panel) return;
+  // Sauvegarder les notes avant de collapse (au cas où l'éditeur a le focus)
+  if (typeof _saveNotesScNow === 'function') _saveNotesScNow();
+  panel.classList.toggle('collapsed');
+  var isCollapsed = panel.classList.contains('collapsed');
+  try { localStorage.setItem('psm_notesSc_collapsed', isCollapsed ? '1' : '0'); } catch(e) {}
+  _updateNotesScCollapseBtn();
+}
+
+// Met à jour l'icône du bouton collapse selon l'état actuel
+// Note : le bouton collapse ⤢ n'est visible qu'en mode EXPANDED (il est dans #notesScTitleBar
+// qui est caché quand collapsed). Quand collapsed, c'est le bouton ▶ Agrandir qui expand.
+function _updateNotesScCollapseBtn() {
+  var panel = document.getElementById('notesScPanel');
+  var btn = document.getElementById('btnNotesScCollapse');
+  if (!panel || !btn) return;
+  // Le bouton est toujours "⤢ Réduire" quand visible (mode expanded)
+  btn.innerHTML = '⤢ Réduire';
+  btn.title = 'Réduire la colonne';
 }
 
 function showCardsCol() {
@@ -10573,8 +11103,8 @@ function selectCard(id) {
   PChat.loadForCard();
   updateQuestStatusPill();
   
-  // ALWAYS open Fichier principal when clicking a card
-  switchItemTab(-1);
+  // ALWAYS open Email / Photos (fichier secondaire) when clicking a card
+  switchToSecondaryFile();
   
   // Show notes service client column (replaces cards column)
   showNotesScCol(id);
@@ -10840,8 +11370,10 @@ function renderMatInNotes(dept, mats) {
   if (matZone) {
     if (validMats.length > 0) {
       matZone.style.display = 'flex';
+      if (typeof window._showMatResizer === 'function') window._showMatResizer('dept');
     } else {
       matZone.style.display = 'none';
+      if (typeof window._hideMatResizer === 'function') window._hideMatResizer('dept');
     }
   }
   
@@ -11071,7 +11603,13 @@ function renderMatInNotesItem(dept, deptMats) {
   
   var itemMatZone = document.getElementById('itemMatZone');
   if (itemMatZone) {
-    itemMatZone.style.display = validMats.length > 0 ? 'flex' : 'none';
+    if (validMats.length > 0) {
+      itemMatZone.style.display = 'flex';
+      if (typeof window._showMatResizer === 'function') window._showMatResizer('item');
+    } else {
+      itemMatZone.style.display = 'none';
+      if (typeof window._hideMatResizer === 'function') window._hideMatResizer('item');
+    }
   }
   
   // Rétrécir/agrandir la fenêtre principale selon la présence de matériaux
@@ -12437,7 +12975,7 @@ function renderNotifications() {
   badge.textContent = combinedTotal > 99 ? '99+' : combinedTotal;
   badge.classList.toggle('has-notif', combinedTotal > 0);
   var bellBtn = document.getElementById('bellBtn');
-  bellBtn.classList.toggle('bell-ringing', combinedTotal > 0);
+  if (bellBtn) bellBtn.classList.toggle('bell-ringing', combinedTotal > 0);
   
   // Sound when NEW unread notifications arrive
   var prevCount = renderNotifications._lastCount || 0;
@@ -12600,6 +13138,7 @@ function hideFlashBanner() {
 
 function toggleNotifDropdown() {
   var dd = document.getElementById('notifDropdown');
+  if (!dd) return;
   var isOpen = dd.classList.contains('open');
   if (isOpen) {
     closeNotifDropdown();
@@ -17019,237 +17558,1074 @@ function printCardPdfFromInline() {
   }
 }
 
-// Print notes + images from right panel
+// ═══════════════════════════════════════════════════════════════════════════
+// IMPRESSION PSM — VERSION SIMPLE
+// ═══════════════════════════════════════════════════════════════════════════
+// Approche : génère un HTML complet, l'ouvre dans une nouvelle fenêtre,
+// la fenêtre appelle window.print() automatiquement.
+// Le menu d'impression Chrome s'ouvre comme pour n'importe quelle page.
+//
+// Ordre des pages :
+//   1. Atelier   — notes Service Client + notes technicien + matériaux + items + annotations
+//   2. Couture   — idem pour la couturière
+//   3. Fichier principal (photos caméra + devisImages : images <img>, PDFs <embed>)
+//   4. Fichier secondaire (devisImages2 : pareil)
+//   5. Questionnement (si présent)
+// ═══════════════════════════════════════════════════════════════════════════
+
 function printNotesAndImages() {
-  if (!currentCardId || !psmData[currentCardId]) { showToast('⚠️ Aucune carte sélectionnée', 'error'); return; }
+  if (!currentCardId || !psmData[currentCardId]) { 
+    showToast('⚠️ Aucune carte sélectionnée', 'error'); 
+    return; 
+  }
   
-  // Force save ALL current data before printing
+  // Force save toutes les données avant impression
   if (typeof _saveDeptNotes === 'function') _saveDeptNotes();
   if (typeof _saveCurrentItemNotes === 'function') _saveCurrentItemNotes();
   if (typeof saveCurrentItemFromHeader === 'function' && _activeItemIdx >= 0) saveCurrentItemFromHeader();
   if (typeof _flushDomToData === 'function') _flushDomToData();
-  // Persist to Firebase so nothing is lost
   if (typeof saveToFirebaseNow === 'function') saveToFirebaseNow();
   
   var card = psmData[currentCardId];
-  var orderNum = card.order || card.name || currentCardId;
   var cardId = currentCardId;
   
-  // Load ALL quest messages from every possible path
-  var promises = [];
-  
-  // Path 1: psmChat/{cardId}/atelier/messages
-  promises.push(db.ref('psmChat/' + cardId + '/atelier/messages').once('value').then(function(snap) {
-    return snap.val() || {};
-  }).catch(function() { return {}; }));
-  
-  // Path 2: psmChat/{cardId}/couture/messages
-  promises.push(db.ref('psmChat/' + cardId + '/couture/messages').once('value').then(function(snap) {
-    return snap.val() || {};
-  }).catch(function() { return {}; }));
-  
-  // Path 3: questChat/{jobId}/messages (ServiceClient questionnement)
-  var questJobId = card.questionnementJobId;
-  if (questJobId) {
-    promises.push(db.ref('questChat/' + questJobId + '/messages').once('value').then(function(snap) {
-      return snap.val() || {};
-    }).catch(function() { return {}; }));
+  // Récupère les questionnements (3 paths possibles), puis lance la construction
+  var promises = [
+    db.ref('psmChat/' + cardId + '/atelier/messages').once('value').then(function(s){return s.val()||{}}).catch(function(){return{}}),
+    db.ref('psmChat/' + cardId + '/couture/messages').once('value').then(function(s){return s.val()||{}}).catch(function(){return{}})
+  ];
+  if (card.questionnementJobId) {
+    promises.push(db.ref('questChat/' + card.questionnementJobId + '/messages').once('value').then(function(s){return s.val()||{}}).catch(function(){return{}}));
   } else {
     promises.push(Promise.resolve({}));
   }
   
   Promise.all(promises).then(function(results) {
-    // Merge all messages and sort by timestamp
     var allMsgs = {};
-    results.forEach(function(msgs) {
-      Object.keys(msgs).forEach(function(k) { allMsgs[k] = msgs[k]; });
-    });
-    var questMsgs = Object.entries(allMsgs).sort(function(a, b) { return (a[1].timestamp || 0) - (b[1].timestamp || 0); });
-    _buildAndPrint(card, orderNum, questMsgs);
-  }).catch(function() {
-    _buildAndPrint(card, orderNum, []);
+    results.forEach(function(msgs){ Object.keys(msgs).forEach(function(k){ allMsgs[k] = msgs[k]; }); });
+    var questMsgs = Object.entries(allMsgs).sort(function(a,b){ return (a[1].timestamp||0) - (b[1].timestamp||0); });
+    _doPrint(card, questMsgs);
   });
 }
 
-function _buildAndPrint(card, orderNum, questMsgs) {
-  var html = '<!DOCTYPE html><html><head><title>PSM — ' + escapeHtml(String(orderNum)) + '</title>';
-  html += '<style>body{font-family:Arial,sans-serif;margin:15px;color:#333;}';
-  html += 'h1{font-size:18px;border-bottom:3px solid #1e40af;padding-bottom:8px;margin-bottom:6px;}';
-  html += '.info-table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px;}';
-  html += '.info-table td{padding:3px 8px;border:1px solid #ddd;}';
-  html += '.info-table td.label{font-weight:700;background:#f1f5f9;width:130px;color:#1e293b;}';
-  html += 'h2{font-size:14px;color:#1e40af;margin:12px 0 6px;padding:4px 8px;background:#eff6ff;border-left:3px solid #3b82f6;}';
-  html += '.section{margin:10px 0;page-break-inside:avoid;}';
-  html += '.section-title{font-size:12px;font-weight:700;color:#1e40af;margin-bottom:4px;}';
-  html += 'img{max-width:100%;height:auto;border:1px solid #ddd;border-radius:4px;margin:4px 0;}';
-  html += '.notes{font-size:11px;line-height:1.5;padding:6px 8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;margin:4px 0;}';
-  html += '.notes img{max-width:100%;height:auto;}';
-  html += '@media print{@page{margin:8mm;size:letter;}}</style></head><body>';
+function _doPrint(card, questMsgs) {
+  // Sources des fichiers — ordre du viewer respecté
+  // Fichier principal = cardCameraPhotos + devisImages
+  var mainFiles = [].concat(card.cardCameraPhotos || []).concat(card.devisImages || []);
+  var secondaryFiles = (card.devisImages2 || []).slice();
   
-  // Header with logo
-  html += '<div style="display:flex;align-items:center;justify-content:center;position:relative;margin-bottom:6px;">';
-  html += '<img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" style="height:40px;position:absolute;left:0;border:none;">';
-  html += '<h1 style="border:none;margin:0;padding:0;">PSM</h1>';
-  html += '</div>';
+  var now = new Date().toLocaleDateString('fr-CA');
+  var LOGO = 'https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png';
   
-  // Info table with all critical data
-  html += '<table class="info-table">';
-  html += '<tr><td class="label">📋 Soumission</td><td style="font-size:14px;font-weight:700;">' + escapeHtml(card.name || '—') + '</td>';
-  html += '<td class="label">📅 Date</td><td>' + new Date().toLocaleDateString('fr-CA') + '</td></tr>';
-  if (card.order) {
-    html += '<tr><td class="label">🔢 N° Commande</td><td>' + escapeHtml(card.order) + '</td>';
-    html += '<td class="label">👤 Client</td><td>' + escapeHtml(card.client || '—') + '</td></tr>';
+  // ─── HELPERS ───
+  // Nettoie les "stamps" auteur/date collés dans les notes par le système
+  // (style="color:#fde047" = auteur jaune, style="color:#94a3b8" = date grise)
+  function stripAuthorStamps(htmlText) {
+    if (!htmlText) return '';
+    var clean = htmlText;
+    // Enlève les <div> contenant uniquement un <strong color:#fde047> + timestamp
+    clean = clean.replace(/<div[^>]*>\s*<strong[^>]*color:\s*#fde047[^>]*>[^<]*<\/strong>\s*<span[^>]*color:\s*#94a3b8[^>]*>[^<]*<\/span>\s*<\/div>/gi, '');
+    // Enlève les <hr> séparateurs (entre entrées)
+    clean = clean.replace(/<hr[^>]*>/gi, '');
+    // Enlève les <div id="__newEntryCursor__">
+    clean = clean.replace(/<div[^>]*id\s*=\s*["']__newEntryCursor__["'][^>]*>[\s\S]*?<\/div>/gi, '');
+    // Enlève les lignes vides résiduelles au début/fin
+    clean = clean.replace(/^(?:\s*<(?:div|p|br)[^>]*>\s*(?:<br\s*\/?>)?\s*<\/(?:div|p)>\s*)+/i, '');
+    clean = clean.replace(/(?:\s*<(?:div|p|br)[^>]*>\s*(?:<br\s*\/?>)?\s*<\/(?:div|p)>\s*)+$/i, '');
+    return clean.trim();
   }
   
-  // Per-dept type and temps summary
-  ['atelier', 'couture'].forEach(function(dept) {
-    var d = card[dept];
-    if (!d) return;
-    var deptLabel = dept === 'atelier' ? '🔨 Atelier' : '🧵 Couture';
-    var typeLabel = d.prixMajore ? 'Prix majoré' : 'PSM';
-    html += '<tr><td class="label">' + deptLabel + '</td><td><strong>' + typeLabel + '</strong></td>';
-    html += '<td class="label">⏱️ Temps</td><td><strong>' + escapeHtml(d.temps || '—') + ' min</strong>';
-    if (d.evalBy) html += ' (par ' + escapeHtml(d.evalBy) + ')';
-    html += '</td></tr>';
-  });
-  html += '</table>';
-  
-  // Print devis images if they exist
-  if (card.devisImages && card.devisImages.length) {
-    html += '<div class="section"><div class="section-title">📄 Fichier principal</div>';
-    card.devisImages.forEach(function(src) {
-      if (src && src.indexOf('data:image') === 0) html += '<img src="' + src + '">';
-    });
-    html += '</div>';
+  // Helper : formate une durée en ajoutant " min" seulement si pas déjà présent
+  function formatTemps(val) {
+    var s = escapeHtml(String(val || '').trim());
+    if (!s) return '';
+    // Si la valeur contient déjà "min" (insensible à la casse), on l'ajoute pas
+    if (/\bmin\b/i.test(s)) return s;
+    return s + ' min';
   }
   
-  // Print each department
-  ['atelier', 'couture'].forEach(function(dept) {
-    var deptData = card[dept];
-    if (!deptData) return;
-    var deptName = dept === 'atelier' ? '🔨 Atelier' : '🧵 Couture';
+  // En-tête de page avec titre dynamique centré (PSM — ATELIER, PSM — COUTURE, etc.)
+  function pageHeader(deptContext) {
+    var titleText = 'PSM';
+    if (deptContext === 'atelier') titleText = 'PSM — ATELIER';
+    else if (deptContext === 'couture') titleText = 'PSM — COUTURE';
+    else if (deptContext === 'quest') titleText = 'PSM — QUESTIONNEMENT';
+    else if (deptContext === 'file') titleText = 'PSM — FICHIERS';
     
-    html += '<h2>' + deptName;
-    if (deptData.temps) {
-      html += ' — ⏱️ ' + escapeHtml(deptData.temps) + ' min';
-      if (deptData.evalBy) html += ' (par ' + escapeHtml(deptData.evalBy) + ')';
+    var h = '<div class="ph">';
+    h += '<div class="ph-logo-wrap"><img class="ph-logo" src="' + LOGO + '" alt="Physipro"></div>';
+    h += '<div class="ph-title-wrap"><div class="ph-title">' + titleText + '</div></div>';
+    h += '<div class="ph-date">' + now + '</div>';
+    h += '</div>';
+    
+    // Ligne d'information : Soumission (gros) | [Client si présent] | Date
+    // Si pas de client → 2 colonnes seulement (Soumission + Date)
+    var hasClient = card.client && String(card.client).trim().length > 0;
+    var colsClass = hasClient ? 'cols-3' : 'cols-2';
+    h += '<div class="info-row ' + colsClass + '">';
+    h += '<div class="info-cell"><div class="info-cell-label">Soumission</div><div class="info-cell-value main">' + escapeHtml(card.name || '—') + '</div></div>';
+    if (hasClient) {
+      h += '<div class="info-cell"><div class="info-cell-label">Client</div><div class="info-cell-value">' + escapeHtml(card.client) + '</div></div>';
     }
-    html += '</h2>';
+    h += '<div class="info-cell"><div class="info-cell-label">Date</div><div class="info-cell-value">' + now + '</div></div>';
+    h += '</div>';
     
-    // Dept note image (right panel paste image)
-    if (deptData.noteImage) {
-      html += '<div class="section"><div class="section-title">📷 Image</div>';
-      html += '<img src="' + deptData.noteImage + '">';
-      html += '</div>';
+    return h;
+  }
+  
+  function deptPage(dept, isFirst) {
+    var d = card[dept] || {};
+    var deptClass = dept === 'atelier' ? 'atelier' : 'couture';
+    var cardHeaderColor = dept === 'atelier' ? 'blue' : 'purple';
+    var noteLabel = dept === 'couture' ? 'Notes pour la couturière' : 'Notes pour le technicien';
+    
+    // CHAQUE DÉPARTEMENT est une page séparée (page-break-before forcé)
+    var h = '<div class="page"' + (isFirst ? '' : ' style="page-break-before:always"') + '>';
+    h += pageHeader(dept); // en-tête avec "PSM — ATELIER" ou "PSM — COUTURE"
+    
+    // ─── SOMMAIRE DU DÉPARTEMENT (temps, prix majoré, évaluateur) ───
+    var hasSummary = d.temps || d.prixMajore || d.evalBy;
+    if (hasSummary) {
+      h += '<div class="dept-summary ' + deptClass + '">';
+      h += '<div class="dept-tags">';
+      if (d.temps) {
+        h += '<div class="tag"><span class="tag-label">⏱️ Temps :</span> <span class="tag-value">' + formatTemps(d.temps) + '</span></div>';
+      }
+      if (d.prixMajore) {
+        h += '<div class="tag"><span class="tag-label">💰 Type :</span> <span class="tag-value">Prix majoré</span></div>';
+      }
+      if (d.evalBy) {
+        h += '<div class="tag"><span class="tag-label">👤 Évalué par :</span> <span class="tag-value">' + escapeHtml(d.evalBy) + '</span></div>';
+      }
+      h += '</div>';
+      h += '</div>';
     }
     
-    // Dept simple notes (text from deptNotesEditor)
-    if (deptData.simpleNotes && deptData.simpleNotes.trim()) {
-      html += '<div class="section"><div class="section-title">📝 Notes pour le technicien</div>';
-      html += '<div class="notes">' + deptData.simpleNotes + '</div>';
-      html += '</div>';
+    // ─── 1. NOTES SERVICE CLIENT (carte orange) ───
+    var sc = (card.serviceNotesHtml && card.serviceNotesHtml.trim()) || (card.notesServiceClient && card.notesServiceClient.trim()) || '';
+    var scClean = stripAuthorStamps(sc);
+    var scPlain = scClean.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    if (scPlain.length > 0) {
+      h += '<div class="card">';
+      h += '<div class="card-header ' + cardHeaderColor + '"><span class="card-icon">📞</span>Notes du service client</div>';
+      h += '<div class="card-body">' + scClean + '</div>';
+      h += '</div>';
     }
     
-    // Matériaux
-    var printMats = (deptData.materiaux || []).filter(function(m) { return m.name; });
-    if (printMats.length > 0) {
-      html += '<div class="section"><div class="section-title">📦 Matériaux ' + deptName + '</div>';
-      html += '<table style="width:100%;border-collapse:collapse;font-size:11px;">';
-      printMats.forEach(function(m) {
-        html += '<tr><td style="padding:3px 8px;border:1px solid #ddd;">' + escapeHtml(m.name) + '</td>';
-        html += '<td style="padding:3px 8px;border:1px solid #ddd;width:50px;text-align:center;font-weight:700;">' + (m.qty || 1) + '</td></tr>';
-      });
-      html += '</table></div>';
+    // ─── 2. IMAGE + NOTES TECHNICIEN/COUTURIÈRE (MÊME CARTE, côte à côte) ───
+    var simpleClean = stripAuthorStamps(d.simpleNotes || '');
+    var simplePlain = simpleClean.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    var hasImage = !!d.noteImage;
+    var hasNotes = simplePlain.length > 0;
+    
+    if (hasImage || hasNotes) {
+      h += '<div class="card">';
+      // Header : label qui dépend de ce qu'on a (image seule, notes seules, ou les deux)
+      var headerLabel = '';
+      var headerIcon = '';
+      if (hasImage && hasNotes) {
+        headerIcon = '📷';
+        headerLabel = 'Image de référence & ' + noteLabel.toLowerCase();
+      } else if (hasImage) {
+        headerIcon = '📷';
+        headerLabel = 'Image de référence';
+      } else {
+        headerIcon = '📝';
+        headerLabel = noteLabel;
+      }
+      h += '<div class="card-header ' + cardHeaderColor + '"><span class="card-icon">' + headerIcon + '</span>' + headerLabel + '</div>';
+      h += '<div class="card-body">';
+      
+      if (hasImage && hasNotes) {
+        // Côte à côte : notes à gauche (40%), image à droite (60%)
+        h += '<div class="img-notes-split">';
+        h += '<div class="notes-side">' + simpleClean + '</div>';
+        h += '<div class="image-side"><img src="' + d.noteImage + '" alt="Image de référence"></div>';
+        h += '</div>';
+      } else if (hasImage) {
+        // Image seule centrée
+        h += '<div class="img-center"><img src="' + d.noteImage + '" alt="Image de référence"></div>';
+      } else {
+        // Notes seules
+        h += '<div>' + simpleClean + '</div>';
+      }
+      
+      h += '</div>';
+      h += '</div>';
     }
     
-    // Annotations (image + text blocks from annotation system)
-    var annots = (deptData.annotations || []).filter(function(a) {
-      return (a.textHtml && a.textHtml.trim() && a.textHtml.trim() !== '<br>') || a.image;
+    // ─── 4. ANNOTATIONS (carte avec liste) ───
+    var annots = (d.annotations || []).filter(function(a){
+      var textPlain = (a.textHtml || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+      return textPlain.length > 0 || a.image;
     });
     if (annots.length > 0) {
-      html += '<div class="section"><div class="section-title">📷 Annotations</div>';
-      annots.forEach(function(a) {
-        html += '<div style="display:flex;border:1px solid #ddd;margin-bottom:4px;page-break-inside:avoid;">';
-        html += '<div style="width:45%;padding:3px;text-align:center;border-right:1px solid #ddd;">';
-        if (a.image) html += '<img src="' + a.image + '" style="max-width:100%;height:auto;">';
-        else html += '<em style="color:#ccc;font-size:9px;">—</em>';
-        html += '</div>';
-        html += '<div style="width:55%;padding:3px 6px;font-size:10px;line-height:1.4;">' + (a.textHtml || '') + '</div>';
-        html += '</div>';
+      h += '<div class="card">';
+      h += '<div class="card-header ' + cardHeaderColor + '"><span class="card-icon">🎯</span>Annotations & instructions</div>';
+      h += '<div class="card-body">';
+      annots.forEach(function(a, idx) {
+        h += '<div class="annot">';
+        h += '<div class="annot-img-wrap">';
+        h += a.image ? '<img src="' + a.image + '" alt="Annotation ' + (idx+1) + '">' : '<em>Aucune image</em>';
+        h += '</div>';
+        h += '<div class="annot-text-wrap">';
+        h += '<div class="annot-num">Annotation ' + (idx+1) + '</div>';
+        h += '<div>' + (a.textHtml || '<em style="color:#94a3b8">Aucune description</em>') + '</div>';
+        h += '</div>';
+        h += '</div>';
       });
-      html += '</div>';
+      h += '</div>';
+      h += '</div>';
     }
     
-    // Items with temps and notes
-    var items = deptData.items || [];
-    for (var i = 0; i < items.length; i++) {
-      var item = items[i];
-      var itemMats = (item.materiaux || []).filter(function(m) { return m && m.name; });
-      var hasContent = item.image || item.notes || item.noteImage || item.temps || itemMats.length > 0;
-      if (hasContent) {
-        html += '<div class="section"><div class="section-title">' + escapeHtml(item.name || ('Item ' + (i+1)));
-        if (item.temps) html += ' — ⏱️ ' + escapeHtml(item.temps) + ' min';
-        html += '</div>';
-        if (item.image) html += '<img src="' + item.image + '">';
-        if (item.noteImage) html += '<img src="' + item.noteImage + '">';
-        if (item.notes && item.notes.trim()) html += '<div class="notes">' + item.notes + '</div>';
-        if (itemMats.length > 0) {
-          html += '<table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:4px;">';
-          html += '<tr><td colspan="2" style="padding:2px 6px;font-weight:700;background:#e0e0e0;border:1px solid #ddd;">📦 Matériaux</td></tr>';
-          itemMats.forEach(function(m) {
-            html += '<tr><td style="padding:2px 6px;border:1px solid #ddd;">' + escapeHtml(m.name) + '</td>';
-            html += '<td style="padding:2px 6px;border:1px solid #ddd;width:40px;text-align:center;font-weight:700;">' + (m.qty || 1) + '</td></tr>';
-          });
-          html += '</table>';
-        }
-        html += '</div>';
-      }
-    }
-  });
-  
-  // Questionnements from Firebase (not DOM)
-  if (questMsgs && questMsgs.length > 0) {
-    html += '<h2 style="border-left-color:#d97706;color:#92400e;background:#fffbeb;">❓ Questionnement</h2>';
-    var isFirst = true;
-    questMsgs.forEach(function(entry) {
-      var msg = entry[1];
-      var isReplyMsg = !isFirst;
-      isFirst = false;
-      var borderColor = isReplyMsg ? '#2563eb' : '#dc2626';
-      var bgColor = isReplyMsg ? '#dbeafe' : '#fef2f2';
-      var label = isReplyMsg ? '↩️ Réponse' : '❓ Questionnement';
-      var time = msg.timestamp ? new Date(msg.timestamp).toLocaleString('fr-CA') : '';
-      html += '<div style="border:1.5px solid ' + borderColor + ';border-radius:6px;margin-bottom:6px;page-break-inside:avoid;">';
-      html += '<div style="background:' + bgColor + ';padding:6px 8px;">';
-      html += '<div style="font-size:9px;font-weight:700;color:' + borderColor + ';margin-bottom:2px;">' + label + ' <span style="color:#94a3b8;font-weight:400;">' + time + '</span></div>';
-      html += '<div style="font-size:10px;font-weight:600;color:#1e293b;">' + escapeHtml(msg.authorName || '?') + '</div>';
-      var content = msg.contentHtml || escapeHtml(msg.content || '').replace(/\n/g, '<br>');
-      html += '<div style="font-size:11px;color:#334155;margin-top:4px;line-height:1.5;">' + content + '</div>';
-      // Print images in messages
-      var msgImages = [];
-      if (msg.image) msgImages.push(msg.image);
-      if (msg.images) msgImages = msgImages.concat(msg.images);
-      msgImages.forEach(function(src) {
-        html += '<img src="' + src + '" style="max-width:300px;max-height:200px;border-radius:4px;margin-top:4px;">';
+    // ─── 5. MATÉRIAUX DU DÉPARTEMENT (carte) ───
+    var mats = (d.materiaux || []).filter(function(m){ return m.name; });
+    if (mats.length > 0) {
+      h += '<div class="card">';
+      h += '<div class="card-header ' + cardHeaderColor + '"><span class="card-icon">📦</span>Matériaux requis</div>';
+      h += '<div class="card-body">';
+      h += '<div class="mat-list">';
+      mats.forEach(function(m){
+        h += '<div class="mat-row"><span class="mat-name">' + escapeHtml(m.name) + '</span><span class="mat-qty">×' + (m.qty || 1) + '</span></div>';
       });
-      html += '</div></div>';
+      h += '</div>';
+      h += '</div>';
+      h += '</div>';
+    }
+    
+    // ─── 6. ITEMS (carte avec sous-cartes) ───
+    var items = (d.items || []).filter(function(item) {
+      var iMats = (item.materiaux || []).filter(function(m){ return m && m.name; });
+      var notesPlain = (item.notes || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+      return item.image || notesPlain.length > 0 || item.noteImage || item.temps || iMats.length > 0;
     });
+    if (items.length > 0) {
+      h += '<div class="card">';
+      h += '<div class="card-header ' + cardHeaderColor + '"><span class="card-icon">🔧</span>Items & composants</div>';
+      h += '<div class="card-body">';
+      items.forEach(function(item, i) {
+        var iMats = (item.materiaux || []).filter(function(m){ return m && m.name; });
+        var itemNotesClean = stripAuthorStamps(item.notes || '');
+        var notesPlain = itemNotesClean.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+        
+        h += '<div class="item-block">';
+        h += '<div class="item-title">';
+        h += '<span class="item-title-name">' + escapeHtml(item.name || ('Item ' + (i+1))) + '</span>';
+        if (item.temps) h += '<span class="item-title-time">⏱️ ' + formatTemps(item.temps) + '</span>';
+        h += '</div>';
+        
+        h += '<div class="item-body">';
+        if (item.image) h += '<img src="' + item.image + '" alt="Image item">';
+        if (item.noteImage) h += '<img src="' + item.noteImage + '" alt="Image note">';
+        if (notesPlain.length > 0) {
+          h += '<div class="item-sub-label">Notes</div>';
+          h += '<div class="item-text">' + itemNotesClean + '</div>';
+        }
+        if (iMats.length > 0) {
+          h += '<div class="item-sub-label">Matériaux</div>';
+          h += '<div class="mat-list" style="margin-left:6px">';
+          iMats.forEach(function(m){
+            h += '<div class="mat-row"><span class="mat-name">' + escapeHtml(m.name) + '</span><span class="mat-qty">×' + (m.qty || 1) + '</span></div>';
+          });
+          h += '</div>';
+        }
+        h += '</div>'; // fin item-body
+        h += '</div>'; // fin item-block
+      });
+      h += '</div>';
+      h += '</div>';
+    }
+    
+    h += '</div>'; // fin page
+    return h;
   }
   
+  // Page pour un fichier image (les PDFs sont ouverts dans des onglets séparés)
+  function filePage(src, label, isFirst) {
+    var h = '<div class="page"' + (isFirst ? '' : ' style="page-break-before:always"') + '>';
+    h += pageHeader('file');
+    h += '<div class="card">';
+    h += '<div class="card-header slate"><span class="card-icon">📎</span>' + label + '</div>';
+    h += '<div class="card-body" style="text-align:center">';
+    h += '<img class="file-img" src="' + src + '" alt="Fichier">';
+    h += '</div>';
+    h += '</div>';
+    h += '</div>';
+    return h;
+  }
+  
+  // ─── CONSTRUCTION DU HTML ───
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+  html += '<title>Soumission PSM — ' + escapeHtml(card.name || card.order || 'Patient') + '</title>';
+  html += '<style>';
+  // ═══ RESET & BASE ═══
+  html += '* { box-sizing:border-box; margin:0; padding:0; }';
+  html += 'body { font-family:"Segoe UI",Calibri,Arial,sans-serif; color:#1a1a1a; font-size:11pt; line-height:1.5; background:#fff; padding:12mm; }';
+  html += 'img { max-width:100%; height:auto; }';
+  html += 'p { margin-bottom:4px; }';
+  html += 'p:last-child { margin-bottom:0; }';
+  
+  // ═══ EN-TÊTE DE PAGE (bandeau Physipro bleu, titre centré, foncé en haut -> pâle en bas) ═══
+  html += '.ph { display:grid; grid-template-columns:80px 1fr 80px; align-items:center; padding:14px 18px; background:linear-gradient(180deg,#1e3a8a 0%,#1e40af 50%,#3b82f6 100%); color:#fff; border-radius:6px 6px 0 0; }';
+  html += '.ph-logo-wrap { }';
+  html += '.ph-logo { height:42px; width:auto; filter:brightness(0) invert(1); }';
+  html += '.ph-title-wrap { text-align:center; }';
+  html += '.ph-title { font-size:22pt; font-weight:700; line-height:1; letter-spacing:0.12em; color:#fff; }';
+  html += '.ph-date { font-size:10pt; color:#dbeafe; font-weight:500; text-align:right; white-space:nowrap; }';
+  
+  // ═══ LIGNE D\'INFORMATION PATIENT (une seule ligne sous l\'en-tête) ═══
+  html += '.info-row { display:grid; gap:0; margin-bottom:14px; border:1px solid #1e40af; border-top:none; border-radius:0 0 6px 6px; overflow:hidden; }';
+  html += '.info-row.cols-2 { grid-template-columns:2fr 1fr; }';
+  html += '.info-row.cols-3 { grid-template-columns:2fr 1fr 1fr; }';
+  html += '.info-cell { padding:10px 16px; border-right:1px solid #e2e8f0; background:#fff; }';
+  html += '.info-cell:last-child { border-right:none; }';
+  html += '.info-cell-label { font-size:9pt; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:2px; }';
+  html += '.info-cell-value { font-size:12pt; font-weight:700; color:#0f172a; }';
+  // Valeur principale (nom de soumission) : plus grande
+  html += '.info-cell-value.main { font-size:16pt; font-weight:800; color:#1e40af; letter-spacing:0.02em; }';
+  
+  // ═══ LIGNE TEMPS/PRIX/ÉVALUATEUR (en dessous) ═══
+  html += '.dept-summary { background:#eff6ff; border:1.5px solid #2563eb; border-radius:6px; padding:10px 18px; margin-bottom:14px; text-align:center; }';
+  html += '.dept-summary.couture { background:#f5f3ff; border-color:#7c3aed; }';
+  html += '.dept-summary .dept-tags { display:flex; justify-content:center; gap:24px; flex-wrap:wrap; font-size:11pt; color:#1e293b; }';
+  html += '.dept-summary .tag { display:inline-flex; align-items:center; gap:6px; }';
+  html += '.dept-summary .tag-label { font-size:9pt; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; }';
+  html += '.dept-summary .tag-value { font-weight:700; color:#0f172a; }';
+  
+  // ═══ CARTES DE SECTIONS (bandeau coloré + contenu encadré) ═══
+  html += '.card { border:1px solid #cbd5e1; border-radius:6px; margin-bottom:14px; overflow:hidden; page-break-inside:avoid; background:#fff; }';
+  html += '.card-header { padding:10px 16px; font-size:10.5pt; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:#fff; display:flex; align-items:center; gap:8px; }';
+  html += '.card-header.blue { background:linear-gradient(90deg,#1e40af 0%,#2563eb 100%); }';
+  html += '.card-header.purple { background:linear-gradient(90deg,#6d28d9 0%,#7c3aed 100%); }';
+  html += '.card-header.orange { background:linear-gradient(90deg,#c2410c 0%,#ea580c 100%); }';
+  html += '.card-header.amber { background:linear-gradient(90deg,#d97706 0%,#f59e0b 50%,#fbbf24 100%); }';
+  html += '.card-header.slate { background:linear-gradient(90deg,#334155 0%,#475569 100%); }';
+  html += '.card-header .card-icon { font-size:14pt; }';
+  html += '.card-body { padding:12px 16px; font-size:11pt; line-height:1.5; color:#1a1a1a; }';
+  html += '.card-body img { max-width:100%; height:auto; margin:6px 0; border:1px solid #cbd5e1; border-radius:3px; }';
+  html += '.card-body p { margin-bottom:6px; }';
+  html += '.card-body p:last-child { margin-bottom:0; }';
+  html += '.card-body hr { border:none; border-top:1px solid #e2e8f0; margin:8px 0; }';
+  
+  // ═══ IMAGE (centrée dans une carte) ═══
+  html += '.img-center { text-align:center; }';
+  html += '.img-center img { max-width:100%; max-height:90mm; border:1px solid #cbd5e1; border-radius:4px; margin:0 auto; }';
+  
+  // ═══ LAYOUT CÔTE À CÔTE : notes à gauche / image à droite ═══
+  html += '.img-notes-split { display:grid; grid-template-columns:42% 58%; gap:14px; align-items:flex-start; }';
+  html += '.img-notes-split .notes-side { font-size:11pt; line-height:1.5; padding:4px 6px; border-right:1px solid #e2e8f0; padding-right:14px; min-height:60mm; }';
+  html += '.img-notes-split .notes-side img { max-width:100%; height:auto; margin:4px 0; border:1px solid #cbd5e1; border-radius:3px; }';
+  html += '.img-notes-split .image-side { text-align:center; }';
+  html += '.img-notes-split .image-side img { max-width:100%; max-height:95mm; border:1px solid #cbd5e1; border-radius:4px; }';
+  
+  // ═══ COMPACTAGE AUTO — 3 niveaux appliqués par JS si la page dépasse ═══
+  // NIVEAU 1 (modéré) : -10% partout
+  html += '.page.compact-1 { font-size:10.5pt; }';
+  html += '.page.compact-1 .card { margin-bottom:10px; }';
+  html += '.page.compact-1 .card-body { padding:10px 14px; font-size:10.5pt; line-height:1.45; }';
+  html += '.page.compact-1 .card-header { padding:8px 14px; font-size:10pt; }';
+  html += '.page.compact-1 .img-center img, .page.compact-1 .img-notes-split .image-side img { max-height:80mm; }';
+  html += '.page.compact-1 .dept-summary { padding:8px 16px; margin-bottom:12px; }';
+  html += '.page.compact-1 .dept-summary .dept-tags { font-size:10pt; gap:18px; }';
+  html += '.page.compact-1 .info-row { margin-bottom:10px; }';
+  html += '.page.compact-1 .info-cell { padding:8px 14px; }';
+  html += '.page.compact-1 .info-cell-value.main { font-size:14pt; }';
+  html += '.page.compact-1 .mat-row { padding:6px 12px; font-size:10pt; }';
+  html += '.page.compact-1 .item-block { padding:10px 14px; margin-bottom:8px; }';
+  
+  // NIVEAU 2 (fort) : -20% partout + police réduite
+  html += '.page.compact-2 { font-size:9.5pt; }';
+  html += '.page.compact-2 .card { margin-bottom:8px; }';
+  html += '.page.compact-2 .card-body { padding:8px 12px; font-size:9.5pt; line-height:1.4; }';
+  html += '.page.compact-2 .card-header { padding:6px 12px; font-size:9.5pt; }';
+  html += '.page.compact-2 .img-center img, .page.compact-2 .img-notes-split .image-side img { max-height:65mm; }';
+  html += '.page.compact-2 .img-notes-split .notes-side { font-size:9.5pt; line-height:1.4; min-height:50mm; }';
+  html += '.page.compact-2 .dept-summary { padding:6px 14px; margin-bottom:8px; }';
+  html += '.page.compact-2 .dept-summary .dept-tags { font-size:9.5pt; gap:14px; }';
+  html += '.page.compact-2 .info-row { margin-bottom:8px; }';
+  html += '.page.compact-2 .info-cell { padding:6px 12px; }';
+  html += '.page.compact-2 .info-cell-value.main { font-size:12pt; }';
+  html += '.page.compact-2 .info-cell-value { font-size:10pt; }';
+  html += '.page.compact-2 .info-cell-label { font-size:8pt; }';
+  html += '.page.compact-2 .mat-row { padding:4px 10px; font-size:9.5pt; }';
+  html += '.page.compact-2 .item-block { padding:8px 12px; margin-bottom:6px; }';
+  html += '.page.compact-2 .ph { padding:10px 16px; }';
+  html += '.page.compact-2 .ph-title { font-size:18pt; }';
+  html += '.page.compact-2 .item-title-name { font-size:11pt; }';
+  html += '.page.compact-2 .annot { padding:8px; margin-bottom:6px; }';
+  html += '.page.compact-2 .annot-img-wrap img { max-height:60mm; }';
+  
+  // ═══ ANNOTATIONS (image à gauche, texte à droite) ═══
+  html += '.annot { display:grid; grid-template-columns:45% 55%; gap:14px; padding:12px; border:1px solid #e2e8f0; border-radius:4px; margin-bottom:10px; page-break-inside:avoid; align-items:start; background:#f8fafc; }';
+  html += '.annot:last-child { margin-bottom:0; }';
+  html += '.annot-img-wrap img { max-width:100%; max-height:75mm; border:1px solid #cbd5e1; border-radius:3px; display:block; }';
+  html += '.annot-img-wrap em { color:#94a3b8; font-style:italic; font-size:10pt; }';
+  html += '.annot-text-wrap { font-size:10.5pt; line-height:1.55; }';
+  html += '.annot-num { display:inline-block; background:#1e40af; color:#fff; font-size:9pt; font-weight:700; padding:2px 10px; border-radius:3px; margin-bottom:6px; letter-spacing:0.05em; }';
+  
+  // ═══ MATÉRIAUX (liste structurée avec bordures) ═══
+  html += '.mat-list { border:1px solid #e2e8f0; border-radius:4px; overflow:hidden; }';
+  html += '.mat-row { display:flex; justify-content:space-between; align-items:center; padding:8px 14px; border-bottom:1px solid #e2e8f0; font-size:11pt; }';
+  html += '.mat-row:nth-child(even) { background:#f8fafc; }';
+  html += '.mat-row:last-child { border-bottom:none; }';
+  html += '.mat-name { flex:1; font-weight:500; color:#0f172a; }';
+  html += '.mat-qty { display:inline-block; background:#1e40af; color:#fff; font-weight:700; padding:2px 10px; border-radius:10px; font-size:10pt; min-width:42px; text-align:center; }';
+  
+  // ═══ ITEMS (sous-cartes dans la carte items) ═══
+  html += '.item-block { border:1px solid #e2e8f0; border-radius:4px; padding:12px 16px; margin-bottom:10px; background:#fafbfc; page-break-inside:avoid; }';
+  html += '.item-block:last-child { margin-bottom:0; }';
+  html += '.item-title { display:flex; justify-content:space-between; align-items:baseline; padding-bottom:8px; margin-bottom:10px; border-bottom:2px solid #cbd5e1; }';
+  html += '.item-title-name { font-size:12pt; font-weight:700; color:#0f172a; }';
+  html += '.item-title-time { font-size:10pt; font-weight:600; color:#fff; background:#ea580c; padding:3px 10px; border-radius:10px; }';
+  html += '.item-body img { max-width:100%; max-height:90mm; margin:6px 0; border:1px solid #cbd5e1; border-radius:3px; display:block; }';
+  html += '.item-sub-label { font-size:9pt; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-top:10px; margin-bottom:5px; padding-left:6px; border-left:3px solid #1e40af; }';
+  html += '.item-text { padding-left:6px; font-size:10.5pt; line-height:1.5; }';
+  
+  // ═══ QUESTIONNEMENT ═══
+  html += '.quest-msg { border:1px solid #e2e8f0; border-radius:4px; margin-bottom:10px; overflow:hidden; page-break-inside:avoid; }';
+  html += '.quest-msg:last-child { margin-bottom:0; }';
+  html += '.quest-msg-header { padding:8px 14px; font-size:10pt; font-weight:700; color:#fff; display:flex; justify-content:space-between; align-items:center; }';
+  html += '.quest-msg-header.question { background:linear-gradient(90deg,#c2410c 0%,#ea580c 100%); }';
+  html += '.quest-msg-header.reply { background:linear-gradient(90deg,#1e40af 0%,#2563eb 100%); }';
+  html += '.quest-msg-header .qm-meta { font-size:9pt; font-weight:400; opacity:0.9; }';
+  html += '.quest-msg-body { padding:12px 16px; font-size:11pt; line-height:1.55; color:#1a1a1a; background:#fff; }';
+  html += '.quest-msg-body img { max-width:280px; max-height:180px; margin:5px 0; border:1px solid #cbd5e1; border-radius:3px; }';
+  
+  // ═══ PAGES FICHIERS (images secondaires/principales) ═══
+  html += '.file-img { max-width:100%; max-height:220mm; height:auto; border:1px solid #cbd5e1; border-radius:4px; display:block; margin:10px auto; }';
+  
+  // ═══ PAGE CONTAINER ═══
+  html += '.page { background:#fff; }';
+  
+  // ═══ IMPRESSION ═══
+  html += '@media print {';
+  html += '  @page { margin:10mm; size:letter; }';
+  html += '  body { padding:0 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }';
+  html += '  .card-header, .ph, .item-title-time, .mat-qty, .annot-num, .quest-msg-header { -webkit-print-color-adjust:exact; print-color-adjust:exact; }';
+  html += '  .page { page-break-after:always; }';
+  html += '  .page:last-child { page-break-after:auto; }';
+  // Empêche les cartes, items, annotations et messages de se couper entre 2 pages
+  html += '  .card, .annot, .item-block, .quest-msg, .dept-summary, .mat-list, .item-block { page-break-inside:avoid; break-inside:avoid; }';
+  // Le dept-summary et les premières cartes doivent rester avec leur en-tête
+  html += '  .ph, .info-row { page-break-after:avoid; break-after:avoid; }';
+  html += '}';
+  html += '</style></head><body>';
+  
+  // Sépare les PDFs et les images pour l'affichage dans le dossier
+  var mainImages = [];
+  var mainPdfs = [];
+  mainFiles.forEach(function(src) {
+    var ft = _detectFileType(src);
+    if (ft.type === 'pdf') mainPdfs.push(src);
+    else mainImages.push(src);
+  });
+  var secondaryImages = [];
+  var secondaryPdfs = [];
+  secondaryFiles.forEach(function(src) {
+    var ft = _detectFileType(src);
+    if (ft.type === 'pdf') secondaryPdfs.push(src);
+    else secondaryImages.push(src);
+  });
+  // NOTE : allPdfs = UNIQUEMENT les PDFs du fichier principal.
+  // Le fichier secondaire (images + PDFs) a sa propre fenêtre d'impression.
+  var allPdfs = mainPdfs;
+  
+  // ─── ORDRE D'IMPRESSION (dossier de soumission principal) ───
+  //   1. Atelier
+  //   2. Couture
+  //   3. Fichier principal (images — les PDFs s'ouvrent via le bouton séparé)
+  //   4. Questionnement
+  //   → Le fichier secondaire est EXCLU ici — il a son propre bouton optionnel
+  
+  var firstPageDone = false;
+  
+  // Helper : vérifie si un département a du contenu à afficher
+  function _deptHasContent(dept) {
+    var d = card[dept];
+    if (!d) return false;
+    // Temps, prix majoré ou évaluateur = page utile même sans items
+    if (d.temps || d.prixMajore || d.evalBy) return true;
+    // Image zone droite
+    if (d.noteImage) return true;
+    // Notes simples non vides
+    if (d.simpleNotes && d.simpleNotes.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim().length > 0) return true;
+    // Annotations avec contenu
+    var annots = (d.annotations || []).filter(function(a){
+      var textPlain = (a.textHtml || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+      return textPlain.length > 0 || a.image;
+    });
+    if (annots.length > 0) return true;
+    // Matériaux non vides
+    var mats = (d.materiaux || []).filter(function(m){ return m.name; });
+    if (mats.length > 0) return true;
+    // Items avec contenu
+    var items = (d.items || []).filter(function(item) {
+      var iMats = (item.materiaux || []).filter(function(m){ return m && m.name; });
+      var notesPlain = (item.notes || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+      return item.image || notesPlain.length > 0 || item.noteImage || item.temps || iMats.length > 0;
+    });
+    if (items.length > 0) return true;
+    // Sinon : pas de contenu utile
+    return false;
+  }
+  
+  // ─── 1. ATELIER (seulement si contenu utile) ───
+  if (_deptHasContent('atelier')) {
+    html += deptPage('atelier', !firstPageDone);
+    firstPageDone = true;
+  }
+  
+  // ─── 2. COUTURE (seulement si contenu utile) ───
+  if (_deptHasContent('couture')) {
+    html += deptPage('couture', !firstPageDone);
+    firstPageDone = true;
+  }
+  
+  // ─── 3. FICHIER PRINCIPAL (images) — les PDFs sont via le bouton séparé ───
+  mainImages.forEach(function(src, i) {
+    html += filePage(src, '📄 Fichier principal — ' + (i + 1) + ' / ' + mainImages.length, !firstPageDone);
+    firstPageDone = true;
+  });
+  
+  // ─── 5. QUESTIONNEMENT (si présent) ───
+  if (questMsgs && questMsgs.length > 0) {
+    // Le questionnement commence TOUJOURS sur une nouvelle page
+    html += '<div class="page" style="page-break-before:always">';
+    html += pageHeader('quest');
+    
+    html += '<div class="card">';
+    html += '<div class="card-header amber"><span class="card-icon">❓</span>Questionnement — Historique des échanges</div>';
+    html += '<div class="card-body">';
+    
+    var first = true;
+    questMsgs.forEach(function(entry) {
+      var msg = entry[1];
+      var isReply = !first;
+      first = false;
+      var lbl = isReply ? '↩️ Réponse' : '❓ Question initiale';
+      var labelClass = isReply ? 'reply' : 'question';
+      var time = msg.timestamp ? new Date(msg.timestamp).toLocaleString('fr-CA') : '';
+      
+      html += '<div class="quest-msg">';
+      html += '<div class="quest-msg-header ' + labelClass + '">';
+      html += '<span>' + lbl + ' — ' + escapeHtml(msg.authorName || '?') + '</span>';
+      if (time) html += '<span class="qm-meta">' + time + '</span>';
+      html += '</div>';
+      html += '<div class="quest-msg-body">';
+      var content = msg.contentHtml || escapeHtml(msg.content || '').replace(/\n/g, '<br>');
+      html += content;
+      var imgs = [];
+      if (msg.image) imgs.push(msg.image);
+      if (msg.images) imgs = imgs.concat(msg.images);
+      imgs.forEach(function(s){
+        html += '<br><img src="' + s + '" alt="Image questionnement">';
+      });
+      html += '</div>';
+      html += '</div>';
+    });
+    
+    html += '</div>'; // fin card-body
+    html += '</div>'; // fin card
+    html += '</div>'; // fin page
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // SCRIPT D'AUTO-COMPACTAGE :
+  // Une fois la page rendue, on mesure la hauteur de chaque .page et on applique
+  // un niveau de compactage (1 ou 2) si la page dépasse la taille papier Letter.
+  // Letter = 279mm de haut, moins 20mm de marges = ~259mm utiles.
+  // À 96 DPI, 259mm ≈ 980 pixels.
+  // ═══════════════════════════════════════════════════════════════════════
+  html += '<script>';
+  html += 'function _autoCompactPages() {';
+  html += '  var PAGE_MAX_PX = 980;'; // hauteur utile page Letter
+  html += '  var pages = document.querySelectorAll(".page");';
+  html += '  pages.forEach(function(page) {';
+  html += '    page.classList.remove("compact-1","compact-2");';
+  html += '    if (page.scrollHeight > PAGE_MAX_PX) {';
+  html += '      page.classList.add("compact-1");';
+  html += '      if (page.scrollHeight > PAGE_MAX_PX) {';
+  html += '        page.classList.remove("compact-1");';
+  html += '        page.classList.add("compact-2");';
+  html += '      }';
+  html += '    }';
+  html += '    console.log("[Compact] Page hauteur:", page.scrollHeight, "px, classe:", page.className);';
+  html += '  });';
+  html += '}';
+  // Exécute après que toutes les images soient chargées (sinon scrollHeight est faux)
+  html += 'function _waitImagesAndCompact() {';
+  html += '  var imgs = document.querySelectorAll("img");';
+  html += '  var total = imgs.length;';
+  html += '  if (total === 0) { _autoCompactPages(); return; }';
+  html += '  var loaded = 0;';
+  html += '  function done() { loaded++; if (loaded >= total) setTimeout(_autoCompactPages, 100); }';
+  html += '  imgs.forEach(function(img) {';
+  html += '    if (img.complete) done();';
+  html += '    else { img.addEventListener("load", done); img.addEventListener("error", done); }';
+  html += '  });';
+  html += '  setTimeout(_autoCompactPages, 5000);'; // sécurité : après 5s peu importe
+  html += '}';
+  html += 'window.addEventListener("load", _waitImagesAndCompact);';
+  // Re-run avant impression (pour le cas où le user change la taille de fenêtre avant d'imprimer)
+  html += 'window.addEventListener("beforeprint", _autoCompactPages);';
+  html += '<\/script>';
+  
   html += '</body></html>';
-  var iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:900px;height:700px;border:none;';
-  document.body.appendChild(iframe);
-  iframe.contentDocument.write(html);
-  iframe.contentDocument.close();
-  iframe.onload = function() {
-    setTimeout(function() {
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
-      setTimeout(function() { document.body.removeChild(iframe); }, 2000);
-    }, 400);
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // ORDRE D'IMPRESSION :
+  //   📄 ÉTAPE 1 — PDF principal tout seul (pur, sans rien autour)
+  //   📝 ÉTAPE 2 — Tout le reste : fichier secondaire + Atelier + Couture
+  // 
+  // IMPORTANT : Les 2 fenêtres sont ouvertes EN MÊME TEMPS. Sinon, le dialogue
+  // d'impression de la 1re fenêtre bloque le JavaScript de la page principale
+  // et la 2e fenêtre ne s'ouvre jamais tant que l'utilisateur n'a pas fermé le
+  // 1er dialogue. En ouvrant les 2 ensemble, Chrome les traite séquentiellement
+  // mais de façon autonome : dès que tu fermes le 1er dialogue, le 2e apparaît.
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // MODAL DE CHOIX :
+  //   1) Imprimer le PDF       → ouvre UNE fenêtre avec le PDF
+  //   2) Imprimer la soumission → ouvre UNE fenêtre avec le dossier complet
+  //
+  // On stocke le HTML du dossier et les PDFs dans des variables globales, puis
+  // on affiche un modal qui demande à l'utilisateur quoi imprimer. Chaque
+  // bouton du modal ouvre UNE SEULE fenêtre (aucun risque de popup bloquée).
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  // Prépare le HTML du dossier (avec bouton Imprimer + Télécharger PDF)
+  var patientName = (card.name || 'Patient').replace(/[^a-zA-Z0-9À-ÿ\-_ ]/g, '_').substring(0, 50);
+  var btnBar = '<div class="print-bar">';
+  btnBar += '<div class="print-bar-title">📝 Soumission PSM — ' + escapeHtml(card.name || 'Patient') + '</div>';
+  btnBar += '<div class="print-bar-btns">';
+  btnBar += '<button class="print-bar-btn btn-download" onclick="downloadAsPdf()">📥 Télécharger en PDF</button>';
+  btnBar += '<button class="print-bar-btn btn-print" onclick="window.print()">🖨️ Imprimer</button>';
+  btnBar += '</div>';
+  btnBar += '</div>';
+  
+  var barCss = '<style>';
+  barCss += '.print-bar { position:fixed; top:0; left:0; right:0; background:linear-gradient(135deg,#2563eb,#1e40af); color:#fff; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; gap:16px; box-shadow:0 4px 12px rgba(0,0,0,0.3); font-family:Arial,sans-serif; z-index:10000; }';
+  barCss += '.print-bar-title { font-size:15px; font-weight:800; flex:1; }';
+  barCss += '.print-bar-btns { display:flex; gap:10px; }';
+  barCss += '.print-bar-btn { color:#fff; border:none; padding:12px 20px; border-radius:8px; font-weight:800; font-size:14px; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.3); font-family:Arial,sans-serif; white-space:nowrap; }';
+  barCss += '.btn-download { background:linear-gradient(135deg,#f59e0b,#d97706); }';
+  barCss += '.btn-print { background:linear-gradient(135deg,#22c55e,#16a34a); }';
+  barCss += '.print-bar-btn:hover { filter:brightness(1.15); }';
+  barCss += '.print-bar-btn:disabled { opacity:0.6; cursor:wait; }';
+  barCss += 'body { padding-top:70px !important; }';
+  barCss += '@media print { .print-bar { display:none !important; } body { padding-top:0 !important; } }';
+  barCss += '</style>';
+  
+  var safePatientName = patientName.replace(/"/g, '');
+  var pdfScripts = '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>';
+  pdfScripts += '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>';
+  pdfScripts += '<script>';
+  pdfScripts += 'var PDF_FILENAME = "PSM_' + safePatientName.replace(/ /g, '_') + '_" + new Date().toISOString().slice(0,10) + ".pdf";';
+  pdfScripts += 'function downloadAsPdf() {';
+  pdfScripts += '  var btn = document.querySelector(".btn-download");';
+  pdfScripts += '  var originalText = btn.innerHTML;';
+  pdfScripts += '  btn.disabled = true;';
+  pdfScripts += '  btn.innerHTML = "⏳ Génération...";';
+  pdfScripts += '  var pages = document.querySelectorAll(".page");';
+  pdfScripts += '  if (pages.length === 0) { btn.disabled=false; btn.innerHTML=originalText; alert("Aucune page à exporter"); return; }';
+  pdfScripts += '  var jsPDF = window.jspdf.jsPDF;';
+  pdfScripts += '  var pdf = new jsPDF({ orientation:"portrait", unit:"mm", format:"letter" });';
+  pdfScripts += '  var pageW = 216, pageH = 279, margin = 8;';
+  pdfScripts += '  var availW = pageW - margin*2;';
+  pdfScripts += '  var idx = 0;';
+  pdfScripts += '  function processNext() {';
+  pdfScripts += '    if (idx >= pages.length) {';
+  pdfScripts += '      pdf.save(PDF_FILENAME);';
+  pdfScripts += '      btn.disabled=false; btn.innerHTML=originalText;';
+  pdfScripts += '      return;';
+  pdfScripts += '    }';
+  pdfScripts += '    btn.innerHTML = "⏳ Page " + (idx+1) + "/" + pages.length;';
+  pdfScripts += '    html2canvas(pages[idx], { scale:2, useCORS:true, backgroundColor:"#ffffff", logging:false }).then(function(canvas) {';
+  pdfScripts += '      var imgData = canvas.toDataURL("image/jpeg", 0.92);';
+  pdfScripts += '      var imgH = (canvas.height * availW) / canvas.width;';
+  pdfScripts += '      var maxH = pageH - margin*2;';
+  pdfScripts += '      if (imgH > maxH) imgH = maxH;';
+  pdfScripts += '      if (idx > 0) pdf.addPage();';
+  pdfScripts += '      pdf.addImage(imgData, "JPEG", margin, margin, availW, imgH, undefined, "FAST");';
+  pdfScripts += '      idx++;';
+  pdfScripts += '      setTimeout(processNext, 50);';
+  pdfScripts += '    }).catch(function(err) {';
+  pdfScripts += '      console.error("Erreur page " + idx + ":", err);';
+  pdfScripts += '      idx++;';
+  pdfScripts += '      setTimeout(processNext, 50);';
+  pdfScripts += '    });';
+  pdfScripts += '  }';
+  pdfScripts += '  setTimeout(processNext, 100);';
+  pdfScripts += '}';
+  pdfScripts += 'window.downloadAsPdf = downloadAsPdf;';
+  pdfScripts += '<\/script>';
+  
+  // Prépare le HTML complet du dossier avec barre + CSS + scripts
+  html = html.replace('</head>', barCss + pdfScripts + '</head>');
+  html = html.replace('</style></head><body>', '</style></head><body>' + btnBar);
+  html = html.replace(/<body([^>]*)>/, function(m, attrs) {
+    if (html.indexOf('class="print-bar"') !== -1) return m;
+    return '<body' + attrs + '>' + btnBar;
+  });
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // HTML POUR LA FENÊTRE "EMAIL, IMAGE OU NOTE SUPPLÉMENTAIRES" (fichier secondaire)
+  // Contient toutes les images et PDFs du devisImages2 (fichier secondaire),
+  // chacun sur sa propre page pour impression claire.
+  // ═══════════════════════════════════════════════════════════════════════
+  var secondaryHtml = '';
+  if (secondaryImages.length > 0 || secondaryPdfs.length > 0) {
+    secondaryHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+    secondaryHtml += '<title>Documents supplémentaires — ' + escapeHtml(card.name || 'Patient') + '</title>';
+    secondaryHtml += '<style>';
+    secondaryHtml += '* { box-sizing:border-box; margin:0; padding:0; }';
+    secondaryHtml += 'body { font-family:"Segoe UI",Calibri,Arial,sans-serif; color:#1a1a1a; background:#fff; padding:12mm; padding-top:82px; }';
+    // Header de page (style similaire au dossier)
+    secondaryHtml += '.ph { display:grid; grid-template-columns:80px 1fr 80px; align-items:center; padding:14px 18px; background:linear-gradient(180deg,#1e3a8a 0%,#1e40af 50%,#3b82f6 100%); color:#fff; border-radius:6px 6px 0 0; margin-bottom:0; }';
+    secondaryHtml += '.ph-logo { height:42px; filter:brightness(0) invert(1); }';
+    secondaryHtml += '.ph-title { font-size:22pt; font-weight:700; letter-spacing:0.12em; color:#fff; text-align:center; }';
+    secondaryHtml += '.ph-date { font-size:10pt; color:#dbeafe; font-weight:500; text-align:right; white-space:nowrap; }';
+    // Info compacte sous header
+    secondaryHtml += '.info-line { background:#f8fafc; border:1px solid #1e40af; border-top:none; border-radius:0 0 6px 6px; padding:10px 16px; display:flex; gap:30px; margin-bottom:16px; flex-wrap:wrap; }';
+    secondaryHtml += '.info-line .info-item { font-size:11pt; }';
+    secondaryHtml += '.info-line .info-label { font-size:9pt; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-right:6px; }';
+    secondaryHtml += '.info-line .info-value { font-weight:700; color:#0f172a; }';
+    // Barre action
+    secondaryHtml += '.print-bar { position:fixed; top:0; left:0; right:0; background:linear-gradient(135deg,#475569 0%,#334155 100%); color:#fff; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; gap:16px; box-shadow:0 4px 12px rgba(0,0,0,0.3); font-family:"Segoe UI",sans-serif; z-index:10000; }';
+    secondaryHtml += '.print-bar-title { font-size:15px; font-weight:800; flex:1; }';
+    secondaryHtml += '.print-bar-btn { background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; border:none; padding:12px 24px; border-radius:8px; font-weight:800; font-size:15px; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.3); }';
+    secondaryHtml += '.print-bar-btn:hover { filter:brightness(1.15); }';
+    // Cartes de fichiers
+    secondaryHtml += '.doc-card { border:1px solid #cbd5e1; border-radius:6px; margin-bottom:14px; overflow:hidden; page-break-inside:avoid; background:#fff; }';
+    secondaryHtml += '.doc-card-header { padding:10px 16px; font-size:10.5pt; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:#fff; background:linear-gradient(90deg,#475569 0%,#64748b 100%); display:flex; align-items:center; gap:8px; }';
+    secondaryHtml += '.doc-card-body { padding:14px; text-align:center; background:#fff; }';
+    secondaryHtml += '.doc-card-body img { max-width:100%; max-height:220mm; height:auto; border:1px solid #e2e8f0; border-radius:4px; }';
+    secondaryHtml += '.doc-card-body embed { width:100%; height:240mm; border:1px solid #e2e8f0; border-radius:4px; }';
+    secondaryHtml += '.page { }';
+    // Print
+    secondaryHtml += '@media print {';
+    secondaryHtml += '  @page { margin:10mm; size:letter; }';
+    secondaryHtml += '  body { padding:0 !important; padding-top:0 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }';
+    secondaryHtml += '  .print-bar { display:none !important; }';
+    secondaryHtml += '  .doc-card, .doc-card-header, .ph { -webkit-print-color-adjust:exact; print-color-adjust:exact; }';
+    secondaryHtml += '  .doc-card { page-break-inside:avoid; break-inside:avoid; page-break-after:always; }';
+    secondaryHtml += '  .doc-card:last-child { page-break-after:auto; }';
+    secondaryHtml += '}';
+    secondaryHtml += '</style></head><body>';
+    
+    // Barre d'action en haut
+    secondaryHtml += '<div class="print-bar">';
+    secondaryHtml += '<div class="print-bar-title">📎 Email, image ou note supplémentaires</div>';
+    secondaryHtml += '<button class="print-bar-btn" onclick="window.print()">🖨️ Imprimer</button>';
+    secondaryHtml += '</div>';
+    
+    // En-tête + info compacte
+    var secHeader = '<div class="ph">';
+    secHeader += '<div><img class="ph-logo" src="' + LOGO + '" alt="Physipro"></div>';
+    secHeader += '<div class="ph-title">Documents supplémentaires</div>';
+    secHeader += '<div class="ph-date">' + now + '</div>';
+    secHeader += '</div>';
+    secHeader += '<div class="info-line">';
+    secHeader += '<div class="info-item"><span class="info-label">Soumission :</span><span class="info-value">' + escapeHtml(card.name || '—') + '</span></div>';
+    if (card.client && String(card.client).trim().length > 0) {
+      secHeader += '<div class="info-item"><span class="info-label">Client :</span><span class="info-value">' + escapeHtml(card.client) + '</span></div>';
+    }
+    secHeader += '<div class="info-item"><span class="info-label">Date :</span><span class="info-value">' + now + '</span></div>';
+    secHeader += '</div>';
+    
+    // Une page par fichier — chaque fichier dans sa carte
+    var totalFiles = secondaryImages.length + secondaryPdfs.length;
+    var fileIdx = 0;
+    
+    secondaryImages.forEach(function(src, i) {
+      fileIdx++;
+      secondaryHtml += '<div class="page">';
+      if (fileIdx === 1) secondaryHtml += secHeader;
+      secondaryHtml += '<div class="doc-card">';
+      secondaryHtml += '<div class="doc-card-header"><span>📎</span>Document ' + fileIdx + ' / ' + totalFiles + ' — Image</div>';
+      secondaryHtml += '<div class="doc-card-body"><img src="' + src + '" alt="Document ' + fileIdx + '"></div>';
+      secondaryHtml += '</div>';
+      secondaryHtml += '</div>';
+    });
+    
+    secondaryPdfs.forEach(function(src, i) {
+      fileIdx++;
+      secondaryHtml += '<div class="page">';
+      if (fileIdx === 1) secondaryHtml += secHeader;
+      secondaryHtml += '<div class="doc-card">';
+      secondaryHtml += '<div class="doc-card-header"><span>📄</span>Document ' + fileIdx + ' / ' + totalFiles + ' — PDF</div>';
+      secondaryHtml += '<div class="doc-card-body"><embed src="' + src + '" type="application/pdf"></div>';
+      secondaryHtml += '</div>';
+      secondaryHtml += '</div>';
+    });
+    
+    secondaryHtml += '</body></html>';
+  }
+  
+  // Stocke tout dans des variables globales pour que le modal puisse y accéder
+  window._pxPrintData = {
+    dossierHtml: html,
+    pdfs: allPdfs,
+    secondaryHtml: secondaryHtml,
+    secondaryCount: secondaryImages.length + secondaryPdfs.length,
+    patientName: card.name || 'Patient'
   };
+  
+  // Affiche le modal de choix
+  _pxShowPrintModal();
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODAL DE CHOIX D'IMPRESSION
+// ═══════════════════════════════════════════════════════════════════════
+function _pxShowPrintModal() {
+  var data = window._pxPrintData || {};
+  var hasPdfs = (data.pdfs || []).length > 0;
+  
+  // Supprime un modal précédent s'il existe
+  var old = document.getElementById('pxPrintModal');
+  if (old) old.remove();
+  
+  var modal = document.createElement('div');
+  modal.id = 'pxPrintModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;';
+  
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:12px;padding:18px;max-width:350px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,0.4);';
+  
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:15px;font-weight:800;color:#0f172a;margin-bottom:4px;text-align:center;';
+  title.textContent = '🖨️ Imprimer';
+  box.appendChild(title);
+  
+  var subtitle = document.createElement('div');
+  subtitle.style.cssText = 'font-size:11px;color:#64748b;margin-bottom:14px;text-align:center;';
+  subtitle.textContent = 'Clique sur chaque bouton à tour de rôle :';
+  box.appendChild(subtitle);
+  
+  var btnsWrap = document.createElement('div');
+  btnsWrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+  
+  // Style de base commun aux 3 boutons (compact)
+  var btnBase = 'color:#fff;border:none;padding:12px 16px;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;transition:all 0.3s;';
+  var btnGreen = btnBase + 'background:linear-gradient(135deg,#22c55e,#16a34a);box-shadow:0 3px 8px rgba(34,197,94,0.4);';
+  
+  // ─── BOUTON 1 : Email / Photos (fichier secondaire) ───
+  var hasSecondary = (data.secondaryCount || 0) > 0;
+  var btnSec = document.createElement('button');
+  var btnSecSlate = btnBase + 'background:linear-gradient(135deg,#475569,#334155);box-shadow:0 3px 8px rgba(71,85,105,0.3);';
+  btnSec.style.cssText = btnSecSlate;
+  var secSubtitle = hasSecondary
+    ? data.secondaryCount + ' document' + (data.secondaryCount > 1 ? 's' : '') + ' (optionnel)'
+    : 'Aucun document supplémentaire';
+  var secLabelHtml = '<span style="font-size:22px;">📧</span><div><div>Email / Photos</div><div style="font-size:10px;font-weight:400;opacity:0.9;margin-top:2px;">' + secSubtitle + '</div></div>';
+  var secLabelDoneHtml = '<span style="font-size:22px;">✅</span><div><div>Email / Photos — Fait !</div><div style="font-size:10px;font-weight:400;opacity:0.9;margin-top:2px;">Clique à nouveau si besoin</div></div>';
+  btnSec.innerHTML = secLabelHtml;
+  btnSec.disabled = !hasSecondary;
+  if (!hasSecondary) btnSec.style.opacity = '0.5';
+  btnSec.onclick = function() {
+    if (!data.secondaryHtml) return;
+    var w = window.open('', '_blank', 'width=1000,height=900');
+    if (!w) {
+      showToast('⚠️ Popup bloquée — autorisez les popups pour ce site', 'error');
+      return;
+    }
+    w.document.open();
+    w.document.write(data.secondaryHtml);
+    w.document.close();
+    btnSec.style.cssText = btnGreen;
+    btnSec.innerHTML = secLabelDoneHtml;
+  };
+  btnsWrap.appendChild(btnSec);
+  
+  // ─── BOUTON 2 : Imprimer le PDF ───
+  var btnPdf = document.createElement('button');
+  var btnPdfRed = btnBase + 'background:linear-gradient(135deg,#dc2626,#991b1b);box-shadow:0 3px 8px rgba(220,38,38,0.3);';
+  btnPdf.style.cssText = btnPdfRed;
+  var pdfLabelHtml = '<span style="font-size:22px;">📄</span><div><div>Imprimer le PDF</div><div style="font-size:10px;font-weight:400;opacity:0.9;margin-top:2px;">' + (hasPdfs ? data.pdfs.length + ' PDF à imprimer' : 'Aucun PDF disponible') + '</div></div>';
+  var pdfLabelDoneHtml = '<span style="font-size:22px;">✅</span><div><div>PDF — Fait !</div><div style="font-size:10px;font-weight:400;opacity:0.9;margin-top:2px;">Clique à nouveau si besoin</div></div>';
+  btnPdf.innerHTML = pdfLabelHtml;
+  btnPdf.disabled = !hasPdfs;
+  if (!hasPdfs) btnPdf.style.opacity = '0.5';
+  btnPdf.onclick = function() {
+    // Ouvre la fenêtre PDF SANS fermer le modal
+    data.pdfs.forEach(function(pdfUrl, i) {
+      _openSimplePdfWindow(pdfUrl, i + 1, data.pdfs.length);
+    });
+    btnPdf.style.cssText = btnGreen;
+    btnPdf.innerHTML = pdfLabelDoneHtml;
+  };
+  btnsWrap.appendChild(btnPdf);
+  
+  // ─── BOUTON 3 : Imprimer la soumission ───
+  var btnSoum = document.createElement('button');
+  var btnSoumBlue = btnBase + 'background:linear-gradient(135deg,#2563eb,#1e40af);box-shadow:0 3px 8px rgba(37,99,235,0.3);';
+  btnSoum.style.cssText = btnSoumBlue;
+  var soumLabelHtml = '<span style="font-size:22px;">📝</span><div><div>Imprimer la soumission</div><div style="font-size:10px;font-weight:400;opacity:0.9;margin-top:2px;">Atelier, Couture, matériaux...</div></div>';
+  var soumLabelDoneHtml = '<span style="font-size:22px;">✅</span><div><div>Soumission — Fait !</div><div style="font-size:10px;font-weight:400;opacity:0.9;margin-top:2px;">Clique à nouveau si besoin</div></div>';
+  btnSoum.innerHTML = soumLabelHtml;
+  btnSoum.onclick = function() {
+    // Ouvre la fenêtre Soumission SANS fermer le modal
+    var w = window.open('', '_blank', 'width=1000,height=900');
+    if (!w) {
+      showToast('⚠️ Popup bloquée — autorisez les popups pour ce site', 'error');
+      return;
+    }
+    w.document.open();
+    w.document.write(data.dossierHtml);
+    w.document.close();
+    btnSoum.style.cssText = btnGreen;
+    btnSoum.innerHTML = soumLabelDoneHtml;
+  };
+  btnsWrap.appendChild(btnSoum);
+  
+  // Bouton Fermer (renommé car le modal ne se ferme plus automatiquement)
+  var btnCancel = document.createElement('button');
+  btnCancel.style.cssText = 'background:#f1f5f9;color:#475569;border:none;padding:8px 16px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;margin-top:4px;';
+  btnCancel.textContent = 'Fermer';
+  btnCancel.onclick = _pxClosePrintModal;
+  btnsWrap.appendChild(btnCancel);
+  
+  box.appendChild(btnsWrap);
+  modal.appendChild(box);
+  
+  // Le modal ne se ferme PAS au clic sur le fond noir — seul le bouton "Fermer"
+  // peut le fermer. Ça évite de fermer accidentellement pendant qu'on clique
+  // entre les deux boutons d'impression.
+  
+  document.body.appendChild(modal);
+}
+
+function _pxClosePrintModal() {
+  var modal = document.getElementById('pxPrintModal');
+  if (modal) modal.remove();
+}
+
+// Fenêtre simple contenant UN PDF + un bouton d'impression en haut
+function _openSimplePdfWindow(pdfUrl, num, total) {
+  var w = window.open('', '_blank', 'width=900,height=900');
+  if (!w) {
+    showToast('⚠️ Popup bloquée pour PDF #' + num, 'error');
+    return;
+  }
+  
+  var h = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+  h += '<title>PDF ' + num + '/' + total + '</title>';
+  h += '<style>';
+  h += 'html,body { margin:0; padding:0; height:100%; font-family:Arial,sans-serif; }';
+  h += 'body { padding-top:70px; box-sizing:border-box; }';
+  h += '.print-bar { position:fixed; top:0; left:0; right:0; background:linear-gradient(135deg,#dc2626,#991b1b); color:#fff; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; gap:16px; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:10000; }';
+  h += '.print-bar-title { font-size:15px; font-weight:800; }';
+  h += '.print-bar-btn { background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; border:none; padding:12px 24px; border-radius:8px; font-weight:800; font-size:15px; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.3); white-space:nowrap; }';
+  h += '.print-bar-btn:hover { filter:brightness(1.15); }';
+  h += 'embed { width:100%; height:calc(100vh - 70px); border:none; display:block; }';
+  h += '@media print { .print-bar { display:none !important; } body { padding:0 !important; } embed { height:100vh; } @page { margin:0; size:auto; } }';
+  h += '</style></head><body>';
+  h += '<div class="print-bar">';
+  h += '<div class="print-bar-title">📄 PDF ' + num + '/' + total + '</div>';
+  h += '<button class="print-bar-btn" onclick="window.print()">🖨️ Imprimer ce PDF</button>';
+  h += '</div>';
+  h += '<embed src="' + pdfUrl + '" type="application/pdf">';
+  h += '</body></html>';
+  
+  w.document.open();
+  w.document.write(h);
+  w.document.close();
+}
+
+// Ouvre une fenêtre minimale avec UNIQUEMENT le PDF en plein écran,
+// puis lance window.print() automatiquement. Pas de header, pas de bandeau
+// à l'impression — juste les pages du PDF comme si on l'imprimait directement.
+// Une bannière d'info ÉTAPE 1 DE 2 s'affiche à l'écran seulement.
+// screenW et dossierW : pour positionner la fenêtre PDF côte à côte avec le dossier.
+function _openPdfPrintWindow(pdfUrl, num, total, screenW, dossierW) {
+  // Position la fenêtre PDF à GAUCHE (la fenêtre dossier est à droite)
+  var pdfW = Math.min(900, (screenW || 1920) - (dossierW || 700) - 40);
+  var pdfFeatures = 'width=' + pdfW + ',height=800,left=20,top=20';
+  var w = window.open('', '_blank', pdfFeatures);
+  if (!w) {
+    console.warn('Popup PDF #' + num + ' bloquée');
+    showToast('⚠️ Popup bloquée — autorisez les popups pour ce site', 'error');
+    return;
+  }
+  
+  // Force le focus sur la fenêtre PDF pour qu'elle passe au premier plan
+  try { w.focus(); } catch(e) {}
+  
+  // HTML minimal : body sans marge, embed plein écran, script d'auto-print
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+  html += '<title>ÉTAPE 1/2 — PDF ' + num + '/' + total + '</title>';
+  html += '<style>';
+  html += 'html, body { margin:0; padding:0; width:100%; height:100vh; overflow:hidden; font-family:Arial,sans-serif; }';
+  html += '.info-banner { position:fixed; top:0; left:0; right:0; background:linear-gradient(135deg,#dc2626,#991b1b); color:#fff; padding:10px 16px; font-weight:700; font-size:13px; z-index:9999; box-shadow:0 2px 8px rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:space-between; gap:12px; }';
+  html += '.info-banner .info-left { flex:1; text-align:left; }';
+  html += '.info-banner .step { font-size:15px; letter-spacing:0.05em; }';
+  html += '.info-banner .hint { font-size:11px; font-weight:400; opacity:0.9; margin-top:2px; }';
+  // Bouton étape 2 intégré à la bannière
+  html += '.info-banner .step2-btn { background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; border:none; padding:10px 18px; border-radius:8px; font-weight:800; font-size:13px; cursor:pointer; letter-spacing:0.02em; box-shadow:0 2px 6px rgba(0,0,0,0.3); white-space:nowrap; }';
+  html += '.info-banner .step2-btn:hover { filter:brightness(1.1); transform:translateY(-1px); }';
+  html += '.info-banner .step2-btn:active { transform:translateY(0); }';
+  html += 'embed { width:100%; height:100vh; border:none; display:block; margin-top:72px; }';
+  // À l'IMPRESSION : on cache la bannière et on annule la marge de l'embed
+  html += '@media print {';
+  html += '  @page { margin:0; size:auto; }';
+  html += '  body { margin:0; }';
+  html += '  .info-banner { display:none !important; }';
+  html += '  embed { margin-top:0 !important; height:100vh !important; }';
+  html += '}';
+  html += '</style></head><body>';
+  
+  // Bannière visible à l'écran seulement — avec bouton intégré pour l'étape 2
+  html += '<div class="info-banner">';
+  html += '<div class="info-left">';
+  html += '<div class="step">📄 ÉTAPE 1 DE 2 — Impression du PDF';
+  if (total > 1) html += ' (' + num + '/' + total + ')';
+  html += '</div>';
+  html += '<div class="hint">Quand le PDF est imprimé, clique le bouton vert →</div>';
+  html += '</div>';
+  // Bouton qui déclenche l'étape 2 dans la fenêtre dossier
+  html += '<button class="step2-btn" onclick="triggerStep2()">🖨️ Imprimer étape 2 (notes + couture)</button>';
+  html += '</div>';
+  
+  html += '<embed src="' + pdfUrl + '" type="application/pdf">';
+  
+  // Script : auto-print quand prêt + fonction pour déclencher l'étape 2
+  html += '<script>';
+  html += 'var printed = false;';
+  html += 'function autoPrint() {';
+  html += '  if (printed) return;';
+  html += '  printed = true;';
+  html += '  try { window.focus(); window.print(); } catch(e) { console.error("print error:", e); }';
+  html += '}';
+  html += 'var embed = document.querySelector("embed");';
+  html += 'if (embed) {';
+  html += '  embed.addEventListener("load", function() { setTimeout(autoPrint, 800); });';
+  html += '}';
+  html += 'setTimeout(autoPrint, 3000);'; // sécurité si load ne se déclenche pas
+  // Fonction qui appelle _pxPrintStep2() dans la fenêtre principale (opener)
+  html += 'function triggerStep2() {';
+  html += '  try {';
+  html += '    if (window.opener && typeof window.opener._pxPrintStep2 === "function") {';
+  html += '      window.opener._pxPrintStep2();';
+  html += '    } else {';
+  html += '      alert("Fenêtre principale introuvable — va manuellement à la fenêtre du dossier et clique le bouton vert");';
+  html += '    }';
+  html += '  } catch(e) { console.error(e); alert("Erreur : " + e.message); }';
+  html += '}';
+  html += '<\/script>';
+  html += '</body></html>';
+  
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  
+  // Re-focus après écriture du HTML pour que la fenêtre PDF passe devant le dossier
+  try { w.focus(); } catch(e) {}
+  // Deuxième focus après un court délai (certains navigateurs l'ignorent la 1re fois)
+  setTimeout(function(){ try { w.focus(); } catch(e) {} }, 100);
+}
+
 
 function clickToAddFileFromInline() {
   document.getElementById('psmFilePickerInput').click();
