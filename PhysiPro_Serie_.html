@@ -9743,7 +9743,10 @@ function _rebuildSerieDOM() {
 // ─── POINT D'ENTRÉE ───
 function loadSerieDataFromLocalStorage() {
   _attachSerieFirebaseListeners();
+  _initSerieImportLogSync();
   _purgeCompletedLog();
+  // Re-purge après 5s pour laisser le temps au log Firebase de se charger
+  setTimeout(function() { _purgeCompletedLog(); }, 5000);
   setTimeout(function() { autoPurgeCompletedCards(); }, 15000);
   try {
     var savedFilter = localStorage.getItem('physipro_serie_active_tab');
@@ -9773,66 +9776,195 @@ window._isCardPurged = _isCardPurged;
 // Format: [ { order, client, completedAt (timestamp ms) }, ... ]
 
 var SERIE_COMPLETED_LOG_KEY = 'physipro_serie_completed_log';
-var SERIE_COMPLETED_LOG_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 1 mois en ms
+var SERIE_COMPLETED_LOG_MAX_AGE = 90 * 24 * 60 * 60 * 1000; // 90 jours en ms
+var SERIE_IMPORT_LOG_FB_PATH = 'serieImportLog'; // Log Firebase partagé (90j, bloque ré-imports)
 
 // Vérifie si un numéro de commande est dans le log des complétées (dernier 1 mois)
 function isInCompletedLog(order) {
-  var orderClean = String(order || '').trim();
+  var orderClean = String(order || '').replace(/^0+/, '').trim();
   if (!orderClean) return false; // Guard: chaîne vide = jamais un match valide
   try {
     var log = JSON.parse(localStorage.getItem(SERIE_COMPLETED_LOG_KEY) || '[]');
     var cutoff = Date.now() - SERIE_COMPLETED_LOG_MAX_AGE;
     return log.some(function(entry) {
-      return entry.completedAt > cutoff && String(entry.order || '').trim() === orderClean;
+      var entryOrder = String(entry.order || '').replace(/^0+/, '').trim();
+      var entryTs = entry.completedAt || entry.importedAt || entry.deletedAt || 0;
+      return entryTs > cutoff && entryOrder === orderClean;
     });
   } catch(e) { return false; }
 }
 window.isInCompletedLog = isInCompletedLog;
 
-// Ajoute une entrée au log des complétées
+// === LOG FIREBASE PARTAGÉ ENTRE DEVICES ===
+// Cache en mémoire du log Firebase (synchronisé au chargement + en temps réel)
+var _serieImportLogCache = {};
+var _serieImportLogLoaded = false;
+
+// Charge le log Firebase en cache au démarrage + écoute les changements
+function _initSerieImportLogSync() {
+  if (!firebaseDb || !isFirebaseEnabled) return;
+  try {
+    firebaseDb.ref(SERIE_IMPORT_LOG_FB_PATH).on('value', function(snap) {
+      var val = snap.val() || {};
+      _serieImportLogCache = val;
+      _serieImportLogLoaded = true;
+    }, function(err) {
+      console.warn('⚠️ Import log sync error:', err && err.message);
+    });
+  } catch(e) { console.error('_initSerieImportLogSync:', e); }
+}
+
+// Vérifie si un numéro de commande a été vu (log Firebase OU local) dans les 90 derniers jours
+function isOrderInImportLog(order) {
+  var orderClean = String(order || '').replace(/^0+/, '').trim();
+  if (!orderClean) return false;
+  var cutoff = Date.now() - SERIE_COMPLETED_LOG_MAX_AGE;
+  // 1. Check Firebase cache
+  var fbEntry = _serieImportLogCache[orderClean];
+  if (fbEntry) {
+    var fbTs = fbEntry.importedAt || fbEntry.completedAt || fbEntry.deletedAt || 0;
+    if (fbTs > cutoff) return true;
+  }
+  // 2. Fallback sur log local
+  return isInCompletedLog(order);
+}
+window.isOrderInImportLog = isOrderInImportLog;
+
+// Ajoute une entrée au log lors d'un import (Firebase + local)
+function logImportedOrder(order, client) {
+  var orderClean = String(order || '').replace(/^0+/, '').trim();
+  if (!orderClean) return;
+  var now = Date.now();
+  // Local
+  try {
+    var log = JSON.parse(localStorage.getItem(SERIE_COMPLETED_LOG_KEY) || '[]');
+    log = log.filter(function(e) { return String(e.order || '').replace(/^0+/, '').trim() !== orderClean; });
+    log.push({ order: orderClean, client: escapeHtml(client || ''), importedAt: now });
+    _purgeCompletedLogEntries(log);
+    localStorage.setItem(SERIE_COMPLETED_LOG_KEY, JSON.stringify(log));
+  } catch(e) { console.error('logImportedOrder local:', e); }
+  // Firebase
+  if (firebaseDb && isFirebaseEnabled) {
+    var safeKey = orderClean.replace(/[.#$\/\[\]]/g, '_');
+    firebaseDb.ref(SERIE_IMPORT_LOG_FB_PATH + '/' + safeKey).set({
+      order: orderClean,
+      client: client || '',
+      importedAt: now
+    }).catch(function(e) { console.warn('logImportedOrder FB:', e && e.message); });
+  }
+}
+window.logImportedOrder = logImportedOrder;
+
+// Ajoute une entrée au log lors d'une suppression manuelle (Firebase + local)
+function logDeletedOrder(order, client) {
+  var orderClean = String(order || '').replace(/^0+/, '').trim();
+  if (!orderClean) return;
+  var now = Date.now();
+  // Local
+  try {
+    var log = JSON.parse(localStorage.getItem(SERIE_COMPLETED_LOG_KEY) || '[]');
+    var existing = log.filter(function(e) { return String(e.order || '').replace(/^0+/, '').trim() === orderClean; })[0];
+    log = log.filter(function(e) { return String(e.order || '').replace(/^0+/, '').trim() !== orderClean; });
+    log.push({
+      order: orderClean,
+      client: escapeHtml(client || (existing && existing.client) || ''),
+      importedAt: existing && existing.importedAt,
+      deletedAt: now
+    });
+    _purgeCompletedLogEntries(log);
+    localStorage.setItem(SERIE_COMPLETED_LOG_KEY, JSON.stringify(log));
+  } catch(e) { console.error('logDeletedOrder local:', e); }
+  // Firebase
+  if (firebaseDb && isFirebaseEnabled) {
+    var safeKey = orderClean.replace(/[.#$\/\[\]]/g, '_');
+    firebaseDb.ref(SERIE_IMPORT_LOG_FB_PATH + '/' + safeKey).update({
+      order: orderClean,
+      client: client || '',
+      deletedAt: now
+    }).catch(function(e) { console.warn('logDeletedOrder FB:', e && e.message); });
+  }
+}
+window.logDeletedOrder = logDeletedOrder;
+
+// Ajoute une entrée au log des complétées (local + Firebase)
 function addToCompletedLog(cardId) {
   var data = serieCardsData[cardId];
   if (!data) return;
+  var orderClean = String(data.order || cardId).replace(/^0+/, '').trim();
+  if (!orderClean) return;
+  var now = Date.now();
   try {
     var log = JSON.parse(localStorage.getItem(SERIE_COMPLETED_LOG_KEY) || '[]');
-    var order = String(data.order || cardId).trim();
-    // Éviter les doublons
-    log = log.filter(function(e) { return String(e.order || '').trim() !== order; });
+    var existing = log.filter(function(e) { return String(e.order || '').replace(/^0+/, '').trim() === orderClean; })[0];
+    log = log.filter(function(e) { return String(e.order || '').replace(/^0+/, '').trim() !== orderClean; });
     log.push({
-      order: order,
+      order: orderClean,
       client: escapeHtml(data.client || ''),
-      completedAt: Date.now()
+      importedAt: existing && existing.importedAt,
+      completedAt: now
     });
     _purgeCompletedLogEntries(log); // Nettoyer avant de sauvegarder
     localStorage.setItem(SERIE_COMPLETED_LOG_KEY, JSON.stringify(log));
   } catch(e) { console.error('addToCompletedLog error:', e); }
+  // Firebase
+  if (firebaseDb && isFirebaseEnabled) {
+    var safeKey = orderClean.replace(/[.#$\/\[\]]/g, '_');
+    firebaseDb.ref(SERIE_IMPORT_LOG_FB_PATH + '/' + safeKey).update({
+      order: orderClean,
+      client: data.client || '',
+      completedAt: now
+    }).catch(function(e) { console.warn('addToCompletedLog FB:', e && e.message); });
+  }
 }
 window.addToCompletedLog = addToCompletedLog;
 
-// Nettoie les entrées du log plus vieilles que 1 mois (opère sur un tableau en mémoire)
+// Nettoie les entrées du log plus vieilles que 90 jours (opère sur un tableau en mémoire)
 function _purgeCompletedLogEntries(log) {
   var cutoff = Date.now() - SERIE_COMPLETED_LOG_MAX_AGE;
   for (var i = log.length - 1; i >= 0; i--) {
-    if (!log[i].completedAt || log[i].completedAt < cutoff) {
+    var ts = log[i].completedAt || log[i].importedAt || log[i].deletedAt || 0;
+    if (!ts || ts < cutoff) {
       log.splice(i, 1);
     }
   }
   return log;
 }
 
-// Nettoie le log en localStorage (appelé au chargement)
+// Nettoie le log en localStorage + Firebase (appelé au chargement)
 function _purgeCompletedLog() {
   try {
     var raw = localStorage.getItem(SERIE_COMPLETED_LOG_KEY);
-    if (!raw) return;
-    var log = JSON.parse(raw);
-    var before = log.length;
-    _purgeCompletedLogEntries(log);
-    if (log.length !== before) {
-      localStorage.setItem(SERIE_COMPLETED_LOG_KEY, JSON.stringify(log));
-      console.log('🧹 Log complétées: ' + (before - log.length) + ' entrée(s) > 1 mois supprimée(s)');
+    if (raw) {
+      var log = JSON.parse(raw);
+      var before = log.length;
+      _purgeCompletedLogEntries(log);
+      if (log.length !== before) {
+        localStorage.setItem(SERIE_COMPLETED_LOG_KEY, JSON.stringify(log));
+        console.log('🧹 Log complétées (local): ' + (before - log.length) + ' entrée(s) > 90j supprimée(s)');
+      }
     }
-  } catch(e) { console.error('_purgeCompletedLog error:', e); }
+  } catch(e) { console.error('_purgeCompletedLog local:', e); }
+  // Firebase (purge uniquement si version OK et log loaded)
+  if (firebaseDb && isFirebaseEnabled && _serieImportLogLoaded) {
+    try {
+      var cutoff = Date.now() - SERIE_COMPLETED_LOG_MAX_AGE;
+      var removed = 0;
+      var fbUpdates = {};
+      Object.keys(_serieImportLogCache).forEach(function(key) {
+        var entry = _serieImportLogCache[key];
+        var ts = (entry && (entry.completedAt || entry.importedAt || entry.deletedAt)) || 0;
+        if (!ts || ts < cutoff) {
+          fbUpdates[SERIE_IMPORT_LOG_FB_PATH + '/' + key] = null;
+          removed++;
+        }
+      });
+      if (removed > 0) {
+        firebaseDb.ref().update(fbUpdates).then(function() {
+          console.log('🧹 Log Firebase: ' + removed + ' entrée(s) > 90j supprimée(s)');
+        }).catch(function(e) { console.warn('_purgeCompletedLog FB:', e && e.message); });
+      }
+    } catch(e) { console.error('_purgeCompletedLog FB:', e); }
+  }
 }
 window._purgeCompletedLog = _purgeCompletedLog;
 
@@ -10941,6 +11073,11 @@ function openSerieJsonModal(presetClient) {
         
         <button class="settings-btn" style="background:linear-gradient(to bottom,#22c55e,#16a34a);padding:12px 28px;font-size:14px;font-weight:700;border-radius:8px;cursor:pointer;border:none;color:white;" onclick="document.getElementById('serieJsonFileInput').click()">📂 Sélectionner un fichier</button>
         
+        <label style="display:flex;align-items:center;gap:6px;color:#fbbf24;font-size:11px;font-weight:600;cursor:pointer;background:rgba(251,191,36,0.08);padding:6px 12px;border-radius:6px;border:1px solid rgba(251,191,36,0.3);" title="Ignorer le log 90j et importer même les commandes déjà vues/complétées/supprimées">
+          <input type="checkbox" id="serieJsonForceReimport" style="cursor:pointer;accent-color:#fbbf24;">
+          🔄 Forcer réimport (ignorer log 90j)
+        </label>
+        
         <button class="settings-btn" style="background:#a855f7;padding:8px 14px;font-size:11px;border-radius:6px;" onclick="serieJsonCopyPrompt()">📋 Copier le prompt IA</button>
         
         <div id="serieJsonStatus" style="padding:10px;border-radius:6px;display:none;font-size:12px;text-align:center;width:100%;box-sizing:border-box;"></div>
@@ -11060,12 +11197,18 @@ function serieJsonImport() {
     return;
   }
 
+  // Lire l'état de la case "Forcer réimport"
+  var forceReimport = false;
+  var forceCb = document.getElementById('serieJsonForceReimport');
+  if (forceCb && forceCb.checked) forceReimport = true;
+
   const totalItems = commandesToImport.reduce((s, cmd) => s + (cmd.items?.length || 0), 0);
-  if (!confirm('Importer ' + commandesToImport.length + ' commande(s) avec ' + totalItems + ' item(s) ?')) return;
+  if (!confirm('Importer ' + commandesToImport.length + ' commande(s) avec ' + totalItems + ' item(s) ?' + (forceReimport ? '\n\n🔄 MODE FORCÉ: les commandes déjà vues seront aussi importées' : ''))) return;
 
   let created = 0;
   let errors = 0;
-  let skipped = 0;
+  let skipped = 0;        // Déjà carte active
+  let skippedInLog = 0;   // Dans log (déjà vue/complétée/supprimée)
 
   // Build a set of existing order numbers for duplicate detection
   var existingOrders = {};
@@ -11081,11 +11224,18 @@ function serieJsonImport() {
     try {
       const c = cmdData.commande || {};
 
-      // Skip if this order number already exists in Série+
+      // Skip if this order number already exists in Série+ (carte active)
       var importNum = String(c.numero || '').replace(/^0+/, '').trim();
       if (importNum && existingOrders[importNum]) {
-        console.log('⏭ Commande #' + importNum + ' déjà existante — ignorée');
+        console.log('⏭ Commande #' + importNum + ' déjà active — ignorée');
         skipped++;
+        return;
+      }
+
+      // NOUVEAU: Skip si dans le log (déjà vue dans les 90 derniers jours) — sauf mode forcé
+      if (!forceReimport && importNum && typeof isOrderInImportLog === 'function' && isOrderInImportLog(importNum)) {
+        console.log('🗃️ Commande #' + importNum + ' dans le log 90j — ignorée (cochez Forcer pour réimporter)');
+        skippedInLog++;
         return;
       }
       const cardId = 'serie-' + Date.now() + '-' + idx + '-' + Math.random().toString(36).substr(2, 5);
@@ -11201,6 +11351,10 @@ function serieJsonImport() {
       if (itemsArray.length > 0) {
         if (createSerieCardFromData(cardId, serieCardsData[cardId])) {
           created++;
+          // NOUVEAU: logger dans le log d'import 90j
+          if (importNum && typeof logImportedOrder === 'function') {
+            logImportedOrder(importNum, importClient);
+          }
         } else {
           errors++;
         }
@@ -11208,6 +11362,9 @@ function serieJsonImport() {
         // Aucun produit valide — créer quand même pour ne pas perdre la commande
         if (createSerieCardFromData(cardId, serieCardsData[cardId])) {
           created++;
+          if (importNum && typeof logImportedOrder === 'function') {
+            logImportedOrder(importNum, importClient);
+          }
         } else {
           errors++;
         }
@@ -11229,7 +11386,9 @@ function serieJsonImport() {
 
   // Show feedback in modal status area
   const statusEl = document.getElementById('serieJsonStatus');
-  var skipMsg = skipped > 0 ? '<br>⏭ ' + skipped + ' commande(s) déjà existante(s) — ignorée(s)' : '';
+  var skipMsg = '';
+  if (skipped > 0) skipMsg += '<br>⏭ ' + skipped + ' déjà actives(s) dans Série+';
+  if (skippedInLog > 0) skipMsg += '<br>🗃️ ' + skippedInLog + ' dans le log 90 jours (déjà vue(s))';
   
   if (created > 0 && errors === 0) {
     if (statusEl) {
@@ -11237,7 +11396,10 @@ function serieJsonImport() {
       statusEl.style.background = '#14532d';
       statusEl.innerHTML = '✅ <b>Importation réussie!</b><br>' + created + ' commande(s) importée(s).' + skipMsg;
     }
-    showToast('✅ ' + created + ' importée(s)' + (skipped > 0 ? ', ' + skipped + ' ignorée(s)' : ''), 'success');
+    var toastSuffix = '';
+    if (skipped > 0) toastSuffix += ', ' + skipped + ' active(s)';
+    if (skippedInLog > 0) toastSuffix += ', ' + skippedInLog + ' dans log';
+    showToast('✅ ' + created + ' importée(s)' + toastSuffix, 'success');
     const firstNew = Object.keys(serieCardsData).find(id => id.startsWith('serie-'));
     if (firstNew) {
       setTimeout(() => { selectSerieCard(firstNew, true); }, 200);
@@ -11249,13 +11411,14 @@ function serieJsonImport() {
       statusEl.style.background = '#78350f';
       statusEl.innerHTML = '⚠️ <b>Importation partielle</b><br>' + created + ' importée(s), ' + errors + ' erreur(s).' + skipMsg;
     }
-  } else if (skipped > 0 && created === 0) {
+  } else if ((skipped > 0 || skippedInLog > 0) && created === 0) {
     if (statusEl) {
       statusEl.style.display = 'block';
       statusEl.style.background = '#1e3a5f';
-      statusEl.innerHTML = '⏭ <b>Aucune nouvelle commande</b><br>' + skipped + ' commande(s) déjà existante(s) — toutes ignorées.';
+      var total = skipped + skippedInLog;
+      statusEl.innerHTML = '⏭ <b>Aucune nouvelle commande</b><br>' + total + ' commande(s) déjà connue(s).' + skipMsg;
     }
-    showToast('⏭ ' + skipped + ' commande(s) déjà existante(s)', 'info');
+    showToast('⏭ ' + (skipped + skippedInLog) + ' commande(s) déjà connue(s)', 'info');
   } else {
     if (statusEl) {
       statusEl.style.display = 'block';
@@ -12536,6 +12699,11 @@ function deleteSerieCard(cardId) {
     if (log.length > 200) log = log.slice(-200);
     _saveDeletedLog(log);
     _updateDeletedBadge();
+
+    // NOUVEAU: logger dans le log d'import 90j (Firebase + local) — bloque ré-imports
+    if (cardData.order && typeof logDeletedOrder === 'function') {
+      logDeletedOrder(cardData.order, cardData.client || '');
+    }
   }
 
   delete serieCardsData[cardId];
