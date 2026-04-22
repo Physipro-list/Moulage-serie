@@ -1333,6 +1333,908 @@ body.notif-open .topbar-dept-tabs { z-index: 0 !important; }
 .no-selection-icon { font-size: 72px; margin-bottom: 16px; }
 .no-selection p { font-size: 28px; font-weight: 700; text-align: center; padding: 0 30px; line-height: 1.4; }
 
+/* ═════════════════════════════════════════════════════════════════════
+   CARD SUMMARY VIEW — affichée quand une carte est sélectionnée,
+   AVANT d'ouvrir la vue détaillée (3-colonnes Atelier/Couture).
+   Contient : en-tête (nom + date + bouton Détails) + 2 colonnes
+   (fichiers à gauche, note Service Client à droite).
+   ═════════════════════════════════════════════════════════════════════ */
+.card-summary-view {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: linear-gradient(to bottom, #04152c 0%, #0f2a55 45%, #1a3a7a 100%);
+  padding: 8px 12px 10px 12px;
+  gap: 8px;
+}
+.card-summary-view.visible { display: flex; }
+
+/* HEADER */
+.csv-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  background: linear-gradient(135deg, rgba(59,130,246,0.18), rgba(30,64,175,0.12));
+  border: 1.5px solid rgba(96,165,250,0.45);
+  border-radius: 10px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+.csv-header-left {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+  overflow: hidden;
+}
+.csv-header-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  color: #93c5fd;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+.csv-header-title {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.1;
+  letter-spacing: 0.3px;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.csv-header-sep {
+  color: rgba(191,219,254,0.5);
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.csv-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.csv-meta-label {
+  color: #bfdbfe;
+  font-weight: 600;
+  opacity: 0.85;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+}
+.csv-meta-value {
+  color: #ffffff;
+  font-weight: 700;
+  background: rgba(0,0,0,0.25);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(148,163,184,0.25);
+}
+.csv-header-right {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Bouton "Supprimer la soumission" dans le header de la vue sommaire */
+.csv-btn-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1.5px solid rgba(239,68,68,0.45);
+  border-radius: 7px;
+  background: linear-gradient(to bottom, rgba(239,68,68,0.22), rgba(185,28,28,0.15));
+  color: #fecaca;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s ease;
+}
+.csv-btn-delete:hover {
+  border-color: rgba(239,68,68,0.75);
+  background: linear-gradient(to bottom, rgba(239,68,68,0.35), rgba(185,28,28,0.25));
+  color: #ffffff;
+  filter: brightness(1.05);
+}
+.csv-btn-delete:active { transform: translateY(1px); }
+
+/* ═══ TEMPS ÉVALUÉ — maintenant dans le body (colonne gauche) ═══ */
+.csv-col-times {
+  /* Colonne Temps évalué — réduite pour redonner de l'espace à Items et Notes */
+  flex: 0 0 220px;
+  min-width: 200px;
+  max-width: 250px;
+}
+.csv-times-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+/* Mini-carte par département (Atelier / Couture) — partage équitablement l'espace disponible */
+.csv-time-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1.5px solid;
+  background: rgba(0,0,0,0.28);
+  /* Chaque carte prend une part égale de la hauteur disponible */
+  flex: 1 1 0;
+  min-height: 0;
+  /* Si la hauteur est vraiment trop petite, on empêche l'overflow */
+  overflow: hidden;
+}
+.csv-time-card.csv-time-atelier {
+  border-color: rgba(96,165,250,0.6);
+  background: linear-gradient(to bottom, rgba(59,130,246,0.2), rgba(30,64,175,0.1));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.csv-time-card.csv-time-couture {
+  border-color: rgba(168,85,247,0.6);
+  background: linear-gradient(to bottom, rgba(139,92,246,0.2), rgba(91,33,182,0.1));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.csv-time-card-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.4px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+  line-height: 1.1;
+  flex-shrink: 0;
+}
+.csv-time-card-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Toggle PSM / Majoré — partagé */
+.csv-time-toggle {
+  display: inline-flex;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(148,163,184,0.45);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.csv-time-btn {
+  flex: 1 1 auto;
+  padding: 5px 6px;
+  font-size: 9px;
+  font-weight: 800;
+  color: #bfdbfe;
+  background: rgba(0,0,0,0.3);
+  border: none;
+  cursor: pointer;
+  letter-spacing: 0.2px;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+  min-width: 0;
+  text-transform: uppercase;
+}
+.csv-time-btn + .csv-time-btn { border-left: 1px solid rgba(148,163,184,0.3); }
+.csv-time-btn:hover { background: rgba(255,255,255,0.08); }
+.csv-time-btn.active {
+  background: linear-gradient(to bottom, #3b82f6, #1d4ed8);
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+.csv-time-couture .csv-time-btn.active {
+  background: linear-gradient(to bottom, #a855f7, #7c3aed);
+}
+
+/* ═══ DROPDOWN TEMPS custom (assorti Atelier/Couture) ═══ */
+.csv-time-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #bfdbfe;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+.csv-time-couture .csv-time-label { color: #d8b4fe; }
+
+.csv-time-dropdown {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.csv-time-dd-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fde047;
+  background: rgba(0,0,0,0.4);
+  border: 1.5px solid rgba(74,142,245,0.55);
+  border-radius: 5px;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.12s ease;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Padding gauche compense le caret à droite pour un centrage visuel parfait */
+  padding-left: 20px;
+}
+.csv-time-couture .csv-time-dd-btn {
+  border-color: rgba(168,85,247,0.55);
+}
+.csv-time-dd-btn:hover {
+  background: rgba(0,0,0,0.5);
+  filter: brightness(1.1);
+}
+.csv-time-dd-btn.is-open {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(96,165,250,0.3);
+}
+.csv-time-couture .csv-time-dd-btn.is-open {
+  box-shadow: 0 0 0 2px rgba(168,85,247,0.35);
+}
+.csv-time-dd-value {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+/* Quand la valeur est "—" (vide), griser comme un placeholder */
+.csv-time-dd-btn.is-empty .csv-time-dd-value {
+  color: rgba(148,163,184,0.7);
+  font-weight: 600;
+  font-style: italic;
+}
+.csv-time-dd-caret {
+  font-size: 10px;
+  color: #bfdbfe;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.csv-time-couture .csv-time-dd-caret { color: #d8b4fe; }
+.csv-time-dd-btn.is-open .csv-time-dd-caret { transform: rotate(180deg); }
+
+.csv-time-dd-menu {
+  display: none;
+  /* position:fixed pour échapper aux overflow:hidden des conteneurs parents.
+     La position exacte est calculée en JS dans csvTimeDropdownToggle(). */
+  position: fixed;
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 10000;
+  background: linear-gradient(to bottom, #1e3a5f, #0f172a);
+  border: 1.5px solid rgba(96,165,250,0.6);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.3);
+  padding: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #3b82f6 transparent;
+}
+.csv-time-couture .csv-time-dd-menu {
+  border-color: rgba(168,85,247,0.6);
+  scrollbar-color: #a855f7 transparent;
+}
+.csv-time-dd-menu.is-open { display: block; }
+.csv-time-dd-menu::-webkit-scrollbar { width: 6px; }
+.csv-time-dd-menu::-webkit-scrollbar-track { background: transparent; }
+.csv-time-dd-menu::-webkit-scrollbar-thumb {
+  background: rgba(59,130,246,0.5);
+  border-radius: 3px;
+}
+.csv-time-couture .csv-time-dd-menu::-webkit-scrollbar-thumb {
+  background: rgba(168,85,247,0.5);
+}
+
+.csv-time-dd-option {
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.1s ease;
+  letter-spacing: 0.3px;
+}
+.csv-time-dd-option:hover {
+  background: rgba(59,130,246,0.3);
+  color: #ffffff;
+}
+.csv-time-couture .csv-time-dd-option:hover {
+  background: rgba(168,85,247,0.3);
+}
+.csv-time-dd-option.is-selected {
+  background: linear-gradient(to bottom, #3b82f6, #1d4ed8);
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+.csv-time-couture .csv-time-dd-option.is-selected {
+  background: linear-gradient(to bottom, #a855f7, #7c3aed);
+}
+/* Option "— Aucun —" tout en haut du menu (pour effacer sans scroller) */
+.csv-time-dd-option-none {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(148,163,184,0.25);
+  margin-bottom: 3px;
+  padding-bottom: 9px;
+}
+.csv-time-dd-option-none:hover {
+  background: rgba(148,163,184,0.2);
+  color: #e2e8f0;
+}
+.csv-time-dd-option-none.is-selected {
+  background: linear-gradient(to bottom, #475569, #334155);
+  color: #ffffff;
+}
+
+.csv-time-dd-option-clear {
+  color: #fca5a5;
+  font-style: italic;
+  font-weight: 600;
+  border-top: 1px solid rgba(148,163,184,0.2);
+  margin-top: 3px;
+  padding-top: 9px;
+}
+.csv-time-dd-option-clear:hover {
+  background: rgba(239,68,68,0.25);
+  color: #fecaca;
+}
+
+/* Responsive : sur écran étroit, colonne temps pleine largeur en haut */
+@media (max-width: 900px) {
+  .csv-body { flex-direction: column; }
+  .csv-col-times {
+    flex: 0 0 auto;
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
+  .csv-time-card {
+    flex: 0 0 auto;
+  }
+  .csv-col-items {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+}
+
+/* ═══ CHECKBOX "Items multiples" dans le header de Temps évalué ═══ */
+.csv-items-multi-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #bfdbfe;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+  padding: 3px 7px;
+  border: 1px solid rgba(148,163,184,0.35);
+  border-radius: 5px;
+  background: rgba(0,0,0,0.25);
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+.csv-items-multi-toggle:hover {
+  border-color: rgba(191,219,254,0.7);
+  background: rgba(0,0,0,0.4);
+  color: #ffffff;
+}
+.csv-items-multi-toggle input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  accent-color: #3b82f6;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* ═══ COLONNE ITEMS (apparaît à droite de Temps évalué) ═══ */
+/* Largeur = 2/3 de Temps évalué (300px * 2/3 ≈ 200px) */
+.csv-col-items {
+  /* Colonne Items plus large pour que les 2 lignes dept tiennent bien */
+  flex: 0 0 320px;
+  min-width: 290px;
+  max-width: 360px;
+}
+.csv-items-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  /* Si les 4 cartes ne tiennent pas en hauteur, on scrolle verticalement
+     plutôt que de couper le bas des cartes (ce qui cachait la pastille Temps). */
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/* Scrollbar discrète assortie au thème */
+.csv-items-body::-webkit-scrollbar { width: 6px; }
+.csv-items-body::-webkit-scrollbar-track { background: transparent; }
+.csv-items-body::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,0.35);
+  border-radius: 3px;
+}
+.csv-items-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(148,163,184,0.55);
+}
+
+/* Mini-carte pour chaque item — GRILLE 2 colonnes × 3 lignes
+   Colonnes : [Atelier]              | [Couture]
+   Lignes   : Ligne 1 = toggle PSM/Prix majoré (centré)
+              Ligne 2 = "Item N :  🔨 ATELIER" (col 1) / "🧵 COUTURE" (col 2)
+              Ligne 3 = "Temps : [pastille]" / "Temps : [pastille]"
+   Le crayon ✏️ flotte en haut à gauche en position absolue.
+*/
+.csv-item-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  row-gap: 2px;
+  column-gap: 0;
+  align-items: start;
+  align-content: start;
+  /* Padding-top réduit : le crayon est petit (~14px), 14px suffit */
+  padding: 14px 8px 5px 8px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(148,163,184,0.35);
+  background: rgba(15,23,42,0.5);
+  flex: 0 0 auto;
+  transition: border-color 0.12s ease;
+}
+.csv-item-card:hover {
+  border-color: rgba(148,163,184,0.55);
+}
+
+/* Séparateur vertical entre col 1 et col 2 (bordure gauche sur cellules col 2) */
+.csv-item-card > .cell-couture {
+  padding-left: 10px;
+  border-left: 1px solid rgba(148,163,184,0.3);
+}
+.csv-item-card > .cell-atelier {
+  padding-right: 10px;
+}
+
+/* Toutes les cellules : contenu centré horizontalement */
+.csv-item-card > .cell-atelier,
+.csv-item-card > .cell-couture {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* === Crayon ✏️ flottant en haut à gauche === */
+.csv-item-name-edit {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  min-width: 18px;
+  height: 13px;
+  font-size: 10px;
+  line-height: 1;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(148,163,184,0.5);
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: all 0.12s ease;
+  z-index: 2;
+}
+.csv-item-name-edit:hover {
+  opacity: 1;
+  background: rgba(148,163,184,0.15);
+  border-color: rgba(191,219,254,0.6);
+}
+
+/* === Ligne 2 : nom de l'item + label département === */
+.csv-item-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.csv-item-card-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 80px;
+}
+.csv-item-dept-label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  line-height: 1;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+.cell-atelier .csv-item-dept-label { color: #bfdbfe; }
+.cell-couture .csv-item-dept-label { color: #d8b4fe; }
+.csv-item-dept-icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* === Ligne 3 : "Temps :" + pastille === */
+.csv-item-dept-time-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+.csv-item-dept-time-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+.cell-atelier .csv-item-dept-time-label { color: #bfdbfe; }
+.cell-couture .csv-item-dept-time-label { color: #d8b4fe; }
+
+/* Mini-toggle PSM/Majo pour un item */
+.csv-item-dept-toggle {
+  display: inline-flex;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(148,163,184,0.35);
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+.csv-item-dept-toggle button {
+  padding: 2px 4px;
+  font-size: 8px;
+  font-weight: 800;
+  color: #bfdbfe;
+  background: rgba(0,0,0,0.3);
+  border: none;
+  cursor: pointer;
+  letter-spacing: 0.15px;
+  white-space: nowrap;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.csv-item-dept-toggle button + button { border-left: 1px solid rgba(148,163,184,0.3); }
+.csv-item-dept-toggle button:hover { background: rgba(255,255,255,0.08); }
+.csv-item-dept-toggle button.active {
+  background: linear-gradient(to bottom, #3b82f6, #1d4ed8);
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+.csv-item-dept-row.dept-couture .csv-item-dept-toggle button.active {
+  background: linear-gradient(to bottom, #a855f7, #7c3aed);
+}
+/* Mini-dropdown temps pour un item (plus compact) */
+.csv-item-dept-dd {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.csv-item-dept-dd-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 2px 3px 2px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #fde047;
+  background: rgba(0,0,0,0.4);
+  border: 1.5px solid rgba(74,142,245,0.5);
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+.csv-item-dept-row.dept-couture .csv-item-dept-dd-btn {
+  border-color: rgba(168,85,247,0.5);
+}
+.csv-item-dept-dd-btn:hover {
+  background: rgba(0,0,0,0.55);
+  filter: brightness(1.1);
+}
+.csv-item-dept-dd-btn.is-open {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(96,165,250,0.3);
+}
+.csv-item-dept-row.dept-couture .csv-item-dept-dd-btn.is-open {
+  box-shadow: 0 0 0 2px rgba(168,85,247,0.35);
+}
+.csv-item-dept-dd-value {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.csv-item-dept-dd-btn.is-empty .csv-item-dept-dd-value {
+  color: rgba(148,163,184,0.65);
+  font-weight: 600;
+  font-style: italic;
+}
+.csv-item-dept-dd-caret {
+  font-size: 8px;
+  color: #bfdbfe;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.csv-item-dept-row.dept-couture .csv-item-dept-dd-caret { color: #d8b4fe; }
+.csv-item-dept-dd-btn.is-open .csv-item-dept-dd-caret { transform: rotate(180deg); }
+
+/* Les menus items réutilisent le style de .csv-time-dd-menu via JS (même class) */
+.csv-btn-details {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1.5px solid rgba(34,197,94,0.65);
+  border-radius: 7px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(34,197,94,0.35), inset 0 1px 0 rgba(255,255,255,0.18);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.csv-btn-details:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(34,197,94,0.5), inset 0 1px 0 rgba(255,255,255,0.25);
+}
+.csv-btn-details:active { transform: translateY(0); }
+
+/* Bouton "◀ Sommaire" dans le header de la vue détaillée (3-colonnes) */
+.psm-btn-back-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1.5px solid rgba(148,163,184,0.5);
+  border-radius: 5px;
+  background: linear-gradient(to bottom, rgba(59,130,246,0.25), rgba(30,64,175,0.18));
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-right: 4px;
+  transition: all 0.15s ease;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+.psm-btn-back-summary:hover {
+  background: linear-gradient(to bottom, rgba(59,130,246,0.45), rgba(30,64,175,0.3));
+  border-color: rgba(191,219,254,0.85);
+  filter: brightness(1.1);
+}
+.psm-btn-back-summary:active { transform: translateY(1px); }
+
+/* Bouton "⤺ Retour" vers la liste des soumissions (désélectionne la carte) */
+.psm-btn-back-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1.5px solid rgba(148,163,184,0.5);
+  border-radius: 5px;
+  background: linear-gradient(to bottom, rgba(100,116,139,0.3), rgba(51,65,85,0.22));
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-right: 6px;
+  transition: all 0.15s ease;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+.psm-btn-back-list:hover {
+  background: linear-gradient(to bottom, rgba(100,116,139,0.5), rgba(51,65,85,0.35));
+  border-color: rgba(203,213,225,0.85);
+  filter: brightness(1.1);
+}
+.psm-btn-back-list:active { transform: translateY(1px); }
+
+/* Thème Couture : bouton Retour en tonalité mauve neutre */
+body.couture-mode .psm-btn-back-list {
+  background: linear-gradient(to bottom, rgba(107,84,141,0.35), rgba(76,29,149,0.22)) !important;
+  border-color: rgba(168,85,247,0.55) !important;
+}
+body.couture-mode .psm-btn-back-list:hover {
+  background: linear-gradient(to bottom, rgba(107,84,141,0.55), rgba(76,29,149,0.35)) !important;
+  border-color: rgba(216,180,254,0.85) !important;
+}
+
+/* Thème Couture : bouton Sommaire en mauve */
+body.couture-mode .psm-btn-back-summary {
+  background: linear-gradient(to bottom, rgba(139,92,246,0.3), rgba(91,33,182,0.2)) !important;
+  border-color: rgba(168,85,247,0.55) !important;
+}
+body.couture-mode .psm-btn-back-summary:hover {
+  background: linear-gradient(to bottom, rgba(139,92,246,0.5), rgba(91,33,182,0.35)) !important;
+  border-color: rgba(216,180,254,0.85) !important;
+}
+
+/* BODY : 2 colonnes (fichiers / notes) */
+.csv-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+  overflow: hidden;
+}
+.csv-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: linear-gradient(to bottom, #1e3a5f, #0f172a);
+  border: 1.5px solid rgba(59,130,246,0.4);
+  border-radius: 10px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.3);
+}
+/* Colonne gauche (Temps évalué) : largeur réglée par .csv-col-times (280px fixe) */
+/* Colonne droite (Note SC) : prend tout l'espace restant */
+.csv-col-left { flex: 0 0 auto; }
+.csv-col-right { flex: 1 1 auto; min-width: 0; }
+
+.csv-col-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: linear-gradient(to bottom, rgba(59,130,246,0.28), rgba(59,130,246,0.12));
+  border-bottom: 1.5px solid rgba(96,165,250,0.45);
+  flex-shrink: 0;
+}
+.csv-col-icon { font-size: 15px; }
+.csv-col-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+  flex: 1;
+}
+.csv-col-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  background: rgba(59,130,246,0.35);
+  border: 1px solid rgba(96,165,250,0.6);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.csv-col-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Éditeur de notes dans la card summary view : doit occuper tout l'espace */
+.csv-notes-editor {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(59,130,246,0.25);
+  background: rgba(0,0,0,0.25);
+  color: #e2e8f0;
+  font-size: 13px;
+  line-height: 1.5;
+  outline: none;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.csv-notes-editor:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(148,163,184,0.55);
+  font-style: italic;
+  pointer-events: none;
+}
+.csv-notes-editor img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 4px 0;
+  cursor: zoom-in;
+}
+
+/* Thème Couture : violet/mauve au lieu de bleu */
+body.couture-mode .card-summary-view {
+  background: linear-gradient(to bottom, #1a0a2e 0%, #3a1a5e 45%, #5b2a8e 100%);
+}
+body.couture-mode .csv-header {
+  background: linear-gradient(135deg, rgba(139,92,246,0.22), rgba(91,33,182,0.14));
+  border-color: rgba(168,85,247,0.55);
+}
+body.couture-mode .csv-header-eyebrow { color: #d8b4fe; }
+body.couture-mode .csv-col {
+  background: linear-gradient(to bottom, #2d1a4e, #1a0a2e);
+  border-color: rgba(168,85,247,0.45);
+}
+body.couture-mode .csv-col-header {
+  background: linear-gradient(to bottom, rgba(139,92,246,0.3), rgba(139,92,246,0.12));
+  border-bottom-color: rgba(168,85,247,0.5);
+}
+body.couture-mode .csv-col-count {
+  background: rgba(139,92,246,0.35);
+  border-color: rgba(168,85,247,0.65);
+}
+body.couture-mode .csv-meta-label { color: #d8b4fe; }
+
+/* Impression : masquer la summary view */
+body.psm-printing .card-summary-view { display: none !important; }
+
+/* Mode devis ouvert : masquer la summary view */
+body.devis-open .card-summary-view { display: none !important; }
+
 /* Details content wrapper */
 #detailsContent {
   display: none;
@@ -1454,6 +2356,16 @@ body.devis-open .details-zone {
 /* Mode Agrandir PDF : cacher ABSOLUMENT TOUT sauf le PDF */
 body.devis-open #notesScPanel { display: none !important; }
 body.devis-open #notesScDivider { display: none !important; }
+
+/* ═════════════════════════════════════════════════════════════════════
+   PANNEAU "NOTES SERVICE CLIENT" (colonne de gauche) — DÉSACTIVÉ
+   Le contenu a été déplacé dans la nouvelle vue cardSummaryView.
+   Le panneau reste dans le DOM pour la rétro-compatibilité du code legacy
+   (certains modules lisent encore notesScEditor), mais ne doit JAMAIS
+   apparaître visuellement. Règle permanente avec !important.
+   ═════════════════════════════════════════════════════════════════════ */
+#notesScPanel,
+#notesScDivider { display: none !important; }
 body.devis-open .psm-content-right { display: none !important; }
 body.devis-open .psm-content-divider { display: none !important; }
 body.devis-open .psm-window-header { display: none !important; }
@@ -1892,6 +2804,62 @@ body.has-materials .psm-content-left {
 body.has-materials .psm-content-right {
   flex: 1 1 55% !important;
 }
+
+/* ═══ SÉLECTEUR DE VUE DROIT — 3 boutons radio : Image / Matériaux / Notes ═══ */
+.view-mode-btn {
+  padding: 3px 10px;
+  border: none;
+  background: rgba(0,0,0,0.25);
+  color: #93c5fd;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  border-right: 1px solid rgba(74,142,245,0.3);
+}
+.view-mode-btn:last-child { border-right: none; }
+.view-mode-btn:hover { background: rgba(74,142,245,0.2); color: #fff; }
+.view-mode-btn.active {
+  background: linear-gradient(to bottom, #3b82f6, #1e40af);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.25);
+}
+
+/* ═══ MODES DE VUE — chaque mode prend toute la hauteur, plus de split ═══ */
+
+/* MODE IMAGE : seule la zone image est visible, plein écran */
+body.view-mode-image #rightNoteImg { display: flex !important; }
+body.view-mode-image #rightMatZoneTop { display: none !important; }
+/* La barre d'annotation reste visible pour les outils de dessin */
+body.view-mode-image #rightViewNotes > .psm-annot-bar { display: flex !important; }
+/* Cacher complètement la barre Matériaux/Notes/Taille + l'éditeur de notes + matériaux du bas */
+body.view-mode-image #rightViewNotes > .psm-notes-bar { display: none !important; }
+body.view-mode-image #deptNotesSplit { display: none !important; }
+
+/* MODE MATÉRIAUX : seule la zone matériaux est visible, plein écran */
+body.view-mode-materials #rightNoteImg { display: none !important; }
+body.view-mode-materials #rightMatZoneTop { display: flex !important; }
+/* Cacher barre d'annotation, barre notes, éditeur */
+body.view-mode-materials #rightViewNotes > .psm-annot-bar { display: none !important; }
+body.view-mode-materials #rightViewNotes > .psm-notes-bar { display: none !important; }
+body.view-mode-materials #deptNotesSplit { display: none !important; }
+
+/* MODE NOTES : seule la zone de notes est visible, plein écran */
+body.view-mode-notes #rightNoteImg { display: none !important; }
+body.view-mode-notes #rightMatZoneTop { display: none !important; }
+body.view-mode-notes #rightViewNotes > .psm-annot-bar { display: none !important; }
+/* Garder la barre Matériaux/Notes/Taille (entête des notes) et l'éditeur */
+body.view-mode-notes #rightViewNotes > .psm-notes-bar { display: flex !important; }
+body.view-mode-notes #deptNotesSplit { display: flex !important; }
+/* Retirer la zone matériaux du bas (on est en mode Notes pleine page) */
+body.view-mode-notes #deptMatZone { display: none !important; }
+body.view-mode-notes #deptResizer { display: none !important; }
+/* Cacher aussi "📦 Matériaux" + bouton ➕ de la barre (plus de split, on n'en a plus besoin ici) */
+body.view-mode-notes #deptMatTitle,
+body.view-mode-notes #deptMatTitle + button,
+body.view-mode-notes #deptMatTitle + button + span { display: none !important; }
 
 /* Legacy class aliases for JS that references old names */
 .psm-window-body { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
@@ -5774,6 +6742,114 @@ if(localStorage.getItem('physipro_last_email')){
       </svg>
     </div>
     
+    <!-- ═══ CARD SUMMARY VIEW — affiché quand une carte est sélectionnée (avant la 3-colonnes) ═══ -->
+    <div class="card-summary-view" id="cardSummaryView">
+      <!-- HEADER COMPACT : tout sur une ligne (éyebrow + nom + date) + bouton Soumission -->
+      <div class="csv-header">
+        <div class="csv-header-left">
+          <span class="csv-header-eyebrow">📋 Soumission</span>
+          <span class="csv-header-title" id="csvCardName">—</span>
+          <span class="csv-header-sep">•</span>
+          <span class="csv-meta-item"><span class="csv-meta-label">Créée le</span><span class="csv-meta-value" id="csvCardDate">—</span></span>
+        </div>
+        <div class="csv-header-right">
+          <button class="csv-btn-delete" onclick="_quickDeleteCurrentCard()" title="Supprimer cette soumission">
+            <span style="font-size:12px;">🗑️</span>
+            <span>Supprimer</span>
+          </button>
+          <button class="csv-btn-details" onclick="openPsmDetails()" title="Ouvrir la soumission détaillée (Atelier / Couture)">
+            <span style="font-size:12px;">📂</span>
+            <span>Soumission</span>
+            <span style="font-size:11px;">▶</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- BODY : 2-3 colonnes — Temps évalué + (Items si coché) + Note Service Client -->
+      <div class="csv-body">
+
+        <!-- COLONNE GAUCHE : Temps évalué par département -->
+        <div class="csv-col csv-col-left csv-col-times">
+          <div class="csv-col-header">
+            <span class="csv-col-icon">⏱️</span>
+            <span class="csv-col-title">Temps évalué</span>
+            <label class="csv-items-multi-toggle" title="Afficher un temps par item (1 à 6)">
+              <input type="checkbox" id="csvItemsMultiChk" onchange="csvToggleItemsMulti()">
+              <span>Items multiples</span>
+            </label>
+          </div>
+          <div class="csv-col-body csv-times-body">
+
+            <!-- Bloc Atelier -->
+            <div class="csv-time-card csv-time-atelier">
+              <div class="csv-time-card-title">🔨 Atelier</div>
+              <div class="csv-time-card-row">
+                <span class="csv-time-toggle" role="group">
+                  <button type="button" class="csv-time-btn active" data-dept="atelier" data-kind="psm" onclick="csvToggleType('atelier','psm')" title="PSM">PSM</button>
+                  <button type="button" class="csv-time-btn" data-dept="atelier" data-kind="majo" onclick="csvToggleType('atelier','majo')" title="Prix majoré">Prix majoré</button>
+                </span>
+              </div>
+              <div class="csv-time-card-row">
+                <span class="csv-time-label">Temps :</span>
+                <div class="csv-time-dropdown" data-dept="atelier">
+                  <button type="button" class="csv-time-dd-btn" id="csvTimeAtelierBtn" onclick="csvTimeDropdownToggle('atelier', event)" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="csv-time-dd-value" id="csvTimeAtelierValue">—</span>
+                    <span class="csv-time-dd-caret">▾</span>
+                  </button>
+                  <div class="csv-time-dd-menu" id="csvTimeAtelierMenu" role="listbox"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bloc Couture -->
+            <div class="csv-time-card csv-time-couture">
+              <div class="csv-time-card-title">🧵 Couture</div>
+              <div class="csv-time-card-row">
+                <span class="csv-time-toggle" role="group">
+                  <button type="button" class="csv-time-btn active" data-dept="couture" data-kind="psm" onclick="csvToggleType('couture','psm')" title="PSM">PSM</button>
+                  <button type="button" class="csv-time-btn" data-dept="couture" data-kind="majo" onclick="csvToggleType('couture','majo')" title="Prix majoré">Prix majoré</button>
+                </span>
+              </div>
+              <div class="csv-time-card-row">
+                <span class="csv-time-label">Temps :</span>
+                <div class="csv-time-dropdown" data-dept="couture">
+                  <button type="button" class="csv-time-dd-btn" id="csvTimeCoutureBtn" onclick="csvTimeDropdownToggle('couture', event)" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="csv-time-dd-value" id="csvTimeCoutureValue">—</span>
+                    <span class="csv-time-dd-caret">▾</span>
+                  </button>
+                  <div class="csv-time-dd-menu" id="csvTimeCoutureMenu" role="listbox"></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- COLONNE ITEMS (apparaît seulement si "Items multiples" est coché) -->
+        <div class="csv-col csv-col-items" id="csvColItems" style="display:none;">
+          <div class="csv-col-header">
+            <span class="csv-col-icon">📋</span>
+            <span class="csv-col-title">Items</span>
+          </div>
+          <div class="csv-col-body csv-items-body" id="csvItemsBody">
+            <!-- Les 6 items seront générés par JS (csvBuildItemsColumn) -->
+          </div>
+        </div>
+
+        <!-- COLONNE DROITE : Note Service Client -->
+        <div class="csv-col csv-col-right">
+          <div class="csv-col-header">
+            <span class="csv-col-icon">📝</span>
+            <span class="csv-col-title">Note Service Client</span>
+          </div>
+          <div class="csv-col-body">
+            <div class="notes-sc-editor csv-notes-editor" id="csvNotesEditor" contenteditable="true" data-placeholder="Cliquez ici pour écrire une note..." oninput="_csvNotesChanged()" onpaste="_csvNotesPaste(event)" onfocus="_csvNotesOnFocus()" onblur="_saveCsvNotesNow()"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
     <!-- DÉTAILS CONTENT -->
     <div id="detailsContent">
       <!-- Contenu principal (notesScPanel et divider ont été déplacés dans main-container) -->
@@ -5785,23 +6861,32 @@ if(localStorage.getItem('physipro_last_email')){
         <div class="psm-window-header">
           <!-- COLONNE GAUCHE : même ratio que .psm-content-left (62% ou 45% si matériaux) -->
           <div class="psm-header-left">
+            <!-- BOUTON RETOUR vers la vue sommaire de la carte -->
+            <button class="psm-btn-back-summary" onclick="backToCardSummary()" title="Retour au sommaire de la soumission">
+              <span style="font-size:12px;">◀</span>
+              <span>Sommaire</span>
+            </button>
             <button class="psm-htab active" id="btnFichierSecondaire" onclick="switchToSecondaryFile()">📧 Email / Photos</button>
             <button class="psm-htab" id="btnFichierPrincipal" onclick="switchItemTab(-1)">📄 PDF principal</button>
-            <button id="itemAddBtnHeader" class="btn-blue-subtle" onclick="addNewItem()" title="Ajouter un nouvel item" style="flex-shrink:0;margin-left:2px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:3px;">➕ Item</button>
-            <button class="psm-header-delete-btn" onclick="_quickDeleteCurrentCard()" title="Supprimer cette carte" style="padding:3px 10px;font-size:10px;border:1.5px solid rgba(239,68,68,0.3);margin-left:2px;">🗑️</button>
-            <span style="flex:1;"></span>
-          </div>
-          <!-- SÉPARATEUR VERTICAL : même position que .psm-content-divider (3px) -->
-          <div class="psm-header-divider"></div>
-          <!-- COLONNE DROITE : même ratio que .psm-content-right (38% ou 55% si matériaux) -->
-          <div class="psm-header-right">
-            <span class="psm-type-toggle" id="headerPsmToggle" style="display:inline-flex;flex-shrink:0;">
+            <!-- ═══ Boutons déplacés de la colonne droite (PSM / Prix majoré / Temps / Compléter) ═══ -->
+            <span class="psm-type-toggle" id="headerPsmToggle" style="display:inline-flex;flex-shrink:0;margin-left:8px;">
               <button class="psm-type-btn active" id="headerPsmBtn" onclick="togglePsmTypeFromHeader('psm')">PSM</button>
               <button class="psm-type-btn" id="headerPrixBtn" onclick="togglePsmTypeFromHeader('prix')">Prix majoré</button>
             </span>
             <input type="text" class="psm-temps-input" id="headerTempsInput" placeholder="Temps" title="Temps travaillé (ex: 1h 30)" style="flex-shrink:0;width:62px;font-size:10px;font-weight:800;color:#fde047;padding:3px 6px;margin-left:6px;text-align:center;background:rgba(0,0,0,0.3);border:1.5px solid rgba(74,142,245,0.5);border-radius:4px;">
+            <button id="btnCompleteHeader" onclick="toggleCompleteHeader()" title="Marquer ce département comme complété" style="flex-shrink:0;margin-left:6px;padding:4px 16px;border-radius:5px;border:1.5px solid rgba(34,197,94,0.6);background:linear-gradient(135deg,rgba(34,197,94,0.25),rgba(22,163,74,0.2));color:#86efac;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;transition:all 0.15s;" onmouseover="this.style.filter='brightness(1.2)'" onmouseout="this.style.filter=''">Compléter</button>
             <span style="flex:1;"></span>
-            <button id="btnCompleteHeader" onclick="toggleCompleteHeader()" title="Marquer ce département comme complété" style="flex-shrink:0;padding:4px 16px;border-radius:5px;border:1.5px solid rgba(34,197,94,0.6);background:linear-gradient(135deg,rgba(34,197,94,0.25),rgba(22,163,74,0.2));color:#86efac;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;transition:all 0.15s;" onmouseover="this.style.filter='brightness(1.2)'" onmouseout="this.style.filter=''">Compléter</button>
+          </div>
+          <!-- SÉPARATEUR VERTICAL : même position que .psm-content-divider (3px) -->
+          <div class="psm-header-divider"></div>
+          <!-- COLONNE DROITE : sélecteur de vue (Image / Matériaux / Notes) — un seul actif à la fois -->
+          <div class="psm-header-right">
+            <span class="view-mode-toggle" id="viewModeToggle" style="display:inline-flex;flex-shrink:0;border-radius:5px;overflow:hidden;border:1.5px solid rgba(74,142,245,0.5);">
+              <button type="button" class="view-mode-btn active" id="viewModeImageBtn" onclick="setRightViewMode('image')" title="Afficher l'image + les notes">🖼️ Image</button>
+              <button type="button" class="view-mode-btn" id="viewModeMatBtn" onclick="setRightViewMode('materials')" title="Afficher les matériaux + les notes">📦 Matériaux</button>
+              <button type="button" class="view-mode-btn" id="viewModeNotesBtn" onclick="setRightViewMode('notes')" title="Afficher uniquement les notes (plein écran)">📝 Notes</button>
+            </span>
+            <span style="flex:1;"></span>
           </div>
           <span id="psmHeaderCardName" style="display:none;"></span>
           <button class="psm-htab" id="btnQuestTab" onclick="toggleQuestDrawer()" style="display:none;flex-shrink:0;margin-left:4px;">❓ Questionnement</button>
@@ -5814,16 +6899,16 @@ if(localStorage.getItem('physipro_last_email')){
           <!-- ═══ LEFT ═══ -->
           <div class="psm-content-left">
             <div class="psm-items-controls" id="psmItemsControls" style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:linear-gradient(to bottom, #04152c, #4a8ef5);border-bottom:1px solid rgba(59,130,246,0.2);flex-shrink:0;position:relative;">
-              <!-- Navigation items : flèches + compteur cliquable -->
-              <div id="itemNavGroup" style="display:none;align-items:center;gap:2px;flex-shrink:0;">
-                <button id="itemPrevBtn" onclick="navItem(-1)" title="Item précédent" style="width:26px;height:26px;border-radius:4px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">◀</button>
-                <button id="itemCounterBtn" onclick="toggleItemMenu(event)" title="Voir tous les items" style="min-width:80px;height:26px;padding:0 10px;border-radius:4px;border:1.5px solid rgba(74,142,245,0.5);background:rgba(74,142,245,0.15);color:#fff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">Item 1 / 1</button>
-                <button id="itemNextBtn" onclick="navItem(1)" title="Item suivant" style="width:26px;height:26px;border-radius:4px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">▶</button>
-              </div>
-              <!-- Bouton ajouter un item DÉPLACÉ dans le header principal -->
+              <!-- Bouton ajouter un item (conservé caché pour compatibilité JS) -->
               <button id="itemAddBtn" onclick="addNewItem()" style="display:none;">➕ Ajouter un item</button>
-              <!-- Bouton supprimer l'item courant (visible seulement quand on est sur un item) -->
-              <button id="itemDelBtn" onclick="deleteCurrentItem()" title="Supprimer cet item" style="display:none;flex-shrink:0;width:26px;height:26px;border-radius:4px;border:1.5px solid rgba(239,68,68,0.5);background:rgba(239,68,68,0.15);color:#fca5a5;font-size:12px;cursor:pointer;align-items:center;justify-content:center;padding:0;">🗑️</button>
+              <!-- Bouton supprimer l'item courant (conservé pour compatibilité JS, mais caché) -->
+              <button id="itemDelBtn" onclick="deleteCurrentItem()" title="Supprimer cet item" style="display:none;">🗑️</button>
+              <!-- Navigation items (compteur/flèches) conservée cachée pour compatibilité code legacy -->
+              <div id="itemNavGroup" style="display:none;">
+                <button id="itemPrevBtn" onclick="navItem(-1)" style="display:none;">◀</button>
+                <button id="itemCounterBtn" onclick="toggleItemMenu(event)" style="display:none;">Item 1 / 1</button>
+                <button id="itemNextBtn" onclick="navItem(1)" style="display:none;">▶</button>
+              </div>
               <!-- Spacer pour pousser le temps total à droite -->
               <span style="flex:1;"></span>
               <!-- Temps total (déplacé ici) -->
@@ -5920,8 +7005,19 @@ if(localStorage.getItem('physipro_last_email')){
 
                 <!-- Fichier principal: image + note -->
                 <div id="rightViewNotes" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
+                  <!-- Zone IMAGE (mode Image) — affichée quand body.view-mode-image -->
                   <div id="rightNoteImg" tabindex="0" style="flex:1;display:flex;align-items:center;justify-content:center;background:#0d1b2e;position:relative;overflow:hidden;border-bottom:3px solid #3b82f6;box-shadow:inset 0 -1px 0 rgba(59,130,246,0.3);">
                     <div id="rightNoteImgPh" style="color:#64748b;font-size:11px;text-align:center;">📷 Ctrl+V pour coller</div>
+                  </div>
+                  <!-- Zone MATÉRIAUX (mode Matériaux) — affichée à la place de l'image quand body.view-mode-materials -->
+                  <div id="rightMatZoneTop" style="display:none;flex:1;min-height:0;flex-direction:column;background:linear-gradient(to bottom,#1e3a5f,#0f172a);overflow:hidden;border-bottom:3px solid #f59e0b;box-shadow:inset 0 -1px 0 rgba(245,158,11,0.3);">
+                    <!-- Entête : titre + bouton ajouter (compact) -->
+                    <div style="display:flex;align-items:center;gap:6px;padding:3px 8px;background:rgba(245,158,11,0.1);border-bottom:1px solid rgba(245,158,11,0.3);flex-shrink:0;min-height:22px;">
+                      <span style="font-size:10px;font-weight:800;color:#f59e0b;">📦 Matériaux</span>
+                      <button onclick="openMatPickerForNotes()" style="background:rgba(34,197,94,0.2);border:1px solid rgba(34,197,94,0.4);border-radius:3px;color:#22c55e;font-size:9px;font-weight:700;padding:1px 8px;cursor:pointer;">➕ Ajouter</button>
+                    </div>
+                    <!-- Liste des matériaux (compact pour voir plusieurs lignes) -->
+                    <div id="rightMatListTop" style="flex:1;overflow-y:auto;padding:4px 6px;font-size:10px;color:#e2e8f0;"></div>
                   </div>
                   <!-- Barre d'annotation — juste sous l'image, compacte, alignée à droite -->
                   <div class="psm-annot-bar" style="display:flex;align-items:center;justify-content:flex-end;gap:3px;padding:2px 6px;background:linear-gradient(to bottom, #04152c, #1a3a5c);border-bottom:1px solid rgba(59,130,246,0.2);flex-shrink:0;min-height:20px;">
@@ -7861,7 +8957,10 @@ function switchDept(dept) {
   // Recharger la Note du Service Client (elle est partagée entre Atelier et Couture)
   if (currentCardId && psmData[currentCardId]) {
     var scEditor = document.getElementById('notesScEditor');
-    if (scEditor) scEditor.innerHTML = psmData[currentCardId].notesServiceClient || '';
+    if (scEditor) {
+      scEditor.innerHTML = psmData[currentCardId].notesServiceClient || '';
+      scEditor.setAttribute('data-card-id', currentCardId);
+    }
   }
   
   // Mettre à jour le label "Note pour technicien" / "Note pour couturière"
@@ -8620,13 +9719,17 @@ function renderItemsBar() {
   var fpBtn = document.getElementById('btnFichierPrincipal');
   var fsBtn = document.getElementById('btnFichierSecondaire');
   var qtBtn = document.getElementById('btnQuestTab');
-  if (fpBtn) fpBtn.classList.toggle('active', _activeItemIdx === -1);
+  // Masquage intelligent : cacher l'onglet vide, mais ne jamais cacher les 2 en même temps.
+  var hasPrimary   = card.devisImages  && card.devisImages.length  > 0;
+  var hasSecondary = card.devisImages2 && card.devisImages2.length > 0;
+  if (fpBtn) {
+    // PDF Principal : visible s'il y a du contenu OU si Email/Photos est vide (pour toujours avoir au moins un bouton visible)
+    fpBtn.style.display = (hasPrimary || !hasSecondary) ? '' : 'none';
+    fpBtn.classList.toggle('active', _activeItemIdx === -1);
+  }
   if (fsBtn) {
-    var hasSecondary = card.devisImages2 && card.devisImages2.length > 0;
-    // TOUJOURS afficher le bouton Email / Photos — ne jamais le masquer.
-    // L'utilisateur doit pouvoir cliquer dessus même quand c'est vide pour voir
-    // qu'il n'y a rien dedans, ou pour y coller / ajouter un fichier.
-    fsBtn.style.display = '';
+    // Email / Photos : visible uniquement s'il y a du contenu (prioritaire à gauche grâce au reorder ci-dessous)
+    fsBtn.style.display = hasSecondary ? '' : 'none';
     fsBtn.classList.toggle('active', _activeItemIdx === -3);
     fsBtn.classList.toggle('flash-secondary', hasSecondary && _activeItemIdx !== -3);
   }
@@ -10089,16 +11192,51 @@ function initPSM() {
         loadCard(currentCardId);
       }
     } else {
-      // No card selected — stay on welcome screen (fond noir)
+      // No card selected
       // Auto-switch dept for Stéphanie
       if (currentUser && currentUser.email && currentUser.email.toLowerCase() === 'sroy@physipro.com') {
         setTimeout(function() { switchDept('couture'); }, 200);
+      }
+      // ═══ AUTO-SÉLECTION de la 1re carte au démarrage ═══
+      // Premier chargement uniquement : si aucune carte sélectionnée et qu'il y en a
+      // au moins une dans la liste, on ouvre automatiquement la 1re (vue sommaire).
+      // Si la liste est vide, on reste sur l'écran "Soumission PhysiPro".
+      // Le flag _firstCardAutoSelected évite de re-sélectionner à chaque sync Firebase.
+      if (!window._firstCardAutoSelected) {
+        window._firstCardAutoSelected = true;
+        try {
+          var firstCardId = _getFirstCardIdInOrder();
+          if (firstCardId) {
+            setTimeout(function() { selectCard(firstCardId); }, 150);
+          }
+        } catch(e) { console.error('Auto-select first card error:', e); }
       }
     }
   }, function(error) {
     console.error('PSM Firebase error:', error.code, error.message);
     showToast('❌ Erreur Firebase: ' + (error.code || error.message), 'error');
   });
+}
+
+// Retourne l'ID de la première carte dans l'ordre d'affichage de la liste.
+// Utilise le même tri que renderCards pour être cohérent avec ce que l'utilisateur voit.
+function _getFirstCardIdInOrder() {
+  if (!psmData) return null;
+  // Tenter de lire le DOM : si renderCards a déjà tourné, on a l'ordre exact à l'écran
+  var firstDom = document.querySelector('#cardsList .psmc');
+  if (firstDom) {
+    var id = firstDom.getAttribute('data-card-id');
+    if (id && psmData[id]) return id;
+  }
+  // Fallback : tri par date décroissante (plus récent en haut)
+  var ids = Object.keys(psmData);
+  if (ids.length === 0) return null;
+  ids.sort(function(a, b) {
+    var da = psmData[a] && psmData[a].createdAt ? new Date(psmData[a].createdAt).getTime() : 0;
+    var db = psmData[b] && psmData[b].createdAt ? new Date(psmData[b].createdAt).getTime() : 0;
+    return db - da;
+  });
+  return ids[0];
 }
 
 // ═══ DATE AGING SYSTEM ═══
@@ -10935,29 +12073,26 @@ function toggleCardDeptInclusion(cardId, dept) {
 // ═══ NOTES SERVICE CLIENT — colonne gauche ═══
 var _notesScTimer = null;
 
+// LEGACY : Cette fonction mettait à jour le panneau gauche "Notes SC" qui
+// a été retiré de l'UI. Elle est conservée pour compatibilité : elle synchronise
+// l'éditeur legacy (#notesScEditor) et le nom du header caché. Le panneau lui-même
+// est masqué en permanence via CSS `#notesScPanel { display: none !important }`.
+// La colonne des cartes (cardsCol) reste visible en permanence — l'utilisateur
+// doit pouvoir voir la liste des soumissions même quand une carte est sélectionnée.
 function showNotesScCol(cardId) {
   var card = psmData[cardId];
   if (!card) return;
-  document.getElementById('cardsCol').style.display = 'none';
-  var panel = document.getElementById('notesScPanel');
-  var divider = document.getElementById('notesScDivider');
-  if (panel) panel.style.display = 'flex';
-  if (divider) divider.style.display = 'block';
+  // Synchroniser les noms pour le code legacy qui les lit
   var nameEl = document.getElementById('notesScCardName');
   if (nameEl) nameEl.textContent = card.name || 'Patient';
   var headerNameEl = document.getElementById('psmHeaderCardName');
   if (headerNameEl) headerNameEl.textContent = card.name || 'Patient';
+  // Synchroniser l'éditeur legacy pour que tout code qui le lit obtienne la bonne valeur
   var editor = document.getElementById('notesScEditor');
-  if (editor) editor.innerHTML = card.notesServiceClient || '';
-  // Restaurer l'état de collapse sauvegardé
-  try {
-    var wasCollapsed = localStorage.getItem('psm_notesSc_collapsed') === '1';
-    if (panel) {
-      if (wasCollapsed) panel.classList.add('collapsed');
-      else panel.classList.remove('collapsed');
-      _updateNotesScCollapseBtn();
-    }
-  } catch(e) {}
+  if (editor) {
+    editor.innerHTML = card.notesServiceClient || '';
+    editor.setAttribute('data-card-id', cardId);
+  }
 }
 
 // Bascule l'état collapsed du panneau Notes Service Client
@@ -10985,12 +12120,13 @@ function _updateNotesScCollapseBtn() {
 }
 
 function showCardsCol() {
-  // Save notes before switching
-  _saveNotesScNow();
-  // Save current card data
+  // Protocole V2 : flush synchrone de la note puis détache l'éditeur
+  _csvFlushNoteNow();
+  // Save current card data (champs non-note)
   if (currentCardId && psmData[currentCardId]) {
     try { _flushDomToData(); saveToFirebaseNow(); } catch(e) {}
   }
+  _csvDetachNote();
   // Deselect card
   currentCardId = null;
   var panel = document.getElementById('notesScPanel');
@@ -10999,11 +12135,802 @@ function showCardsCol() {
   if (divider) divider.style.display = 'none';
   var headerNameEl = document.getElementById('psmHeaderCardName');
   if (headerNameEl) headerNameEl.textContent = '';
+  // Hide card summary view too
+  var csv = document.getElementById('cardSummaryView');
+  if (csv) csv.classList.remove('visible');
   document.getElementById('cardsCol').style.display = 'flex';
   document.getElementById('noSelection').style.display = 'flex';
   document.getElementById('detailsContent').classList.remove('visible');
   renderCards();
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// CARD SUMMARY VIEW — affiche nom, date, fichiers et note SC
+// AVANT d'entrer dans la vue détaillée 3-colonnes Atelier/Couture.
+// Le bouton "Détails" (csv-btn-details) ouvre la 3-colonnes via openPsmDetails().
+// ═════════════════════════════════════════════════════════════════════
+function showCardSummary(cardId) {
+  var card = psmData[cardId];
+  if (!card) return;
+  
+  // Masquer "Soumission PhysiPro" et la vue détaillée
+  document.getElementById('noSelection').style.display = 'none';
+  var dc = document.getElementById('detailsContent');
+  if (dc) dc.classList.remove('visible');
+  
+  // Ré-afficher la colonne des cartes (cachée quand on est en vue détaillée)
+  var cardsCol = document.getElementById('cardsCol');
+  if (cardsCol) cardsCol.style.display = 'flex';
+  
+  // Nom de la soumission
+  var nameEl = document.getElementById('csvCardName');
+  if (nameEl) nameEl.textContent = card.name || 'Patient sans nom';
+  
+  // Date de création (formatée en français)
+  var dateEl = document.getElementById('csvCardDate');
+  if (dateEl) {
+    if (card.createdAt) {
+      try {
+        var d = new Date(card.createdAt);
+        var jours = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+        var mois = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+        var jStr = jours[d.getDay()];
+        var dateStr = jStr + ' ' + d.getDate() + ' ' + mois[d.getMonth()] + ' ' + d.getFullYear();
+        var h = String(d.getHours()).padStart(2, '0');
+        var m = String(d.getMinutes()).padStart(2, '0');
+        dateEl.textContent = dateStr + ' à ' + h + 'h' + m;
+      } catch(e) {
+        dateEl.textContent = '—';
+      }
+    } else {
+      dateEl.textContent = '—';
+    }
+  }
+  
+  // Charger la note Service Client pour cette carte (nouveau protocole)
+  _csvLoadNoteForCard(cardId);
+  
+  // Charger les temps évalués (par département)
+  csvLoadTimes(card);
+  
+  // Afficher la vue sommaire
+  var csv = document.getElementById('cardSummaryView');
+  if (csv) csv.classList.add('visible');
+}
+
+// ═══ TEMPS ÉVALUÉ PAR DÉPARTEMENT (vue sommaire) ═══
+// Les valeurs sont stockées dans les mêmes champs que la vue détaillée :
+//   psm/{id}/atelier/temps   , psm/{id}/atelier/prixMajore
+//   psm/{id}/couture/temps   , psm/{id}/couture/prixMajore
+// Cohérence garantie entre les deux vues.
+
+// ═══ OPTIONS DU DROPDOWN TEMPS ═══
+// De 15 min à 10h par pas de 15 min → 40 options exactement.
+// Format stocké en Firebase (et dans la vue détaillée) :
+//   < 60 min  → "15", "30", "45"                 (juste le nombre de minutes)
+//   ≥ 60 min  → "1h", "1h15", "1h30", "1h45", …  (format cohérent avec headerTempsInput)
+// Ces formats restent compatibles avec l'input texte de la vue détaillée.
+var CSV_TIME_OPTIONS = (function() {
+  var opts = [];
+  for (var m = 15; m <= 600; m += 15) {
+    var h = Math.floor(m / 60);
+    var mm = m % 60;
+    var label, val;
+    if (h === 0) {
+      // Moins d'une heure : toujours afficher "min" dans le label ET la valeur stockée
+      label = m + ' min';
+      val = m + ' min';
+    } else if (mm === 0) {
+      // Pile une heure ou plus sans minutes résiduelles : "1h", "2h"...
+      label = h + 'h';
+      val = h + 'h';
+    } else {
+      // Heures + minutes : "1h15", "2h30"...
+      label = h + 'h' + (mm < 10 ? '0' + mm : mm);
+      val = h + 'h' + (mm < 10 ? '0' + mm : mm);
+    }
+    opts.push({ label: label, value: val });
+  }
+  return opts;
+})();
+
+// Normalise une ancienne valeur de temps vers le format actuel (compatibilité descendante).
+// Les anciennes versions stockaient "15", "30", "45" (nombre pur) pour les valeurs < 1h.
+// Cette fonction convertit ces valeurs en "15 min", "30 min", "45 min".
+// Les formats heures ("1h30", "2h", etc.) et les valeurs libres sont renvoyés inchangés.
+function _csvNormalizeTime(val) {
+  if (!val) return '';
+  val = String(val).trim();
+  // Si la valeur est uniquement des chiffres (ex: "15", "45"), c'est une vieille valeur minute → ajouter "min"
+  if (/^\d+$/.test(val)) return val + ' min';
+  return val;
+}
+
+// Construit les items du menu pour un département
+function _csvBuildTimeDropdownMenu(dept) {
+  var menuId = dept === 'atelier' ? 'csvTimeAtelierMenu' : 'csvTimeCoutureMenu';
+  var menu = document.getElementById(menuId);
+  if (!menu) return;
+  var current = '';
+  if (currentCardId && psmData[currentCardId] && psmData[currentCardId][dept]) {
+    current = _csvNormalizeTime(psmData[currentCardId][dept].temps || '');
+  }
+  var html = '';
+  // Option "— Aucun —" en HAUT pour effacer facilement sans scroller
+  var noneCls = (current === '') ? ' is-selected' : '';
+  html += '<div class="csv-time-dd-option csv-time-dd-option-none' + noneCls + '" role="option" data-value="" onclick="csvTimeDropdownSelect(\'' + dept + '\',\'\', event)">— Aucun —</div>';
+  for (var i = 0; i < CSV_TIME_OPTIONS.length; i++) {
+    var opt = CSV_TIME_OPTIONS[i];
+    var selCls = (opt.value === current) ? ' is-selected' : '';
+    html += '<div class="csv-time-dd-option' + selCls + '" role="option" data-value="' + opt.value + '" onclick="csvTimeDropdownSelect(\'' + dept + '\',\'' + opt.value + '\', event)">' + opt.label + '</div>';
+  }
+  // Option "✕ Effacer la sélection" EN BAS pour ceux qui sont déjà scrollés
+  html += '<div class="csv-time-dd-option csv-time-dd-option-clear" role="option" data-value="" onclick="csvTimeDropdownSelect(\'' + dept + '\',\'\', event)">✕ Effacer la sélection</div>';
+  menu.innerHTML = html;
+}
+
+// Charge les temps affichés (appelé par showCardSummary)
+function csvLoadTimes(card) {
+  if (!card) return;
+  ['atelier', 'couture'].forEach(function(dept) {
+    var d = card[dept] || {};
+    var val = _csvNormalizeTime(d.temps || '');
+    // Mise à jour du bouton dropdown (valeur affichée)
+    var btn = document.getElementById(dept === 'atelier' ? 'csvTimeAtelierBtn' : 'csvTimeCoutureBtn');
+    var valueEl = document.getElementById(dept === 'atelier' ? 'csvTimeAtelierValue' : 'csvTimeCoutureValue');
+    if (btn && valueEl) {
+      if (val) {
+        valueEl.textContent = val;
+        btn.classList.remove('is-empty');
+      } else {
+        valueEl.textContent = '— Sélectionner —';
+        btn.classList.add('is-empty');
+      }
+    }
+    // Reconstruire le menu pour que la bonne option soit marquée "sélectionnée"
+    _csvBuildTimeDropdownMenu(dept);
+    // Toggle PSM / Majo (inchangé)
+    var psmBtn = document.querySelector('.csv-time-btn[data-dept="' + dept + '"][data-kind="psm"]');
+    var majoBtn = document.querySelector('.csv-time-btn[data-dept="' + dept + '"][data-kind="majo"]');
+    if (psmBtn && majoBtn) {
+      if (d.prixMajore) {
+        psmBtn.classList.remove('active');
+        majoBtn.classList.add('active');
+      } else {
+        psmBtn.classList.add('active');
+        majoBtn.classList.remove('active');
+      }
+    }
+  });
+  // Charger aussi l'état de la checkbox "Items multiples" et la colonne items si visible
+  csvLoadItemsMulti(card);
+}
+
+// ═══ ITEMS MULTIPLES ═══
+// Quand la checkbox est cochée, affiche une colonne supplémentaire avec 6 items.
+// Chaque item a 2 pastilles temps (Atelier bleu, Couture mauve) + toggles PSM/Majo.
+// Stockage : card.atelier.items[N] / card.couture.items[N] (structure déjà existante).
+// Flag : card.itemsMultiples (boolean).
+
+var CSV_ITEMS_COUNT = 4;
+
+// Charge l'état de la checkbox + construit/cache la colonne items
+function csvLoadItemsMulti(card) {
+  var chk = document.getElementById('csvItemsMultiChk');
+  var col = document.getElementById('csvColItems');
+  if (!chk || !col) return;
+  var on = !!(card && card.itemsMultiples);
+  chk.checked = on;
+  if (on) {
+    col.style.display = 'flex';
+    csvBuildItemsColumn(card);
+  } else {
+    col.style.display = 'none';
+  }
+}
+
+// Toggle de la checkbox "Items multiples"
+function csvToggleItemsMulti() {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var chk = document.getElementById('csvItemsMultiChk');
+  var col = document.getElementById('csvColItems');
+  if (!chk || !col) return;
+  var on = chk.checked;
+  psmData[currentCardId].itemsMultiples = on;
+  if (on) {
+    col.style.display = 'flex';
+    csvBuildItemsColumn(psmData[currentCardId]);
+  } else {
+    col.style.display = 'none';
+    // Fermer tout dropdown item ouvert
+    _csvCloseAllItemDropdowns();
+  }
+  // Sauvegarder dans Firebase
+  var updates = {};
+  updates['psm/' + currentCardId + '/itemsMultiples'] = on;
+  updates['psm/' + currentCardId + '/_lastModifiedAt'] = new Date().toISOString();
+  updates['psm/' + currentCardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+  _skipSyncUntil = Date.now() + 2000;
+  _pendingSave = true;
+  db.ref().update(updates).then(function() { _pendingSave = false; }).catch(function(e) {
+    _skipSyncUntil = 0; _pendingSave = false;
+    console.error('csvToggleItemsMulti save error:', e);
+  });
+}
+
+// Construit la colonne des 6 items avec leurs 2 pastilles (Atelier / Couture)
+function csvBuildItemsColumn(card) {
+  var body = document.getElementById('csvItemsBody');
+  if (!body || !card) return;
+  // Assurer l'existence des tableaux items
+  if (!card.atelier) card.atelier = {};
+  if (!card.couture) card.couture = {};
+  if (!card.atelier.items) card.atelier.items = [];
+  if (!card.couture.items) card.couture.items = [];
+  
+  // Lire les noms personnalisés (fallback "Item N" par défaut)
+  if (!card.itemNames) card.itemNames = [];
+  
+  var html = '';
+  for (var i = 0; i < CSV_ITEMS_COUNT; i++) {
+    var aItem = card.atelier.items[i] || {};
+    var cItem = card.couture.items[i] || {};
+    var aTemps = _csvNormalizeTime(aItem.temps || '');
+    var cTemps = _csvNormalizeTime(cItem.temps || '');
+    var aMajo = !!aItem.prixMajore;
+    var cMajo = !!cItem.prixMajore;
+    var defaultName = 'Item ' + (i + 1);
+    var itemName = (card.itemNames[i] && String(card.itemNames[i]).trim()) ? String(card.itemNames[i]) : defaultName;
+    var escapedName = itemName.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    
+    html += '<div class="csv-item-card">' +
+      // Crayon ✏️ flottant en haut à gauche (position: absolute)
+      '<button type="button" class="csv-item-name-edit" title="Modifier le nom de l\'item" onclick="csvItemRename(' + i + ', event)">✏️</button>' +
+      // === LIGNE 1, COL 1 : Toggle Atelier ===
+      '<div class="cell-atelier">' +
+        '<span class="csv-item-dept-toggle">' +
+          '<button type="button" class="' + (!aMajo ? 'active' : '') + '" onclick="csvItemToggleType(\'atelier\',' + i + ',\'psm\')">PSM</button>' +
+          '<button type="button" class="' + (aMajo ? 'active' : '') + '" onclick="csvItemToggleType(\'atelier\',' + i + ',\'majo\')">Prix majoré</button>' +
+        '</span>' +
+      '</div>' +
+      // === LIGNE 1, COL 2 : Toggle Couture ===
+      '<div class="cell-couture">' +
+        '<span class="csv-item-dept-toggle">' +
+          '<button type="button" class="' + (!cMajo ? 'active' : '') + '" onclick="csvItemToggleType(\'couture\',' + i + ',\'psm\')">PSM</button>' +
+          '<button type="button" class="' + (cMajo ? 'active' : '') + '" onclick="csvItemToggleType(\'couture\',' + i + ',\'majo\')">Prix majoré</button>' +
+        '</span>' +
+      '</div>' +
+      // === LIGNE 2, COL 1 : "Item N :  🔨 ATELIER" ===
+      '<div class="cell-atelier">' +
+        '<div class="csv-item-name-wrap">' +
+          '<span class="csv-item-card-title" id="csvItemName_' + i + '">' + escapedName + ' :</span>' +
+          '<div class="csv-item-dept-label"><span class="csv-item-dept-icon">🔨</span>Atelier</div>' +
+        '</div>' +
+      '</div>' +
+      // === LIGNE 2, COL 2 : "🧵 COUTURE" ===
+      '<div class="cell-couture">' +
+        '<div class="csv-item-dept-label"><span class="csv-item-dept-icon">🧵</span>Couture</div>' +
+      '</div>' +
+      // === LIGNE 3, COL 1 : Temps Atelier ===
+      '<div class="cell-atelier">' +
+        '<div class="csv-item-dept-time-row">' +
+          '<span class="csv-item-dept-time-label">Temps :</span>' +
+          '<div class="csv-item-dept-dd">' +
+            '<button type="button" class="csv-item-dept-dd-btn' + (aTemps ? '' : ' is-empty') + '" id="csvItemDdBtn_atelier_' + i + '" onclick="csvItemDropdownToggle(\'atelier\',' + i + ', event)">' +
+              '<span class="csv-item-dept-dd-value">' + (aTemps || '—') + '</span>' +
+              '<span class="csv-item-dept-dd-caret">▾</span>' +
+            '</button>' +
+            '<div class="csv-time-dd-menu" id="csvItemDdMenu_atelier_' + i + '" role="listbox"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      // === LIGNE 3, COL 2 : Temps Couture ===
+      '<div class="cell-couture">' +
+        '<div class="csv-item-dept-time-row">' +
+          '<span class="csv-item-dept-time-label">Temps :</span>' +
+          '<div class="csv-item-dept-dd">' +
+            '<button type="button" class="csv-item-dept-dd-btn' + (cTemps ? '' : ' is-empty') + '" id="csvItemDdBtn_couture_' + i + '" onclick="csvItemDropdownToggle(\'couture\',' + i + ', event)">' +
+              '<span class="csv-item-dept-dd-value">' + (cTemps || '—') + '</span>' +
+              '<span class="csv-item-dept-dd-caret">▾</span>' +
+            '</button>' +
+            '<div class="csv-time-dd-menu" id="csvItemDdMenu_couture_' + i + '" role="listbox"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+  body.innerHTML = html;
+}
+
+// Toggle PSM/Majoré pour un item donné
+// Renommer un item — ouvre un prompt, sauve dans card.itemNames[i]
+function csvItemRename(itemIdx, evt) {
+  if (evt) evt.stopPropagation();
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var card = psmData[currentCardId];
+  if (!card.itemNames) card.itemNames = [];
+  var defaultName = 'Item ' + (itemIdx + 1);
+  var currentName = card.itemNames[itemIdx] || defaultName;
+  var newName = prompt('Nom de l\'item :', currentName);
+  if (newName === null) return; // annulé
+  newName = String(newName).trim();
+  // Si vide ou égal à "Item N" par défaut, on nettoie (stockage null)
+  var toStore = (!newName || newName === defaultName) ? null : newName;
+  card.itemNames[itemIdx] = toStore;
+  // Rafraîchir juste le titre de cet item
+  var titleEl = document.getElementById('csvItemName_' + itemIdx);
+  if (titleEl) {
+    var display = toStore || defaultName;
+    titleEl.textContent = display;
+  }
+  // Firebase
+  var updates = {};
+  updates['psm/' + currentCardId + '/itemNames/' + itemIdx] = toStore;
+  updates['psm/' + currentCardId + '/_lastModifiedAt'] = new Date().toISOString();
+  updates['psm/' + currentCardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+  _skipSyncUntil = Date.now() + 2000;
+  _pendingSave = true;
+  db.ref().update(updates).then(function() { _pendingSave = false; }).catch(function(e) {
+    _skipSyncUntil = 0; _pendingSave = false;
+    console.error('csvItemRename save error:', e);
+  });
+}
+
+function csvItemToggleType(dept, itemIdx, kind) {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  if (dept !== 'atelier' && dept !== 'couture') return;
+  if (kind !== 'psm' && kind !== 'majo') return;
+  var card = psmData[currentCardId];
+  if (!card[dept]) card[dept] = {};
+  if (!card[dept].items) card[dept].items = [];
+  if (!card[dept].items[itemIdx]) card[dept].items[itemIdx] = {};
+  var nowMajo = (kind === 'majo');
+  var wasMajo = !!card[dept].items[itemIdx].prixMajore;
+  if (wasMajo === nowMajo) return;
+  card[dept].items[itemIdx].prixMajore = nowMajo;
+  // Rebuild just the items column for simplicity (rafraîchit les toggles visuellement)
+  csvBuildItemsColumn(card);
+  // Firebase
+  var updates = {};
+  updates['psm/' + currentCardId + '/' + dept + '/items/' + itemIdx + '/prixMajore'] = nowMajo;
+  updates['psm/' + currentCardId + '/_lastModifiedAt'] = new Date().toISOString();
+  updates['psm/' + currentCardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+  _skipSyncUntil = Date.now() + 2000;
+  _pendingSave = true;
+  db.ref().update(updates).then(function() { _pendingSave = false; }).catch(function(e) {
+    _skipSyncUntil = 0; _pendingSave = false;
+    console.error('csvItemToggleType save error:', e);
+  });
+}
+
+// Construit le menu dropdown d'un item (réutilise les 40 options CSV_TIME_OPTIONS)
+function _csvBuildItemDropdownMenu(dept, itemIdx) {
+  var menu = document.getElementById('csvItemDdMenu_' + dept + '_' + itemIdx);
+  if (!menu) return;
+  var card = psmData[currentCardId];
+  var current = '';
+  if (card && card[dept] && card[dept].items && card[dept].items[itemIdx]) {
+    current = _csvNormalizeTime(card[dept].items[itemIdx].temps || '');
+  }
+  var html = '';
+  // Option "— Aucun —" en HAUT
+  var noneCls = (current === '') ? ' is-selected' : '';
+  html += '<div class="csv-time-dd-option csv-time-dd-option-none' + noneCls + '" role="option" data-value="" onclick="csvItemDropdownSelect(\'' + dept + '\',' + itemIdx + ',\'\', event)">— Aucun —</div>';
+  for (var i = 0; i < CSV_TIME_OPTIONS.length; i++) {
+    var opt = CSV_TIME_OPTIONS[i];
+    var selCls = (opt.value === current) ? ' is-selected' : '';
+    html += '<div class="csv-time-dd-option' + selCls + '" role="option" data-value="' + opt.value + '" onclick="csvItemDropdownSelect(\'' + dept + '\',' + itemIdx + ',\'' + opt.value + '\', event)">' + opt.label + '</div>';
+  }
+  html += '<div class="csv-time-dd-option csv-time-dd-option-clear" role="option" data-value="" onclick="csvItemDropdownSelect(\'' + dept + '\',' + itemIdx + ',\'\', event)">✕ Effacer la sélection</div>';
+  menu.innerHTML = html;
+}
+
+// Ouvre/ferme le dropdown d'un item (même logique que csvTimeDropdownToggle)
+function csvItemDropdownToggle(dept, itemIdx, evt) {
+  if (evt) evt.stopPropagation();
+  var btn = document.getElementById('csvItemDdBtn_' + dept + '_' + itemIdx);
+  var menu = document.getElementById('csvItemDdMenu_' + dept + '_' + itemIdx);
+  if (!btn || !menu) return;
+  var isOpen = menu.classList.contains('is-open');
+  // Fermer TOUS les dropdowns temps (principaux + items) d'abord
+  _csvCloseAllTimeDropdowns();
+  _csvCloseAllItemDropdowns();
+  if (!isOpen) {
+    _csvBuildItemDropdownMenu(dept, itemIdx);
+    // Positionner comme le dropdown principal
+    var rect = btn.getBoundingClientRect();
+    var menuMaxHeight = 260;
+    var spaceBelow = window.innerHeight - rect.bottom - 10;
+    var spaceAbove = rect.top - 10;
+    if (spaceBelow < 120 && spaceAbove > spaceBelow) {
+      menu.style.top = (rect.top - Math.min(menuMaxHeight, spaceAbove) - 4) + 'px';
+      menu.style.maxHeight = Math.min(menuMaxHeight, spaceAbove) + 'px';
+    } else {
+      menu.style.top = (rect.bottom + 4) + 'px';
+      menu.style.maxHeight = Math.min(menuMaxHeight, spaceBelow) + 'px';
+    }
+    menu.style.left = rect.left + 'px';
+    menu.style.width = Math.max(rect.width, 130) + 'px';
+    menu.classList.add('is-open');
+    btn.classList.add('is-open');
+    var sel = menu.querySelector('.csv-time-dd-option.is-selected');
+    if (sel) sel.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+// Sélectionne une valeur dans le dropdown d'un item
+function csvItemDropdownSelect(dept, itemIdx, value, evt) {
+  if (evt) evt.stopPropagation();
+  if (!currentCardId || !psmData[currentCardId]) return;
+  if (dept !== 'atelier' && dept !== 'couture') return;
+  var card = psmData[currentCardId];
+  if (!card[dept]) card[dept] = {};
+  if (!card[dept].items) card[dept].items = [];
+  if (!card[dept].items[itemIdx]) card[dept].items[itemIdx] = {};
+  var prev = card[dept].items[itemIdx].temps || '';
+  card[dept].items[itemIdx].temps = value;
+  // Rafraîchir l'UI du bouton
+  var btn = document.getElementById('csvItemDdBtn_' + dept + '_' + itemIdx);
+  if (btn) {
+    var valEl = btn.querySelector('.csv-item-dept-dd-value');
+    if (valEl) valEl.textContent = value || '—';
+    if (value) btn.classList.remove('is-empty');
+    else btn.classList.add('is-empty');
+  }
+  _csvCloseAllItemDropdowns();
+  if (prev !== value) {
+    var updates = {};
+    updates['psm/' + currentCardId + '/' + dept + '/items/' + itemIdx + '/temps'] = value || null;
+    updates['psm/' + currentCardId + '/_lastModifiedAt'] = new Date().toISOString();
+    updates['psm/' + currentCardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+    _skipSyncUntil = Date.now() + 2000;
+    _pendingSave = true;
+    db.ref().update(updates).then(function() { _pendingSave = false; }).catch(function(e) {
+      _skipSyncUntil = 0; _pendingSave = false;
+      console.error('csvItemDropdownSelect save error:', e);
+    });
+  }
+}
+
+// Ferme tous les dropdowns des items (6 items × 2 depts = 12 dropdowns max)
+function _csvCloseAllItemDropdowns() {
+  ['atelier', 'couture'].forEach(function(dept) {
+    for (var i = 0; i < CSV_ITEMS_COUNT; i++) {
+      var btn = document.getElementById('csvItemDdBtn_' + dept + '_' + i);
+      var menu = document.getElementById('csvItemDdMenu_' + dept + '_' + i);
+      if (menu) menu.classList.remove('is-open');
+      if (btn) btn.classList.remove('is-open');
+    }
+  });
+}
+
+// Ouvre/ferme le dropdown d'un département
+function csvTimeDropdownToggle(dept, evt) {
+  if (evt) evt.stopPropagation();
+  var btnId = dept === 'atelier' ? 'csvTimeAtelierBtn' : 'csvTimeCoutureBtn';
+  var menuId = dept === 'atelier' ? 'csvTimeAtelierMenu' : 'csvTimeCoutureMenu';
+  var btn = document.getElementById(btnId);
+  var menu = document.getElementById(menuId);
+  if (!btn || !menu) return;
+  var isOpen = menu.classList.contains('is-open');
+  // Fermer TOUS les dropdowns avant d'ouvrir celui-ci
+  _csvCloseAllTimeDropdowns();
+  if (!isOpen) {
+    // Reconstruire le menu pour refléter la sélection courante
+    _csvBuildTimeDropdownMenu(dept);
+    // Positionner le menu en fixed, juste sous le bouton, même largeur que lui.
+    // (nécessaire car position:fixed pour échapper aux overflow:hidden parents)
+    var rect = btn.getBoundingClientRect();
+    var menuMaxHeight = 260;
+    var spaceBelow = window.innerHeight - rect.bottom - 10;
+    var spaceAbove = rect.top - 10;
+    // Si pas assez de place dessous et plus de place dessus → afficher au-dessus
+    if (spaceBelow < 120 && spaceAbove > spaceBelow) {
+      menu.style.top = (rect.top - Math.min(menuMaxHeight, spaceAbove) - 4) + 'px';
+      menu.style.maxHeight = Math.min(menuMaxHeight, spaceAbove) + 'px';
+    } else {
+      menu.style.top = (rect.bottom + 4) + 'px';
+      menu.style.maxHeight = Math.min(menuMaxHeight, spaceBelow) + 'px';
+    }
+    menu.style.left = rect.left + 'px';
+    menu.style.width = rect.width + 'px';
+    menu.classList.add('is-open');
+    btn.classList.add('is-open');
+    btn.setAttribute('aria-expanded', 'true');
+    // Faire défiler jusqu'à l'option sélectionnée (si présente)
+    var sel = menu.querySelector('.csv-time-dd-option.is-selected');
+    if (sel) sel.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+// Sélectionne une valeur dans le dropdown
+function csvTimeDropdownSelect(dept, value, evt) {
+  if (evt) evt.stopPropagation();
+  if (!currentCardId || !psmData[currentCardId]) return;
+  if (dept !== 'atelier' && dept !== 'couture') return;
+  if (!psmData[currentCardId][dept]) psmData[currentCardId][dept] = {};
+  var prev = psmData[currentCardId][dept].temps || '';
+  // Stocker la valeur exactement comme affichée (ex: "1h30", "45")
+  psmData[currentCardId][dept].temps = value;
+  // Mettre à jour l'UI du bouton
+  var btn = document.getElementById(dept === 'atelier' ? 'csvTimeAtelierBtn' : 'csvTimeCoutureBtn');
+  var valueEl = document.getElementById(dept === 'atelier' ? 'csvTimeAtelierValue' : 'csvTimeCoutureValue');
+  if (btn && valueEl) {
+    if (value) {
+      valueEl.textContent = value;
+      btn.classList.remove('is-empty');
+    } else {
+      valueEl.textContent = '— Sélectionner —';
+      btn.classList.add('is-empty');
+    }
+  }
+  // Fermer le dropdown
+  _csvCloseAllTimeDropdowns();
+  // Synchroniser le header de la vue détaillée si même dept
+  if (typeof currentDept !== 'undefined' && currentDept === dept) {
+    var hInp = document.getElementById('headerTempsInput');
+    if (hInp) hInp.value = value;
+  }
+  // Sauvegarder dans Firebase (seulement si changé)
+  if (prev !== value) {
+    _csvSaveDeptField(dept, 'temps', value);
+  }
+}
+
+// Ferme tous les dropdowns temps
+function _csvCloseAllTimeDropdowns() {
+  ['atelier', 'couture'].forEach(function(dept) {
+    var btn = document.getElementById(dept === 'atelier' ? 'csvTimeAtelierBtn' : 'csvTimeCoutureBtn');
+    var menu = document.getElementById(dept === 'atelier' ? 'csvTimeAtelierMenu' : 'csvTimeCoutureMenu');
+    if (menu) menu.classList.remove('is-open');
+    if (btn) {
+      btn.classList.remove('is-open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+  });
+}
+
+// Clic en dehors → ferme les dropdowns (principaux ET items)
+document.addEventListener('click', function(e) {
+  // Si le clic est à l'intérieur d'un dropdown temps principal OU item, laisser les handlers internes gérer
+  if (e.target.closest && (e.target.closest('.csv-time-dropdown') || e.target.closest('.csv-item-dept-dd'))) return;
+  _csvCloseAllTimeDropdowns();
+  if (typeof _csvCloseAllItemDropdowns === 'function') _csvCloseAllItemDropdowns();
+});
+
+// Touche Échap → ferme les dropdowns
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    _csvCloseAllTimeDropdowns();
+    if (typeof _csvCloseAllItemDropdowns === 'function') _csvCloseAllItemDropdowns();
+  }
+});
+
+function csvToggleType(dept, kind) {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  if (dept !== 'atelier' && dept !== 'couture') return;
+  if (kind !== 'psm' && kind !== 'majo') return;
+  
+  if (!psmData[currentCardId][dept]) psmData[currentCardId][dept] = {};
+  var wasMajo = !!psmData[currentCardId][dept].prixMajore;
+  var nowMajo = (kind === 'majo');
+  if (wasMajo === nowMajo) return; // déjà à la bonne valeur, rien à faire
+  
+  psmData[currentCardId][dept].prixMajore = nowMajo;
+  // Mettre à jour UI : bouton actif
+  var psmBtn = document.querySelector('.csv-time-btn[data-dept="' + dept + '"][data-kind="psm"]');
+  var majoBtn = document.querySelector('.csv-time-btn[data-dept="' + dept + '"][data-kind="majo"]');
+  if (psmBtn && majoBtn) {
+    if (nowMajo) { psmBtn.classList.remove('active'); majoBtn.classList.add('active'); }
+    else { psmBtn.classList.add('active'); majoBtn.classList.remove('active'); }
+  }
+  // Synchroniser avec le header de la vue détaillée si on est sur le même dept
+  if (typeof currentDept !== 'undefined' && currentDept === dept) {
+    var hpsm = document.getElementById('headerPsmBtn');
+    var hprx = document.getElementById('headerPrixBtn');
+    if (hpsm && hprx) {
+      if (nowMajo) { hpsm.classList.remove('active'); hprx.classList.add('active'); }
+      else { hpsm.classList.add('active'); hprx.classList.remove('active'); }
+    }
+  }
+  // Sauvegarder immédiatement dans Firebase
+  _csvSaveDeptField(dept, 'prixMajore', nowMajo);
+}
+
+function csvSaveTime(dept) {
+  // LEGACY : cette fonction existait quand le temps était un <input> libre.
+  // Avec le nouveau dropdown, la sauvegarde se fait dans csvTimeDropdownSelect.
+  // La fonction est conservée au cas où du code ancien l'appellerait encore.
+  if (!currentCardId || !psmData[currentCardId]) return;
+  if (dept !== 'atelier' && dept !== 'couture') return;
+  // Rien d'autre à faire : le dropdown gère lui-même la sauvegarde au clic sur une option.
+}
+
+// Helper : écrire un seul champ dans Firebase (granulaire comme le legacy)
+function _csvSaveDeptField(dept, field, value) {
+  if (!currentCardId) return;
+  var updates = {};
+  updates['psm/' + currentCardId + '/' + dept + '/' + field] = (value === '' || value === false) ? (value === false ? false : null) : value;
+  updates['psm/' + currentCardId + '/_lastModifiedAt'] = new Date().toISOString();
+  updates['psm/' + currentCardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+  _skipSyncUntil = Date.now() + 2000;
+  _pendingSave = true;
+  db.ref().update(updates).then(function() { _pendingSave = false; }).catch(function(e) {
+    _skipSyncUntil = 0; _pendingSave = false;
+    console.error('CSV time save error (' + dept + '.' + field + '):', e);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ═══ NOTE SERVICE CLIENT — SYSTÈME RÉÉCRIT V2 (anti-contamination croisée) ═══
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// PROBLÈME HISTORIQUE : Les notes d'une carte se retrouvaient dans une autre
+// carte quand l'utilisateur switchait rapidement entre cartes. Cause = race
+// condition entre onblur asynchrone + changement de currentCardId + reload DOM.
+//
+// PRINCIPES DE CETTE RÉÉCRITURE :
+//
+//   1. SOURCE DE VÉRITÉ UNIQUE : l'attribut `data-card-id` de l'éditeur
+//      Le DOM ÉDITEUR connaît à tout moment l'ID de la carte qu'il représente.
+//      Toute sauvegarde VÉRIFIE cet attribut avant d'écrire → impossible d'écrire
+//      la note de B dans A.
+//
+//   2. PROTOCOLE STRICT DE SWITCH DE CARTE (dans selectCard) :
+//      a) FLUSH SYNCHRONE de la note actuelle (si dirty) AVANT de changer currentCardId
+//      b) Changer currentCardId = nouvelle carte
+//      c) Charger le contenu de la nouvelle carte ET poser data-card-id
+//      Entre a) et c), aucun save asynchrone ne peut tirer car on les annule.
+//
+//   3. ANNULATION RADICALE des timers asynchrones au switch :
+//      - clearTimeout de _csvNotesTimer
+//      - Ignorer toute sauvegarde où data-card-id ≠ currentCardId
+//
+//   4. FIREBASE AU NIVEAU GRANULAIRE : on écrit psm/{id}/notesServiceClient
+//      (pas psm/{id} entier) pour éviter d'écraser d'autres champs par accident.
+//
+//   5. PAS DE SAVE SI RIEN N'A CHANGÉ : on compare avec psmData[id].notesServiceClient
+//      avant d'écrire, pour éviter des écritures Firebase inutiles.
+
+var _csvNotesTimer = null;
+
+/**
+ * Sauvegarde la note de la carte actuellement chargée dans l'éditeur.
+ * Sûre à appeler à n'importe quel moment : si l'éditeur ne "possède" pas
+ * une carte valide (data-card-id), elle ne fait rien.
+ */
+function _saveCsvNotesNow() {
+  if (_csvNotesTimer) { clearTimeout(_csvNotesTimer); _csvNotesTimer = null; }
+  var editor = document.getElementById('csvNotesEditor');
+  if (!editor) return;
+
+  // ═══ VÉRIFICATION D'OWNERSHIP DU DOM ═══
+  // L'éditeur porte l'ID de la carte qu'il affiche visuellement. On sauvegarde
+  // UNIQUEMENT dans cette carte. Peu importe ce que `currentCardId` dit.
+  var ownerId = editor.getAttribute('data-card-id');
+  if (!ownerId) {
+    // L'éditeur n'est lié à aucune carte → pas de sauvegarde.
+    return;
+  }
+  if (!psmData[ownerId]) {
+    console.warn('CSV notes save: card ' + ownerId + ' no longer exists, skipping');
+    return;
+  }
+
+  var html = editor.innerHTML || '';
+  var prev = psmData[ownerId].notesServiceClient || '';
+
+  // Skip si rien n'a changé
+  if (prev === html) return;
+
+  // Mise à jour mémoire locale
+  psmData[ownerId].notesServiceClient = html;
+  psmData[ownerId]._lastModifiedAt = new Date().toISOString();
+  psmData[ownerId]._lastModifiedBy = currentUser ? currentUser.email : 'unknown';
+
+  // Synchronisation de l'éditeur legacy caché (certains modules legacy le lisent)
+  var legacyEditor = document.getElementById('notesScEditor');
+  if (legacyEditor && document.activeElement !== legacyEditor) {
+    legacyEditor.innerHTML = html;
+    legacyEditor.setAttribute('data-card-id', ownerId);
+  }
+
+  // Écriture granulaire Firebase : on touche SEULEMENT le champ notesServiceClient
+  // et les métadonnées de modif — pas toute la carte.
+  _skipSyncUntil = Date.now() + 2000;
+  _pendingSave = true;
+  var updates = {};
+  updates['psm/' + ownerId + '/notesServiceClient'] = html || null;
+  updates['psm/' + ownerId + '/_lastModifiedAt'] = psmData[ownerId]._lastModifiedAt;
+  updates['psm/' + ownerId + '/_lastModifiedBy'] = psmData[ownerId]._lastModifiedBy;
+  db.ref().update(updates).then(function() {
+    _pendingSave = false;
+  }).catch(function(e) {
+    _skipSyncUntil = 0;
+    _pendingSave = false;
+    console.error('CSV Notes save error for card ' + ownerId + ':', e);
+  });
+}
+
+/**
+ * Handler oninput : débounce la sauvegarde de 1,5s après la dernière frappe.
+ */
+function _csvNotesChanged() {
+  if (_csvNotesTimer) clearTimeout(_csvNotesTimer);
+  _csvNotesTimer = setTimeout(_saveCsvNotesNow, 1500);
+}
+
+/**
+ * Handler onfocus : insère automatiquement "Nom — JJ/MM/AAAA à hhhmm" si l'éditeur est vide.
+ */
+function _csvNotesOnFocus() {
+  if (typeof _insertNameHeaderOnFocus === 'function') {
+    _insertNameHeaderOnFocus('csvNotesEditor', _csvNotesChanged);
+  }
+}
+
+/**
+ * Handler onpaste : gère le collage d'images.
+ */
+function _csvNotesPaste(e) {
+  if (typeof _insertPastedImage === 'function') {
+    _insertPastedImage(e, 'csvNotesEditor', _csvNotesChanged);
+  }
+}
+
+/**
+ * Charge le contenu de `cardId` dans l'éditeur et pose son ownership.
+ * Appelé par showCardSummary (et nulle part ailleurs).
+ */
+function _csvLoadNoteForCard(cardId) {
+  var editor = document.getElementById('csvNotesEditor');
+  if (!editor) return;
+  if (!cardId || !psmData[cardId]) {
+    editor.innerHTML = '';
+    editor.removeAttribute('data-card-id');
+    return;
+  }
+  editor.innerHTML = psmData[cardId].notesServiceClient || '';
+  editor.setAttribute('data-card-id', cardId);
+  // Synchroniser l'éditeur legacy caché (certains modules legacy le lisent)
+  var legacyEditor = document.getElementById('notesScEditor');
+  if (legacyEditor) {
+    legacyEditor.innerHTML = psmData[cardId].notesServiceClient || '';
+    legacyEditor.setAttribute('data-card-id', cardId);
+  }
+}
+
+/**
+ * Détache l'éditeur de toute carte. À appeler quand on quitte la vue sommaire
+ * ou qu'on désélectionne toutes les cartes. Empêche tout save ultérieur.
+ */
+function _csvDetachNote() {
+  if (_csvNotesTimer) { clearTimeout(_csvNotesTimer); _csvNotesTimer = null; }
+  var editor = document.getElementById('csvNotesEditor');
+  if (editor) {
+    editor.innerHTML = '';
+    editor.removeAttribute('data-card-id');
+  }
+  var legacyEditor = document.getElementById('notesScEditor');
+  if (legacyEditor) {
+    legacyEditor.innerHTML = '';
+    legacyEditor.removeAttribute('data-card-id');
+  }
+}
+
+/**
+ * Flush synchrone : vide le timer et sauve immédiatement.
+ * À appeler par selectCard AVANT de changer currentCardId.
+ */
+function _csvFlushNoteNow() {
+  if (_csvNotesTimer) { clearTimeout(_csvNotesTimer); _csvNotesTimer = null; }
+  _saveCsvNotesNow(); // ne sauvera que si data-card-id + contenu changé
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ═══ FIN RÉÉCRITURE V2 ═══
+// ═══════════════════════════════════════════════════════════════════════════
+
 
 function _notesScChanged() {
   if (_notesScTimer) clearTimeout(_notesScTimer);
@@ -11162,26 +13089,11 @@ function _itemNotesPaste(e) {
 }
 
 function _saveNotesScNow() {
+  // RÉÉCRITURE V2 : cette fonction legacy est désormais un alias de _saveCsvNotesNow.
+  // Elle ne lit plus notesScEditor directement — tout passe par csvNotesEditor (visible),
+  // avec l'ownership via data-card-id. Le legacy editor est juste un miroir caché.
   if (_notesScTimer) { clearTimeout(_notesScTimer); _notesScTimer = null; }
-  if (!currentCardId || !psmData[currentCardId]) return;
-  var editor = document.getElementById('notesScEditor');
-  if (!editor) return;
-  var html = editor.innerHTML || '';
-  // Skip if unchanged
-  if ((psmData[currentCardId].notesServiceClient || '') === html) return;
-  psmData[currentCardId].notesServiceClient = html;
-  psmData[currentCardId]._lastModifiedAt = new Date().toISOString();
-  psmData[currentCardId]._lastModifiedBy = currentUser ? currentUser.email : 'unknown';
-  _skipSyncUntil = Date.now() + 2000;
-  _pendingSave = true;
-  var updates = {};
-  updates['psm/' + currentCardId + '/notesServiceClient'] = html || null;
-  updates['psm/' + currentCardId + '/_lastModifiedAt'] = psmData[currentCardId]._lastModifiedAt;
-  updates['psm/' + currentCardId + '/_lastModifiedBy'] = psmData[currentCardId]._lastModifiedBy;
-  db.ref().update(updates).then(function() { _pendingSave = false; }).catch(function(e) {
-    _skipSyncUntil = 0; _pendingSave = false;
-    console.error('Notes SC save error:', e);
-  });
+  _saveCsvNotesNow();
 }
 
 function selectCard(id) {
@@ -11189,34 +13101,49 @@ function selectCard(id) {
   if (!card) return;
   var wasResolvedUnread = card && card._resolvedUnread === true;
   var wasReplyUnread = card && card._hasReply && card._replyUnread === true;
-  
-  // Save current card before switching (protected)
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // ═══ PROTOCOLE V2 DE SWITCH DE CARTE ═══
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // ÉTAPE 1 — FLUSH SYNCHRONE de la carte qu'on quitte :
+  //   _csvFlushNoteNow() vide le timer de débounce et appelle _saveCsvNotesNow,
+  //   qui vérifie le data-card-id de l'éditeur et sauve UNIQUEMENT dans cette carte.
+  //   Impossible d'écrire dans la mauvaise carte ici : l'éditeur porte encore l'ID
+  //   de la carte qu'on quitte.
+  //
+  // ÉTAPE 2 — DÉTACHER l'éditeur :
+  //   _csvDetachNote() vide l'éditeur et supprime data-card-id. À partir de ce
+  //   moment, aucun onblur ou autre événement asynchrone ne peut écrire quoi que
+  //   ce soit (la garde dans _saveCsvNotesNow refuse si data-card-id absent).
+  //
+  // ÉTAPE 3 — Changer currentCardId et faire les autres sauvegardes non-notes
+  //   (items, toggle PSM, etc. via _flushDomToData)
+  //
+  // ÉTAPE 4 — Charger la note de la nouvelle carte :
+  //   Fait plus tard par showCardSummary via _csvLoadNoteForCard(id).
+  //
+  // ═════════════════════════════════════════════════════════════════════════
   var _prevCardId = currentCardId;
   try {
     if (currentCardId && currentCardId !== id && psmData[currentCardId]) {
-      _saveNotesScNow();
+      // ÉTAPE 1 : flush synchrone de la note (SEUL endroit où on sauve la note)
+      _csvFlushNoteNow();
+      // Sauvegarder aussi les autres données de la carte précédente (champs non-note)
       if (window._notesInputTimer) { clearTimeout(window._notesInputTimer); window._notesInputTimer = null; }
       _flushDomToData();
       saveToFirebaseNow();
       window._dirty = false;
-      // Keep _dirtyCardId pointing to old card so blur handlers save to correct card
-      window._dirtyCardId = currentCardId;
+      // ÉTAPE 2 : détacher l'éditeur pour éliminer toute possibilité
+      // qu'un événement asynchrone futur écrive dans l'ancienne carte
+      _csvDetachNote();
     }
   } catch(e) { console.error('selectCard save error:', e); }
-  
+
+  // ÉTAPE 3 : changer l'identifiant de carte courante
   currentCardId = id;
-  // Clear _dirtyCardId after blur events have fired (browser processes them async)
-  setTimeout(function() { if (window._dirtyCardId === _prevCardId) window._dirtyCardId = null; }, 50);
-  
-  // Mettre à jour le label "Note pour technicien/couturière"
-  if (typeof _updateNotesTargetLabel === 'function') _updateNotesTargetLabel();
-  if (typeof _updateQuestDrawerTitle === 'function') _updateQuestDrawerTitle();
-  if (typeof _updateQuestToggleBtn === 'function') _updateQuestToggleBtn();
-  if (typeof _updateCompleteHeaderBtn === 'function') _updateCompleteHeaderBtn();
-  // Aligner le séparateur du header avec la zone de droite
-  setTimeout(function() { if (typeof _alignHeaderSeparatorWithDivider === 'function') _alignHeaderSeparatorWithDivider(); }, 100);
-  
-  // Remove quest-mode class (will be re-added by switchItemTab if needed)
+
+  // Remove quest-mode class (will be re-added later if needed)
   document.body.classList.remove('quest-mode');
   
   // Clear local unread flags
@@ -11225,11 +13152,47 @@ function selectCard(id) {
     card._replyUnread = false;
   }
   
-  // Load the card data first
+  // Re-render cards (to highlight the selected one in the left list)
   renderCards();
+  
+  // ═══ SHOW NEW CARD SUMMARY VIEW (instead of going straight to 3-colonnes) ═══
+  // Masque "Soumission PhysiPro" et affiche la vue sommaire avec le nom,
+  // la date, les fichiers et la note service client de la carte.
+  showCardSummary(id);
+  
+  // If questionnement was just resolved (unread), send notification + offer email
+  if (wasResolvedUnread && card) {
+    setTimeout(function() {
+      _handleQuestResolved(id);
+    }, 300);
+  }
+}
+
+// ═══ OPEN DETAILS VIEW (3 colonnes Atelier/Couture) depuis la card summary view ═══
+// Appelé par le bouton "Détails" de la vue sommaire.
+function openPsmDetails() {
+  var id = currentCardId;
+  if (!id) return;
+  var card = psmData[id];
+  if (!card) return;
+  
+  // Sauvegarder la note SC avant de quitter la vue sommaire
+  _saveCsvNotesNow();
+  
+  // Mettre à jour les labels dynamiques
+  if (typeof _updateNotesTargetLabel === 'function') _updateNotesTargetLabel();
+  if (typeof _updateQuestDrawerTitle === 'function') _updateQuestDrawerTitle();
+  if (typeof _updateQuestToggleBtn === 'function') _updateQuestToggleBtn();
+  if (typeof _updateCompleteHeaderBtn === 'function') _updateCompleteHeaderBtn();
+  // Aligner le séparateur du header avec la zone de droite
+  setTimeout(function() { if (typeof _alignHeaderSeparatorWithDivider === 'function') _alignHeaderSeparatorWithDivider(); }, 100);
+  
+  // Charger la carte dans la vue détaillée
   loadCard(id);
   PChat.loadForCard();
   updateQuestStatusPill();
+  // Synchroniser l'éditeur legacy notesScEditor (caché mais encore lu par certains modules)
+  showNotesScCol(id);
   
   // AUTO-OUVERTURE INTELLIGENTE de l'onglet fichier (Email prioritaire) :
   //   - Si Email/Photos a des fichiers → ouvrir Email/Photos
@@ -11245,22 +13208,56 @@ function selectCard(id) {
     switchToSecondaryFile();
   }
   
-  // Show notes service client column (replaces cards column)
-  showNotesScCol(id);
-  
   // Auto-open/close quest drawer based on card's questionnement status
   _autoQuestDrawerForCard(id);
   
+  // Masquer la vue sommaire, afficher la vue détaillée
+  var csv = document.getElementById('cardSummaryView');
+  if (csv) csv.classList.remove('visible');
   document.getElementById('noSelection').style.display = 'none';
   const dc = document.getElementById('detailsContent');
   dc.classList.add('visible');
   
-  // If questionnement was just resolved (unread), send notification + offer email
-  if (wasResolvedUnread && card) {
-    setTimeout(function() {
-      _handleQuestResolved(id);
-    }, 300);
+  // La vue détaillée s'affiche en pleine largeur : cacher la colonne des cartes
+  var cardsCol = document.getElementById('cardsCol');
+  if (cardsCol) cardsCol.style.display = 'none';
+  
+  // Mettre à jour le nom dans le header caché (utilisé par certains modules)
+  var headerNameEl = document.getElementById('psmHeaderCardName');
+  if (headerNameEl) headerNameEl.textContent = card.name || 'Patient';
+}
+
+// ═══ RETOUR vers la vue sommaire depuis la vue détaillée (3-colonnes) ═══
+function backToCardSummary() {
+  var id = currentCardId;
+  if (!id || !psmData[id]) {
+    // Pas de carte sélectionnée : retour à la liste
+    showCardsCol();
+    return;
   }
+  
+  // Sauvegarder tout ce qui est dirty avant de quitter la vue détaillée
+  try {
+    if (typeof _flushDomToData === 'function') _flushDomToData();
+    if (typeof saveToFirebaseNow === 'function') saveToFirebaseNow();
+    if (typeof _saveNotesScNow === 'function') _saveNotesScNow();
+  } catch(e) { console.error('backToCardSummary save error:', e); }
+  
+  // Fermer le quest drawer s'il est ouvert
+  try {
+    var qd = document.getElementById('questDrawer');
+    if (qd) qd.classList.remove('open');
+    var pcr = document.querySelector('.psm-content-right');
+    if (pcr) pcr.classList.remove('quest-drawer-open');
+    document.body.classList.remove('quest-drawer-open');
+  } catch(e) {}
+  
+  // Ré-afficher la colonne des cartes (cachée pendant la vue détaillée)
+  var cardsCol = document.getElementById('cardsCol');
+  if (cardsCol) cardsCol.style.display = 'flex';
+  
+  // Afficher la vue sommaire (met à jour nom, date, fichiers, notes SC)
+  showCardSummary(id);
 }
 
 // Handle resolved quest — no modal, just notification + email prompt
@@ -11519,6 +13516,11 @@ function renderMatInNotes(dept, mats) {
   // Rétrécir/agrandir la fenêtre principale (PDF gauche) selon la présence de matériaux
   _updateMaterialsLayout();
   
+  // ═══ Si le mode "Matériaux" est actif, rafraîchir aussi la liste en haut ═══
+  if (document.body.classList.contains('view-mode-materials') && typeof _renderRightMatListTop === 'function') {
+    _renderRightMatListTop();
+  }
+  
   // Build mat list HTML
   var listHtml = validMats.map(function(mat, i) {
     var origIdx = mats.indexOf(mat);
@@ -11573,12 +13575,14 @@ function _findSheetInfo(matName) {
   var m = matName.match(/(\d+)\s*[xX×]\s*(\d+)/);
   if (m) {
     var a = parseInt(m[1], 10), b = parseInt(m[2], 10);
-    // Si les deux dimensions sont > 24, c'est une grande feuille
-    if (a > 24 && b > 24) {
-      return { w: Math.min(a, b), h: Math.max(a, b), label: a + '×' + b };
+    // Règle : au moins une dimension > 22" ET l'autre >= 24"
+    // (donc 22×24, 24×24 NE déclenchent PAS ; 24×30, 30×30, 36×72 oui)
+    var mn = Math.min(a, b);
+    var mx = Math.max(a, b);
+    if (mx > 22 && mn >= 24 || mn > 22 && mx > 24) {
+      return { w: mn, h: mx, label: a + '×' + b };
     }
-    // Si les dimensions sont présentes mais ≤ 24, c'est une PETITE feuille → PAS de règle
-    // (même si le nom contient "NEOCOR" ou autre mot-clé, on respecte les dimensions explicites)
+    // Dimensions présentes mais trop petites → pas de règle
     return null;
   }
   
@@ -11624,6 +13628,13 @@ function openPSMSheetCalc(matName) {
 function closePSMSheetCalc() {
   document.getElementById('psmScOverlay').classList.remove('open');
   _psmScCurrent = null;
+  // Cacher le bouton "Appliquer" s'il est visible (il sera réaffiché par openPSMSheetCalcForMat)
+  var applyBtn = document.getElementById('psmScApplyBtn');
+  if (applyBtn) applyBtn.style.display = 'none';
+  // Reset contexte cible
+  window._psmScTargetDept = null;
+  window._psmScTargetIdx = null;
+  window._psmScTargetCardId = null;
 }
 
 function _psmScToggleMode() {
@@ -11689,19 +13700,12 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-// Vérifie si des matériaux sont affichés (dept OU item) et applique la classe body.has-materials
-// qui rétrécit la fenêtre principale (PDF à gauche) pour donner plus de place à la zone droite
+// Vérifie si des matériaux sont affichés et applique la classe body.has-materials.
+// NOUVEAU (avril 2026) : avec le système de 3 vues plein écran (Image/Matériaux/Notes),
+// il n'y a plus de split — chaque mode prend toute la zone droite. On retire donc
+// toujours has-materials, qui élargissait la zone droite pour le split disparu.
 function _updateMaterialsLayout() {
-  var deptZone = document.getElementById('deptMatZone');
-  var itemZone = document.getElementById('itemMatZone');
-  var deptVisible = deptZone && deptZone.style.display === 'flex';
-  var itemVisible = itemZone && itemZone.style.display === 'flex';
-  var hasMats = deptVisible || itemVisible;
-  if (hasMats) {
-    document.body.classList.add('has-materials');
-  } else {
-    document.body.classList.remove('has-materials');
-  }
+  document.body.classList.remove('has-materials');
   // Réaligner le séparateur du header après le changement de layout
   setTimeout(_alignHeaderSeparatorWithDivider, 50);
 }
@@ -17895,6 +19899,246 @@ function _addToSecondaryFiles(cardId, base64) {
 
 // ═══ INLINE PDF VIEWER (in left panel) ═══
 var pdfInlineIdx = 0;
+
+// ═══ SÉLECTEUR DE VUE DROITE — Image / Matériaux / Notes ═══
+// Un seul mode actif à la fois. État persisté dans localStorage.
+//   'image'     → zone image en haut + barre + notes en bas (défaut)
+//   'materials' → zone matériaux en haut (à la place de l'image) + notes en bas, barre identique
+//   'notes'     → zone notes pleine hauteur, tout le haut disparaît
+function setRightViewMode(mode) {
+  if (!mode) mode = 'image';
+  if (['image','materials','notes'].indexOf(mode) === -1) mode = 'image';
+  
+  // Retirer toutes les classes de mode, puis appliquer la bonne
+  document.body.classList.remove('view-mode-image', 'view-mode-materials', 'view-mode-notes');
+  document.body.classList.add('view-mode-' + mode);
+  
+  // Mettre à jour l'état actif des 3 boutons
+  var btnImage = document.getElementById('viewModeImageBtn');
+  var btnMat   = document.getElementById('viewModeMatBtn');
+  var btnNotes = document.getElementById('viewModeNotesBtn');
+  if (btnImage) btnImage.classList.toggle('active', mode === 'image');
+  if (btnMat)   btnMat.classList.toggle('active',   mode === 'materials');
+  if (btnNotes) btnNotes.classList.toggle('active', mode === 'notes');
+  
+  // En mode Matériaux : remplir la liste des matériaux dans la zone du haut
+  if (mode === 'materials') {
+    _renderRightMatListTop();
+  }
+  
+  // Recalculer le layout : si on passe en mode Matériaux, on retire has-materials
+  // pour que la zone droite garde sa taille normale. Si on sort du mode Matériaux
+  // et qu'il y a des matériaux en bas, has-materials est réappliqué.
+  if (typeof _updateMaterialsLayout === 'function') _updateMaterialsLayout();
+  
+  // Sauvegarder le choix
+  try { localStorage.setItem('psm_right_view_mode', mode); } catch(e) {}
+}
+
+// Remplit #rightMatListTop avec les matériaux du département courant.
+// Layout en colonnes fixes : [CODE 80px] [MATÉRIEL flex] [📐] [QTÉ + libellé] [✕]
+function _renderRightMatListTop() {
+  var listEl = document.getElementById('rightMatListTop');
+  if (!listEl) return;
+  if (!currentCardId || !psmData[currentCardId]) {
+    listEl.innerHTML = '<div style="color:#64748b;font-size:10px;font-style:italic;padding:6px;">Sélectionnez une carte pour voir les matériaux.</div>';
+    return;
+  }
+  var dept = (typeof currentDept !== 'undefined' && currentDept) ? currentDept : 'atelier';
+  var mats = (psmData[currentCardId][dept] && psmData[currentCardId][dept].materiaux) || [];
+  // Retenir l'index original pour pouvoir éditer/supprimer la bonne entrée
+  var withIdx = [];
+  for (var i = 0; i < mats.length; i++) {
+    var m = mats[i];
+    if (m && (m.name || '').trim() !== '') withIdx.push({ mat: m, origIdx: i });
+  }
+  if (withIdx.length === 0) {
+    listEl.innerHTML = '<div style="color:#64748b;font-size:10px;font-style:italic;padding:6px;">Aucun matériau pour ' + dept + '. Cliquez sur « ➕ Ajouter ».</div>';
+    return;
+  }
+  
+  // Entête de colonnes avec vraies séparations verticales (grille)
+  var headerHtml = '<div style="display:flex;align-items:stretch;font-size:7px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border:1px solid rgba(148,163,184,0.2);border-radius:3px;background:rgba(15,23,42,0.5);margin-bottom:3px;">' +
+    '<div style="flex:0 0 60px;padding:2px 5px;border-right:1px solid rgba(148,163,184,0.15);">Code</div>' +
+    '<div style="flex:1;min-width:0;padding:2px 5px;border-right:1px solid rgba(148,163,184,0.15);">Matériel</div>' +
+    '<div style="flex:0 0 22px;padding:2px 0;text-align:center;border-right:1px solid rgba(148,163,184,0.15);"></div>' +
+    '<div style="flex:0 0 58px;padding:2px 0;text-align:center;">Qté</div>' +
+  '</div>';
+  
+  // Lignes
+  var rowsHtml = withIdx.map(function(entry) {
+    var m = entry.mat;
+    var origIdx = entry.origIdx;
+    var nameFull = m.name || '';
+    var qty = m.qty != null ? m.qty : 1;
+    
+    // Extraction du code : premier "token" (lettres/chiffres/tirets/×) séparé du reste
+    // par un espace ou un tiret. Accepte aussi les codes qui commencent par un chiffre
+    // (ex: "18×16×5/8", "24×30 Mousse bleue", "MI7615 - Velcro")
+    var code = '';
+    var materiel = nameFull;
+    // Regex : capture le premier "mot" (3-14 caractères, lettres/chiffres/-/×/×/x/×) suivi d'espace ou tiret
+    var codeMatch = nameFull.match(/^([A-Z0-9]{1,3}[A-Z0-9\-×x\/]{2,13})(\s+|\s*[-–—:]\s*)(.+)$/i);
+    if (codeMatch) {
+      code = codeMatch[1].toUpperCase();
+      materiel = codeMatch[3].trim();
+    }
+    // Si pas de match mais le nom entier est court, le mettre dans code
+    if (!code && nameFull.length <= 14 && /^[A-Z0-9\-×x\/]+$/i.test(nameFull)) {
+      code = nameFull.toUpperCase();
+      materiel = '';
+    }
+    
+    // Détection grande feuille → bouton 📐
+    var sheet = (typeof _findSheetInfo === 'function') ? _findSheetInfo(nameFull) : null;
+    var calcBtn = sheet
+      ? '<button onclick="event.stopPropagation();openPSMSheetCalcForMat(\'' + dept + '\',' + origIdx + ')" title="Calculateur feuille ' + sheet.w + '×' + sheet.h + '" style="flex:0 0 22px;align-self:center;height:18px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:3px;color:#fbbf24;font-size:10px;cursor:pointer;padding:0;line-height:1;margin:0 2px;">📐</button>'
+      : '<div style="flex:0 0 22px;border-right:1px solid rgba(148,163,184,0.1);"></div>';
+    
+    // Affichage qty : si c'est un nombre décimal (ex 0.15) on l'affiche tel quel, sinon entier
+    var qtyDisplay = (typeof qty === 'number')
+      ? (qty < 1 && qty > 0 ? qty.toFixed(2) : (qty % 1 === 0 ? qty.toString() : qty.toFixed(2)))
+      : String(qty);
+    
+    return '<div style="display:flex;align-items:stretch;background:rgba(15,23,42,0.4);border:1px solid rgba(74,142,245,0.15);border-radius:3px;margin-bottom:2px;min-height:20px;">' +
+      // Colonne CODE (largeur fixe, bordure droite)
+      '<div style="flex:0 0 60px;padding:2px 5px;font-size:8px;font-weight:800;color:#93c5fd;letter-spacing:0.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid rgba(148,163,184,0.15);display:flex;align-items:center;">' +
+        (code ? escapeHtml(code) : '<span style="color:#475569;font-weight:500;">—</span>') +
+      '</div>' +
+      // Colonne MATÉRIEL (flex, bordure droite)
+      '<div style="flex:1;min-width:0;padding:2px 5px;font-size:9px;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid rgba(148,163,184,0.15);display:flex;align-items:center;" title="' + escapeHtml(nameFull) + '">' +
+        escapeHtml(materiel || nameFull) +
+      '</div>' +
+      // Colonne CALCULATEUR 📐 (petite)
+      calcBtn +
+      // Colonne QUANTITÉ + ✕ compacte (un seul bloc collé)
+      '<div style="flex:0 0 58px;display:flex;align-items:center;gap:2px;padding:0 2px;">' +
+        '<div style="flex:1;min-width:0;font-size:9px;font-weight:800;color:#fde047;background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3);border-radius:2px;padding:0 3px;line-height:16px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+          escapeHtml(qtyDisplay) +
+        '</div>' +
+        '<button onclick="event.stopPropagation();_removeMatFromDept(' + origIdx + ')" title="Retirer" style="flex:0 0 14px;height:16px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:2px;color:#ef4444;font-size:9px;font-weight:700;cursor:pointer;padding:0;line-height:1;">✕</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  
+  listEl.innerHTML = headerHtml + rowsHtml;
+}
+
+// Retire un matériau du département courant (appelé depuis rightMatListTop)
+// NOTE: origIdx = index original dans le tableau mats (pas filtré)
+function _removeMatFromDept(origIdx) {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var dept = (typeof currentDept !== 'undefined' && currentDept) ? currentDept : 'atelier';
+  if (!psmData[currentCardId][dept]) return;
+  var mats = psmData[currentCardId][dept].materiaux || [];
+  if (origIdx < 0 || origIdx >= mats.length) return;
+  mats.splice(origIdx, 1);
+  if (mats.length === 0) mats.push({ name: '', qty: 1 });
+  psmData[currentCardId][dept].materiaux = mats;
+  saveToFirebase();
+  _renderRightMatListTop();
+  if (typeof renderMatInNotes === 'function') renderMatInNotes(dept, mats);
+}
+
+// Ouvre le calculateur de feuille et mémorise quel matériau on calcule,
+// pour pouvoir appliquer la quantité résultante ensuite.
+function openPSMSheetCalcForMat(dept, origIdx) {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var mats = (psmData[currentCardId][dept] && psmData[currentCardId][dept].materiaux) || [];
+  if (origIdx < 0 || origIdx >= mats.length) return;
+  var mat = mats[origIdx];
+  if (!mat || !mat.name) return;
+  // Mémoriser le contexte pour le bouton "Appliquer"
+  window._psmScTargetDept = dept;
+  window._psmScTargetIdx = origIdx;
+  window._psmScTargetCardId = currentCardId;
+  // Ouvrir le modal (fonction existante)
+  openPSMSheetCalc(mat.name);
+  // Afficher le bouton "Appliquer" (ajouté dynamiquement au modal)
+  _ensurePSMSheetCalcApplyBtn();
+}
+
+// S'assure qu'il y a un bouton "Appliquer comme quantité" dans le modal calculateur.
+// On l'injecte une seule fois, et il lit window._psmScTargetDept/Idx quand on clique.
+function _ensurePSMSheetCalcApplyBtn() {
+  var body = document.querySelector('#psmScOverlay .psm-sc-body');
+  if (!body) return;
+  var existing = document.getElementById('psmScApplyBtn');
+  if (existing) {
+    existing.style.display = window._psmScTargetDept ? 'block' : 'none';
+    return;
+  }
+  var btn = document.createElement('button');
+  btn.id = 'psmScApplyBtn';
+  btn.textContent = '✅ Appliquer comme quantité';
+  btn.onclick = _psmScApplyQty;
+  btn.style.cssText = 'width:100%;margin-top:12px;padding:10px;border:none;border-radius:6px;background:linear-gradient(to bottom,#22c55e,#16a34a);color:#fff;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(34,197,94,0.4);';
+  body.appendChild(btn);
+}
+
+// Applique la fraction calculée comme quantité du matériau cible.
+// Utilise la même valeur que #psmScQty affiche (donc respecte le mode fraction/décimal).
+function _psmScApplyQty() {
+  if (!window._psmScTargetCardId || window._psmScTargetDept == null || window._psmScTargetIdx == null) {
+    if (typeof showToast === 'function') showToast('⚠️ Aucun matériau cible', 'warning');
+    return;
+  }
+  if (!_psmScCurrent) return;
+  var sqft = parseFloat(document.getElementById('psmScInput').value) || 0;
+  if (sqft <= 0) {
+    if (typeof showToast === 'function') showToast('⚠️ Entrez d\'abord une surface utilisée', 'warning');
+    return;
+  }
+  var frac = (sqft * 144) / _psmScCurrent.sqin;
+  // Arrondir à 2 décimales
+  var qtyValue = Math.round(frac * 100) / 100;
+  
+  var cardId = window._psmScTargetCardId;
+  var dept = window._psmScTargetDept;
+  var idx = window._psmScTargetIdx;
+  if (!psmData[cardId] || !psmData[cardId][dept]) return;
+  var mats = psmData[cardId][dept].materiaux || [];
+  if (idx < 0 || idx >= mats.length) return;
+  
+  mats[idx].qty = qtyValue;
+  psmData[cardId][dept].materiaux = mats;
+  saveToFirebase();
+  _renderRightMatListTop();
+  if (typeof renderMatInNotes === 'function') renderMatInNotes(dept, mats);
+  
+  if (typeof showToast === 'function') {
+    showToast('✅ Quantité appliquée : ' + qtyValue + ' de feuille', 'success');
+  }
+  
+  // Fermer le modal et nettoyer le contexte
+  if (typeof closePSMSheetCalc === 'function') closePSMSheetCalc();
+  window._psmScTargetDept = null;
+  window._psmScTargetIdx = null;
+  window._psmScTargetCardId = null;
+}
+
+// Appliquer l'état sauvegardé au chargement (vue image par défaut si rien en mémoire)
+(function() {
+  var savedMode = 'image';
+  try {
+    var s = localStorage.getItem('psm_right_view_mode');
+    if (s && ['image','materials','notes'].indexOf(s) !== -1) savedMode = s;
+  } catch(e) {}
+  
+  var apply = function() {
+    // Vérifier que les boutons sont là avant d'appliquer
+    if (!document.getElementById('viewModeImageBtn')) {
+      setTimeout(apply, 100);
+      return;
+    }
+    setRightViewMode(savedMode);
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', apply);
+  } else {
+    apply();
+  }
+})();
 
 function refreshInlinePdf() {
   var emptyEl = document.getElementById('pdfInlineEmpty');
