@@ -8623,7 +8623,10 @@ function renderItemsBar() {
   if (fpBtn) fpBtn.classList.toggle('active', _activeItemIdx === -1);
   if (fsBtn) {
     var hasSecondary = card.devisImages2 && card.devisImages2.length > 0;
-    fsBtn.style.display = hasSecondary ? '' : 'none';
+    // TOUJOURS afficher le bouton Email / Photos — ne jamais le masquer.
+    // L'utilisateur doit pouvoir cliquer dessus même quand c'est vide pour voir
+    // qu'il n'y a rien dedans, ou pour y coller / ajouter un fichier.
+    fsBtn.style.display = '';
     fsBtn.classList.toggle('active', _activeItemIdx === -3);
     fsBtn.classList.toggle('flash-secondary', hasSecondary && _activeItemIdx !== -3);
   }
@@ -10255,11 +10258,11 @@ function renderCards() {
       var dossierIcon = '📁';
       if (filledCount === 2) {
         dossierState = 'is-full';
-        dossierLabel = '2 / 2';
+        dossierLabel = '2';
         dossierIcon = '📂';
       } else if (filledCount === 1) {
         dossierState = 'is-partial';
-        dossierLabel = '1 / 2';
+        dossierLabel = '1';
         dossierIcon = '📂';
       }
       var chipsHtml = '';
@@ -10270,7 +10273,7 @@ function renderCards() {
         '</div>';
       }
       var dossierTitle = filledCount === 2 ? 'Dossier complet : 2 fichiers'
-                        : filledCount === 1 ? 'Dossier : 1 fichier sur 2'
+                        : filledCount === 1 ? 'Dossier : 1 fichier'
                         : 'Aucun fichier — cliquez pour en ajouter';
       var dossierHtml = '<div class="psmc-dossier ' + dossierState + '" ' +
         'onclick="event.stopPropagation();openCardFiche(\'' + safeId + '\')" ' +
@@ -11228,8 +11231,19 @@ function selectCard(id) {
   PChat.loadForCard();
   updateQuestStatusPill();
   
-  // ALWAYS open Email / Photos (fichier secondaire) when clicking a card
-  switchToSecondaryFile();
+  // AUTO-OUVERTURE INTELLIGENTE de l'onglet fichier (Email prioritaire) :
+  //   - Si Email/Photos a des fichiers → ouvrir Email/Photos
+  //   - Sinon si PDF Principal a des fichiers → ouvrir PDF Principal
+  //   - Sinon (les deux vides) → ouvrir Email/Photos par défaut
+  var hasEmail = card.devisImages2 && card.devisImages2.length > 0;
+  var hasPdf = card.devisImages && card.devisImages.length > 0;
+  if (hasEmail) {
+    switchToSecondaryFile();
+  } else if (hasPdf) {
+    switchItemTab(-1);
+  } else {
+    switchToSecondaryFile();
+  }
   
   // Show notes service client column (replaces cards column)
   showNotesScCol(id);
@@ -13665,80 +13679,75 @@ function openCardFiche(cardId) {
   
   var safeId = isCreate ? '' : cardId.replace(/'/g, "\\'");
   
-  // Statut
-  var statusHtml = '';
+  // Statut — petit badge à afficher dans le header (plus de bandeau pleine largeur)
+  var statusBadgeHtml = '';
   if (!isCreate) {
     var isComplete = checkCardFullyComplete(card);
     var isQuest = card.questionnementSent === true;
-    var statusLabel = isQuest ? '⚠️ En questionnement' : isComplete ? '✅ Complet' : '📋 Soumission à faire';
+    var statusLabel = isQuest ? '⚠️ Questionnement' : isComplete ? '✅ Complet' : '📋 À faire';
     var statusColor = isQuest ? '#eab308' : isComplete ? '#22c55e' : '#3b82f6';
-    statusHtml = '<div style="text-align:center;padding:4px;margin-bottom:6px;border-radius:6px;border:1.5px solid ' + statusColor + ';background:rgba(0,0,0,0.2);">' +
-      '<div style="font-size:12px;font-weight:800;color:' + statusColor + ';">' + statusLabel + '</div></div>';
+    statusBadgeHtml = '<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:12px;background:rgba(0,0,0,0.35);border:1px solid ' + statusColor + ';font-size:10px;font-weight:700;color:' + statusColor + ';white-space:nowrap;">' + statusLabel + '</span>';
   }
   
   // Fichiers — toujours affichés
-  var filesHtml = '<div style="margin:6px 0;" id="ficheFilesZone">' + _buildFicheFilesRows(cardId || '__new__', card) + '</div>';
+  var filesHtml = '<div id="ficheFilesZone">' + _buildFicheFilesRows(cardId || '__new__', card) + '</div>';
   
-  // Date de création
-  var dateHtml = '';
+  // Ligne d'infos consolidée tout en bas : créé le X par Y • envoyé le Z par W
+  var infoLineBits = [];
   if (!isCreate && card.createdAt) {
     try {
       var d = new Date(card.createdAt);
       var dateCreation = d.toLocaleDateString('fr-CA') + ' ' + d.toLocaleTimeString('fr-CA', {hour:'2-digit', minute:'2-digit'});
-      dateHtml = '<div style="font-size:10px;color:#64748b;text-align:center;margin:4px 0;">Créé le ' + dateCreation + (card.createdByName ? ' par ' + escapeHtml(card.createdByName) : '') + '</div>';
+      infoLineBits.push('Créé le ' + dateCreation + (card.createdByName ? ' par ' + escapeHtml(card.createdByName) : ''));
     } catch(e) {}
   }
-  
-  // PSM envoyé
-  var sentInfo = '';
   if (!isCreate && card.psmSent) {
-    sentInfo = '<div style="background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);border-radius:6px;padding:8px 10px;margin-top:8px;">' +
-      '<div style="font-size:11px;font-weight:700;color:#22c55e;">✅ PSM déjà envoyé</div>' +
-      '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">Par ' + escapeHtml(card.psmSentBy || '?') + ' le ' + escapeHtml(card.psmSentAt || '?') + '</div>' +
-      (card.psmSentTo ? '<div style="font-size:10px;color:#94a3b8;">À: ' + escapeHtml(card.psmSentTo.join(', ')) + '</div>' : '') +
-    '</div>';
+    var sentBit = '<span style="color:#22c55e;font-weight:700;">✅ Envoyé</span> ' + escapeHtml(card.psmSentAt || '') + ' par ' + escapeHtml(card.psmSentBy || '?');
+    if (card.psmSentTo && card.psmSentTo.length) sentBit += ' → ' + escapeHtml(card.psmSentTo.join(', '));
+    infoLineBits.push(sentBit);
+  }
+  var infoLineHtml = '';
+  if (infoLineBits.length) {
+    infoLineHtml = '<div style="font-size:10px;color:#64748b;text-align:center;margin-top:8px;line-height:1.5;">' + infoLineBits.join('<br>') + '</div>';
   }
   
-  // Recipients HTML reconstruit à la demande dans le sous-modal d'envoi
-  // (ancien emailSection retiré du modal principal pour économiser de l'espace)
-  
-  // Footer
+  // Footer — une seule ligne compacte pour ne pas empiéter sur la hauteur
   var footerHtml;
   if (isCreate) {
-    footerHtml = '<div class="modal-footer" style="padding:6px 14px;flex-shrink:0;">' +
-      '<div style="display:flex;gap:4px;width:100%;">' +
-        '<button class="modal-btn cancel" onclick="closeFicheModal()" style="flex:1;padding:6px;">Annuler</button>' +
-        '<button class="modal-btn confirm" onclick="createCardFromFiche()" style="flex:1;padding:6px;">➕ Créer</button>' +
+    footerHtml = '<div class="modal-footer" style="padding:8px 14px;flex-shrink:0;">' +
+      '<div style="display:flex;gap:6px;width:100%;">' +
+        '<button class="modal-btn cancel" onclick="closeFicheModal()" style="flex:1;padding:8px;">Annuler</button>' +
+        '<button class="modal-btn confirm" onclick="createCardFromFiche()" style="flex:2;padding:8px;">➕ Créer</button>' +
       '</div>' +
     '</div>';
   } else {
-    footerHtml = '<div class="modal-footer" style="flex-direction:column;gap:4px;padding:6px 14px;flex-shrink:0;">' +
-      '<div style="display:flex;gap:4px;width:100%;">' +
-        '<button class="modal-btn cancel" onclick="closeFicheModal()" style="flex:1;padding:6px;">Fermer</button>' +
-        '<button class="modal-btn confirm" onclick="saveFicheChanges(\'' + safeId + '\')" style="flex:1;padding:6px;">💾 Sauvegarder</button>' +
+    footerHtml = '<div class="modal-footer" style="padding:8px 14px;flex-shrink:0;">' +
+      '<div style="display:flex;gap:6px;width:100%;">' +
+        '<button class="modal-btn cancel" onclick="closeFicheModal()" style="flex:0.8;padding:8px;font-size:12px;">Fermer</button>' +
+        '<button onclick="sendFicheEmail(\'' + safeId + '\')" style="flex:1.2;padding:8px;border-radius:6px;border:none;background:linear-gradient(to bottom,#7c3aed,#4c1d95);color:#fff;font-size:12px;font-weight:700;cursor:pointer;">📨 Renvoyer courriel</button>' +
+        '<button class="modal-btn confirm" onclick="saveFicheChanges(\'' + safeId + '\')" style="flex:1.2;padding:8px;font-size:12px;">💾 Sauvegarder</button>' +
       '</div>' +
-      '<button onclick="sendFicheEmail(\'' + safeId + '\')" style="width:100%;padding:8px;border-radius:6px;border:none;background:linear-gradient(to bottom,#7c3aed,#4c1d95);color:#fff;font-size:11px;font-weight:800;cursor:pointer;">📨 Renvoyer le courriel</button>' +
     '</div>';
   }
   
   var headerColor = isCreate ? 'background:linear-gradient(to bottom,#22c55e,#16a34a);' : 'background:linear-gradient(to bottom,#7c3aed,#4c1d95);';
-  var headerTitle = isCreate ? '➕ Nouvelle soumission PSM' : '📋 Fiche PSM';
+  var headerTitle = isCreate ? '➕ Nouvelle soumission' : '📋 Fiche PSM';
   
   var html = '<div class="modal-overlay" id="ficheModal" onclick="if(event.target===this)closeFicheModal()" style="display:flex;">' +
-    '<div class="modal" style="max-width:420px;width:95%;max-height:85vh;display:flex;flex-direction:column;">' +
-      '<div class="modal-header" style="' + headerColor + 'padding:6px 14px;flex-shrink:0;">' +
-        '<span class="modal-title" style="font-size:13px;">' + headerTitle + '</span>' +
-        '<button class="modal-close" onclick="closeFicheModal()">✕</button>' +
+    '<div class="modal" style="max-width:640px;width:96%;max-height:94vh;display:flex;flex-direction:column;">' +
+      // Header : titre à gauche + badge statut au centre + X à droite
+      '<div class="modal-header" style="' + headerColor + 'padding:8px 14px;flex-shrink:0;display:flex;align-items:center;gap:10px;">' +
+        '<span class="modal-title" style="font-size:14px;flex-shrink:0;">' + headerTitle + '</span>' +
+        '<span style="flex:1;display:flex;justify-content:center;">' + statusBadgeHtml + '</span>' +
+        '<button class="modal-close" onclick="closeFicheModal()" style="flex-shrink:0;">✕</button>' +
       '</div>' +
-      '<div class="modal-body" style="padding:10px 14px;overflow-y:auto;flex:1;min-height:0;">' +
-        statusHtml +
-        '<div class="modal-field" style="margin-bottom:6px;">' +
-          '<label style="font-size:11px;margin-bottom:2px;">Nom du patient</label>' +
-          '<input type="text" id="ficheModalName" value="' + escapeHtml(card.name || '') + '" placeholder="Tremblay, Jean" style="padding:6px 8px;font-size:13px;">' +
+      '<div class="modal-body" style="padding:10px 14px;flex:1;min-height:0;overflow-y:auto;">' +
+        '<div class="modal-field" style="margin-bottom:8px;">' +
+          '<label style="font-size:11px;margin-bottom:3px;">Nom du patient</label>' +
+          '<input type="text" id="ficheModalName" value="' + escapeHtml(card.name || '') + '" placeholder="Tremblay, Jean" style="padding:8px 10px;font-size:14px;">' +
         '</div>' +
         filesHtml +
-        dateHtml +
-        sentInfo +
+        infoLineHtml +
       '</div>' +
       footerHtml +
     '</div>' +
@@ -13800,66 +13809,439 @@ function _ficheCreateBeforeFile(btnEl, evt) {
 }
 
 // Handle files selected from the fiche modal
+// Nouveau comportement (avril 2026) :
+//   - Toutes les images sélectionnées → fusionnées en 1 seul PDF (via jsPDF)
+//   - Les autres fichiers (PDF, Word, Excel, email, etc.) sont ajoutés tels quels
+//   - Fonctionne en mode création ET en mode édition (cardId récupéré de façon robuste)
 function _ficheFilesSelected(input, fileKey) {
   if (!input.files || !input.files.length) return;
   
-  // Find cardId from the save button (works in edit mode after _ficheCreateBeforeFile converted it)
+  // === Résolution robuste du cardId ===
+  // 1) data-created-id sur le modal (mode création après _ficheCreateBeforeFile)
+  // 2) cardId dans le onclick du bouton Sauvegarder (mode édition)
+  // 3) currentCardId en dernier recours
   var cardId = null;
-  var saveBtn = document.querySelector('#ficheModal .modal-btn.confirm');
-  if (saveBtn) {
-    var onclick = saveBtn.getAttribute('onclick') || '';
-    var match = onclick.match(/saveFicheChanges\('([^']+)'\)/);
-    if (match) cardId = match[1];
+  var modal = document.getElementById('ficheModal');
+  if (modal) {
+    var dcid = modal.getAttribute('data-created-id');
+    if (dcid && psmData[dcid]) cardId = dcid;
   }
-  // Fallback: use currentCardId
-  if (!cardId) cardId = currentCardId;
+  if (!cardId) {
+    var saveBtn = document.querySelector('#ficheModal .modal-btn.confirm');
+    if (saveBtn) {
+      var onclick = saveBtn.getAttribute('onclick') || '';
+      var match = onclick.match(/saveFicheChanges\('([^']+)'\)/);
+      if (match && psmData[match[1]]) cardId = match[1];
+    }
+  }
+  if (!cardId && currentCardId && psmData[currentCardId]) cardId = currentCardId;
+  
   if (!cardId || !psmData[cardId]) {
-    showToast('⚠️ Créez la carte d\'abord (entrez le nom et cliquez Créer)', 'warning');
+    showToast('⚠️ Entrez le nom du patient d\'abord, puis cliquez "Ajouter"', 'warning');
     input.value = '';
     return;
   }
   
   var fk = fileKey || 'devisImages';
   var files = Array.from(input.files);
-  showToast('📤 Ajout de ' + files.length + ' fichier(s)...', 'info');
+  var card = psmData[cardId];
+  var patientName = (card.name || 'Patient');
   
-  var processNext = function(idx) {
-    if (idx >= files.length) {
-      input.value = '';
-      var refreshZone = function() {
-        var zone = document.getElementById('ficheFilesZone');
-        if (zone) zone.innerHTML = _buildFicheFilesRows(cardId, psmData[cardId]);
-      };
-      setTimeout(refreshZone, 500);
-      setTimeout(refreshZone, 2000);
-      setTimeout(refreshZone, 5000);
+  // Flag pour supprimer le popup de notification email (on est dans le modal fiche)
+  window._skipFileNotify = true;
+  
+  // === Séparation images vs autres fichiers ===
+  var images = [];
+  var others = [];
+  files.forEach(function(f) {
+    if (f.type && f.type.indexOf('image/') === 0) images.push(f);
+    else others.push(f);
+  });
+  
+  var addFn = (fk === 'devisImages2') ? _addToSecondaryFiles : addDevisImageToCard;
+  var totalToAdd = (images.length > 0 ? 1 : 0) + others.length;
+  showToast('📤 Ajout de ' + totalToAdd + ' fichier' + (totalToAdd > 1 ? 's' : '') + '...', 'info');
+  
+  // Helper : lire un fichier en base64
+  function readAsBase64(file) {
+    return new Promise(function(resolve, reject) {
+      var r = new FileReader();
+      r.onload = function(ev) { resolve(ev.target.result); };
+      r.onerror = function() { reject(new Error(file.name)); };
+      r.readAsDataURL(file);
+    });
+  }
+  
+  // Helper : refresh du zone fichiers
+  function refreshZone() {
+    var zone = document.getElementById('ficheFilesZone');
+    if (zone) zone.innerHTML = _buildFicheFilesRows(cardId, psmData[cardId]);
+  }
+  
+  // === Étape 1 : traiter les images → 1 seul PDF fusionné ===
+  var imagesPromise;
+  if (images.length === 0) {
+    imagesPromise = Promise.resolve();
+  } else {
+    // Lire toutes les images en base64, compresser, puis fusionner
+    var readAll = images.map(function(f) {
+      return readAsBase64(f).then(function(b64) {
+        if (typeof compressDevisImage === 'function') {
+          return compressDevisImage(b64).catch(function() { return b64; });
+        }
+        return b64;
+      });
+    });
+    imagesPromise = Promise.all(readAll).then(function(base64List) {
+      return _ficheImagesToPdf(base64List, patientName);
+    }).then(function(pdfBase64) {
+      addFn(cardId, pdfBase64);
+    }).catch(function(err) {
+      console.error('Fusion images→PDF échouée :', err);
+      showToast('⚠️ Fusion PDF échouée, ajout des images individuelles', 'warning');
+      // Fallback : ajouter les images individuellement
+      var fallbackChain = Promise.resolve();
+      images.forEach(function(f) {
+        fallbackChain = fallbackChain.then(function() {
+          return readAsBase64(f).then(function(b64) {
+            if (typeof compressDevisImage === 'function') {
+              return compressDevisImage(b64).then(function(c) { addFn(cardId, c); }).catch(function() { addFn(cardId, b64); });
+            }
+            addFn(cardId, b64);
+          });
+        });
+      });
+      return fallbackChain;
+    });
+  }
+  
+  // === Étape 2 : traiter les autres fichiers (PDF, Word, etc.) tels quels ===
+  imagesPromise.then(function() {
+    var chain = Promise.resolve();
+    others.forEach(function(f) {
+      chain = chain.then(function() {
+        return readAsBase64(f).then(function(b64) {
+          addFn(cardId, b64);
+        }).catch(function(err) {
+          showToast('❌ Erreur: ' + (err.message || err), 'error');
+        });
+      });
+    });
+    return chain;
+  }).then(function() {
+    input.value = '';
+    showToast('✅ Fichier' + (totalToAdd > 1 ? 's ajoutés' : ' ajouté') + '!', 'success');
+    
+    // IMPORTANT : forcer l'ouverture du bon onglet pour que le fichier apparaisse
+    // dans le panneau principal. Nécessaire si la carte était déjà sélectionnée
+    // (auto-ouverture de selectCard ne se déclenche que sur nouveau clic).
+    setTimeout(function() {
+      if (cardId === currentCardId) {
+        if (fk === 'devisImages2') {
+          if (typeof switchToSecondaryFile === 'function') switchToSecondaryFile();
+        } else {
+          if (typeof switchItemTab === 'function') switchItemTab(-1);
+        }
+        if (typeof refreshInlinePdf === 'function') refreshInlinePdf();
+      }
+    }, 1200);
+    
+    setTimeout(refreshZone, 500);
+    setTimeout(refreshZone, 2000);
+    setTimeout(refreshZone, 5000);
+  });
+}
+
+// Fusionne une liste d'images base64 en un seul PDF base64 (1 image par page, A4 portrait).
+// Réutilise la même logique que _photosToPdfForCard mais retourne le résultat au lieu de
+// le télécharger. Retourne une Promise<string> avec le dataURL du PDF.
+function _ficheImagesToPdf(imagesBase64, patientName) {
+  return new Promise(function(resolve, reject) {
+    if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF) {
+      reject(new Error('jsPDF non chargé'));
       return;
     }
-    var file = files[idx];
-    var reader = new FileReader();
-    reader.onload = function(ev) {
-      var base64 = ev.target.result;
-      var addFn = (fk === 'devisImages2') ? _addToSecondaryFiles : addDevisImageToCard;
-      if (file.type.indexOf('image/') === 0) {
-        compressDevisImage(base64).then(function(c) {
-          addFn(cardId, c);
-          processNext(idx + 1);
-        }).catch(function() {
-          addFn(cardId, base64);
-          processNext(idx + 1);
-        });
-      } else {
-        addFn(cardId, base64);
-        processNext(idx + 1);
+    if (!imagesBase64 || imagesBase64.length === 0) {
+      reject(new Error('Aucune image à fusionner'));
+      return;
+    }
+    
+    var jsPDF = window.jspdf.jsPDF;
+    var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    var pageW = 210, pageH = 297, margin = 10;
+    var availW = pageW - 2 * margin;
+    var availH = pageH - 2 * margin - 15; // -15 pour titre
+    
+    function processOne(idx) {
+      return new Promise(function(res) {
+        var img = new Image();
+        img.onload = function() {
+          var imgW = img.naturalWidth;
+          var imgH = img.naturalHeight;
+          var ratio = Math.min(availW / (imgW * 0.264583), availH / (imgH * 0.264583));
+          var finalW = imgW * 0.264583 * ratio;
+          var finalH = imgH * 0.264583 * ratio;
+          var x = (pageW - finalW) / 2;
+          var y = margin + 15 + (availH - finalH) / 2;
+          
+          if (idx > 0) pdf.addPage();
+          
+          pdf.setFontSize(12);
+          pdf.setTextColor(30, 58, 138);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text('PSM — ' + (patientName || 'Patient'), pageW / 2, margin + 5, { align: 'center' });
+          pdf.setFontSize(9);
+          pdf.setTextColor(100, 116, 139);
+          pdf.setFont('helvetica', 'normal');
+          pdf.text('Page ' + (idx + 1) + ' / ' + imagesBase64.length, pageW / 2, margin + 11, { align: 'center' });
+          
+          pdf.addImage(imagesBase64[idx], 'JPEG', x, y, finalW, finalH, undefined, 'FAST');
+          res();
+        };
+        img.onerror = function() {
+          console.error('Image ' + idx + ' illisible, sautée');
+          res();
+        };
+        img.src = imagesBase64[idx];
+      });
+    }
+    
+    var chain = Promise.resolve();
+    for (var i = 0; i < imagesBase64.length; i++) {
+      (function(idx) {
+        chain = chain.then(function() { return processOne(idx); });
+      })(i);
+    }
+    chain.then(function() {
+      try {
+        // Retourner le PDF en dataURL base64
+        var dataUri = pdf.output('datauristring');
+        resolve(dataUri);
+      } catch(e) {
+        reject(e);
       }
+    }).catch(reject);
+  });
+}
+
+// ═══ PHOTOSENDER depuis le modal fiche ═══
+// Flow indépendant du PhotoSender principal (qui dépose dans cardCameraPhotos).
+// Celui-ci dépose directement en PDF fusionné dans le slot fileKey choisi (devisImages ou devisImages2).
+var _fichePhotoJobId = null;
+var _fichePhotoListener = null;
+var _fichePhotoTimeout = null;
+
+function _ficheOpenPhotoSender(fileKey) {
+  // Résoudre cardId (même logique que _ficheFilesSelected)
+  var cardId = null;
+  var modal = document.getElementById('ficheModal');
+  if (modal) {
+    var dcid = modal.getAttribute('data-created-id');
+    if (dcid && psmData[dcid]) cardId = dcid;
+  }
+  if (!cardId) {
+    var saveBtn = document.querySelector('#ficheModal .modal-btn.confirm');
+    if (saveBtn) {
+      var m = (saveBtn.getAttribute('onclick') || '').match(/saveFicheChanges\('([^']+)'\)/);
+      if (m && psmData[m[1]]) cardId = m[1];
+    }
+  }
+  if (!cardId && currentCardId && psmData[currentCardId]) cardId = currentCardId;
+  
+  // Si pas de carte → il faut d'abord créer (mode création) : lire le nom et créer
+  if (!cardId) {
+    var nameEl = document.getElementById('ficheModalName');
+    var name = nameEl ? nameEl.value.trim() : '';
+    if (!name) {
+      showToast('⚠️ Entrez le nom du patient d\'abord', 'warning');
+      return;
+    }
+    // Créer la carte maintenant (même logique que _ficheCreateBeforeFile)
+    if (!db) { showToast('⚠️ Firebase non disponible', 'error'); return; }
+    var creatorEmail = currentUser ? currentUser.email : '';
+    var creatorName = currentUser ? getPhysiproDisplayName(currentUser.email) : 'Inconnu';
+    cardId = 'psm_' + Date.now();
+    var newCard = {
+      name: name, order: '', region: 'qc',
+      atelier: { enabled: true, complete: false, psm: true, prixMajore: false, materiaux: [{ name: '', qty: 1 }] },
+      couture: { enabled: true, complete: false, psm: true, prixMajore: false, materiaux: [{ name: '', qty: 1 }] },
+      createdAt: new Date().toISOString(),
+      createdByEmail: creatorEmail,
+      createdByName: creatorName,
+      _appVersion: APP_VERSION,
+      _lastModifiedAt: new Date().toISOString(),
+      _lastModifiedBy: creatorEmail
     };
-    reader.onerror = function() {
-      showToast('❌ Erreur: ' + file.name, 'error');
-      processNext(idx + 1);
-    };
-    reader.readAsDataURL(file);
+    psmData[cardId] = newCard;
+    _pendingSave = true;
+    _skipSyncUntil = Date.now() + 2000;
+    db.ref('psm/' + cardId).set(newCard).then(function() { _pendingSave = false; }).catch(function() {
+      _skipSyncUntil = 0; _pendingSave = false;
+    });
+    renderCards();
+    if (modal) modal.setAttribute('data-created-id', cardId);
+    var zone = document.getElementById('ficheFilesZone');
+    if (zone) zone.innerHTML = _buildFicheFilesRows(cardId, newCard);
+    showToast('✅ Carte créée — le téléphone va recevoir la demande photo', 'success');
+  }
+  
+  if (!db) { showToast('⚠️ Firebase non disponible', 'error'); return; }
+  
+  var card = psmData[cardId];
+  var patientName = card.name || 'Patient';
+  var jobId = 'psmFichePhoto_' + cardId + '_' + Date.now();
+  var myEmail = currentUser ? (currentUser.email || '').toLowerCase() : '';
+  var myName = currentUser ? getPhysiproDisplayName(currentUser.email) : 'PSM';
+  
+  var jobData = {
+    order: 'PSM-' + patientName,
+    client: patientName,
+    assignee: myName,
+    assigneeEmail: myEmail,
+    createdAt: new Date().toISOString(),
+    createdBy: myName,
+    source: 'psm',
+    psmCardId: cardId,
+    isPhotoRequest: true,
+    status: 'photoRequest'
   };
-  processNext(0);
+  var requestData = {
+    status: 'waiting',
+    requestedBy: myName,
+    requestedByEmail: myEmail,
+    timestamp: Date.now(),
+    source: 'psm',
+    psmCardId: cardId,
+    patientName: patientName,
+    ficheFileKey: fileKey  // Marqueur : ces photos vont dans ce slot du modal fiche
+  };
+  
+  var updates = {};
+  updates['jobs/' + jobId] = jobData;
+  updates['photoRequests/' + jobId] = requestData;
+  
+  db.ref().update(updates).then(function() {
+    _fichePhotoJobId = jobId;
+    _showPhotoRequestModal(jobId, patientName, myName);
+    _startFichePhotoListener(jobId, cardId, fileKey);
+    _fichePhotoTimeout = setTimeout(function() {
+      _cleanupFichePhotoRequest(jobId);
+      showToast('⏱️ Délai dépassé (5 min) — demande photo annulée', 'warning');
+    }, 5 * 60 * 1000);
+  }).catch(function(err) {
+    console.error('Erreur création demande photo fiche:', err);
+    showToast('❌ Impossible de créer la demande photo', 'error');
+  });
+}
+
+// Écoute la réponse du téléphone et fusionne les photos reçues en 1 PDF dans le slot
+function _startFichePhotoListener(jobId, cardId, fileKey) {
+  if (_fichePhotoListener) {
+    try { db.ref('photoRequests/' + _fichePhotoJobId).off('value', _fichePhotoListener); } catch(e) {}
+  }
+  // Flag pour ne traiter qu'une seule fois (évite les doublons de déclenchement Firebase)
+  var _alreadyProcessed = false;
+  
+  _fichePhotoListener = db.ref('photoRequests/' + jobId).on('value', function(snap) {
+    var req = snap.val();
+    if (!req) return;
+    if (req.status !== 'done') return;
+    if (_alreadyProcessed) return;
+    _alreadyProcessed = true;
+    
+    var photos = [];
+    if (req.photo) photos.push(req.photo);
+    if (req.photos && Array.isArray(req.photos)) photos = photos.concat(req.photos);
+    
+    if (photos.length === 0) {
+      _cleanupFichePhotoRequest(jobId);
+      return;
+    }
+    
+    // IMPORTANT: Détacher le listener MAINTENANT (on ne veut plus de callbacks)
+    // mais garder la data Firebase jusqu'à la fin du traitement pour que le téléphone
+    // ne voie pas la demande disparaître brutalement.
+    try { db.ref('photoRequests/' + jobId).off('value', _fichePhotoListener); } catch(e) {}
+    _fichePhotoListener = null;
+    if (_fichePhotoTimeout) { clearTimeout(_fichePhotoTimeout); _fichePhotoTimeout = null; }
+    // Cacher le modal "En attente" immédiatement
+    var waitModal = document.getElementById('psmPhotoRequestModal');
+    if (waitModal) waitModal.style.display = 'none';
+    
+    showToast('📥 Traitement de ' + photos.length + ' photo' + (photos.length > 1 ? 's' : '') + '...', 'info');
+    
+    var card = psmData[cardId];
+    var patientName = card ? (card.name || 'Patient') : 'Patient';
+    
+    // Compresser les photos avant fusion
+    var compressPromises = photos.map(function(p) {
+      if (typeof compressDevisImage === 'function') {
+        return compressDevisImage(p).catch(function() { return p; });
+      }
+      return Promise.resolve(p);
+    });
+    
+    Promise.all(compressPromises).then(function(compressed) {
+      return _ficheImagesToPdf(compressed, patientName);
+    }).then(function(pdfBase64) {
+      // Flag pour supprimer le popup de notification email (on est dans le modal fiche)
+      window._skipFileNotify = true;
+      var addFn = (fileKey === 'devisImages2') ? _addToSecondaryFiles : addDevisImageToCard;
+      addFn(cardId, pdfBase64);
+      showToast('✅ ' + photos.length + ' photo' + (photos.length > 1 ? 's' : '') + ' → PDF ajouté', 'success');
+      
+      // S'assurer que la carte est sélectionnée + forcer l'affichage dans la fenêtre principale
+      setTimeout(function() {
+        // Refresh du modal fiche s'il est encore ouvert
+        var zone = document.getElementById('ficheFilesZone');
+        if (zone && psmData[cardId]) zone.innerHTML = _buildFicheFilesRows(cardId, psmData[cardId]);
+        
+        // Forcer l'affichage dans la fenêtre principale
+        if (cardId === currentCardId) {
+          // Ouvrir le bon onglet selon où la photo a été déposée
+          if (fileKey === 'devisImages2') {
+            if (typeof switchToSecondaryFile === 'function') switchToSecondaryFile();
+          } else {
+            if (typeof switchItemTab === 'function') switchItemTab(-1);
+          }
+          if (typeof refreshInlinePdf === 'function') refreshInlinePdf();
+        }
+      }, 1000);
+    }).catch(function(err) {
+      console.error('Fusion photos→PDF échouée:', err);
+      showToast('❌ Erreur fusion PDF : ' + (err.message || err), 'error');
+    }).then(function() {
+      // Nettoyer Firebase après traitement complet (succès OU échec)
+      if (db && jobId) {
+        var cleanupUpdates = {};
+        cleanupUpdates['jobs/' + jobId] = null;
+        cleanupUpdates['photoRequests/' + jobId] = null;
+        db.ref().update(cleanupUpdates).catch(function() {});
+      }
+      _fichePhotoJobId = null;
+    });
+  });
+}
+
+function _cleanupFichePhotoRequest(jobId) {
+  var modal = document.getElementById('psmPhotoRequestModal');
+  if (modal) modal.style.display = 'none';
+  
+  if (_fichePhotoListener && jobId) {
+    try { db.ref('photoRequests/' + jobId).off('value', _fichePhotoListener); } catch(e) {}
+    _fichePhotoListener = null;
+  }
+  if (_fichePhotoTimeout) {
+    clearTimeout(_fichePhotoTimeout);
+    _fichePhotoTimeout = null;
+  }
+  if (db && jobId) {
+    var updates = {};
+    updates['jobs/' + jobId] = null;
+    updates['photoRequests/' + jobId] = null;
+    db.ref().update(updates).catch(function() {});
+  }
+  _fichePhotoJobId = null;
 }
 
 // Ouvre un fichier depuis les miniatures du modal fiche.
@@ -13900,7 +14282,7 @@ function _ficheOpenFile(el) {
           // Autre type : forcer téléchargement via lien temporaire
           var a = w.document.createElement('a');
           a.href = src;
-          a.download = 'fichier_' + (fileKey === 'devisImages' ? 'email' : 'pdf');
+          a.download = 'fichier_' + (fileKey === 'devisImages' ? 'pdf' : 'email');
           w.document.body.appendChild(a);
           a.click();
           setTimeout(function() { w.close(); }, 500);
@@ -13913,14 +14295,14 @@ function _ficheOpenFile(el) {
   }
 }
 
-// Build 2 compact file rows for fiche modal: Fichier 1 = Email (📧) + Fichier 2 = PDF Principal (📄)
-// Design ultra-simple : UNE LIGNE par fichier. [icône] [nom] [bouton ajouter/supprimer]
+// Build 2 compact file rows for fiche modal: Ligne 1 = PDF Principal (📄) + Ligne 2 = Email/Photos (📧)
+// Design ultra-simple : UNE LIGNE par fichier. [icône] [nom] [boutons PhotoSender + Ajouter/Supprimer]
 // Pas de carré, pas de scroll, pas de prévisualisation.
 //
-// RÉSOLUTION INTELLIGENTE : on ne se fie pas à la position du slot (devisImages vs
-// devisImages2) pour décider si c'est un email ou un PDF — on détecte le TYPE réel
-// de chaque fichier. Les anciennes cartes peuvent avoir le PDF dans le slot 1 et
-// l'email dans le slot 2 ; on les affiche au bon endroit sans toucher à Firebase.
+// Mapping slot → ligne (aligné sur la carte principale) :
+//   devisImages  → PDF Principal 📄  (ce que switchItemTab(-1) affiche côté carte)
+//   devisImages2 → Email / Photos 📧 (ce que switchToSecondaryFile() affiche côté carte)
+// Un slot "a un fichier" dès qu'il contient au moins un élément, peu importe le type.
 function _buildFicheFilesRows(cardId, card) {
   if (!card) card = {};
   var isNew = (cardId === '__new__');
@@ -13933,46 +14315,14 @@ function _buildFicheFilesRows(cardId, card) {
   // - Si un slot contient un fichier du bon type → on l'utilise
   // - Sinon (pas de fichier de ce type, ou le slot nominal est vide) → on garde
   //   le slot nominal par défaut pour les nouveaux ajouts.
-  function resolveRole(targetType) {
-    // Chercher un fichier du bon type dans les 2 slots
-    function firstOfType(arr) {
-      for (var i = 0; i < arr.length; i++) {
-        var t = _detectFileType(arr[i]).type;
-        if (targetType === 'email' && t === 'email') return true;
-        if (targetType === 'pdf' && t === 'pdf') return true;
-      }
-      return false;
-    }
-    var in1 = firstOfType(raw1);
-    var in2 = firstOfType(raw2);
-    // Priorité : slot avec un fichier du bon type
-    if (in1 && !in2) return { files: raw1, slot: 'devisImages' };
-    if (in2 && !in1) return { files: raw2, slot: 'devisImages2' };
-    // Les deux slots ont ce type : garder le slot nominal
-    if (in1 && in2) {
-      return targetType === 'email'
-        ? { files: raw1, slot: 'devisImages' }
-        : { files: raw2, slot: 'devisImages2' };
-    }
-    // Aucun slot n'a ce type : par défaut, email = slot 1, pdf = slot 2
-    return targetType === 'email'
-      ? { files: raw1, slot: 'devisImages' }
-      : { files: raw2, slot: 'devisImages2' };
-  }
-  
-  var emailResolved = resolveRole('email');
-  var pdfResolved = resolveRole('pdf');
-  
-  // Edge case : si la résolution a mis les deux rôles sur le même slot (p.ex. les
-  // 2 slots sont vides → email et pdf pointent tous deux vers devisImages par
-  // défaut), on force pdf → devisImages2 pour éviter les conflits.
-  if (emailResolved.slot === pdfResolved.slot) {
-    if (emailResolved.slot === 'devisImages') {
-      pdfResolved = { files: raw2, slot: 'devisImages2' };
-    } else {
-      emailResolved = { files: raw1, slot: 'devisImages' };
-    }
-  }
+  // Résolution SIMPLIFIÉE (avril 2026) — alignée sur la carte principale :
+  //   - devisImages  → PDF Principal 📄  (ce que switchItemTab(-1) affiche)
+  //   - devisImages2 → Email / Photos 📧 (ce que switchToSecondaryFile() affiche)
+  // Un slot "a un fichier" dès qu'il contient au moins un élément, PEU IMPORTE
+  // le type réel (photo, PDF, Word, email, Excel, etc.). Ça évite qu'une photo
+  // ou un fichier Office soit invisible parce qu'il n'est pas "du bon type".
+  var pdfResolved   = { files: raw1, slot: 'devisImages' };
+  var emailResolved = { files: raw2, slot: 'devisImages2' };
   
   function buildRow(label, icon, resolved) {
     var fileKey = resolved.slot;
@@ -13980,46 +14330,73 @@ function _buildFicheFilesRows(cardId, card) {
     var count = files.length;
     var hasFiles = count > 0;
     
-    // Texte au centre : nom du fichier OU "VIDE" en rouge
-    var centerHtml;
+    // ═══ Zone statut — compact, une ligne ═══
+    // Statut clair et sobre : "1 fichier", "2 fichiers", ou "Aucun fichier joint"
+    var statusHtml;
     if (hasFiles) {
       var first = files[0];
       var ft = _detectFileType(first);
-      var fileLabel = ft.label + ' Ajouté';
-      if (count > 1) fileLabel += ' (+' + (count - 1) + ')';
-      // Nom du fichier cliquable → ouvre lightbox/nouvel onglet
-      centerHtml = '<div data-src-idx="0" data-file-key="' + fileKey + '" onclick="event.stopPropagation();_ficheOpenFile(this)" style="flex:1;min-width:0;padding:6px 10px;background:rgba(34,197,94,0.15);border:1.5px solid rgba(34,197,94,0.5);border-radius:6px;color:#86efac;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="Cliquez pour ouvrir">✅ ' + fileLabel + '</div>';
+      var countLabel = count + ' fichier' + (count > 1 ? 's' : '');
+      // État rempli : fond vert doux, icône du vrai type, nombre exact
+      statusHtml =
+        '<div data-src-idx="0" data-file-key="' + fileKey + '" onclick="event.stopPropagation();_ficheOpenFile(this)" ' +
+          'style="flex:1;min-width:0;height:34px;padding:0 12px;background:linear-gradient(135deg,rgba(34,197,94,0.18),rgba(22,163,74,0.12));border:1.5px solid rgba(34,197,94,0.55);border-radius:6px;color:#bbf7d0;cursor:pointer;display:flex;align-items:center;gap:8px;" ' +
+          'title="Cliquer pour ouvrir">' +
+          '<div style="flex:0 0 auto;font-size:16px;line-height:1;">' + ft.icon + '</div>' +
+          '<div style="flex:1;min-width:0;font-size:12px;font-weight:700;color:#dcfce7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + countLabel + ' <span style="font-weight:500;opacity:0.75;">— ' + ft.label + '</span></div>' +
+          '<div style="flex:0 0 auto;font-size:14px;color:#86efac;">✓</div>' +
+        '</div>';
     } else {
-      centerHtml = '<div style="flex:1;min-width:0;padding:6px 10px;background:rgba(239,68,68,0.1);border:1.5px solid rgba(239,68,68,0.4);border-radius:6px;color:#ef4444;font-size:13px;font-weight:900;letter-spacing:0.5px;text-align:center;">VIDE</div>';
+      // État vide : sobre, gris-bleu, juste "Aucun fichier joint" — pas de drame
+      statusHtml =
+        '<div style="flex:1;min-width:0;height:34px;padding:0 12px;background:rgba(148,163,184,0.08);border:1.5px dashed rgba(148,163,184,0.3);border-radius:6px;color:#94a3b8;display:flex;align-items:center;gap:8px;">' +
+          '<div style="flex:0 0 auto;font-size:14px;opacity:0.5;">∅</div>' +
+          '<div style="flex:1;min-width:0;font-size:12px;font-weight:500;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Aucun fichier joint</div>' +
+        '</div>';
     }
     
-    // Bouton à droite : Ajouter si vide, Supprimer si plein
-    var btnHtml;
+    // ═══ BOUTONS DE DROITE : hauteur harmonisée, tous même style ═══
+    var BTN_STYLE_BASE = 'flex:0 0 auto;height:34px;min-width:38px;padding:0 10px;border-radius:6px;border:none;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;transition:filter .15s;';
+    
+    // Bouton 📷 PhotoSender — toujours présent
+    var photoBtnHtml = '<button onclick="event.stopPropagation();_ficheOpenPhotoSender(\'' + fileKey + '\')" ' +
+      'onmouseover="this.style.filter=\'brightness(1.15)\'" onmouseout="this.style.filter=\'\'" ' +
+      'style="' + BTN_STYLE_BASE + 'background:linear-gradient(to bottom,#8b5cf6,#6d28d9);box-shadow:0 2px 4px rgba(139,92,246,0.3);" ' +
+      'title="Prendre des photos avec le téléphone (PhotoSender) — converties en PDF">📷</button>';
+    
+    // Bouton Ajouter OU Supprimer (mutuellement exclusifs)
+    var actionBtnHtml;
     if (hasFiles && !isNew) {
-      btnHtml = '<button onclick="event.stopPropagation();_ficheDeleteAllFiles(\'' + safeId + '\',\'' + fileKey + '\')" style="flex:0 0 auto;padding:6px 10px;border-radius:6px;border:none;background:linear-gradient(to bottom,#ef4444,#dc2626);color:#fff;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 2px 4px rgba(239,68,68,0.4);" title="Supprimer">🗑️</button>';
+      actionBtnHtml = '<button onclick="event.stopPropagation();_ficheDeleteAllFiles(\'' + safeId + '\',\'' + fileKey + '\')" ' +
+        'onmouseover="this.style.filter=\'brightness(1.15)\'" onmouseout="this.style.filter=\'\'" ' +
+        'style="' + BTN_STYLE_BASE + 'background:linear-gradient(to bottom,#ef4444,#dc2626);box-shadow:0 2px 4px rgba(239,68,68,0.3);" ' +
+        'title="Supprimer le(s) fichier(s)">🗑️</button>';
     } else {
-      // Pas de fichier → bouton "Ajouter"
       var addClickAttr = isNew ? 'onclick="_ficheCreateBeforeFile(this,event)"' : '';
       var dataAttr = isNew ? 'data-filekey="' + fileKey + '"' : '';
-      btnHtml = '<label style="flex:0 0 auto;cursor:pointer;">' +
-        '<div ' + addClickAttr + ' style="padding:6px 12px;border-radius:6px;background:linear-gradient(to bottom,#3b82f6,#2563eb);color:#fff;font-size:13px;font-weight:800;text-align:center;cursor:pointer;box-shadow:0 2px 4px rgba(59,130,246,0.4);white-space:nowrap;">📤 Ajouter</div>' +
+      actionBtnHtml = '<label style="flex:0 0 auto;cursor:pointer;display:inline-block;">' +
+        '<div ' + addClickAttr +
+          ' onmouseover="this.style.filter=\'brightness(1.15)\'" onmouseout="this.style.filter=\'\'" ' +
+          ' style="' + BTN_STYLE_BASE + 'background:linear-gradient(to bottom,#3b82f6,#2563eb);box-shadow:0 2px 4px rgba(59,130,246,0.3);white-space:nowrap;">📤 Ajouter</div>' +
         '<input type="file" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.pptx,.ppt,.eml,.msg,.txt,.rtf,.csv,.zip,.rar" style="display:none;" ' + dataAttr + ' onchange="_ficheFilesSelected(this,\'' + fileKey + '\')">' +
       '</label>';
     }
     
-    // Une seule ligne : [icône + label] [centre] [bouton]
-    return '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(0,0,0,0.25);border-radius:8px;margin-bottom:6px;">' +
-      // Bloc gauche : icône + label vertical pour économiser la largeur
-      '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">' +
-        '<div style="font-size:24px;line-height:1;">' + icon + '</div>' +
-        '<div style="font-size:11px;font-weight:900;color:#fff;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap;">' + label + '</div>' +
+    // ═══ LAYOUT FINAL — tout sur une seule rangée pour économiser la hauteur ═══
+    // [icône 📄/📧] [label vertical compact] [zone statut qui s'étire] [📷] [Ajouter/Supprimer]
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.15);border-radius:9px;margin-bottom:6px;">' +
+      // Bloc gauche : icône + label (compact)
+      '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;min-width:0;">' +
+        '<div style="font-size:20px;line-height:1;">' + icon + '</div>' +
+        '<div style="font-size:10px;font-weight:700;color:#e2e8f0;letter-spacing:0.2px;text-transform:uppercase;white-space:nowrap;">' + label + '</div>' +
       '</div>' +
-      centerHtml +
-      btnHtml +
+      statusHtml +
+      photoBtnHtml +
+      actionBtnHtml +
     '</div>';
   }
   
-  return buildRow('Email', '📧', emailResolved) +
+  return buildRow('Email / Photos', '📧', emailResolved) +
          buildRow('PDF Principal', '📄', pdfResolved);
 }
 
@@ -17610,15 +17987,67 @@ function refreshInlinePdf() {
     } else if (ftype.type === 'pdf') {
       // PDF — iframe
       frameEl.innerHTML = '<iframe style="width:100%;height:100%;border:none;" src="' + src + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH"></iframe>';
+    } else if (ftype.type === 'email') {
+      // Email .eml/.msg — tenter de lire le contenu et l'afficher inline
+      // (lecture directe depuis data: URL ou URL distante)
+      frameEl.innerHTML = '<div id="_emailViewer" style="width:100%;height:100%;background:#0f172a;color:#e2e8f0;overflow:auto;padding:20px;font-family:monospace;font-size:12px;white-space:pre-wrap;">Chargement du courriel...</div>';
+      (function(srcVal) {
+        var fetchPromise;
+        if (srcVal.indexOf('data:') === 0) {
+          try {
+            var commaIdx = srcVal.indexOf(',');
+            var base64 = srcVal.substring(commaIdx + 1);
+            var decoded = atob(base64);
+            fetchPromise = Promise.resolve(decoded);
+          } catch(e) { fetchPromise = Promise.reject(e); }
+        } else {
+          fetchPromise = fetch(srcVal).then(function(r) { return r.text(); });
+        }
+        fetchPromise.then(function(txt) {
+          var viewer = document.getElementById('_emailViewer');
+          if (!viewer) return;
+          // Extraire les en-têtes + corps (parse très basique pour .eml)
+          var lines = txt.split(/\r?\n/);
+          var headers = [];
+          var bodyStart = 0;
+          for (var i = 0; i < lines.length; i++) {
+            if (lines[i].trim() === '') { bodyStart = i + 1; break; }
+            if (/^(From|To|Subject|Date|Cc|Bcc):/i.test(lines[i])) headers.push(lines[i]);
+          }
+          var body = lines.slice(bodyStart).join('\n');
+          // Nettoyer un peu le corps (enlever les encodages HTML évidents)
+          body = body.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/g, function(m, h) {
+            try { return String.fromCharCode(parseInt(h, 16)); } catch(e) { return m; }
+          });
+          // Extraire texte HTML → texte lisible
+          if (body.indexOf('<html') !== -1 || body.indexOf('<body') !== -1) {
+            var tmp = document.createElement('div');
+            tmp.innerHTML = body;
+            body = tmp.innerText || tmp.textContent || body;
+          }
+          // Tronquer si trop long
+          if (body.length > 20000) body = body.substring(0, 20000) + '\n\n[... texte tronqué ...]';
+          var hdrHtml = headers.length ? '<div style="color:#fbbf24;font-weight:700;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(251,191,36,0.3);">' + headers.map(function(h) { return h.replace(/</g, '&lt;'); }).join('<br>') + '</div>' : '';
+          var bodyHtml = '<div style="color:#e2e8f0;">' + body.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
+          viewer.innerHTML = hdrHtml + bodyHtml;
+        }).catch(function(err) {
+          var viewer = document.getElementById('_emailViewer');
+          if (viewer) viewer.textContent = 'Impossible de lire le courriel : ' + (err.message || err);
+        });
+      })(src);
     } else {
-      // Non-previewable file (Word, Excel, Email, etc.) — show icon + download link
-      var downloadUrl = src.startsWith('https://') ? src : '#';
-      var downloadAttr = src.startsWith('data:') ? ' download="fichier' + (ftype.type === 'word' ? '.docx' : ftype.type === 'excel' ? '.xlsx' : ftype.type === 'ppt' ? '.pptx' : ftype.type === 'email' ? '.eml' : '.bin') + '"' : '';
-      frameEl.innerHTML = '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#0f172a;">' +
-        '<div style="font-size:48px;">' + ftype.icon + '</div>' +
-        '<div style="font-size:13px;font-weight:700;color:#fff;">' + ftype.label + '</div>' +
-        '<div style="font-size:10px;color:#94a3b8;">Fichier ' + (pdfInlineIdx + 1) + ' / ' + allFiles.length + '</div>' +
-        '<a href="' + downloadUrl + '"' + downloadAttr + ' target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:6px 14px;border-radius:6px;background:linear-gradient(to bottom,#3b82f6,#2563eb);color:#fff;text-decoration:none;font-size:11px;font-weight:600;margin-top:4px;">⬇️ Télécharger / Ouvrir</a>' +
+      // Fichier non prévisualisable (Word, Excel, PowerPoint, archive, etc.)
+      // Afficher un panneau clair avec bouton d'ouverture
+      var downloadUrl = src.startsWith('https://') ? src : src;
+      var extMap = { word: '.docx', excel: '.xlsx', ppt: '.pptx', archive: '.zip', text: '.txt' };
+      var ext = extMap[ftype.type] || '.bin';
+      var downloadAttr = src.startsWith('data:') ? ' download="' + (card.name || 'fichier').replace(/[^a-zA-Z0-9]/g, '_') + ext + '"' : '';
+      frameEl.innerHTML = '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0f172a;padding:40px;box-sizing:border-box;">' +
+        '<div style="font-size:72px;">' + ftype.icon + '</div>' +
+        '<div style="font-size:16px;font-weight:700;color:#fff;">Fichier ' + ftype.label + '</div>' +
+        '<div style="font-size:11px;color:#94a3b8;text-align:center;max-width:360px;line-height:1.5;">Ce type de fichier ne peut pas être affiché directement dans le navigateur. Cliquez ci-dessous pour l\'ouvrir dans son application (Word, Excel, etc.).</div>' +
+        '<a href="' + downloadUrl + '"' + downloadAttr + ' target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:8px;background:linear-gradient(to bottom,#3b82f6,#2563eb);color:#fff;text-decoration:none;font-size:13px;font-weight:700;box-shadow:0 2px 6px rgba(59,130,246,0.4);margin-top:4px;">⬇️ Ouvrir le fichier</a>' +
+        (allFiles.length > 1 ? '<div style="font-size:10px;color:#64748b;">Fichier ' + (pdfInlineIdx + 1) + ' / ' + allFiles.length + '</div>' : '') +
       '</div>';
     }
   }
@@ -19111,7 +19540,13 @@ function _cleanupPhotoRequest(jobId) {
 // Annulation manuelle (bouton ✕ ou timeout)
 function _cancelPhotoRequest(jobId, reason) {
   if (reason) showToast('ℹ️ Demande photo annulée : ' + reason, 'info');
-  _cleanupPhotoRequest(jobId);
+  // Nettoyer le flow actif — si c'est le flow fiche, utiliser _cleanupFichePhotoRequest,
+  // sinon le flow standard _cleanupPhotoRequest.
+  if (jobId && jobId === _fichePhotoJobId) {
+    _cleanupFichePhotoRequest(jobId);
+  } else {
+    _cleanupPhotoRequest(jobId);
+  }
 }
 
 // Sauvegarde la photo (base64) dans card.cardCameraPhotos + Firebase
@@ -19780,10 +20215,18 @@ function addDevisImageToCard(cardId, base64) {
     }
     showToast('✅ Fichier ajouté avec succès!', 'success');
     
-    // After 3.5 seconds, show email notification modal
-    setTimeout(function() {
-      openPsmFileNotifyModal(cardId);
-    }, 3500);
+    // Popup de notification courriel : sauter si l'ajout vient du modal fiche
+    // (flag _skipFileNotify posé par _ficheFilesSelected / _startFichePhotoListener)
+    if (window._skipFileNotify) {
+      // Consommer le flag une seule fois, puis le lever après un court délai
+      // au cas où plusieurs fichiers seraient ajoutés en séquence.
+      setTimeout(function() { window._skipFileNotify = false; }, 4000);
+    } else {
+      // After 3.5 seconds, show email notification modal
+      setTimeout(function() {
+        openPsmFileNotifyModal(cardId);
+      }, 3500);
+    }
   }).catch(function(err) {
     showToast('❌ Erreur lors de l\'ajout: ' + (err.message || err), 'error');
   });
