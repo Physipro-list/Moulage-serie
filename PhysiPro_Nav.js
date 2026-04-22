@@ -74,7 +74,7 @@
     'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','serie','inspfinale','psm','jobs','calcmat','jobsattente'],                             // sonia.boulanger
     'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','psm','jobs','calcmat','jobsattente'],                                                  // service3 (Jacynthe)
     'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','psm','jobs','calcmat','jobsattente'],                                                  // service1 (Jonathan)
-    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','inspfinale','psm','jobs','calcmat','jobsattente'],                                     // ngagne (Nadia)
+    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspfinale','psm','jobs','calcmat','jobsattente'],                            // ngagne (Nadia)
     'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':             ['moulage','jobs','calcmat','jobsattente'],                                                        // mplanguedoc (Marie-Pier)
     'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':         ['moulage','jobs','calcmat','jobsattente'],                                                        // mariesoleilr (Marie-Soleil)
     'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':     ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente'],  // fabrys.frechette
