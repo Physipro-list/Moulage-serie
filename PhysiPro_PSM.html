@@ -7035,9 +7035,10 @@ if(localStorage.getItem('physipro_last_email')){
                   <button id="btnPdfCamera" onclick="openCameraForCard()" title="Prendre une photo avec l'appareil" style="flex-shrink:0;padding:6px 12px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:4px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">📷</button>
                   <button id="btnPhotosToPdf" onclick="saveCardPhotosToPdf()" title="Sauvegarder toutes les photos en un seul PDF" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:13px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:4px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">📄</button>
                   <!-- Boutons zoom (pour les images) -->
-                  <button id="btnPdfZoomOut" onclick="_pdfImgZoomChange(-0.2)" title="Dézoomer l'image" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:800;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;min-width:32px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">−</button>
+                  <button id="btnPdfZoomOut" onclick="_pdfImgZoomChange(-0.2)" title="Dézoomer (image ou PDF)" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:800;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;min-width:32px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">−</button>
                   <button id="btnPdfZoomReset" onclick="_pdfImgZoomReset()" title="Réinitialiser le zoom" style="flex-shrink:0;padding:6px 8px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:10px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;min-width:40px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''"><span id="pdfZoomLabel">100%</span></button>
-                  <button id="btnPdfZoomIn" onclick="_pdfImgZoomChange(0.2)" title="Zoomer l'image" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:800;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;min-width:32px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">+</button>
+                  <button id="btnPdfZoomIn" onclick="_pdfImgZoomChange(0.2)" title="Zoomer (image ou PDF)" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:800;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;min-width:32px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">+</button>
+                  <button id="btnPdfRotate" onclick="_pdfRotate()" title="Pivoter de 90° (PDF ou image)" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:800;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;min-width:32px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">↻</button>
                   <button id="btnPdfAgrandir" onclick="openDevisViewerFromInline()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:11px;letter-spacing:.3px;">🔍 Agrandir</button>
                   <button id="btnPdfPrint" onclick="printNotesAndImages()" style="padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:11px;letter-spacing:.3px;">🖨️ Imprimer</button>
                   <input type="file" id="psmFilePickerInput" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.pptx,.ppt,.eml,.msg,.txt,.rtf,.csv,.zip,.rar" multiple style="display:none;" onchange="handleFilePickerFiles(this)">
@@ -20533,17 +20534,85 @@ function _pdfImgZoomChange(delta) {
 
 function _pdfImgZoomReset() {
   window._pdfImgZoom = 1;
+  window._pdfImgRotation = 0;
   _pdfImgApplyZoom();
-  // Réinitialise aussi le pan
+  // Réinitialise aussi le pan pour les images
   var wrapper = document.getElementById('_imgZoomWrapper');
   if (wrapper) { wrapper.scrollLeft = 0; wrapper.scrollTop = 0; }
 }
 
+// Rotation par incréments de 90° : 0 → 90 → 180 → 270 → 0
+function _pdfRotate() {
+  window._pdfImgRotation = ((window._pdfImgRotation || 0) + 90) % 360;
+  _pdfImgApplyZoom();
+}
+
 function _pdfImgApplyZoom() {
+  var z = window._pdfImgZoom || 1;
+  var rot = window._pdfImgRotation || 0;
+  // Image : transform combine scale + rotate, centré sur l'image
   var img = document.getElementById('_imgZoomTarget');
-  if (img) img.style.transform = 'scale(' + window._pdfImgZoom + ')';
+  if (img) {
+    img.style.transformOrigin = 'center center';
+    img.style.transform = 'rotate(' + rot + 'deg) scale(' + z + ')';
+  }
+  // PDF :
+  // - On lit la LARGEUR ACTUELLE du panneau (pas une valeur cachée au chargement,
+  //   qui peut être obsolète si le panneau a changé de taille).
+  // - L'iframe a toujours width = panelW (largeur courante du panneau).
+  //   Donc à scale=1, elle remplit le panneau ; à scale=0.6, elle occupe 60% (centrée).
+  // - La hauteur de l'iframe = panelH/z, comme ça après scale, elle remplit la hauteur.
+  // - Le ghost définit l'espace de scroll (= max de la largeur visuelle et du panneau).
+  // - Le PDF est TOUJOURS centré horizontalement via translateX.
+  // - Rotation : on tourne l'iframe entière autour de son centre. Pour rot=90/270,
+  //   on échange visuellement largeur et hauteur via les calculs d'espace de scroll.
+  var ghost = document.getElementById('_pdfZoomGhost');
+  var iframe = document.getElementById('_pdfZoomFrame');
+  var outer = document.getElementById('_pdfZoomOuter');
+  if (ghost && iframe && outer) {
+    var panelW = outer.clientWidth || 600;
+    var panelH = outer.clientHeight || 800;
+    var rotated = (rot === 90 || rot === 270);
+    // Dimensions de base de l'iframe (avant transform)
+    // - rotation 0/180 : iframe width=panelW, scale ×z → visuel panelW*z (largeur), panelH (hauteur)
+    // - rotation 90/270 : on veut que la rotation amène le PDF à remplir la hauteur du panneau.
+    //   Donc l'iframe a width=panelH (qui deviendra la hauteur après rotation),
+    //   et height=panelW/z (qui deviendra la largeur visuelle après rotation et scale).
+    var iframeW, iframeH, visualW, visualH;
+    if (!rotated) {
+      iframeW = panelW;
+      iframeH = panelH / z;
+      visualW = iframeW * z;       // = panelW * z
+      visualH = iframeH * z;       // = panelH
+    } else {
+      iframeW = panelH;
+      iframeH = panelW / z;
+      // Après rotation 90° et scale, dimensions visuelles inversées :
+      visualW = iframeH * z;       // = panelW
+      visualH = iframeW * z;       // = panelH * z
+    }
+    var containerW = Math.max(visualW, panelW);
+    var containerH = Math.max(visualH, panelH);
+    var offsetX = (containerW - visualW) / 2;
+    var offsetY = (containerH - visualH) / 2;
+    ghost.style.width = containerW + 'px';
+    ghost.style.height = containerH + 'px';
+    iframe.style.width = iframeW + 'px';
+    iframe.style.height = iframeH + 'px';
+    // On utilise transform-origin center pour que la rotation tourne autour du centre de l'iframe,
+    // puis on translate pour centrer le résultat dans le conteneur.
+    // L'iframe est positionnée en absolute à (0,0), donc on calcule où doit être son coin top-left
+    // pour que son centre visuel soit au bon endroit.
+    // Centre visuel souhaité = (containerW/2, containerH/2)
+    // Centre actuel de l'iframe avant transform = (iframeW/2, iframeH/2)
+    // Donc translate = (containerW/2 - iframeW/2, containerH/2 - iframeH/2)
+    var translateX = (containerW - iframeW) / 2;
+    var translateY = (containerH - iframeH) / 2;
+    iframe.style.transformOrigin = 'center center';
+    iframe.style.transform = 'translate(' + translateX + 'px,' + translateY + 'px) rotate(' + rot + 'deg) scale(' + z + ')';
+  }
   var lbl = document.getElementById('pdfZoomLabel');
-  if (lbl) lbl.textContent = Math.round(window._pdfImgZoom * 100) + '%';
+  if (lbl) lbl.textContent = Math.round(z * 100) + '%';
 }
 
 // Zoom via molette Ctrl+scroll
@@ -20671,15 +20740,17 @@ function refreshInlinePdf() {
   if (frameEl) {
     frameEl.style.display = 'block';
     var ftype = _detectFileType(src);
-    // Afficher/cacher les boutons zoom selon si c'est une image
-    var zoomBtns = ['btnPdfZoomIn', 'btnPdfZoomOut', 'btnPdfZoomReset'];
+    // Afficher/cacher les boutons zoom + rotation : pour images ET PDF
+    var zoomBtns = ['btnPdfZoomIn', 'btnPdfZoomOut', 'btnPdfZoomReset', 'btnPdfRotate'];
+    var showZoom = (ftype.type === 'image' || ftype.type === 'pdf');
     zoomBtns.forEach(function(id) {
       var b = document.getElementById(id);
-      if (b) b.style.display = (ftype.type === 'image') ? '' : 'none';
+      if (b) b.style.display = showZoom ? '' : 'none';
     });
-    // Réinitialiser le zoom au changement d'image
-    if (ftype.type === 'image') {
+    // Réinitialiser le zoom et la rotation au changement de fichier (image ou PDF)
+    if (showZoom) {
       window._pdfImgZoom = 1;
+      window._pdfImgRotation = 0;
       var lbl = document.getElementById('pdfZoomLabel');
       if (lbl) lbl.textContent = '100%';
     }
@@ -20687,8 +20758,22 @@ function refreshInlinePdf() {
       // Image — show directly with zoom/pan support
       frameEl.innerHTML = '<div id="_imgZoomWrapper" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:auto;cursor:grab;" onwheel="_handleImgWheelZoom(event)"><img id="_imgZoomTarget" src="' + src + '" style="max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;transition:transform 0.15s ease;transform:scale(' + (window._pdfImgZoom || 1) + ');" onmousedown="_startImgPan(event)"></div>';
     } else if (ftype.type === 'pdf') {
-      // PDF — iframe
-      frameEl.innerHTML = '<iframe style="width:100%;height:100%;border:none;" src="' + src + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH"></iframe>';
+      // PDF — iframe natif, avec zoom via "ghost-div" :
+      //   outer (overflow:auto, taille du panneau)
+      //     ├─ ghost (largeur scroll = max(visualW, panelW), hauteur = panelH)
+      //     └─ iframe (position absolute, width = panelW, transform:scale(z) + translateX pour centrage)
+      // L'iframe garde toujours width=panelW (même valeur peu importe le zoom) → le visualiseur
+      // PDF natif ne re-fitte pas. Le transform:scale rétrécit/grossit visuellement.
+      // Les dimensions précises sont calculées dynamiquement par _pdfImgApplyZoom() qui lit
+      // outer.clientWidth/clientHeight à chaque appel.
+      frameEl.innerHTML =
+        '<div id="_pdfZoomOuter" style="width:100%;height:100%;overflow:auto;background:#0a0f1a;position:relative;">' +
+          '<div id="_pdfZoomGhost" style="position:relative;"></div>' +
+          '<iframe id="_pdfZoomFrame" style="border:none;display:block;position:absolute;top:0;left:0;transform-origin:0 0;transition:transform 0.15s ease;" src="' + src + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH"></iframe>' +
+        '</div>';
+      // Appliquer immédiatement les dimensions correctes (sinon l'iframe a width:0 par défaut)
+      // requestAnimationFrame garantit que le DOM est layouté avant qu'on lise clientWidth.
+      requestAnimationFrame(function() { _pdfImgApplyZoom(); });
     } else if (ftype.type === 'email') {
       // Email .eml/.msg — tenter de lire le contenu et l'afficher inline
       // (lecture directe depuis data: URL ou URL distante)
