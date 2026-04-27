@@ -1504,7 +1504,10 @@ body.notif-open .topbar-dept-tabs { z-index: 0 !important; }
   padding: 10px 12px;
   border-radius: 8px;
   border: 1.5px solid;
-  flex: 1 1 0;
+  /* Taille naturelle : ne pas s'étirer pour remplir la zone si l'autre card est
+     non-requise/collapsée. Évite que la pastille Couture devienne géante quand
+     Atelier est décoché (et vice-versa). */
+  flex: 0 0 auto;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -21314,16 +21317,17 @@ function _pdfImgApplyZoom() {
     img.style.transformOrigin = 'center center';
     img.style.transform = 'rotate(' + rot + 'deg) scale(' + z + ')';
   }
-  // PDF :
-  // - On lit la LARGEUR ACTUELLE du panneau (pas une valeur cachée au chargement,
-  //   qui peut être obsolète si le panneau a changé de taille).
-  // - L'iframe a toujours width = panelW (largeur courante du panneau).
-  //   Donc à scale=1, elle remplit le panneau ; à scale=0.6, elle occupe 60% (centrée).
-  // - La hauteur de l'iframe = panelH/z, comme ça après scale, elle remplit la hauteur.
-  // - Le ghost définit l'espace de scroll (= max de la largeur visuelle et du panneau).
-  // - Le PDF est TOUJOURS centré horizontalement via translateX.
-  // - Rotation : on tourne l'iframe entière autour de son centre. Pour rot=90/270,
-  //   on échange visuellement largeur et hauteur via les calculs d'espace de scroll.
+  // PDF — NOUVELLE APPROCHE :
+  // - L'iframe occupe TOUJOURS 100% de la hauteur du panneau (pas de transform: scale
+  //   qui aurait pu créer un espace vide en bas à cause du PDF natif qui garde son ratio).
+  // - Le ZOOM se fait en jouant sur la LARGEUR de l'iframe :
+  //     * z=1   → iframe.width = 100% du panneau (largeur normale)
+  //     * z=0.6 → iframe.width = 60% du panneau, centrée horizontalement (espace vide
+  //                gauche/droite, mais hauteur toujours pleine)
+  //     * z=2   → iframe.width = 200% du panneau, scrollable horizontalement
+  // - Rotation : on fait pivoter l'iframe via transform: rotate (sans scale).
+  // - Le PDF natif (Chrome) re-fit automatiquement à la nouvelle largeur de l'iframe
+  //   en utilisant toute la hauteur disponible → plus d'espace vide en bas.
   var ghost = document.getElementById('_pdfZoomGhost');
   var iframe = document.getElementById('_pdfZoomFrame');
   var outer = document.getElementById('_pdfZoomOuter');
@@ -21331,43 +21335,43 @@ function _pdfImgApplyZoom() {
     var panelW = outer.clientWidth || 600;
     var panelH = outer.clientHeight || 800;
     var rotated = (rot === 90 || rot === 270);
-    // Dimensions de base de l'iframe (avant transform)
-    // - rotation 0/180 : iframe width=panelW, scale ×z → visuel panelW*z (largeur), panelH (hauteur)
-    // - rotation 90/270 : on veut que la rotation amène le PDF à remplir la hauteur du panneau.
-    //   Donc l'iframe a width=panelH (qui deviendra la hauteur après rotation),
-    //   et height=panelW/z (qui deviendra la largeur visuelle après rotation et scale).
-    var iframeW, iframeH, visualW, visualH;
-    if (!rotated) {
-      iframeW = panelW;
-      iframeH = panelH / z;
-      visualW = iframeW * z;       // = panelW * z
-      visualH = iframeH * z;       // = panelH
-    } else {
-      iframeW = panelH;
-      iframeH = panelW / z;
-      // Après rotation 90° et scale, dimensions visuelles inversées :
-      visualW = iframeH * z;       // = panelW
-      visualH = iframeW * z;       // = panelH * z
-    }
+    
+    // Largeur visuelle souhaitée (panelW * z) — c'est ce qu'on impose à l'iframe
+    var visualW = panelW * z;
+    // Hauteur visuelle : TOUJOURS la hauteur pleine du panneau (clé du fix)
+    var visualH = panelH;
+    
+    // Le ghost définit l'espace de scroll dans le conteneur extérieur :
+    //   - largeur : max(visualW, panelW) → si on zoome, on scroll horizontalement
+    //   - hauteur : toujours panelH
     var containerW = Math.max(visualW, panelW);
-    var containerH = Math.max(visualH, panelH);
-    var offsetX = (containerW - visualW) / 2;
-    var offsetY = (containerH - visualH) / 2;
+    var containerH = panelH;
     ghost.style.width = containerW + 'px';
     ghost.style.height = containerH + 'px';
-    iframe.style.width = iframeW + 'px';
-    iframe.style.height = iframeH + 'px';
-    // On utilise transform-origin center pour que la rotation tourne autour du centre de l'iframe,
-    // puis on translate pour centrer le résultat dans le conteneur.
-    // L'iframe est positionnée en absolute à (0,0), donc on calcule où doit être son coin top-left
-    // pour que son centre visuel soit au bon endroit.
-    // Centre visuel souhaité = (containerW/2, containerH/2)
-    // Centre actuel de l'iframe avant transform = (iframeW/2, iframeH/2)
-    // Donc translate = (containerW/2 - iframeW/2, containerH/2 - iframeH/2)
-    var translateX = (containerW - iframeW) / 2;
-    var translateY = (containerH - iframeH) / 2;
+    
+    // L'iframe est positionnée en absolute, dimensions = visuel souhaité
+    if (!rotated) {
+      iframe.style.width = visualW + 'px';
+      iframe.style.height = visualH + 'px';
+    } else {
+      // Rotation 90/270 : on échange largeur et hauteur de l'iframe pour qu'après
+      // rotation, le PDF s'aligne correctement avec le panneau
+      iframe.style.width = visualH + 'px';
+      iframe.style.height = visualW + 'px';
+    }
+    
+    // Centrer horizontalement et verticalement par rapport au conteneur
+    var iframeBoxW = rotated ? visualH : visualW;
+    var iframeBoxH = rotated ? visualW : visualH;
+    var translateX = (containerW - iframeBoxW) / 2;
+    var translateY = (containerH - iframeBoxH) / 2;
+    
     iframe.style.transformOrigin = 'center center';
-    iframe.style.transform = 'translate(' + translateX + 'px,' + translateY + 'px) rotate(' + rot + 'deg) scale(' + z + ')';
+    if (rot === 0) {
+      iframe.style.transform = 'translate(' + translateX + 'px,' + translateY + 'px)';
+    } else {
+      iframe.style.transform = 'translate(' + translateX + 'px,' + translateY + 'px) rotate(' + rot + 'deg)';
+    }
   }
   var lbl = document.getElementById('pdfZoomLabel');
   if (lbl) lbl.textContent = Math.round(z * 100) + '%';
