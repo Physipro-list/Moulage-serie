@@ -1713,6 +1713,29 @@ body.notif-open .topbar-dept-tabs { z-index: 0 !important; }
   font-weight: 600;
   font-style: italic;
 }
+
+/* ─── État REMPLI : dropdown "Temps total" Atelier/Couture mis en évidence en
+       jaune quand il y a une valeur (somme des items, ou temps libre) ─── */
+.csv-time-dd-btn:not(.is-empty) {
+  background: linear-gradient(to bottom, #fde047 0%, #ca8a04 100%);
+  border-color: #fde047;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+}
+.csv-time-dd-btn:not(.is-empty):hover {
+  background: linear-gradient(to bottom, #fef08a 0%, #d97706 100%);
+  filter: brightness(1.1);
+}
+.csv-time-dd-btn:not(.is-empty) .csv-time-dd-value {
+  color: #1a1a1a;
+  font-weight: 900;
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
+.csv-time-dd-btn:not(.is-empty) .csv-time-dd-caret {
+  color: #1a1a1a;
+  font-weight: 900;
+  text-shadow: none;
+}
 .csv-time-dd-caret {
   font-size: 9px;
   color: rgba(255,255,255,0.85);
@@ -2176,6 +2199,29 @@ body.notif-open .topbar-dept-tabs { z-index: 0 !important; }
   color: rgba(148,163,184,0.65);
   font-weight: 600;
   font-style: italic;
+}
+
+/* ─── État REMPLI : pastille jaune mise en évidence pour qu'on voie d'un coup
+       d'œil qu'il y a une valeur ─── */
+.csv-item-dept-dd-btn:not(.is-empty) {
+  background: linear-gradient(to bottom, #fde047 0%, #ca8a04 100%);
+  border-color: #fde047;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+}
+.csv-item-dept-dd-btn:not(.is-empty):hover {
+  background: linear-gradient(to bottom, #fef08a 0%, #d97706 100%);
+  filter: brightness(1.1);
+}
+.csv-item-dept-dd-btn:not(.is-empty) .csv-item-dept-dd-value {
+  color: #1a1a1a;
+  font-weight: 900;
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
+.csv-item-dept-dd-btn:not(.is-empty) .csv-item-dept-dd-caret {
+  color: #1a1a1a;
+  font-weight: 900;
+  text-shadow: none;
 }
 .csv-item-dept-dd-caret {
   font-size: 8px;
@@ -12914,16 +12960,85 @@ function _csvBuildTimeDropdownMenu(dept) {
   menu.innerHTML = html;
 }
 
-// Charge les temps affichés (appelé par showCardSummary)
-function csvLoadTimes(card) {
-  if (!card) return;
+// ═════════════════════════════════════════════════════════════════════════
+// CALCUL DU TEMPS TOTAL CUMULÉ DES ITEMS
+// Quand "Items multiples" est coché, le dropdown Atelier/Couture à gauche affiche
+// la SOMME des temps des 3 items du dept (au lieu du temps libre de la carte).
+// ═════════════════════════════════════════════════════════════════════════
+
+// Parse un temps stocké (string) et retourne sa valeur en minutes.
+// Formats acceptés : "15 min", "1h30", "1 h 30", "45", "2h", etc.
+function _csvParseTimeToMinutes(v) {
+  if (!v) return 0;
+  v = String(v).trim();
+  if (!v || v === '—' || v === '— Sélectionner —') return 0;
+  var mins = 0;
+  var hMatch = v.match(/(\d+)\s*h/i);
+  var mMatch = v.match(/(\d+)\s*min/i);
+  if (hMatch) {
+    mins += parseInt(hMatch[1], 10) * 60;
+    // "1 h 30" → minutes après le "h" sans suffixe "min"
+    if (!mMatch) {
+      var afterH = v.substring(v.indexOf(hMatch[0]) + hMatch[0].length).match(/(\d+)/);
+      if (afterH) mins += parseInt(afterH[1], 10);
+    }
+  }
+  if (mMatch) mins += parseInt(mMatch[1], 10);
+  // Cas simple : juste un nombre nu (ex: "45") → minutes
+  if (!hMatch && !mMatch) {
+    var raw = v.match(/^(\d+)$/);
+    if (raw) mins = parseInt(raw[1], 10);
+  }
+  return mins;
+}
+
+// Formate un nombre de minutes en chaîne lisible.
+//   90 → "1 h 30"   |   60 → "1 h"   |   45 → "45 min"   |   0 → ""
+function _csvFormatTotalTime(min) {
+  if (!min || min <= 0) return '';
+  var h = Math.floor(min / 60);
+  var m = min % 60;
+  if (h && m) return h + ' h ' + m;
+  if (h) return h + ' h';
+  return m + ' min';
+}
+
+// Calcule la somme des temps des items d'un dept (atelier/couture).
+// Retourne une chaîne formatée prête à être affichée.
+function _csvComputeTotalItemsTime(card, dept) {
+  if (!card || !card[dept] || !Array.isArray(card[dept].items)) return '';
+  var totalMin = 0;
+  for (var i = 0; i < CSV_ITEMS_COUNT; i++) {
+    var it = card[dept].items[i];
+    if (it && it.temps) totalMin += _csvParseTimeToMinutes(it.temps);
+  }
+  return _csvFormatTotalTime(totalMin);
+}
+
+// Met à jour les 2 dropdowns (Atelier + Couture) avec le total des items.
+// Appelée quand on change un temps d'item ou quand on toggle Items multiples.
+function _csvRefreshTotalTimeDisplay() {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var card = psmData[currentCardId];
+  var isItemsMulti = !!card.itemsMultiples;
   ['atelier', 'couture'].forEach(function(dept) {
-    var d = card[dept] || {};
-    var val = _csvNormalizeTime(d.temps || '');
-    // Mise à jour du bouton dropdown (valeur affichée)
     var btn = document.getElementById(dept === 'atelier' ? 'csvTimeAtelierBtn' : 'csvTimeCoutureBtn');
     var valueEl = document.getElementById(dept === 'atelier' ? 'csvTimeAtelierValue' : 'csvTimeCoutureValue');
-    if (btn && valueEl) {
+    if (!btn || !valueEl) return;
+    if (isItemsMulti) {
+      // Mode total : affiche la somme des items, ou "—" si aucun
+      var total = _csvComputeTotalItemsTime(card, dept);
+      if (total) {
+        valueEl.textContent = total;
+        btn.classList.remove('is-empty');
+      } else {
+        valueEl.textContent = '—';
+        btn.classList.add('is-empty');
+      }
+    } else {
+      // Mode normal : affiche le temps libre de la carte
+      var d = card[dept] || {};
+      var val = _csvNormalizeTime(d.temps || '');
       if (val) {
         valueEl.textContent = val;
         btn.classList.remove('is-empty');
@@ -12932,6 +13047,14 @@ function csvLoadTimes(card) {
         btn.classList.add('is-empty');
       }
     }
+  });
+}
+
+// Charge les temps affichés (appelé par showCardSummary)
+function csvLoadTimes(card) {
+  if (!card) return;
+  ['atelier', 'couture'].forEach(function(dept) {
+    var d = card[dept] || {};
     // Reconstruire le menu pour que la bonne option soit marquée "sélectionnée"
     _csvBuildTimeDropdownMenu(dept);
     // Toggle PSM / Majo (inchangé)
@@ -12949,6 +13072,8 @@ function csvLoadTimes(card) {
   });
   // Charger aussi l'état de la checkbox "Items multiples" et la colonne items si visible
   csvLoadItemsMulti(card);
+  // Mettre à jour l'affichage du temps (libre OU total des items selon le mode)
+  _csvRefreshTotalTimeDisplay();
 }
 
 // ═══ ITEMS MULTIPLES ═══
@@ -13007,6 +13132,9 @@ function csvToggleItemsMulti() {
     _skipSyncUntil = 0; _pendingSave = false;
     console.error('csvToggleItemsMulti save error:', e);
   });
+  // Rafraîchir le dropdown de Temps : si "Items multiples" est coché, on affiche
+  // le total cumulé des items, sinon on revient au temps libre de la carte.
+  _csvRefreshTotalTimeDisplay();
 }
 
 // Construit la colonne des 6 items avec leurs 2 pastilles (Atelier / Couture)
@@ -13237,6 +13365,9 @@ function csvItemDropdownSelect(dept, itemIdx, value, evt) {
     else btn.classList.add('is-empty');
   }
   _csvCloseAllItemDropdowns();
+  // Rafraîchir le dropdown "Temps total" à gauche : il affiche la SOMME des items
+  // pour ce dept, donc il faut le recalculer dès qu'un temps d'item change.
+  _csvRefreshTotalTimeDisplay();
   if (prev !== value) {
     var updates = {};
     updates['psm/' + currentCardId + '/' + dept + '/items/' + itemIdx + '/temps'] = value || null;
@@ -13271,6 +13402,15 @@ function csvTimeDropdownToggle(dept, evt) {
   var btn = document.getElementById(btnId);
   var menu = document.getElementById(menuId);
   if (!btn || !menu) return;
+  // En mode "Items multiples" : le temps affiché est calculé (somme des items),
+  // donc on ne permet pas de l'éditer via dropdown. L'utilisateur doit changer
+  // les temps des items individuels.
+  if (currentCardId && psmData[currentCardId] && psmData[currentCardId].itemsMultiples) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ Le temps total est calculé à partir des items. Modifiez les items individuels.', 'info');
+    }
+    return;
+  }
   var isOpen = menu.classList.contains('is-open');
   // Fermer TOUS les dropdowns avant d'ouvrir celui-ci
   _csvCloseAllTimeDropdowns();
