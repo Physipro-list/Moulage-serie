@@ -1567,6 +1567,31 @@ body {
 .new-psm-badge { display:none; }
 .new-card-badge { display:inline-block; background:linear-gradient(135deg,#ef4444,#f97316); color:#fff; font-size:10px; font-weight:900; padding:2px 7px; border-radius:3px; animation:newCardBlink 0.6s ease-in-out infinite; letter-spacing:0.5px; vertical-align:middle; text-shadow:0 1px 2px rgba(0,0,0,0.5); }
 @keyframes newCardBlink { 0%,100%{ opacity:1; transform:scale(1); box-shadow:0 0 8px rgba(239,68,68,0.8); } 50%{ opacity:0.2; transform:scale(1.1); box-shadow:0 0 20px rgba(249,115,22,1); } }
+/* === Réponse reçue (notification non-lue pour l'utilisateur courant) === */
+/* Seule la pastille clignote — la carte elle-même reste statique. */
+/* Attente badge: deux versions rendues côte-à-côte; la classe sur la carte parent décide laquelle est visible. */
+.job-card-attente.attente-reply-received { display: none; }
+.job-card.has-reply-for-me .job-card-attente.attente-default { display: none !important; }
+.job-card.has-reply-for-me .job-card-attente.attente-reply-received {
+  display: block !important;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border-color: #b45309;
+  color: #fff;
+  font-size: 10.5px;
+  letter-spacing: 0.3px;
+  animation: attenteReplyPulse 0.9s ease-in-out infinite;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+@keyframes attenteReplyPulse {
+  0%, 100% {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    box-shadow: 0 0 6px rgba(251,191,36,0.6);
+  }
+  50% {
+    background: linear-gradient(135deg, #fde047, #fbbf24);
+    box-shadow: 0 0 16px rgba(251,191,36,1), 0 0 28px rgba(245,158,11,0.5);
+  }
+}
 .job-card-sep { color: rgba(255,255,255,0.3); font-weight: 400; }
 .job-card-daterecue { font-size: 9px; font-weight: 500; color: #93c5fd; }
 .job-card-status { font-size: 7px; font-weight: 700; text-align: center; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.15); }
@@ -3534,17 +3559,22 @@ function renderJobs() {
         // En attente depuis — based on createdAt (date de création) — shown on ALL cards
         let attenteHtml = '';
         if (job.resolved) {
-          attenteHtml = `<div class="job-card-attente" style="background:linear-gradient(135deg,#14532d,#166534);border-color:#15803d;">Questionnement complété</div>`;
+          attenteHtml = `<div class="job-card-attente attente-default" style="background:linear-gradient(135deg,#14532d,#166534);border-color:#15803d;">Questionnement complété</div>`;
         } else {
           const refDate = job.createdAt || job.dateRecue || job.psmCreatedAt;
           if (refDate) {
             const created = new Date(refDate);
             const now = new Date();
             const diff = Math.floor((now - created) / (1000 * 60 * 60 * 24));
-            attenteHtml = `<div class="job-card-attente">En questionnement depuis ${diff} jour${diff > 1 ? 's' : ''}</div>`;
+            attenteHtml = `<div class="job-card-attente attente-default">En questionnement depuis ${diff} jour${diff > 1 ? 's' : ''}</div>`;
           } else {
-            attenteHtml = `<div class="job-card-attente">En questionnement</div>`;
+            attenteHtml = `<div class="job-card-attente attente-default">En questionnement</div>`;
           }
+        }
+        // Version "Réponse non lue" — toujours rendue, masquée par défaut.
+        // Devient visible quand la classe `has-reply-for-me` est appliquée sur la carte (CSS).
+        if (!job.resolved) {
+          attenteHtml += `<div class="job-card-attente attente-reply-received">📬 Réponse non lue</div>`;
         }
         
         // Rappel indicator
@@ -3633,6 +3663,92 @@ function renderJobs() {
     }
   });
   updateNewPsmBadges();
+  // Re-applique les classes "has-reply-for-me" sur les cartes après chaque rendu,
+  // car renderJobs reconstruit le HTML et perdrait la classe sinon.
+  if (typeof _refreshCardBlinks === 'function') _refreshCardBlinks();
+}
+
+// ===== BLINK DE LA PASTILLE POUR RÉPONSES NON-LUES (DESTINATAIRE) =====
+// Quand une notif (reply/normal) arrive pour l'utilisateur courant et n'est pas
+// encore lue, le bandeau d'attente de la carte affiche "📬 Réponse non lue" en
+// ambre pulsant jusqu'à ce que l'utilisateur ouvre la fiche. La carte
+// elle-même ne clignote pas — seule la pastille.
+
+// Retourne { jobId: true, ... } pour les jobs où l'utilisateur courant a au moins
+// une notification non-lue de type reply/normal.
+function _getJobsWithUnreadResponse() {
+  var result = {};
+  if (typeof allNotifications !== 'object' || !allNotifications) return result;
+  var emailKey = (currentUser && currentUser.email) ? currentUser.email.replace(/\./g, '_') : '';
+  Object.values(allNotifications).forEach(function(n) {
+    if (!n || !n.jobId) return;
+    if (n.sourceApp === 'moulage') return; // les notifs Moulage ont leur propre flux
+    if (n.messageType !== 'reply' && n.messageType !== 'normal') return;
+    if (n.read) return;
+    if (emailKey && n.readBy && n.readBy[emailKey]) return;
+    result[n.jobId] = true;
+  });
+  return result;
+}
+
+// Applique/retire la classe `has-reply-for-me` sur les cartes existantes du DOM
+// sans tout re-rendre (préserve l'état "expanded" et autres états DOM).
+function _refreshCardBlinks() {
+  try {
+    var unread = _getJobsWithUnreadResponse();
+    // Cartes desktop
+    document.querySelectorAll('.job-card[data-job-id]').forEach(function(card) {
+      var jid = card.getAttribute('data-job-id');
+      var job = jobsData[jid];
+      if (!jid || (job && job.resolved)) {
+        card.classList.remove('has-reply-for-me');
+        return;
+      }
+      if (unread[jid]) card.classList.add('has-reply-for-me');
+      else card.classList.remove('has-reply-for-me');
+    });
+    // Cartes mobile
+    document.querySelectorAll('.mobile-job-card[onclick]').forEach(function(card) {
+      var oc = card.getAttribute('onclick') || '';
+      var m = oc.match(/openMobileFiche\(['"]([^'"]+)['"]\)/);
+      var jid = m ? m[1] : null;
+      var job = jid ? jobsData[jid] : null;
+      if (!jid || (job && job.resolved)) {
+        card.classList.remove('has-reply-for-me');
+        return;
+      }
+      if (unread[jid]) card.classList.add('has-reply-for-me');
+      else card.classList.remove('has-reply-for-me');
+    });
+  } catch (e) { /* fail-silent */ }
+}
+
+// Marque comme lues toutes les notifications du job pour l'utilisateur courant.
+// Appelée quand l'utilisateur ouvre la fiche (équivalent du "vu" côté agent SC).
+// Met aussi à jour `allNotifications` localement pour un retour visuel immédiat.
+function _markJobNotifsRead(jobId) {
+  if (!db || !currentUser || !currentUser.email || !jobId) return;
+  var emailKey = currentUser.email.replace(/\./g, '_');
+  var changed = false;
+  Object.keys(allNotifications || {}).forEach(function(notifId) {
+    var n = allNotifications[notifId];
+    if (!n) return;
+    if (n.jobId !== jobId) return;
+    if (n.sourceApp === 'moulage') return;
+    if (n.read) return;
+    if (n.readBy && n.readBy[emailKey]) return;
+    db.ref('jobNotifications/' + notifId + '/read').set(true).catch(function(){});
+    db.ref('jobNotifications/' + notifId + '/readBy/' + emailKey).set(true).catch(function(){});
+    // MAJ optimiste
+    allNotifications[notifId].read = true;
+    if (!allNotifications[notifId].readBy) allNotifications[notifId].readBy = {};
+    allNotifications[notifId].readBy[emailKey] = true;
+    changed = true;
+  });
+  if (changed) {
+    if (typeof updateUnifiedBell === 'function') updateUnifiedBell();
+    else if (typeof _refreshCardBlinks === 'function') _refreshCardBlinks();
+  }
 }
 
 // ===== NEW PSM BADGE TRACKING =====
@@ -6380,6 +6496,9 @@ function openFiche(jobId) {
   markPsmJobSeen(jobId);
   // Mark as seen by current user (for the eye badge)
   _markJobSeenByAgent(jobId);
+  // Marque comme lues toutes les notifications du job pour l'utilisateur courant
+  // (arrête le clignotement de la carte côté destinataire de la réponse).
+  _markJobNotifsRead(jobId);
   // Hide the colsel button so it doesn't show through
   var colselContainer = document.getElementById('colselBtnContainer');
   if (colselContainer) colselContainer.style.display = 'none';
@@ -8521,6 +8640,8 @@ function openMobileFiche(jobId) {
   mobileCurrentJobId = jobId;
   const job = jobsData[jobId];
   if (!job) return;
+  // Marque comme lues les notifs pour ce job — même rôle qu'en desktop.
+  if (typeof _markJobNotifsRead === 'function') _markJobNotifsRead(jobId);
   
   document.getElementById('mobileFicheTitle').textContent = `#${job.order || '?'} — ${job.assignee || ''}`;
   
@@ -8890,6 +9011,9 @@ function updateUnifiedBell() {
     btn.classList.remove('has-notifs');
     if (text) text.textContent = '';
   }
+
+  // Met à jour le clignotement des cartes (carte avec réponse non-lue pour cet utilisateur)
+  if (typeof _refreshCardBlinks === 'function') _refreshCardBlinks();
 }
 
 function openNotifDetail(notifId) {
