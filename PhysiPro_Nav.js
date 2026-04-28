@@ -35,7 +35,6 @@
     inspcouture: { icon: '🧵', label: 'Prod. Couture',     sub: 'Production Couture',         file: 'PhysiPro_Production_Couture.html',      color: '#a855f7' },
     psm:         { icon: '🔧', label: 'PSM',               sub: 'Plan de santé matières',     file: 'PhysiPro_PSM.html',                     color: '#ef4444' },
     jobs:        { icon: '🎧', label: 'Service Client',    sub: 'Service Client',             file: 'PhysiPro_ServiceClient.html',           color: '#f59e0b' },
-    calcmat:     { icon: '🧮', label: 'Liste Matériaux',    sub: 'Liste des matériaux',        file: 'PhysiPro_Liste_Materiaux.html',         color: '#14b8a6' },
     photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' },
     jobsattente: { icon: '⏳', label: 'Commandes en attente',   sub: 'Commandes en attente',       file: 'PhysiPro_Jobs_Attente.html',             color: '#f59e0b' },
     inspfinale:  { icon: '🔍', label: 'Insp. Finale',      sub: 'Inspection finale',          file: 'PhysiPro_Inspection_Finale.html',        color: '#6366f1' }
@@ -44,7 +43,7 @@
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
     'moulage', 'serie', 'inspection', 'inspcouture', 'inspfinale', 'psm', 'jobs',
-    'jobsattente', 'calcmat'
+    'jobsattente'
   ];
 
   // Modules autorisés sur mobile
@@ -81,14 +80,14 @@
     'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':                 ['moulage','inspfinale','jobs','calcmat','jobsattente'],                                            // cncatp (Sina)
     'cGV0ZXJiYXNzNzZAZ21haWwuY29t':                 ['moulage','jobs','calcmat','jobsattente'],                                                        // peterbass76 (Pierre)
     'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':         ['moulage','jobs','calcmat','jobsattente'],                                                        // mario.jacques (Mario J.)
-    'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente'],  // marioouellette (Mario O.)
-    'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':             ['calcmat','jobsattente'],                                                                         // magasinatp2 (Sylvain)
-    'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':             ['calcmat','jobsattente'],                                                                         // magasinatp3 (Stéphane Del.)
+    'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat'],                // marioouellette (Mario O.)
+    'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':             ['jobs','calcmat','jobsattente'],                                                                  // magasinatp2 (Sylvain)
+    'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':             ['jobs','calcmat','jobsattente'],                                                                  // magasinatp3 (Stéphane Del.)
     'cmhAcGh5c2lwcm8uY29t':                         ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente'],  // rh (Roxanne)
     'Y29vcmRvLm1hZy5hdHBAcGh5c2lwcm8uY29t':         ['calcmat','jobsattente'],                                                                         // coordo.mag.atp (Patrick C.)
-    'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':         ['calcmat','jobsattente'],                                                                         // elyse.bolduc (Élyse)
-    'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':         ['calcmat','jobsattente'],                                                                         // eric.poirier (Éric)
-    'Y29udGFjdEBwaHlzaXByby5mcg==':                 ['calcmat','jobsattente'],                                                                         // contact (France)
+    'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':         ['calcmat'],                                                                                       // elyse.bolduc (Élyse)
+    'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':         ['calcmat'],                                                                                       // eric.poirier (Éric)
+    'Y29udGFjdEBwaHlzaXByby5mcg==':                 ['jobs','calcmat'],                                                                                // contact (France)
     'amVhbmNocmlzdG9waGVkYW5qb3VAcGh5c2lwcm8uY29t': ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente']   // jeanchristophedanjou (Jean-Christophe)
   };
 
