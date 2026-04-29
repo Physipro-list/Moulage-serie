@@ -171,14 +171,19 @@ body {
 /* — Notes service client (éditeur) — */
 .notes-sc-editor {
   min-height: 100%;
-  font-size: 11px;
-  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
   line-height: 1.5;
   outline: none;
   padding: 4px;
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
+.notes-sc-editor strong, .notes-sc-editor b { font-weight: 800; }
+/* Préserver les stamps auteur (style="color:#fde047" et style="color:#94a3b8") qui sont inline */
+.notes-sc-editor [style*="color:#fde047"], .notes-sc-editor [style*="color: #fde047"] { font-weight: 800; }
+.notes-sc-editor [style*="color:#94a3b8"], .notes-sc-editor [style*="color: #94a3b8"] { font-weight: 600; }
 .notes-sc-editor:empty::before {
   content: attr(data-placeholder);
   color: #64748b;
@@ -2454,13 +2459,15 @@ body.couture-mode .psm-btn-back-summary:hover {
   border-radius: 6px;
   border: 1px solid rgba(59,130,246,0.25);
   background: rgba(0,0,0,0.25);
-  color: #e2e8f0;
-  font-size: 13px;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
   line-height: 1.5;
   outline: none;
   overflow-y: auto;
   box-sizing: border-box;
 }
+.csv-notes-editor strong, .csv-notes-editor b { font-weight: 800; }
 .csv-notes-editor:empty::before {
   content: attr(data-placeholder);
   color: rgba(148,163,184,0.55);
@@ -14220,7 +14227,7 @@ function renderMatInNotes(dept, mats) {
     return '<div style="display:flex;align-items:center;gap:4px;padding:3px 4px;border-bottom:1px solid rgba(255,255,255,0.08);">' +
       '<span style="flex:1;font-size:10px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(mat.name) + '</span>' +
       calcBtn +
-      '<span style="font-size:10px;font-weight:700;color:#93c5fd;min-width:20px;text-align:center;background:rgba(59,130,246,0.15);border-radius:3px;padding:1px 4px;">' + (mat.qty || 1) + '</span>' +
+      '<input type="text" value="' + (mat.qty || 1) + '" onchange="updateMaterial(\'' + activeDept + '\', ' + origIdx + ', \'qty\', this.value); renderMatInNotes(\'' + activeDept + '\', psmData[currentCardId][\'' + activeDept + '\'].materiaux || [])" onclick="event.stopPropagation();this.select()" style="font-size:10px;font-weight:700;color:#93c5fd;width:32px;text-align:center;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:3px;padding:1px 2px;cursor:text;outline:none;">' +
       '<button onclick="removeMaterial(\'' + activeDept + '\',' + origIdx + ')" style="background:none;border:none;color:#f87171;font-size:11px;cursor:pointer;padding:0 4px;margin-left:8px;">✕</button>' +
     '</div>';
   }).join('');
@@ -14456,7 +14463,7 @@ function renderMatInNotesItem(dept, deptMats) {
     return '<div style="display:flex;align-items:center;gap:4px;padding:3px 4px;border-bottom:1px solid rgba(255,255,255,0.08);">' +
       '<span style="flex:1;font-size:10px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(mat.name) + '</span>' +
       calcBtn +
-      '<span style="font-size:10px;font-weight:700;color:#93c5fd;min-width:20px;text-align:center;background:rgba(59,130,246,0.15);border-radius:3px;padding:1px 4px;">' + (mat.qty || 1) + '</span>' +
+      '<input type="text" value="' + (mat.qty || 1) + '" onchange="updateItemMaterial(' + _activeItemIdx + ',' + origIdx + ',\'qty\',this.value); renderMatInNotesItem(currentDept, [])" onclick="event.stopPropagation();this.select()" style="font-size:10px;font-weight:700;color:#93c5fd;width:32px;text-align:center;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:3px;padding:1px 2px;cursor:text;outline:none;">' +
       '<button onclick="removeItemMaterial(' + _activeItemIdx + ',' + origIdx + ')" style="background:none;border:none;color:#f87171;font-size:11px;cursor:pointer;padding:0 4px;margin-left:8px;">✕</button>' +
     '</div>';
   }).join('');
@@ -14479,6 +14486,17 @@ function openMatPickerForNotes() {
 
 var _matPickerMode = 'dept';
 var _matPickerItemIdx = -1;
+
+function updateItemMaterial(itemIdx, matIdx, field, value) {
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var dept = currentDept || 'atelier';
+  var item = (psmData[currentCardId][dept].items || [])[itemIdx];
+  if (!item || !item.materiaux) return;
+  if (item.materiaux[matIdx]) {
+    item.materiaux[matIdx][field] = value;
+    saveToFirebase();
+  }
+}
 
 function removeItemMaterial(itemIdx, matIdx) {
   if (!currentCardId || !psmData[currentCardId]) return;
@@ -20943,9 +20961,7 @@ function _renderRightMatListTop() {
       calcBtn +
       // Colonne QUANTITÉ + ✕ compacte (un seul bloc collé)
       '<div style="flex:0 0 54px;display:flex;align-items:center;gap:2px;padding:0 2px;">' +
-        '<div style="flex:1;min-width:0;font-size:8px;font-weight:800;color:#fde047;background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3);border-radius:2px;padding:0 3px;line-height:14px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
-          escapeHtml(qtyDisplay) +
-        '</div>' +
+        '<input type="text" value="' + escapeHtml(qtyDisplay) + '" onchange="updateMaterial(\'' + dept + '\',' + origIdx + ',\'qty\',this.value); _renderRightMatListTop(); if(typeof renderMatInNotes===\'function\') renderMatInNotes(\'' + dept + '\', psmData[currentCardId][\'' + dept + '\'].materiaux || [])" onclick="event.stopPropagation();this.select()" style="width:24px;font-size:8px;font-weight:800;color:#fde047;background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3);border-radius:2px;padding:0 2px;line-height:14px;height:14px;text-align:center;outline:none;cursor:text;font-family:inherit;box-sizing:border-box;">' +
         '<button onclick="event.stopPropagation();_removeMatFromDept(' + origIdx + ')" title="Retirer" style="flex:0 0 12px;height:14px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:2px;color:#ef4444;font-size:8px;font-weight:700;cursor:pointer;padding:0;line-height:1;">✕</button>' +
       '</div>' +
     '</div>';
@@ -21620,6 +21636,38 @@ function _doPrint(card, questMsgs) {
   }
   
   // Helper : formate une durée en ajoutant " min" seulement si pas déjà présent
+  // Convertit une chaîne de temps libre en minutes (ex: "45 min" → 45, "1h 30" → 90, "2h" → 120)
+  function _parseTempsToMinutes(s) {
+    if (!s) return 0;
+    s = String(s).toLowerCase().trim();
+    if (!s) return 0;
+    var total = 0;
+    // Pattern "Xh" ou "Xh YY" ou "Xh YYmin"
+    var hMatch = s.match(/(\d+(?:[.,]\d+)?)\s*h/);
+    if (hMatch) {
+      var h = parseFloat(hMatch[1].replace(',', '.'));
+      total += h * 60;
+      // Reste après le h
+      s = s.replace(hMatch[0], ' ').trim();
+    }
+    // Pattern "X min" ou "Xmin" ou juste un nombre
+    var mMatch = s.match(/(\d+(?:[.,]\d+)?)/);
+    if (mMatch) {
+      total += parseFloat(mMatch[1].replace(',', '.'));
+    }
+    return Math.round(total);
+  }
+  
+  // Convertit des minutes en chaîne lisible "Xh YYmin" ou "Xmin"
+  function _formatMinutesToTemps(mins) {
+    if (!mins || mins <= 0) return '';
+    if (mins < 60) return mins + ' min';
+    var h = Math.floor(mins / 60);
+    var m = mins % 60;
+    if (m === 0) return h + ' h';
+    return h + ' h ' + m + ' min';
+  }
+  
   function formatTemps(val) {
     var s = escapeHtml(String(val || '').trim());
     if (!s) return '';
@@ -21658,83 +21706,147 @@ function _doPrint(card, questMsgs) {
     var d = card[dept] || {};
     var deptClass = dept === 'atelier' ? 'atelier' : 'couture';
     var cardHeaderColor = dept === 'atelier' ? 'blue' : 'purple';
-    var noteLabel = dept === 'couture' ? 'Notes pour la couturière' : 'Notes pour le technicien';
+    var noteLabel = dept === 'couture' ? 'Note pour couturière' : 'Note pour technicien';
     var tempsLabel = dept === 'couture' ? 'Temps Couture' : 'Temps Atelier';
     
     // CHAQUE DÉPARTEMENT est une page séparée (page-break-before forcé)
     var h = '<div class="page"' + (isFirst ? '' : ' style="page-break-before:always"') + '>';
     h += pageHeader(dept); // en-tête minimaliste : titre + soumission + date
     
-    // ─── 1. NOTES SERVICE CLIENT (compact, en haut, pleine largeur) ───
+    // ─── 1+2+3 BLOC COMBINÉ : Notes service client (gauche) + Temps Atelier/Couture (droite) ───
+    // Côte à côte, hauteur égale via display:flex. Le sommaire (Temps total / Évaluateur / Type)
+    // est intégré EN HAUT du tableau de droite.
     var sc = (card.serviceNotesHtml && card.serviceNotesHtml.trim()) || (card.notesServiceClient && card.notesServiceClient.trim()) || '';
     var scClean = stripAuthorStamps(sc);
     var scPlain = scClean.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-    if (scPlain.length > 0) {
-      h += '<div class="sc-compact">';
-      h += '<div class="sc-compact-label">📞 Notes service client</div>';
-      h += '<div class="sc-compact-body">' + scClean + '</div>';
-      h += '</div>';
+    var hasSc = scPlain.length > 0;
+    
+    // Calcul auto du temps total : si d.temps n'est pas saisi mais qu'il y a des items
+    // avec des temps, on additionne automatiquement.
+    var totalTempsStr = d.temps && String(d.temps).trim();
+    if (!totalTempsStr && (d.items || []).length > 0) {
+      var totalMins = 0;
+      (d.items || []).forEach(function(item) {
+        if (item.temps) totalMins += _parseTempsToMinutes(item.temps);
+      });
+      if (totalMins > 0) totalTempsStr = _formatMinutesToTemps(totalMins);
     }
     
-    // ─── 2. SOMMAIRE DU DÉPARTEMENT (temps total, prix majoré, évaluateur) — sobre ───
-    var hasSummary = d.temps || d.prixMajore || d.evalBy;
-    if (hasSummary) {
-      h += '<div class="dept-summary ' + deptClass + '">';
-      h += '<div class="dept-tags">';
-      if (d.temps) {
-        h += '<div class="tag"><span class="tag-label">⏱ Temps total :</span> <span class="tag-value">' + formatTemps(d.temps) + '</span></div>';
-      }
-      if (d.prixMajore) {
-        h += '<div class="tag"><span class="tag-label">💰 Type :</span> <span class="tag-value">Prix majoré</span></div>';
-      }
-      if (d.evalBy) {
-        h += '<div class="tag"><span class="tag-label">👤 Évalué par :</span> <span class="tag-value">' + escapeHtml(d.evalBy) + '</span></div>';
-      }
-      h += '</div>';
-      h += '</div>';
-    }
-    
-    // ─── 3. TEMPS ATELIER / TEMPS COUTURE (anciennement "Items et composants") ───
+    var hasSummary = !!totalTempsStr;
     var items = (d.items || []).filter(function(item) {
       var iMats = (item.materiaux || []).filter(function(m){ return m && m.name; });
       var notesPlain = (item.notes || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
       return item.image || notesPlain.length > 0 || item.noteImage || item.temps || iMats.length > 0;
     });
-    if (items.length > 0) {
-      h += '<div class="card">';
-      h += '<div class="card-header ' + cardHeaderColor + '"><span class="card-icon">⏱</span>' + tempsLabel + '</div>';
-      h += '<div class="card-body">';
-      items.forEach(function(item, i) {
-        var iMats = (item.materiaux || []).filter(function(m){ return m && m.name; });
-        var itemNotesClean = stripAuthorStamps(item.notes || '');
-        var notesPlain = itemNotesClean.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-        
-        h += '<div class="item-block">';
-        h += '<div class="item-title">';
-        h += '<span class="item-title-name">' + escapeHtml(item.name || ('Item ' + (i+1))) + '</span>';
-        if (item.temps) h += '<span class="item-title-time">⏱ ' + formatTemps(item.temps) + '</span>';
+    var hasItems = items.length > 0;
+    var hasRightSide = hasSummary || hasItems;
+    
+    if (hasSc || hasRightSide) {
+      h += '<div class="top-split">';
+      
+      // ━━━━ COLONNE GAUCHE : Notes service client ━━━━
+      if (hasSc) {
+        h += '<div class="top-split-col top-split-sc">';
+        h += '<div class="top-split-header sc-header">📞 Notes service client</div>';
+        h += '<div class="top-split-body sc-body">' + scClean + '</div>';
         h += '</div>';
+      } else {
+        // placeholder vide pour garder le layout 50/50 si pas de SC
+        h += '<div class="top-split-col top-split-sc top-split-empty">';
+        h += '<div class="top-split-header sc-header">📞 Notes service client</div>';
+        h += '<div class="top-split-body sc-body"><em style="color:#94a3b8;">Aucune note du service client</em></div>';
+        h += '</div>';
+      }
+      
+      // ━━━━ COLONNE DROITE : Tableau Temps Atelier/Couture ━━━━
+      h += '<div class="top-split-col top-split-temps top-split-' + cardHeaderColor + '">';
+      h += '<div class="top-split-header ' + cardHeaderColor + '-header">⏱ ' + tempsLabel + '</div>';
+      h += '<div class="top-split-body temps-body">';
+      
+      // ── Tableau unique : Temps total en haut + items ──
+      if (hasSummary || hasItems) {
+        h += '<table class="temps-table">';
+        h += '<tbody>';
         
-        h += '<div class="item-body">';
-        if (item.image) h += '<img src="' + item.image + '" alt="Image item">';
-        if (item.noteImage) h += '<img src="' + item.noteImage + '" alt="Image note">';
-        if (notesPlain.length > 0) {
-          h += '<div class="item-sub-label">Notes</div>';
-          h += '<div class="item-text">' + itemNotesClean + '</div>';
+        // Première ligne : TEMPS TOTAL (occupe toute la largeur, mise en avant)
+        if (totalTempsStr) {
+          // Évaluateur : utilise d.evalBy si saisi, sinon le nom de l'utilisateur connecté
+          var evalName = d.evalBy && String(d.evalBy).trim();
+          if (!evalName && typeof currentUser !== 'undefined' && currentUser && currentUser.email) {
+            try { evalName = getPhysiproDisplayName(currentUser.email); } catch(e) {}
+          }
+          var evalSuffix = evalName ? ' <span class="tt-eval">· Évalué par ' + escapeHtml(evalName) + '</span>' : '';
+          h += '<tr class="tt-total-row">';
+          h += '<td class="tt-total-label" colspan="2">Temps total' + evalSuffix + '</td>';
+          h += '<td class="tt-total-value">' + formatTemps(totalTempsStr) + '</td>';
+          h += '</tr>';
         }
-        if (iMats.length > 0) {
-          h += '<div class="item-sub-label">Matériaux</div>';
-          h += '<div class="mat-list" style="margin-left:6px">';
-          iMats.forEach(function(m){
-            h += '<div class="mat-row"><span class="mat-name">' + escapeHtml(m.name) + '</span><span class="mat-qty">×' + (m.qty || 1) + '</span></div>';
+        
+        // En-tête des colonnes pour les items
+        if (hasItems) {
+          h += '<tr class="tt-head-row">';
+          h += '<th class="th-item">Item</th>';
+          h += '<th class="th-type">Type</th>';
+          h += '<th class="th-time">Temps</th>';
+          h += '</tr>';
+          
+          // Lignes items
+          items.forEach(function(item, i) {
+            var typeLabel = item.prixMajore ? 'Prix majoré' : 'PSM';
+            var typeClass = item.prixMajore ? 'type-prix' : 'type-psm';
+            h += '<tr>';
+            h += '<td class="td-item">' + escapeHtml(item.name || ('Item ' + (i+1))) + '</td>';
+            h += '<td class="td-type"><span class="type-badge ' + typeClass + '">' + typeLabel + '</span></td>';
+            h += '<td class="td-time">' + (item.temps ? formatTemps(item.temps) : '<span style="color:#94a3b8;">—</span>') + '</td>';
+            h += '</tr>';
+          });
+        }
+        
+        h += '</tbody>';
+        h += '</table>';
+        
+        // Détails item (notes, matériaux par item, images) — sous le tableau si nécessaire
+        var hasItemDetails = items.some(function(item) {
+          var iMats = (item.materiaux || []).filter(function(m){ return m && m.name; });
+          var notesPlain = (item.notes || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+          return item.image || item.noteImage || notesPlain.length > 0 || iMats.length > 0;
+        });
+        if (hasItemDetails) {
+          h += '<div class="temps-item-details">';
+          items.forEach(function(item, i) {
+            var iMats = (item.materiaux || []).filter(function(m){ return m && m.name; });
+            var itemNotesClean = stripAuthorStamps(item.notes || '');
+            var notesPlain = itemNotesClean.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+            if (!item.image && !item.noteImage && !notesPlain.length && !iMats.length) return;
+            h += '<div class="td-detail-block">';
+            h += '<div class="td-detail-title">' + escapeHtml(item.name || ('Item ' + (i+1))) + '</div>';
+            if (item.image) h += '<img src="' + item.image + '" class="td-detail-img" alt="">';
+            if (item.noteImage) h += '<img src="' + item.noteImage + '" class="td-detail-img" alt="">';
+            if (notesPlain.length > 0) {
+              h += '<div class="td-detail-notes">' + itemNotesClean + '</div>';
+            }
+            if (iMats.length > 0) {
+              h += '<div class="td-detail-mats"><span class="td-detail-mats-label">Matériaux :</span> ';
+              iMats.forEach(function(m, idx) {
+                if (idx > 0) h += ', ';
+                h += escapeHtml(m.name) + ' ×' + (m.qty || 1);
+              });
+              h += '</div>';
+            }
+            h += '</div>';
           });
           h += '</div>';
         }
-        h += '</div>'; // fin item-body
-        h += '</div>'; // fin item-block
-      });
-      h += '</div>';
-      h += '</div>';
+      }
+      
+      if (!hasSummary && !hasItems) {
+        h += '<div class="temps-empty"><em style="color:#94a3b8;">Aucun temps évalué</em></div>';
+      }
+      
+      h += '</div>'; // fin temps-body
+      h += '</div>'; // fin top-split-temps
+      
+      h += '</div>'; // fin top-split
     }
     
     // ─── 4. MATÉRIAUX DU DÉPARTEMENT ───
@@ -21777,7 +21889,7 @@ function _doPrint(card, questMsgs) {
         h += '<div class="img-notes-split">';
         h += '<div class="image-side"><img src="' + d.noteImage + '" alt="Image de référence"></div>';
         h += '<div class="notes-side">';
-        h += '<div class="notes-side-label">Notes</div>';
+        h += '<div class="notes-side-label">' + noteLabel + '</div>';
         h += '<div class="notes-side-body">' + (hasNotes ? simpleClean : '<em style="color:#cbd5e1;font-size:9.5pt;">— Aucune note —</em>') + '</div>';
         h += '</div>';
         h += '</div>';
@@ -21847,7 +21959,7 @@ function _doPrint(card, questMsgs) {
   // Une seule ligne discrète : logo + titre + soumission · client · date
   // Pas de bandeau bleu, fond blanc, simple bordure fine en bas
   html += '.ph-mini { display:flex; align-items:center; gap:12px; padding:6px 4px 8px 4px; margin-bottom:10px; border-bottom:2px solid #475569; }';
-  html += '.ph-mini-logo { height:26px; width:auto; flex-shrink:0; }';
+  html += '.ph-mini-logo { height:32px; width:auto; flex-shrink:0; }';
   html += '.ph-mini-title { font-size:14pt; font-weight:800; color:#0f172a; letter-spacing:0.04em; flex-shrink:0; }';
   html += '.ph-mini-info { font-size:10pt; color:#475569; margin-left:auto; display:flex; align-items:baseline; gap:6px; }';
   html += '.ph-mini-soum-label { font-size:9pt; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; }';
@@ -21862,6 +21974,63 @@ function _doPrint(card, questMsgs) {
   html += '.sc-compact-body { font-size:10pt; line-height:1.45; color:#1a1a1a; }';
   html += '.sc-compact-body p { margin:0 0 3px 0; }';
   html += '.sc-compact-body p:last-child { margin-bottom:0; }';
+  
+  // ═══ TOP-SPLIT : Notes service client (gauche) + Temps Atelier/Couture (droite) ═══
+  // Layout flex 50/50 avec hauteur égale (align-items:stretch)
+  html += '.top-split { display:flex; gap:12px; margin-bottom:14px; align-items:stretch; page-break-inside:avoid; }';
+  html += '.top-split-col { flex:1; min-width:0; border:1.5px solid #94a3b8; border-radius:4px; overflow:hidden; background:#fff; display:flex; flex-direction:column; }';
+  html += '.top-split-sc { border-left:3.5px solid #f97316; }';
+  html += '.top-split-blue { border-left:3.5px solid #2563eb; }';
+  html += '.top-split-purple { border-left:3.5px solid #7c3aed; }';
+  // En-tête bandeau (bordure gauche colorée selon dept)
+  html += '.top-split-header { padding:6px 12px; font-size:9.5pt; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#0f172a; background:#f8fafc; border-bottom:1.5px solid #94a3b8; }';
+  html += '.top-split-header.sc-header { background:#fff7ed; color:#9a3412; }';
+  html += '.top-split-header.blue-header { background:#eff6ff; color:#1e40af; border-left:3.5px solid #2563eb; }';
+  html += '.top-split-header.purple-header { background:#f5f3ff; color:#6d28d9; border-left:3.5px solid #7c3aed; }';
+  html += '.top-split-body { padding:9px 12px; font-size:10pt; line-height:1.45; color:#1a1a1a; flex:1; overflow:hidden; }';
+  html += '.top-split-body.sc-body { font-size:14pt; font-weight:700; line-height:1.5; color:#000000; }';
+  html += '.top-split-body.sc-body p { margin:0 0 5px 0; font-weight:700; color:#000000; }';
+  html += '.top-split-body.sc-body p:last-child { margin-bottom:0; }';
+  html += '.top-split-body.sc-body strong, .top-split-body.sc-body b { font-weight:900; color:#000000; }';
+  // Les stamps auteur (jaune/gris) dans le SC : on les masque à l'impression pour ne garder que le texte noir bien visible
+  html += '.top-split-body.sc-body [style*="color:#fde047"], .top-split-body.sc-body [style*="color: #fde047"] { color:#000000 !important; font-weight:800 !important; }';
+  html += '.top-split-body.sc-body [style*="color:#94a3b8"], .top-split-body.sc-body [style*="color: #94a3b8"] { color:#475569 !important; font-weight:600 !important; }';
+  html += '.top-split-empty { opacity:0.7; }';
+  
+  // ── Tableau Temps : Temps total en haut + items (Item / Temps / Type) ──
+  html += '.temps-table { width:100%; border-collapse:collapse; margin-bottom:6px; font-size:9.5pt; border:1.5px solid #94a3b8; border-radius:3px; overflow:hidden; }';
+  // Ligne TEMPS TOTAL : compacte (50% moins épais), fond gris foncé, valeur en jaune
+  html += '.temps-table .tt-total-row { -webkit-print-color-adjust:exact; print-color-adjust:exact; }';
+  html += '.temps-table .tt-total-row td { padding:3px 8px; background:#1e293b; color:#fff; font-weight:800; -webkit-print-color-adjust:exact; print-color-adjust:exact; }';
+  html += '.temps-table .tt-total-label { font-size:8.5pt; text-transform:uppercase; letter-spacing:0.06em; }';
+  html += '.temps-table .tt-eval { font-size:8pt; font-weight:500; text-transform:none; letter-spacing:0; color:#cbd5e1; margin-left:4px; }';
+  html += '.temps-table .tt-total-value { font-size:10pt; text-align:right; font-variant-numeric:tabular-nums; color:#fde047; }';
+  // En-tête des colonnes des items
+  html += '.temps-table .tt-head-row th { background:#475569; color:#fff; padding:5px 8px; text-align:left; font-size:8.5pt; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; -webkit-print-color-adjust:exact; print-color-adjust:exact; }';
+  html += '.temps-table th.th-type { text-align:center; width:110px; white-space:nowrap; }';
+  html += '.temps-table th.th-time { text-align:right; width:70px; white-space:nowrap; }';
+  // Lignes des items — ligne de séparation forte entre chaque item (TRÈS visible)
+  html += '.temps-table tbody td { padding:6px 8px; border-bottom:2px solid #475569; vertical-align:middle; }';
+  html += '.temps-table tbody tr:not(.tt-total-row):not(.tt-head-row):last-child td { border-bottom:none; }';
+  html += '.temps-table tbody tr:not(.tt-total-row):not(.tt-head-row):nth-of-type(odd) td { background:#f1f5f9; }';
+  html += '.temps-table .td-item { font-weight:600; color:#0f172a; }';
+  html += '.temps-table .td-type { text-align:center; white-space:nowrap; }';
+  html += '.temps-table .td-time { text-align:right; font-weight:700; color:#1e40af; font-variant-numeric:tabular-nums; white-space:nowrap; }';
+  // Badges PSM (vert) / Prix majoré (orange)
+  html += '.type-badge { display:inline-block; padding:2px 10px; border-radius:10px; font-size:9pt; font-weight:700; letter-spacing:0.04em; white-space:nowrap; -webkit-print-color-adjust:exact; print-color-adjust:exact; }';
+  html += '.type-badge.type-psm { background:#dcfce7; color:#166534; border:1px solid #86efac; }';
+  html += '.type-badge.type-prix { background:#fef3c7; color:#78350f; border:1px solid #fcd34d; }';
+  
+  // ── Détails des items (notes / matériaux par item) sous le tableau ──
+  html += '.temps-item-details { margin-top:6px; }';
+  html += '.td-detail-block { border:1px solid #cbd5e1; border-radius:3px; padding:6px 9px; margin-top:5px; background:#fafbfc; page-break-inside:avoid; }';
+  html += '.td-detail-block:first-child { margin-top:0; }';
+  html += '.td-detail-title { font-size:9pt; font-weight:700; color:#0f172a; margin-bottom:4px; padding-bottom:3px; border-bottom:1px solid #e2e8f0; }';
+  html += '.td-detail-img { max-width:100%; max-height:50mm; border:1px solid #94a3b8; border-radius:3px; margin:3px 0; display:block; }';
+  html += '.td-detail-notes { font-size:9pt; line-height:1.4; margin:3px 0; }';
+  html += '.td-detail-mats { font-size:8.5pt; color:#475569; margin-top:3px; }';
+  html += '.td-detail-mats-label { font-weight:700; text-transform:uppercase; letter-spacing:0.04em; font-size:8pt; color:#64748b; }';
+  html += '.temps-empty { padding:14px; text-align:center; }';
   
   // ═══ SOMMAIRE DÉPARTEMENT (temps/prix/évaluateur) — version sobre ═══
   html += '.dept-summary { padding:6px 12px; margin-bottom:10px; border-radius:4px; text-align:center; background:#f8fafc; border:1.5px solid #94a3b8; }';
@@ -21949,7 +22118,7 @@ function _doPrint(card, questMsgs) {
   html += '.page.compact-2 .mat-row { padding:4px 10px; font-size:9.5pt; }';
   html += '.page.compact-2 .item-block { padding:8px 12px; margin-bottom:6px; }';
   html += '.page.compact-2 .ph-mini { padding:4px 4px 6px 4px; margin-bottom:8px; }';
-  html += '.page.compact-2 .ph-mini-logo { height:20px; }';
+  html += '.page.compact-2 .ph-mini-logo { height:24px; }';
   html += '.page.compact-2 .ph-mini-title { font-size:12pt; }';
   html += '.page.compact-2 .ph-mini-info { font-size:9pt; }';
   html += '.page.compact-2 .ph-mini-soum { font-size:10pt; }';
@@ -22219,15 +22388,15 @@ function _doPrint(card, questMsgs) {
   btnBar += '</div>';
   
   var barCss = '<style>';
-  barCss += '.print-bar { position:fixed; top:0; left:0; right:0; background:linear-gradient(135deg,#2563eb,#1e40af); color:#fff; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; gap:16px; box-shadow:0 4px 12px rgba(0,0,0,0.3); font-family:Arial,sans-serif; z-index:10000; }';
-  barCss += '.print-bar-title { font-size:15px; font-weight:800; flex:1; }';
-  barCss += '.print-bar-btns { display:flex; gap:10px; }';
-  barCss += '.print-bar-btn { color:#fff; border:none; padding:12px 20px; border-radius:8px; font-weight:800; font-size:14px; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.3); font-family:Arial,sans-serif; white-space:nowrap; }';
+  barCss += '.print-bar { position:fixed; top:0; left:0; right:0; background:linear-gradient(135deg,#2563eb,#1e40af); color:#fff; padding:6px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 2px 6px rgba(0,0,0,0.3); font-family:Arial,sans-serif; z-index:10000; }';
+  barCss += '.print-bar-title { font-size:12px; font-weight:700; flex:1; }';
+  barCss += '.print-bar-btns { display:flex; gap:6px; }';
+  barCss += '.print-bar-btn { color:#fff; border:none; padding:5px 12px; border-radius:5px; font-weight:700; font-size:11px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.25); font-family:Arial,sans-serif; white-space:nowrap; }';
   barCss += '.btn-download { background:linear-gradient(135deg,#f59e0b,#d97706); }';
   barCss += '.btn-print { background:linear-gradient(135deg,#22c55e,#16a34a); }';
   barCss += '.print-bar-btn:hover { filter:brightness(1.15); }';
   barCss += '.print-bar-btn:disabled { opacity:0.6; cursor:wait; }';
-  barCss += 'body { padding-top:70px !important; }';
+  barCss += 'body { padding-top:34px !important; }';
   barCss += '@media print { .print-bar { display:none !important; } body { padding-top:0 !important; } }';
   barCss += '</style>';
   
