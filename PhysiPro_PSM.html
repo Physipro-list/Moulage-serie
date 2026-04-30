@@ -552,6 +552,12 @@ body.couture-mode .psmc.is-quest {
 .psmc-action-btn.act-print {
   background: linear-gradient(135deg, #22c55e, #16a34a);
   color: #fff;
+  position: relative;
+  z-index: 1;
+  /* Pulsation douce d'attention : bordure dorée clignotante.
+     S'applique UNIQUEMENT à la version pleine largeur (avant impression).
+     Désactivée en mode split (act-print-split) — voir plus bas. */
+  animation: psmc-print-pulse 1.6s ease-in-out infinite;
 }
 .psmc-action-btn.act-print:hover { filter: brightness(1.15); }
 .psmc-action-btn.act-delete {
@@ -559,6 +565,19 @@ body.couture-mode .psmc.is-quest {
   color: #fff;
 }
 .psmc-action-btn.act-delete:hover { filter: brightness(1.15); }
+
+/* Pulsation : bordure dorée qui clignote doucement autour du bouton.
+   Pas trop agressif — opacité moyenne et transition douce. */
+@keyframes psmc-print-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.0),
+                0 0 0 0 rgba(250, 204, 21, 0.0);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.85),
+                0 0 8px 2px rgba(250, 204, 21, 0.55);
+  }
+}
 
 /* Split mode: après impression, on garde Imprimer (large) + Supprimer (compact) côte à côte */
 .psmc-action-split {
@@ -569,6 +588,9 @@ body.couture-mode .psmc.is-quest {
   flex: 1;
   border-radius: 0 0 0 3px;
   border-right: 1px solid rgba(0,0,0,0.5);
+  /* Pas de pulsation après impression : l'attention n'est plus nécessaire */
+  animation: none !important;
+  box-shadow: none !important;
 }
 .psmc-action-btn.act-delete-compact {
   width: auto;
@@ -3139,6 +3161,10 @@ body.devis-open #itemView { display: none !important; }
 body.devis-open #questViewImages { display: none !important; }
 body.devis-open #questView { display: none !important; }
 body.devis-open #matView { display: none !important; }
+/* Bouton Agrandir/Rapetisser caché en mode agrandi (avril 2026, demande Daniel : redondant
+   avec le bouton ✕ Fermer qui est déjà visible). Le code JS continue de modifier
+   son innerHTML mais l'élément est invisible. */
+body.devis-open #btnPdfAgrandir { display: none !important; }
 .dept-form-main-devis { display: none; }
 
 /* ═══ UNIFIED WINDOW LAYOUT ═══ */
@@ -7484,8 +7510,22 @@ if(localStorage.getItem('physipro_last_email')){
             <span class="csv-col-icon">📝</span>
             <span class="csv-col-title">Note Service Client</span>
           </div>
-          <div class="csv-col-body">
-            <div class="notes-sc-editor csv-notes-editor" id="csvNotesEditor" contenteditable="true" data-placeholder="Cliquez ici pour écrire une note..." oninput="_csvNotesChanged()" onpaste="_csvNotesPaste(event)" onfocus="_csvNotesOnFocus()" onblur="_saveCsvNotesNow()"></div>
+          <div class="csv-col-body" style="display:flex;flex-direction:column;gap:0;">
+            <div class="notes-sc-editor csv-notes-editor" id="csvNotesEditor" contenteditable="true" data-placeholder="Cliquez ici pour écrire une note..." oninput="_csvNotesChanged()" onpaste="_csvNotesPaste(event)" onfocus="_csvNotesOnFocus()" onblur="_saveCsvNotesNow()" style="flex:1;min-height:0;"></div>
+            <!-- Pastille Agent Service Client en bas (avril 2026, Daniel) -->
+            <!-- Largeur identique à la note ; menu déroulant vers le HAUT -->
+            <div id="csvScAgentBar" style="position:relative;flex-shrink:0;margin-top:6px;">
+              <button type="button" id="csvScAgentBtn" onclick="_csvScAgentToggle(event)"
+                style="width:100%;padding:8px 12px;border:1.5px solid rgba(96,165,250,0.45);background:linear-gradient(to bottom,#04152c 0%,#1a3a5c 100%);color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;letter-spacing:0.2px;transition:all 0.15s;"
+                onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">
+                <span style="font-size:14px;line-height:1;">👤</span>
+                <span style="flex:0 0 auto;font-size:10px;font-weight:700;color:#94c5ff;letter-spacing:0.4px;text-transform:uppercase;">Agent SC</span>
+                <span id="csvScAgentValue" style="flex:1;text-align:left;color:#fbbf24;font-weight:800;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">— Aucun —</span>
+                <span style="flex-shrink:0;font-size:10px;opacity:0.7;">▴</span>
+              </button>
+              <!-- Menu déroulant vers le HAUT -->
+              <div id="csvScAgentMenu" style="display:none;position:absolute;left:0;right:0;bottom:calc(100% + 4px);background:linear-gradient(to bottom,#1e3a5f,#0f172a);border:1.5px solid rgba(96,165,250,0.55);border-radius:8px;box-shadow:0 -6px 24px rgba(0,0,0,0.6);z-index:1000;max-height:280px;overflow-y:auto;padding:4px;"></div>
+            </div>
           </div>
         </div>
 
@@ -7589,13 +7629,12 @@ if(localStorage.getItem('physipro_last_email')){
                 </div>
                 <div class="psm-pdf-btns-bar" style="display:flex;gap:6px;padding:6px 8px;background:linear-gradient(to bottom, #04152c, #1a3a5c);border-top:2px solid rgba(59,130,246,0.4);flex-shrink:0;align-items:center;justify-content:center;min-height:34px;position:sticky;bottom:0;z-index:50;box-shadow:0 -2px 8px rgba(0,0,0,0.4);">
                   <button id="btnPdfCamera" onclick="openCameraForCard()" title="Prendre une photo avec l'appareil" style="flex-shrink:0;padding:6px 12px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:4px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">📷</button>
-                  <!-- Boutons zoom (pour les images) -->
-                  <button id="btnPdfZoomOut" onclick="_pdfImgZoomChange(-0.2)" title="Dézoomer (image ou PDF)" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:800;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;min-width:32px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">−</button>
+                  <!-- Boutons zoom (pour les images) — bouton "−" Dézoomer retiré (avril 2026, demande Daniel : pas nécessaire) -->
                   <button id="btnPdfZoomReset" onclick="_pdfImgZoomReset()" title="Réinitialiser le zoom" style="flex-shrink:0;padding:6px 8px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:10px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;min-width:40px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''"><span id="pdfZoomLabel">100%</span></button>
                   <button id="btnPdfZoomIn" onclick="_pdfImgZoomChange(0.2)" title="Zoomer (image ou PDF)" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:800;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;min-width:32px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">+</button>
                   <button id="btnPdfRotate" onclick="_pdfRotate()" title="Pivoter de 90° (PDF ou image)" style="flex-shrink:0;padding:6px 10px;border-radius:6px;cursor:pointer;border:none;font-weight:800;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;min-width:32px;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">↻</button>
                   <button id="btnPdfAgrandir" onclick="openDevisViewerFromInline()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:11px;letter-spacing:.3px;">🔍 Agrandir</button>
-                  <button id="btnPdfConvertToImages" onclick="convertCurrentPdfToImages()" title="Convertir ce PDF en images (permet la pose d'étampes, capture auto, et impression avec étampes)" style="display:none;padding:6px 12px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom, #6d28d9 0%, #a78bfa 100%);color:#fff;font-size:11px;letter-spacing:.3px;">📄→🖼️ Convertir</button>
+                  <!-- Bouton "📄→🖼️ Convertir" retiré (avril 2026, demande Daniel : pas nécessaire) -->
                   <button id="btnPdfPrint" onclick="printNotesAndImages()" style="padding:6px 14px;border-radius:6px;cursor:pointer;border:none;font-weight:700;background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%);color:#fff;font-size:11px;letter-spacing:.3px;">🖨️ Imprimer</button>
                   <input type="file" id="psmFilePickerInput" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.pptx,.ppt,.eml,.msg,.txt,.rtf,.csv,.zip,.rar" multiple style="display:none;" onchange="handleFilePickerFiles(this)">
                   <input type="file" id="psmCameraInput" accept="image/*" capture="environment" style="display:none;" onchange="handleCameraCapture(this)">
@@ -9667,6 +9706,14 @@ function switchDept(dept) {
   // (reset _selectedItemIdx = 0 déjà fait plus haut, avant le rechargement des notes)
   // Rafraîchir le sélecteur d'item (la liste change selon le dept actif)
   if (typeof _itemSelectorRefresh === 'function') _itemSelectorRefresh();
+  // Rafraîchir le label du bouton "🖋️ Ajouter Image Item N" pour qu'il reflète
+  // le nombre d'étampes du NOUVEAU dept (avril 2026, fix Daniel : sans ça, le
+  // bouton restait à "Item 3" même si le nouveau dept n'avait aucune étampe).
+  if (typeof _updateStampButtonLabel === 'function') _updateStampButtonLabel();
+  // Aussi rafraîchir l'overlay des étampes pour montrer celles du nouveau dept
+  if (typeof _stampRenderOverlay === 'function') _stampRenderOverlay();
+  // Et la visibilité du bouton "Effacer étampes" (caché si aucune étampe dans le nouveau dept)
+  if (typeof _refreshRemoveStampButtonVisibility === 'function') _refreshRemoveStampButtonVisibility();
   // Recharger l'image et les matériaux de l'item 0 du nouveau dept
   if (typeof _loadRightNoteImage === 'function') _loadRightNoteImage();
   if (typeof _renderRightMatListTop === 'function') _renderRightMatListTop();
@@ -12952,14 +12999,14 @@ function showCardSummary(cardId) {
 // Cohérence garantie entre les deux vues.
 
 // ═══ OPTIONS DU DROPDOWN TEMPS ═══
-// De 15 min à 10h par pas de 15 min → 40 options exactement.
+// De 15 min à 10h par pas de 5 min (avril 2026, demande Daniel).
 // Format stocké en Firebase (et dans la vue détaillée) :
-//   < 60 min  → "15", "30", "45"                 (juste le nombre de minutes)
-//   ≥ 60 min  → "1h", "1h15", "1h30", "1h45", …  (format cohérent avec headerTempsInput)
+//   < 60 min  → "15 min", "20 min", "25 min", …    (label avec "min")
+//   ≥ 60 min  → "1h", "1h05", "1h10", …            (format cohérent avec headerTempsInput)
 // Ces formats restent compatibles avec l'input texte de la vue détaillée.
 var CSV_TIME_OPTIONS = (function() {
   var opts = [];
-  for (var m = 15; m <= 600; m += 15) {
+  for (var m = 15; m <= 600; m += 5) {
     var h = Math.floor(m / 60);
     var mm = m % 60;
     var label, val;
@@ -13105,14 +13152,30 @@ function _csvRefreshTotalTimeDisplay() {
 // Quand décoché, le dept est marqué notRequired (pastille grisée + "Non requis").
 // Met aussi à jour le flag legacy includeDepts pour la compatibilité avec
 // renderCards, checkCardFullyComplete, et le print/email.
+//
+// FIX (avril 2026) : la fonction cherchait avant la checkbox via les IDs
+// 'timeAtelierReq' / 'timeCoutureReq', mais ces IDs n'existent plus dans le DOM
+// (les anciennes pastilles ont été retirées). On utilise maintenant directement
+// l'event.target (la checkbox cliquée), avec fallback sur un toggle de l'état
+// actuel si l'event est absent.
 function _toggleDeptRequired(dept) {
   if (!currentCardId || !psmData[currentCardId]) return;
   var card = psmData[currentCardId];
   if (!card[dept]) card[dept] = {};
-  var chk = document.getElementById('time' + (dept === 'atelier' ? 'Atelier' : 'Couture') + 'Req');
-  if (!chk) return;
-  // checked = requis (true) ; pas checked = non requis (notRequired = true)
-  card[dept].notRequired = !chk.checked;
+  
+  // Lire l'état désiré : priorité à la checkbox déclencheuse (event.target),
+  // sinon toggle de l'état actuel.
+  var newNotRequired;
+  var ev = (typeof window !== 'undefined' && window.event) ? window.event : null;
+  var chk = (ev && ev.target && ev.target.type === 'checkbox') ? ev.target : null;
+  if (chk) {
+    // checked = requis (true) ; pas checked = non requis (notRequired = true)
+    newNotRequired = !chk.checked;
+  } else {
+    // Fallback : toggle de l'état actuel
+    newNotRequired = !(card[dept].notRequired === true);
+  }
+  card[dept].notRequired = newNotRequired;
   // Synchroniser avec le flag legacy includeDepts (utilisé par renderCards et autres)
   if (!card.includeDepts) card.includeDepts = { atelier: true, couture: true };
   card.includeDepts[dept] = !card[dept].notRequired;
@@ -13136,6 +13199,8 @@ function _toggleDeptRequired(dept) {
   // Reconstruire la zone Items pour afficher "ATELIER NON REQUIS" / "COUTURE NON REQUISE"
   // (ou les 4 items à nouveau si re-coché)
   if (typeof csvBuildItemsColumn === 'function') csvBuildItemsColumn(card);
+  // Recalculer les temps totaux affichés (un dept non requis ne compte plus)
+  if (typeof _csvRefreshTotalTimeDisplay === 'function') _csvRefreshTotalTimeDisplay();
   // Re-render la liste de cartes (état complet/à faire dépend des dept requis)
   if (typeof renderCards === 'function') renderCards();
   // Toast feedback
@@ -13206,6 +13271,8 @@ function csvLoadTimes(card) {
   _csvRefreshTotalTimeDisplay();
   // Mettre à jour l'état des checkboxes "Requis" et l'apparence grisée si non requis
   if (currentCardId) _updateCsvStatusCards(currentCardId);
+  // Charger l'agent service client (avril 2026, Daniel)
+  if (typeof _csvLoadScAgent === 'function') _csvLoadScAgent(card);
 }
 
 // ═══ ITEMS MULTIPLES ═══
@@ -13255,28 +13322,46 @@ function _itemSelectorRefresh() {
   
   wrap.classList.add('is-visible');
   
-  // ── Le nombre d'onglets correspond au nombre d'étampes posées ──
-  //   0 étampe  → onglet [Item principal] + "+" (pour ajouter le 1er item étampé)
-  //   1 étampe  → onglets [Item 1] + "+" + "−"
-  //   2 étampes → onglets [1] [Item 2] + "+" + "−"
-  //   ...
-  //   6 étampes → onglets [1] [2] [3] [4] [5] [Item 6] + "−" (plus de "+")
-  // Le bouton "−" retire toujours le dernier item (item 6 puis 5 puis 4...)
+  // ── SYNCHRONISATION devant ↔ arrière (avril 2026) ──
+  // Le nombre d'onglets est le MAX de :
+  //   • itemStamps.length            — étampes posées sur le PDF
+  //   • _csvComputeRevealedCount()   — items révélés dans la vue sommaire (devant)
+  //                                     via le bouton "+" ou le contenu saisi.
+  // Cas typiques :
+  //   0 étampe + 0 item devant → onglet unique [Item principal]
+  //   0 étampe + 2 items devant (cliqués via "+") → onglets [1] [Item 2]
+  //   2 étampes + 0 item devant → onglets [1] [Item 2]
+  //   3 étampes + 5 items devant → onglets [1] [2] [3] [4] [Item 5]
   var maxItems = (typeof CSV_ITEMS_COUNT === 'number') ? CSV_ITEMS_COUNT : 6;
   var dept = card[currentDept] || {};
   var stamps = (Array.isArray(dept.itemStamps)) ? dept.itemStamps : [];
   var stampCount = stamps.length;
   
-  // Borner stampCount à maxItems
-  if (stampCount > maxItems) stampCount = maxItems;
+  // Compter aussi les items "révélés" devant (vue sommaire) pour synchro
+  var frontRevealed = 0;
+  if (typeof _csvComputeRevealedCount === 'function') {
+    frontRevealed = _csvComputeRevealedCount(card, currentDept);
+    // _csvComputeRevealedCount retourne au minimum 1 (Item principal). Mais ici
+    // on veut afficher l'onglet "Item principal" tant qu'il n'y a NI étampe NI
+    // ajout explicite devant (revealedCount > 1 OU itemsRevealedCount défini).
+    // Donc on retient frontRevealed seulement s'il est > 1 OU s'il y a des
+    // étampes (pour ne pas "downgrader" à 1 quand il y a des étampes).
+    if (frontRevealed <= 1 && stampCount === 0) frontRevealed = 0;
+  }
+  
+  // Le nombre d'onglets numérotés à afficher
+  var tabCount = Math.max(stampCount, frontRevealed);
+  
+  // Borner à maxItems
+  if (tabCount > maxItems) tabCount = maxItems;
   
   // Borner _selectedItemIdx
   if (typeof _selectedItemIdx !== 'number' || _selectedItemIdx < 0) _selectedItemIdx = 0;
-  if (stampCount > 0) {
-    var maxAllowedIdx = stampCount - 1;
+  if (tabCount > 0) {
+    var maxAllowedIdx = tabCount - 1;
     if (_selectedItemIdx > maxAllowedIdx) _selectedItemIdx = maxAllowedIdx;
   } else {
-    // Aucune étampe : on reste sur l'index 0 (Item principal)
+    // Aucun item révélé : on reste sur l'index 0 (Item principal)
     _selectedItemIdx = 0;
   }
   if (_selectedItemIdx >= maxItems) _selectedItemIdx = maxItems - 1;
@@ -13285,10 +13370,10 @@ function _itemSelectorRefresh() {
   var items = dept.items || [];
   var html = '';
   
-  if (stampCount === 0) {
-    // ── Cas spécial : aucune étampe → onglet unique "Item principal" ──
+  if (tabCount === 0) {
+    // ── Cas spécial : aucun item révélé → onglet unique "Item principal" ──
     // Permet à l'utilisateur de saisir des données (image/notes/matériaux)
-    // même avant de poser des étampes.
+    // même avant de poser des étampes ou d'ajouter des items devant.
     var hasMainContent = false;
     if (items[0]) {
       var it0 = items[0];
@@ -13300,8 +13385,8 @@ function _itemSelectorRefresh() {
     if (hasMainContent) mainClasses += ' has-content';
     html += '<button type="button" class="' + mainClasses + '" onclick="_itemSelectorPick(0)" title="Item principal">Item principal</button>';
   } else {
-    // ── Cas normal : un onglet par étampe posée ──
-    for (var idx = 0; idx < stampCount; idx++) {
+    // ── Cas normal : un onglet par item révélé (étampe OU item devant) ──
+    for (var idx = 0; idx < tabCount; idx++) {
       var isSelected = (idx === _selectedItemIdx);
       // Le sélectionné montre "Item N", les autres juste "N"
       var labelText = isSelected ? ('Item ' + (idx + 1)) : String(idx + 1);
@@ -13826,7 +13911,166 @@ function _stampAdd(xRel, yRel) {
     _stampDeactivate();
   }
   
+  // ── Modal de saisie du temps directement après pose (avril 2026, Daniel) ──
+  // Pour éviter d'avoir à retourner en avant changer le temps, on demande
+  // tout de suite après la pose de l'étampe. L'utilisateur peut "Plus tard"
+  // pour passer sans rien saisir.
+  setTimeout(function() {
+    _openItemTimeModalAfterStamp(dept, newIdx);
+  }, 200);
+  
   return newIdx;
+}
+
+// ═══ MODAL : saisir le temps de l'item juste après pose d'étampe ═══
+// (avril 2026) Refonte : Daniel veut un dropdown avec les options standards
+// (15 min, 30 min, 1h, 1h30, ... 10h) + un champ pour écrire un temps libre.
+// Au clic sur "Confirmer", on sauvegarde via csvItemDropdownSelect() qui
+// rafraîchit la vue sommaire ET le rendu des étampes (pour afficher le temps
+// à côté du numéro de l'étampe).
+function _openItemTimeModalAfterStamp(dept, itemIdx) {
+  // Si la carte a changé entre temps (timeout), bail
+  if (!currentCardId || !psmData[currentCardId]) return;
+  // Note : on ne bail PAS si l'item a déjà un temps — Daniel veut le modal à
+  // chaque pose d'étampe. Si l'utilisateur veut garder le temps existant, il
+  // clique simplement "Plus tard".
+  
+  // Retirer un éventuel modal déjà ouvert
+  var existing = document.getElementById('psmItemTimeModal');
+  if (existing) existing.remove();
+  
+  var deptLabel = (dept === 'couture') ? 'Couture' : 'Atelier';
+  var deptColor = (dept === 'couture') ? '#a855f7' : '#3b82f6';
+  var deptIcon = (dept === 'couture') ? '🧵' : '🔨';
+  var itemNum = itemIdx + 1;
+  
+  // Récupérer le temps actuel (si l'utilisateur reçoit le modal sur un item
+  // qui a déjà un temps, on le pré-sélectionne)
+  var card = psmData[currentCardId];
+  var currentTemps = '';
+  if (card[dept] && card[dept].items && card[dept].items[itemIdx]) {
+    currentTemps = String(card[dept].items[itemIdx].temps || '').trim();
+  }
+  if (typeof _csvNormalizeTime === 'function') currentTemps = _csvNormalizeTime(currentTemps);
+  
+  // Construire les options du dropdown <select>
+  var timeOptions = (typeof CSV_TIME_OPTIONS !== 'undefined') ? CSV_TIME_OPTIONS : [];
+  var optionsHtml = '<option value="">— Choisir —</option>';
+  // Vérifier si currentTemps est dans la liste standard ; sinon on l'ajoutera
+  // comme une option "personnalisée" pour qu'il soit présélectionné.
+  var foundInStandard = false;
+  for (var i = 0; i < timeOptions.length; i++) {
+    var opt = timeOptions[i];
+    var sel = (opt.value === currentTemps) ? ' selected' : '';
+    if (sel) foundInStandard = true;
+    optionsHtml += '<option value="' + escapeHtml(String(opt.value)) + '"' + sel + '>' + escapeHtml(opt.label) + '</option>';
+  }
+  // Si l'utilisateur a un temps non standard, on l'affiche comme option
+  // personnalisée présélectionnée tout en haut
+  var customOptionHtml = '';
+  if (currentTemps && !foundInStandard) {
+    customOptionHtml = '<option value="' + escapeHtml(currentTemps) + '" selected>' + escapeHtml(currentTemps) + ' (personnalisé)</option>';
+  }
+  
+  var modal = document.createElement('div');
+  modal.id = 'psmItemTimeModal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML =
+    '<div style="background:#0f172a;border:2px solid ' + deptColor + ';border-radius:12px;padding:20px 22px;max-width:380px;width:100%;color:#fff;box-shadow:0 8px 32px rgba(0,0,0,0.6);">' +
+      // Titre
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">' +
+        '<div style="font-size:26px;line-height:1;">' + deptIcon + '</div>' +
+        '<div style="flex:1;">' +
+          '<div style="font-size:16px;font-weight:800;letter-spacing:0.3px;">Item ' + itemNum + ' — ' + deptLabel + '</div>' +
+          '<div style="font-size:11px;color:#94a3b8;font-weight:500;">Étampe posée. Quel est le temps pour cet item ?</div>' +
+        '</div>' +
+      '</div>' +
+      // Dropdown des temps standards (seul mode de saisie — Daniel : "pas écrire à la main")
+      '<div style="margin-bottom:14px;">' +
+        '<label style="display:block;font-size:11px;font-weight:700;color:#cbd5e1;margin-bottom:4px;letter-spacing:0.3px;text-transform:uppercase;">Choisir un temps</label>' +
+        '<select id="itemTimeModalSelect" size="6" style="width:100%;padding:6px;border:1.5px solid ' + deptColor + ';background:#1e293b;color:#fff;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;font-variant-numeric:tabular-nums;outline:none;">' +
+          customOptionHtml +
+          optionsHtml +
+        '</select>' +
+      '</div>' +
+      // Boutons du bas
+      '<div style="display:flex;gap:6px;margin-top:14px;">' +
+        '<button type="button" onclick="_closeItemTimeModal()" ' +
+          'style="flex:1;padding:10px 14px;border:1px solid rgba(148,163,184,0.3);background:rgba(55,65,81,0.6);color:#cbd5e1;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px;" ' +
+          'onmouseover="this.style.filter=\'brightness(1.2)\'" onmouseout="this.style.filter=\'\'">' +
+          'Plus tard' +
+        '</button>' +
+        '<button type="button" id="itemTimeModalConfirm" onclick="_confirmItemTimeModal(\'' + dept.replace(/'/g, "\\'") + '\',' + itemIdx + ')" ' +
+          'style="flex:2;padding:10px 14px;border:none;background:linear-gradient(135deg,' + deptColor + ',' + deptColor + 'cc);color:#fff;border-radius:6px;font-weight:800;cursor:pointer;font-size:13px;letter-spacing:0.3px;" ' +
+          'onmouseover="this.style.filter=\'brightness(1.2)\'" onmouseout="this.style.filter=\'\'">' +
+          '✅ Confirmer' +
+        '</button>' +
+      '</div>' +
+    '</div>';
+  
+  // Permettre de fermer par clic sur l'overlay (mais pas sur le contenu)
+  modal.addEventListener('click', function(evt) {
+    if (evt.target === modal) _closeItemTimeModal();
+  });
+  document.body.appendChild(modal);
+  
+  // Auto-confirmer au double-clic sur une option de la liste (UX rapide)
+  var selectEl = document.getElementById('itemTimeModalSelect');
+  if (selectEl) {
+    selectEl.addEventListener('dblclick', function() {
+      _confirmItemTimeModal(dept, itemIdx);
+    });
+    // Confirmer aussi via Entrée
+    selectEl.addEventListener('keydown', function(evt) {
+      if (evt.key === 'Enter') {
+        evt.preventDefault();
+        _confirmItemTimeModal(dept, itemIdx);
+      }
+    });
+  }
+}
+
+// Confirmer le temps choisi (dropdown uniquement)
+function _confirmItemTimeModal(dept, itemIdx) {
+  var selectEl = document.getElementById('itemTimeModalSelect');
+  var value = selectEl ? (selectEl.value || '') : '';
+  // Pas de temps choisi → traiter comme "Plus tard"
+  if (!value) {
+    _closeItemTimeModal();
+    return;
+  }
+  // Sauvegarder via la fonction existante (gère Firebase + UI vue sommaire)
+  if (typeof csvItemDropdownSelect === 'function') {
+    csvItemDropdownSelect(dept, itemIdx, value);
+  }
+  // Rafraîchir le rendu des étampes pour afficher le nouveau temps
+  // à côté du numéro sur la pastille/rectangle
+  if (typeof _stampRenderOverlay === 'function') _stampRenderOverlay();
+  _closeItemTimeModal();
+  if (typeof showToast === 'function') {
+    var deptLabel = (dept === 'couture') ? 'Couture' : 'Atelier';
+    showToast('⏱️ Item ' + (itemIdx + 1) + ' — ' + deptLabel + ' : ' + value, 'success');
+  }
+}
+
+// Legacy : appelé par la grille de boutons précédente. Conservé pour ne rien
+// casser si du code externe l'appelle.
+function _pickItemTimeFromModal(dept, itemIdx, value) {
+  if (typeof csvItemDropdownSelect === 'function') {
+    csvItemDropdownSelect(dept, itemIdx, value);
+  }
+  if (typeof _stampRenderOverlay === 'function') _stampRenderOverlay();
+  _closeItemTimeModal();
+  if (typeof showToast === 'function') {
+    var deptLabel = (dept === 'couture') ? 'Couture' : 'Atelier';
+    showToast('⏱️ Item ' + (itemIdx + 1) + ' — ' + deptLabel + ' : ' + value, 'success');
+  }
+}
+
+function _closeItemTimeModal() {
+  var m = document.getElementById('psmItemTimeModal');
+  if (m) m.remove();
 }
 
 // ─── Capture une zone rectangulaire autour d'une étampe et l'applique ───
@@ -13962,7 +14206,7 @@ function _captureStampZoneAsItemImage(stamp, itemIdx) {
       } catch(secErr) {
         console.error('[Capture] Canvas tainted (CORS bloque l\'export):', secErr);
         if (typeof showToast === 'function') {
-          showToast('⚠️ Image bloquée par CORS. Clique sur 📄→🖼️ Convertir pour re-uploader le PDF en images locales.', 'warning');
+          showToast('⚠️ Capture impossible (image bloquée par CORS). Re-téléverse le fichier depuis ton ordinateur si tu veux capturer la zone d\'étampe.', 'warning');
         }
         return;
       }
@@ -14051,6 +14295,21 @@ function _stampRemove(idx) {
   
   // Retirer l'étampe elle-même
   stamps.splice(idx, 1);
+  
+  // ── (avril 2026, demande Daniel) ──
+  // Si après retrait il ne reste PLUS aucune étampe → effacer aussi l'image
+  // principale (items[0].image + champ legacy noteImage). On ne touche PAS aux
+  // matériaux ni aux notes ni aux temps — Daniel veut juste repartir à zéro
+  // côté image quand il a tout effacé.
+  if (stamps.length === 0) {
+    if (Array.isArray(card[dept].items) && card[dept].items[0]) {
+      card[dept].items[0].image = null;
+    }
+    // Aussi le champ legacy au niveau dept (au cas où une vieille image y serait restée)
+    if (card[dept].noteImage) {
+      card[dept].noteImage = null;
+    }
+  }
   
   // Décrémenter aussi itemsRevealedCount pour ne pas garder un compteur
   // d'items "révélés" supérieur au nombre réel d'items existants. Sans ça,
@@ -14202,6 +14461,9 @@ function _refreshRemoveStampButtonVisibility() {
 }
 
 // ─── Effacer une étampe spécifique par son index ───
+// (avril 2026, Daniel) Comportement uniforme avec _stampRemove (double-clic) :
+// l'item correspondant est aussi splice. Si c'était la dernière étampe,
+// l'image principale est effacée mais matériaux/notes sont conservés.
 function _removeOneStamp(idx) {
   _closeRemoveStampMenu();
   if (!currentCardId || !psmData[currentCardId]) return;
@@ -14211,18 +14473,20 @@ function _removeOneStamp(idx) {
   if (idx < 0 || idx >= stamps.length) return;
   
   var itemNum = idx + 1;
-  if (!confirm('Effacer l\'étampe Item ' + itemNum + ' du devis ?\n\nL\'image, les matériaux et les notes de cet item NE SERONT PAS effacés — seule l\'étampe visuelle sur le devis est retirée.')) {
+  if (!confirm('Effacer l\'étampe Item ' + itemNum + ' ?\n\nL\'item correspondant (image, matériaux, notes, temps) est aussi retiré.\n\nSi c\'est la dernière étampe : l\'image principale est effacée mais les matériaux et notes sont conservés.')) {
     return;
   }
   
-  // Retirer l'étampe
-  stamps.splice(idx, 1);
-  
-  // Renuméroter automatiquement les étampes restantes (Item 1, 2, 3 sans trou)
-  // n'est pas nécessaire car l'index dans le tableau = numéro affiché
-  
-  if (typeof saveToFirebase === 'function') saveToFirebase();
-  _stampSyncAll();
+  // Réutiliser _stampRemove qui gère tout :
+  // - splice item à idx (image, mat, notes, temps disparaissent avec)
+  // - splice étampe à idx
+  // - si plus aucune étampe après → efface aussi items[0].image (mais garde mats/notes)
+  // - décrémente itemsRevealedCount
+  // - décale _selectedItemIdx
+  // - sauvegarde Firebase + _stampSyncAll
+  if (typeof _stampRemove === 'function') {
+    _stampRemove(idx);
+  }
   showToast('✅ Étampe Item ' + itemNum + ' effacée', 'success');
 }
 
@@ -14247,14 +14511,55 @@ function removeAllItemStamps() {
     return;
   }
   
-  if (!confirm('Retirer les ' + stamps.length + ' étampe(s) du devis ?\n\nLes images, matériaux et notes des items NE SERONT PAS effacés — seules les étampes visuelles sur le devis sont retirées.')) {
+  // Daniel : demander si on retire AUSSI les données des items (image, mat, notes, temps).
+  // Comportement par défaut : on retire TOUT (étampes + données) pour que la vue
+  // sommaire en avant se mette à jour correctement (sinon items fantômes).
+  // Si l'utilisateur veut juste retirer les étampes visuelles, il peut annuler.
+  var totalCount = stamps.length;
+  if (!confirm('Retirer les ' + totalCount + ' étampe(s) ?\n\n' +
+               '⚠️ Les items 2+ seront complètement effacés.\n' +
+               'L\'image principale sera aussi effacée.\n' +
+               'Les matériaux et les notes de l\'item principal sont conservés.')) {
     return;
   }
   
+  // ── Vider les étampes ──
   card[dept].itemStamps = [];
+  
+  // ── Nettoyer aussi les items 2+ (garder uniquement l'item 0 = item principal) ──
+  // Sinon, les données fantômes (matériaux, temps, etc.) feraient ré-apparaître
+  // les items en avant via _csvComputeRevealedCount.
+  // Pour items[0] : on EFFACE l'IMAGE (Daniel veut repartir à zéro côté image)
+  // mais on PRÉSERVE les matériaux, les notes et le temps.
+  if (Array.isArray(card[dept].items)) {
+    var keep0 = card[dept].items[0] || {};
+    keep0.image = null;       // (avril 2026, Daniel) image effacée
+    // matériaux, notes, temps, prixMajore : intacts
+    card[dept].items = [keep0];
+  }
+  // Aussi le champ legacy noteImage au niveau dept (sécurité)
+  if (card[dept].noteImage) {
+    card[dept].noteImage = null;
+  }
+  
+  // ── Nettoyer aussi les noms personnalisés des items 2+ ──
+  // FIX (avril 2026) : sans ça, un nom comme "Item 2" laissé par le bouton "+"
+  // garde l'item visible en avant alors que tout est supposé être effacé.
+  // Note : itemNames est au niveau carte (pas dept), mais quand on demande
+  // "tout retirer" pour un dept, c'est OK de purger les noms aussi puisque
+  // la liste d'items affichés est unique pour la carte.
+  if (Array.isArray(card.itemNames) && card.itemNames.length > 1) {
+    card.itemNames = card.itemNames.slice(0, 1);
+  }
+  
+  // ── Réinitialiser le compteur de révélation ──
+  // Sans ça, itemsRevealedCount garde la vieille valeur et la vue avant
+  // continue d'afficher N items même sans contenu.
+  card[dept].itemsRevealedCount = 1;
+  
   if (typeof saveToFirebase === 'function') saveToFirebase();
   _stampSyncAll();
-  showToast('✅ ' + stamps.length + ' étampe(s) retirée(s)', 'success');
+  showToast('✅ ' + totalCount + ' étampe(s) et item(s) retirés', 'success');
 }
 
 // ─── Synchronisation globale après pose/retrait ───
@@ -14271,6 +14576,16 @@ function _stampSyncAll() {
   _updateStampButtonLabel();
   // Visibilité du bouton "Effacer" (caché si aucune étampe)
   if (typeof _refreshRemoveStampButtonVisibility === 'function') _refreshRemoveStampButtonVisibility();
+  // ── Rafraîchir le panneau de DROITE (image, matériaux, notes) ──
+  // (avril 2026, demande Daniel : "quand on efface item N, efface aussi
+  //  l'image dans la colonne de droite ; pour item 1 ça repart à zéro")
+  // Ces 3 fonctions chargent l'item courant (_selectedItemIdx) du dept actif :
+  // après suppression, l'item courant a déjà été décalé/effacé par _stampRemove,
+  // donc on lit les nouvelles données et l'UI montre l'item à jour (vide si
+  // tout l'item a disparu).
+  if (typeof _loadRightNoteImage === 'function') _loadRightNoteImage();
+  if (typeof _renderRightMatListTop === 'function') _renderRightMatListTop();
+  if (typeof _loadActiveItemNotesIntoEditor === 'function') _loadActiveItemNotesIntoEditor();
 }
 
 // ─── Met à jour le texte du bouton 🖋️ pour afficher "Ajouter Item N+1" ───
@@ -14724,7 +15039,7 @@ function _stampRenderOverlay() {
             'pointer-events:auto;cursor:move;' +
             'box-sizing:border-box;';
           
-          // Étiquette "Item N" en haut à gauche du rectangle (en diagonale, posée sur le coin)
+          // Étiquette "Item N" en haut à GAUCHE du rectangle
           var label = document.createElement('div');
           label.style.cssText = 
             'position:absolute;' +
@@ -14742,6 +15057,40 @@ function _stampRenderOverlay() {
             'pointer-events:none;';                          // l'étiquette ne capture pas les clics
           label.textContent = 'Item ' + (idx + 1);
           dot.appendChild(label);
+          
+          // ── Pastille TEMPS séparée en haut à DROITE du rectangle ──
+          // (avril 2026, demande Daniel : "petite pastille avec le temps choisi")
+          // Ne s'affiche que si un temps a été saisi pour cet item.
+          var stampItemTemps = '';
+          try {
+            var _stampDept = currentDept || 'atelier';
+            var _items = (psmData[currentCardId] && psmData[currentCardId][_stampDept] && psmData[currentCardId][_stampDept].items) || [];
+            if (_items[idx] && _items[idx].temps) {
+              stampItemTemps = String(_items[idx].temps).trim();
+              if (typeof _csvNormalizeTime === 'function') stampItemTemps = _csvNormalizeTime(stampItemTemps);
+            }
+          } catch(_e) {}
+          if (stampItemTemps) {
+            var timeLabel = document.createElement('div');
+            // Pastille verte (cohérent avec PSM/Couture qui utilisent vert pour temps validé)
+            timeLabel.style.cssText = 
+              'position:absolute;' +
+              'top:-14px;right:-3px;' +                       // miroir à droite
+              'padding:4px 10px;' +
+              'background:#22c55e;' +                          // vert pour le temps
+              'border:2.5px solid #000;' +
+              'border-radius:6px;' +
+              'color:#fff;font-weight:900;font-size:13px;' +
+              'letter-spacing:0.3px;' +
+              'white-space:nowrap;' +
+              'box-shadow:0 0 0 1.5px #fff, 0 2px 6px rgba(0,0,0,0.5);' +
+              'font-family:"Segoe UI",Arial,sans-serif;' +
+              'line-height:1;' +
+              'font-variant-numeric:tabular-nums;' +
+              'pointer-events:none;';
+            timeLabel.textContent = '⏱ ' + stampItemTemps;
+            dot.appendChild(timeLabel);
+          }
         } else {
           // ── FALLBACK PASTILLE : si pas d'image (PDF natif, image pas encore chargée) ──
           dot.style.cssText = 
@@ -14761,7 +15110,20 @@ function _stampRenderOverlay() {
             'user-select:none;-webkit-user-select:none;' +
             'font-family:"Segoe UI",Arial,sans-serif;' +
             'line-height:1;';
-          dot.textContent = 'Item ' + (idx + 1);
+          // Mode pastille (PDF natif sans image) : texte combiné car pas
+          // de cadre où séparer gauche/droite
+          var stampLabelText2 = 'Item ' + (idx + 1);
+          var stampItemTemps2 = '';
+          try {
+            var _stampDept2 = currentDept || 'atelier';
+            var _items2 = (psmData[currentCardId] && psmData[currentCardId][_stampDept2] && psmData[currentCardId][_stampDept2].items) || [];
+            if (_items2[idx] && _items2[idx].temps) {
+              stampItemTemps2 = String(_items2[idx].temps).trim();
+              if (typeof _csvNormalizeTime === 'function') stampItemTemps2 = _csvNormalizeTime(stampItemTemps2);
+            }
+          } catch(_e2) {}
+          if (stampItemTemps2) stampLabelText2 += ' — ⏱ ' + stampItemTemps2;
+          dot.textContent = stampLabelText2;
         }
         dot.title = 'Item ' + (idx + 1) + ' — Glisser pour déplacer, double-clic pour retirer';
         
@@ -14942,42 +15304,56 @@ document.addEventListener('keydown', function(e) {
 //  il intercepte aussi les clics sur les iframes PDF natifs.)
 
 // Nombre d'items à afficher dans la vue sommaire pour un dept donné.
-// Source de vérité : itemStamps.length (étape étampes). Sinon, fallback legacy
-// (temps/prixMajore/itemNames/itemsRevealedCount) pour les cartes pré-étampes.
+// SYNCHRONISATION devant ↔ arrière (avril 2026, demande Daniel) :
+//   Le nombre d'items est le MAX de :
+//     1. itemStamps.length         — étampes posées sur le PDF (panneau droit)
+//     2. items[] avec contenu      — temps, prix majoré, image, notes, matériaux
+//     3. itemNames personnalisés   — un item renommé compte comme révélé
+//                                    (mais SEULEMENT si la position a un index
+//                                    qui ne dépasse pas items.length, sinon fantôme)
+//
+// IMPORTANT (avril 2026, fix Daniel) : `itemsRevealedCount` n'est PAS pris en
+// compte ici. Pourquoi ? C'est un fantôme : quand on supprime des étampes ou
+// des items, ce compteur garde sa vieille valeur et fait apparaître des items
+// vides en avant. Daniel : "vérifie combien d'étampes il y a OU s'il y a des
+// informations dans les matériaux ou quelque chose d'un item autre que l'item
+// principal". On suit donc strictement étampes + contenu réel + noms valides.
 function _csvComputeRevealedCount(card, dept) {
   if (!card || !card[dept]) return 1;
   
-  // ── Le nombre d'items dans la vue sommaire est piloté par L'UTILISATEUR ──
-  // (boutons +/− et contenu saisi), pas par les étampes. Les étampes sont une
-  // aide visuelle sur le PDF, totalement INDÉPENDANTE du nombre d'items.
   if (!card[dept].items) card[dept].items = [];
   var items = card[dept].items;
-  var revealedExplicit = card[dept].itemsRevealedCount;
   
-  // Trouver le plus haut index avec du contenu (temps ou prixMajore)
+  // ── 1. Étampes posées (panneau droit) ──
+  var stamps = Array.isArray(card[dept].itemStamps) ? card[dept].itemStamps : [];
+  var stampCount = stamps.length;
+  
+  // ── 2. Plus haut index avec du contenu réel ──
   var highestWithContent = 0;
   for (var i = 0; i < CSV_ITEMS_COUNT && i < items.length; i++) {
     var it = items[i] || {};
-    if ((it.temps && String(it.temps).trim()) || it.prixMajore) {
-      highestWithContent = i + 1;
-    }
-    // Aussi : si l'item a une image, des matériaux ou des notes saisies,
-    // il est considéré comme révélé (l'utilisateur a saisi des données dedans).
+    var hasTemps = it.temps && String(it.temps).trim();
+    var hasMajo = it.prixMajore;
     var iMats = Array.isArray(it.materiaux) && it.materiaux.some(function(m){ return m && m.name; });
     var iNotesPlain = (it.notes || '').replace(/<[^>]*>/g, '').trim();
-    if (it.image || iMats || iNotesPlain.length > 0) {
-      if (i + 1 > highestWithContent) highestWithContent = i + 1;
+    if (hasTemps || hasMajo || it.image || iMats || iNotesPlain.length > 0) {
+      highestWithContent = i + 1;
     }
   }
-  // Aussi vérifier les noms personnalisés (un item renommé compte comme révélé)
+  // ── 3. Noms personnalisés (un item renommé compte comme révélé) ──
+  // Inclut les noms par défaut "Item N+1" créés par "+ Ajouter un item" devant.
+  // Au moindre retrait global d'étampes, removeAllItemStamps() nettoie aussi
+  // card.itemNames pour éviter les fantômes (avril 2026, fix Daniel).
   if (Array.isArray(card.itemNames)) {
-    for (var k = 0; k < CSV_ITEMS_COUNT && k < card.itemNames.length; k++) {
-      if (card.itemNames[k] && String(card.itemNames[k]).trim()) {
+    var maxNamePos = Math.min(CSV_ITEMS_COUNT, card.itemNames.length);
+    for (var k = 0; k < maxNamePos; k++) {
+      var nm = card.itemNames[k];
+      if (nm && String(nm).trim()) {
         if (k + 1 > highestWithContent) highestWithContent = k + 1;
       }
     }
   }
-  var n = Math.max(1, highestWithContent, revealedExplicit || 0);
+  var n = Math.max(1, highestWithContent, stampCount);
   return Math.min(CSV_ITEMS_COUNT, n);
 }
 
@@ -14990,15 +15366,26 @@ function _csvRevealNextItem(dept) {
   if (current >= CSV_ITEMS_COUNT) return;
   
   // ── Révèle un item supplémentaire dans la vue sommaire ──
-  // (les étampes sur le PDF sont indépendantes — elles ne sont pas créées
-  //  ici. L'utilisateur les pose lui-même via le mode étampe si désiré.)
+  // FIX (avril 2026, Daniel) : on n'utilise plus itemsRevealedCount comme
+  // marqueur (créait des fantômes après suppression). À la place, on crée
+  // immédiatement un NOM par défaut dans itemNames qui sera détecté par
+  // _csvComputeRevealedCount comme un item révélé. Quand l'utilisateur
+  // saisit du contenu (temps, matériaux...), le nom devient secondaire.
+  // Quand l'utilisateur retire l'item via "−", on retire aussi le nom.
+  var newIdx = current; // 0-based : si current=1, on révèle l'index 1 (Item 2)
+  if (!Array.isArray(card.itemNames)) card.itemNames = [];
+  // Combler les trous éventuels
+  while (card.itemNames.length < newIdx) card.itemNames.push(null);
+  // Nom par défaut "Item N+1" — l'utilisateur peut le renommer via ✏️
+  card.itemNames[newIdx] = 'Item ' + (newIdx + 1);
+  
+  // Conserver itemsRevealedCount synchro pour rétrocompatibilité avec
+  // d'éventuels appelants externes, mais ce n'est plus la source de vérité.
   card[dept].itemsRevealedCount = current + 1;
   
   if (typeof saveToFirebase === 'function') saveToFirebase();
   csvBuildItemsColumn(card);
-  // Rafraîchir le sélecteur d'item droite (qui dépend de revealedCount pour
-  // la valeur sélectionnée par défaut) — note : le dropdown affiche toujours
-  // les 6 items, mais on rafraîchit quand même pour le label.
+  // Rafraîchir le sélecteur d'item droit pour faire apparaître le nouvel onglet
   if (typeof _itemSelectorRefresh === 'function') _itemSelectorRefresh();
 }
 
@@ -15010,6 +15397,21 @@ function _csvHideLastItem(dept) {
   var current = _csvComputeRevealedCount(card, dept);
   if (current <= 1) return;
   var lastIdx = current - 1;
+  
+  // ── SYNCHRONISATION devant ↔ arrière ──
+  // Si l'item à retirer a une étampe correspondante (lastIdx < stamps.length),
+  // on refuse : l'étampe est la source de vérité forte. L'utilisateur doit
+  // retirer l'étampe (panneau droit) pour faire disparaître l'item.
+  var stamps = Array.isArray(card[dept].itemStamps) ? card[dept].itemStamps : [];
+  if (lastIdx < stamps.length) {
+    if (typeof showToast === 'function') {
+      showToast('Cet item a une étampe. Retirez l\'étampe sur le PDF pour le supprimer.', 'warning');
+    } else {
+      alert('Cet item a une étampe. Retirez l\'étampe sur le PDF pour le supprimer.');
+    }
+    return;
+  }
+  
   var items = card[dept].items || [];
   var lastItem = items[lastIdx] || {};
   
@@ -15394,6 +15796,9 @@ function csvItemDropdownSelect(dept, itemIdx, value, evt) {
   _csvCloseAllItemDropdowns();
   // Rafraîchir l'affichage du TEMPS TOTAL à gauche (somme des items)
   if (typeof _csvRefreshTotalTimeDisplay === 'function') _csvRefreshTotalTimeDisplay();
+  // Rafraîchir le rendu des étampes pour afficher le nouveau temps à côté du
+  // numéro sur la pastille/rectangle (avril 2026, demande Daniel)
+  if (typeof _stampRenderOverlay === 'function' && dept === currentDept) _stampRenderOverlay();
   if (prev !== value) {
     var updates = {};
     updates['psm/' + currentCardId + '/' + dept + '/items/' + itemIdx + '/temps'] = value || null;
@@ -15701,6 +16106,139 @@ function _csvNotesOnFocus() {
 function _csvNotesPaste(e) {
   if (typeof _insertPastedImage === 'function') {
     _insertPastedImage(e, 'csvNotesEditor', _csvNotesChanged);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AGENT SERVICE CLIENT (avril 2026, Daniel)
+// ═══════════════════════════════════════════════════════════════════════════
+// Pastille en bas de la note SC permettant de marquer quel agent du service
+// client a saisi la note. Stocké dans card.scAgent (string : nom de l'agent).
+// Liste : agents du service client + responsables (mêmes que PSM_RECIPIENTS
+// + Marie-Soleil et Marie-Pier qui sont aussi des agents SC).
+// ═══════════════════════════════════════════════════════════════════════════
+
+var SC_AGENTS = [
+  { name: 'Jacynthe', color: '#dc2626' },
+  { name: 'Nadia', color: '#2563eb' },
+  { name: 'Sonia', color: '#16a34a' },
+  { name: 'Jonathan', color: '#7c3aed' },
+  { name: 'Marie-Soleil', color: '#d97706' },
+  { name: 'Marie-Pier', color: '#db2777' },
+  { name: 'Stéphanie', color: '#a855f7' },
+  { name: 'Daniel', color: '#c2410c' }
+];
+
+// Charge la valeur courante de l'agent dans la pastille (à l'ouverture d'une carte)
+function _csvLoadScAgent(card) {
+  var valEl = document.getElementById('csvScAgentValue');
+  if (!valEl) return;
+  var current = (card && card.scAgent) ? String(card.scAgent).trim() : '';
+  if (current) {
+    // Trouver la couleur de l'agent (si dans la liste)
+    var color = '#fbbf24'; // jaune par défaut
+    for (var i = 0; i < SC_AGENTS.length; i++) {
+      if (SC_AGENTS[i].name === current) { color = SC_AGENTS[i].color; break; }
+    }
+    valEl.textContent = current;
+    valEl.style.color = color;
+  } else {
+    valEl.textContent = '— Aucun —';
+    valEl.style.color = '#94a3b8';
+  }
+}
+
+// Toggle (ouvre/ferme) le menu déroulant
+function _csvScAgentToggle(evt) {
+  if (evt) evt.stopPropagation();
+  var menu = document.getElementById('csvScAgentMenu');
+  if (!menu) return;
+  var isOpen = menu.style.display !== 'none';
+  if (isOpen) {
+    _csvScAgentCloseMenu();
+    return;
+  }
+  // Construire la liste
+  var card = (currentCardId && psmData[currentCardId]) ? psmData[currentCardId] : null;
+  var current = (card && card.scAgent) ? String(card.scAgent).trim() : '';
+  var html = '';
+  // Option "Aucun" (efface la sélection)
+  var noneCls = current ? '' : 'background:rgba(59,130,246,0.2);';
+  html += '<div onclick="_csvScAgentPick(\'\')" ' +
+    'style="padding:8px 12px;cursor:pointer;color:#94a3b8;font-size:12px;font-weight:600;font-style:italic;border-radius:5px;transition:background 0.1s;' + noneCls + '" ' +
+    'onmouseover="this.style.background=\'rgba(148,163,184,0.15)\'" onmouseout="this.style.background=\'' + (current ? '' : 'rgba(59,130,246,0.2)') + '\'">— Aucun —</div>';
+  // Ligne de séparation
+  html += '<div style="height:1px;background:rgba(148,163,184,0.2);margin:4px 6px;"></div>';
+  // Agents
+  for (var i = 0; i < SC_AGENTS.length; i++) {
+    var a = SC_AGENTS[i];
+    var safeName = String(a.name).replace(/'/g, "\\'");
+    var sel = (a.name === current);
+    var bgInline = sel ? a.color : 'transparent';
+    var colorInline = sel ? '#fff' : '#e2e8f0';
+    html += '<div onclick="_csvScAgentPick(\'' + safeName + '\')" ' +
+      'style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-radius:5px;transition:background 0.1s;background:' + bgInline + ';color:' + colorInline + ';font-weight:' + (sel ? '800' : '700') + ';font-size:12px;" ' +
+      'onmouseover="if(!this.dataset.selected)this.style.background=\'rgba(148,163,184,0.15)\'" ' +
+      'onmouseout="if(!this.dataset.selected)this.style.background=\'transparent\'" ' +
+      (sel ? 'data-selected="1"' : '') + '>' +
+      '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + a.color + ';flex-shrink:0;"></span>' +
+      '<span style="flex:1;">' + escapeHtml(a.name) + '</span>' +
+      (sel ? '<span style="font-size:11px;opacity:0.85;">✓</span>' : '') +
+    '</div>';
+  }
+  menu.innerHTML = html;
+  menu.style.display = 'block';
+  // Fermer au clic externe
+  setTimeout(function() {
+    document.addEventListener('click', _csvScAgentOutsideClick, true);
+  }, 0);
+}
+
+// Sélectionne un agent (sauve dans Firebase + UI)
+function _csvScAgentPick(name) {
+  if (!currentCardId || !psmData[currentCardId]) {
+    _csvScAgentCloseMenu();
+    return;
+  }
+  var card = psmData[currentCardId];
+  var prev = card.scAgent || '';
+  card.scAgent = name || null;
+  // Mise à jour visuelle immédiate
+  _csvLoadScAgent(card);
+  _csvScAgentCloseMenu();
+  // Sauvegarde Firebase ciblée
+  if (prev !== (name || '')) {
+    var updates = {};
+    updates['psm/' + currentCardId + '/scAgent'] = name || null;
+    updates['psm/' + currentCardId + '/_lastModifiedAt'] = new Date().toISOString();
+    updates['psm/' + currentCardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
+    _skipSyncUntil = Date.now() + 2000;
+    _pendingSave = true;
+    db.ref().update(updates).then(function() { _pendingSave = false; }).catch(function(e) {
+      _skipSyncUntil = 0; _pendingSave = false;
+      console.error('scAgent save error:', e);
+      if (typeof showToast === 'function') showToast('❌ Erreur sauvegarde agent', 'error');
+    });
+    if (typeof showToast === 'function') {
+      if (name) {
+        showToast('👤 Agent service client : ' + name, 'info');
+      } else {
+        showToast('Agent service client retiré', 'info');
+      }
+    }
+  }
+}
+
+function _csvScAgentCloseMenu() {
+  var menu = document.getElementById('csvScAgentMenu');
+  if (menu) menu.style.display = 'none';
+  document.removeEventListener('click', _csvScAgentOutsideClick, true);
+}
+
+function _csvScAgentOutsideClick(evt) {
+  var bar = document.getElementById('csvScAgentBar');
+  if (bar && !bar.contains(evt.target)) {
+    _csvScAgentCloseMenu();
   }
 }
 
@@ -17553,6 +18091,184 @@ function _sendCompleteEmail(cardId) {
 }
 // ═══ FIN SYSTÈME COMPLÉTER ═══
 
+// ═══════════════════════════════════════════════════════════════════════════
+// GARDE-FOU : modifications sur un département déjà complété (avril 2026)
+// ═══════════════════════════════════════════════════════════════════════════
+// Quand un dept (atelier ou couture) est marqué `complete === true`, toute
+// tentative de modification d'un champ de ce dept déclenche une confirmation :
+// "Êtes-vous sûr de vouloir modifier cette soumission ? Le département X
+//  a déjà été complété."
+// L'utilisateur doit confirmer à CHAQUE tentative (pas de mémoïsation pour
+// la session — choix Daniel : "demander à chaque tentative, plus sûr").
+//
+// Stratégie : un seul handler global en capture sur `mousedown` qui intercepte
+// avant que les `click` / `focus` ne s'exécutent. Si l'utilisateur annule,
+// on stoppe la propagation et on previentDefault → le champ ne reçoit pas
+// le focus, le bouton ne déclenche pas son onclick, etc.
+//
+// On ne déclenche la confirmation que pour des éléments INTERACTIFS (inputs,
+// textarea, contenteditable, boutons spécifiques au dept). Les boutons d'UI
+// neutres (Compléter, ✕ Fermer, Imprimer, navigation) sont dans une whitelist.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// IDs de boutons / classes qui ne déclenchent JAMAIS la confirmation
+// (UI neutre ou actions qui doivent rester accessibles même si dept complété)
+var _DEPT_GUARD_WHITELIST_IDS = {
+  'btnCompleteHeader': 1,        // permet de DÉ-compléter (sortir du verrou)
+  'btnDevisClose': 1,            // ✕ Fermer le mode agrandi
+  'btnPdfPrint': 1, 'btnPdfAgrandir': 1, 'btnPdfCamera': 1,
+  'btnPdfRotate': 1, 'btnPdfZoomIn': 1, 'btnPdfZoomReset': 1,
+  'btnQuestTab': 1               // ouvrir le drawer de questionnement (lecture)
+};
+// Classes (substring match) qui ne déclenchent jamais la confirmation
+var _DEPT_GUARD_WHITELIST_CLASS_PARTS = [
+  'modal', 'pchat', 'send-popup', 'questionnement',
+  'topbar', 'dept-tabs', 'devis-viewer-thumb',
+  'da-img-resize', 'da-img-remove'  // gestes sur images en zone item
+];
+
+// Détermine à quel dept appartient un élément du DOM (ou null si neutre)
+function _detectDeptFromElement(el) {
+  if (!el || !el.closest) return null;
+  // ── Vue sommaire (devant) : .csv-dept-block.csv-dept-atelier / .csv-dept-couture ──
+  if (el.closest('.csv-dept-block.csv-dept-atelier')) return 'atelier';
+  if (el.closest('.csv-dept-block.csv-dept-couture')) return 'couture';
+  // ── Zone matériaux : #matAtelier / #matCouture ──
+  if (el.closest('#matAtelier')) return 'atelier';
+  if (el.closest('#matCouture')) return 'couture';
+  // ── Vue items / notes / image / étampes du panneau droit ──
+  // Tout ce qui touche au panneau droit dépend du `currentDept` actif.
+  // On détecte ces zones par les conteneurs principaux du panneau droit.
+  // On utilise une liste de sélecteurs sûrs.
+  var rightPanelSelectors = [
+    '#itemView', '#pdfView', '#itemTabs',
+    '#itemNotesEditor', '#itemImgZone',
+    '#rightSubBar', '#rightMatTopList', '#rightMatTopAdd',
+    '.psm-item-img-zone', '.psm-item-view',
+    '.dept-form-side'  // ancien layout, par sécurité
+  ];
+  for (var i = 0; i < rightPanelSelectors.length; i++) {
+    if (el.closest(rightPanelSelectors[i])) {
+      // Le panneau droit est lié au currentDept actif
+      return (typeof currentDept === 'string' && currentDept) ? currentDept : null;
+    }
+  }
+  return null;
+}
+
+// L'élément est-il un élément qui MODIFIE les données ?
+function _isInteractiveDataElement(el) {
+  if (!el || !el.tagName) return false;
+  var tag = el.tagName.toUpperCase();
+  if (tag === 'INPUT') {
+    var t = (el.type || 'text').toLowerCase();
+    // Les checkboxes/radios/selects modifient des données ; les readonly non
+    if (el.readOnly || el.disabled) return false;
+    return true;  // tous types d'inputs comptent
+  }
+  if (tag === 'TEXTAREA') {
+    return !el.readOnly && !el.disabled;
+  }
+  if (tag === 'SELECT') {
+    return !el.disabled;
+  }
+  // contenteditable (notes éditables, etc.)
+  if (el.isContentEditable) return true;
+  // Boutons : seuls ceux qui ont un onclick et ne sont pas en whitelist
+  if (tag === 'BUTTON') {
+    if (el.id && _DEPT_GUARD_WHITELIST_IDS[el.id]) return false;
+    // Les boutons sans onclick (juste hover, etc.) ne modifient pas → ignorer
+    if (!el.onclick && !el.getAttribute('onclick')) return false;
+    return true;
+  }
+  // <label> qui contient un input : on laisse l'event passer au input lui-même,
+  // qui sera ré-intercepté.
+  return false;
+}
+
+// L'élément est-il dans une zone whitelist (modal, popup, questionnement, etc.) ?
+function _isInDeptGuardWhitelist(el) {
+  if (!el || !el.closest) return false;
+  for (var i = 0; i < _DEPT_GUARD_WHITELIST_CLASS_PARTS.length; i++) {
+    var cls = _DEPT_GUARD_WHITELIST_CLASS_PARTS[i];
+    // Cherche un ancêtre dont le className contient le mot
+    var sel = '[class*="' + cls + '"]';
+    try { if (el.closest(sel)) return true; } catch(e) {}
+  }
+  return false;
+}
+
+// Handler global en mode CAPTURE — déclenché AVANT tout autre listener
+function _deptCompleteEditGuard(evt) {
+  if (!evt || !evt.target) return;
+  // Pas de carte active → rien à protéger
+  if (!currentCardId || !psmData[currentCardId]) return;
+  var card = psmData[currentCardId];
+  // Si AUCUN dept n'est complété, pas besoin de garder
+  var atlComplete = !!(card.atelier && card.atelier.complete === true);
+  var coutComplete = !!(card.couture && card.couture.complete === true);
+  if (!atlComplete && !coutComplete) return;
+  
+  var el = evt.target;
+  
+  // Whitelist : modals, popups, etc. → toujours laisser passer
+  if (_isInDeptGuardWhitelist(el)) return;
+  
+  // Détecter à quel dept appartient l'élément
+  var dept = _detectDeptFromElement(el);
+  if (!dept) return;
+  
+  // Le dept ciblé est-il complété ?
+  if (!card[dept] || card[dept].complete !== true) return;
+  
+  // L'élément modifie-t-il les données ?
+  if (!_isInteractiveDataElement(el)) return;
+  
+  // ── Demander confirmation ──
+  var deptLabel = (dept === 'couture') ? 'Couture' : 'Atelier';
+  var msg = 'Êtes-vous sûr de vouloir modifier cette soumission ?\n\n' +
+            'Le département ' + deptLabel + ' a déjà été complété.';
+  if (!window.confirm(msg)) {
+    // Annulé → bloquer l'événement complètement
+    evt.preventDefault();
+    evt.stopPropagation();
+    if (typeof evt.stopImmediatePropagation === 'function') {
+      evt.stopImmediatePropagation();
+    }
+    // Empêcher que le focus aille sur l'input (au cas où mousedown a déjà
+    // commencé à le donner)
+    try { if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur(); } catch(e) {}
+  }
+  // Si l'utilisateur a confirmé → on laisse l'event suivre son cours normal
+}
+
+// Installer le handler en capture sur `mousedown` (le plus tôt possible)
+// On l'attache une seule fois au document.
+if (!window._psmDeptGuardInstalled) {
+  document.addEventListener('mousedown', _deptCompleteEditGuard, true);
+  // Aussi sur keydown pour les utilisateurs qui tapent directement sans clic
+  // (Tab pour focuser puis taper dans un input). On ne déclenche la confirmation
+  // que pour des touches qui modifient (alphanum, espace, backspace, delete, etc.).
+  document.addEventListener('keydown', function(evt) {
+    if (!evt || !evt.target) return;
+    // Touches de navigation pures qui ne modifient rien → ignorer
+    var key = evt.key || '';
+    var navKeys = {
+      'Tab':1,'Shift':1,'Control':1,'Alt':1,'Meta':1,'CapsLock':1,
+      'ArrowUp':1,'ArrowDown':1,'ArrowLeft':1,'ArrowRight':1,
+      'Home':1,'End':1,'PageUp':1,'PageDown':1,
+      'Escape':1,'F1':1,'F2':1,'F3':1,'F4':1,'F5':1,'F6':1,'F7':1,'F8':1,'F9':1,'F10':1,'F11':1,'F12':1
+    };
+    if (navKeys[key]) return;
+    // Combos avec Ctrl/Meta sans modification (Ctrl+C, Ctrl+A, Ctrl+F) → ignorer
+    if ((evt.ctrlKey || evt.metaKey) && (key === 'c' || key === 'a' || key === 'f' || key === 'C' || key === 'A' || key === 'F')) return;
+    _deptCompleteEditGuard(evt);
+  }, true);
+  window._psmDeptGuardInstalled = true;
+}
+
+// ═══ FIN GARDE-FOU DEPT COMPLÉTÉ ═══
+
 // ═══ CRITICAL FIX: Flush DOM state to psmData (in-memory only, no Firebase write) ═══
 // This prevents data loss when Firebase on('value') fires while user is editing,
 // or when switching cards/departments without triggering blur.
@@ -17803,10 +18519,14 @@ function saveCardToFirebase(cardId) {
 
 // ═══ SEND PSM + NOTIFICATIONS ═══
 // PSM Send recipients
+// Mis à jour avril 2026 : Éric retiré ; Sonia, Jonathan, Jacynthe, Nadia ajoutés.
 var PSM_RECIPIENTS = [
   { name: 'Daniel Charest', key: 'daniel_charest', email: atob('YXRlbGllcmF0cEBwaHlzaXByby5jb20=') },
   { name: 'Stéphanie Roy', key: 'stephanie_roy', email: atob('c3JveUBwaHlzaXByby5jb20=') },
-  { name: 'Éric Poirier', key: 'eric_poirier', email: atob('ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==') }
+  { name: 'Sonia Boulanger', key: 'sonia_boulanger', email: atob('c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==') },
+  { name: 'Jonathan', key: 'jonathan', email: atob('c2VydmljZTFAcGh5c2lwcm8uY29t') },
+  { name: 'Jacynthe', key: 'jacynthe', email: atob('c2VydmljZTNAcGh5c2lwcm8uY29t') },
+  { name: 'Nadia Gagné', key: 'nadia_gagne', email: atob('bmdhZ25lQHBoeXNpcHJvLmNvbQ==') }
 ];
 
 // Department → responsible person email mapping for PSM creation notifications
@@ -19360,10 +20080,37 @@ function _ficheDeleteAllFiles(cardId, fileKey) {
   
   card[fileKey] = null;
   
+  // ── Cascade : si on supprime devisImages (PDF modifiable),
+  //    on supprime aussi devisImagesPdfSources (PDF original associé) ──
+  // Daniel : "quand je fais un fichier dans la carte, assure-toi que ça enlève
+  // aussi le PDF original — il y avait une petite poubelle, je l'ai effacé,
+  // mais l'original, il n'y a pas de poubelle pour l'effacer."
+  // Le PDF original n'est qu'un accompagnement du modifiable ; sans modifiable,
+  // il n'a plus de raison d'exister.
+  var alsoDeletePdfSources = (fileKey === 'devisImages');
+  var deletedOriginalsCount = 0;
+  if (alsoDeletePdfSources && Array.isArray(card.devisImagesPdfSources) && card.devisImagesPdfSources.length > 0) {
+    if (typeof deleteFromStorage === 'function') {
+      // Dédoubler les URLs (un PDF multi-pages a la même URL répétée pour chaque page)
+      var seen = {};
+      card.devisImagesPdfSources.forEach(function(url) {
+        if (url && !seen[url]) {
+          seen[url] = true;
+          try { deleteFromStorage(url); } catch(e) { /* ignore */ }
+          deletedOriginalsCount++;
+        }
+      });
+    }
+    card.devisImagesPdfSources = null;
+  }
+  
   _skipSyncUntil = Date.now() + 2000;
   _pendingSave = true;
   var updates = {};
   updates['psm/' + cardId + '/' + fileKey] = null;
+  if (alsoDeletePdfSources) {
+    updates['psm/' + cardId + '/devisImagesPdfSources'] = null;
+  }
   updates['psm/' + cardId + '/_lastModifiedAt'] = new Date().toISOString();
   updates['psm/' + cardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
   db.ref().update(updates).then(function() { _pendingSave = false; }).catch(function(e) {
@@ -19381,7 +20128,11 @@ function _ficheDeleteAllFiles(cardId, fileKey) {
   var zone = document.getElementById('ficheFilesZone');
   if (zone) zone.innerHTML = _buildFicheFilesRows(cardId, psmData[cardId]);
   
-  showToast('🗑️ Fichier(s) supprimé(s)', 'info');
+  var msg = '🗑️ Fichier(s) supprimé(s)';
+  if (deletedOriginalsCount > 0) {
+    msg += ' (+ PDF original' + (deletedOriginalsCount > 1 ? 's' : '') + ')';
+  }
+  showToast(msg, 'info');
 }
 
 function closeFicheModal() {
@@ -19524,7 +20275,7 @@ function sendFicheEmail(cardId) {
   var safeId = cardId.replace(/'/g, "\\'");
   var recipientsHtml = PSM_RECIPIENTS.map(function(r) {
     return '<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.25);transition:all 0.15s;margin-bottom:4px;" onmouseover="this.style.background=\'rgba(59,130,246,0.15)\'" onmouseout="this.style.background=\'rgba(0,0,0,0.25)\'">' +
-      '<input type="checkbox" class="fiche-email-check" data-key="' + r.key + '" data-email="' + r.email + '" data-name="' + r.name + '" style="width:16px;height:16px;accent-color:#3b82f6;cursor:pointer;"' + (r.key !== 'eric_poirier' ? ' checked' : '') + '>' +
+      '<input type="checkbox" class="fiche-email-check" data-key="' + r.key + '" data-email="' + r.email + '" data-name="' + r.name + '" style="width:16px;height:16px;accent-color:#3b82f6;cursor:pointer;" checked>' +
       '<div style="flex:1;">' +
         '<div style="font-size:12px;font-weight:700;color:#fff;">' + escapeHtml(r.name) + '</div>' +
       '</div>' +
@@ -20523,11 +21274,34 @@ function removeDevisFromViewer(idx) {
   images.splice(idx, 1);
   psmData[currentCardId].devisImages = images;
   
+  // ── Cascade : retirer aussi l'entrée de devisImagesPdfSources à cet index ──
+  // (mapping 1:1 — devisImagesPdfSources[i] est le PDF original de devisImages[i])
+  // Le fichier Storage du PDF original n'est supprimé que si c'est la DERNIÈRE
+  // référence (un PDF multi-pages a la même URL répétée pour chaque page).
+  var sources = psmData[currentCardId].devisImagesPdfSources;
+  if (Array.isArray(sources) && sources.length > idx) {
+    var removedSrcUrl = sources[idx];
+    sources.splice(idx, 1);
+    // Nettoyer les null en queue (cosmétique)
+    while (sources.length > 0 && sources[sources.length - 1] == null) {
+      sources.pop();
+    }
+    psmData[currentCardId].devisImagesPdfSources = sources.length > 0 ? sources : null;
+    // Storage : supprimer l'URL si plus aucune référence dans les sources restantes
+    if (removedSrcUrl) {
+      var stillReferenced = sources.some(function(u) { return u === removedSrcUrl; });
+      if (!stillReferenced && typeof deleteFromStorage === 'function') {
+        try { deleteFromStorage(removedSrcUrl); } catch(e) { /* ignore */ }
+      }
+    }
+  }
+  
   // TARGETED write — only the devisImages array, not all cards
   _skipSyncUntil = Date.now() + 2000;
   _pendingSave = true;
   var updates = {};
   updates['psm/' + currentCardId + '/devisImages'] = images.length > 0 ? images : null;
+  updates['psm/' + currentCardId + '/devisImagesPdfSources'] = psmData[currentCardId].devisImagesPdfSources;
   updates['psm/' + currentCardId + '/_lastModifiedAt'] = new Date().toISOString();
   updates['psm/' + currentCardId + '/_lastModifiedBy'] = currentUser ? currentUser.email : 'unknown';
   db.ref().update(updates).then(function() {
@@ -24017,7 +24791,8 @@ function refreshInlinePdf() {
     frameEl.style.display = 'block';
     var ftype = _detectFileType(src);
     // Afficher/cacher les boutons zoom + rotation : pour images ET PDF
-    var zoomBtns = ['btnPdfZoomIn', 'btnPdfZoomOut', 'btnPdfZoomReset', 'btnPdfRotate'];
+    // (btnPdfZoomOut retiré du DOM en avril 2026 — demande Daniel)
+    var zoomBtns = ['btnPdfZoomIn', 'btnPdfZoomReset', 'btnPdfRotate'];
     var showZoom = (ftype.type === 'image' || ftype.type === 'pdf');
     zoomBtns.forEach(function(id) {
       var b = document.getElementById(id);
