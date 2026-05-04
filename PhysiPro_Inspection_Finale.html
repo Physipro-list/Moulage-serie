@@ -71,15 +71,20 @@ tr.date-row:hover td{background:#fde68a;}
 .date-inp{background:#fff;border:1px solid var(--gold);color:#92400e;padding:2px 6px;border-radius:3px;font-size:11px;font-weight:700;width:110px;text-align:center;}
 .c-cmd{font-weight:700;color:#1d4ed8;font-family:'Consolas',monospace;}
 .c-po{font-weight:600;color:#6d28d9;}
-.c-item{font-weight:500;color:#1e293b;text-align:left;word-wrap:break-word;line-height:1.4;overflow:visible !important;height:auto !important;white-space:normal !important;}
-.si-cell{text-align:left;line-height:1.1;white-space:normal;}
-.si-row{display:flex;align-items:center;white-space:nowrap;line-height:1.35;}
-.si-badge{display:inline-block;width:22px;min-width:22px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.3);border-radius:3px;color:#7c3aed;font-weight:700;font-size:9px;padding:0 2px;text-align:right;box-sizing:border-box;}
+.c-item{font-weight:500;color:#1e293b;text-align:left;word-wrap:break-word;line-height:1.25;overflow:hidden;height:auto;white-space:normal;max-height:2.5em;word-break:break-word;}
+.si-cell{text-align:left;line-height:1.1;white-space:normal;overflow:hidden;}
+.si-row{display:flex;align-items:flex-start;white-space:normal;line-height:1.25;overflow:hidden;}
+.si-badge{display:inline-block;width:22px;min-width:22px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.3);border-radius:3px;color:#7c3aed;font-weight:700;font-size:9px;padding:0 2px;text-align:right;box-sizing:border-box;flex-shrink:0;margin-top:1px;}
 .si-badge.part{background:rgba(251,191,36,0.15);border-color:rgba(251,191,36,0.4);color:#b45309;}
-.si-name{font-size:9px;color:#1e293b;padding-left:3px;font-weight:600;}
+.si-name{font-size:9px;color:#1e293b;padding-left:3px;font-weight:600;overflow:hidden;word-break:break-word;line-height:1.2;flex:1;min-width:0;max-height:2.4em;}
 .c-client{font-weight:600;}
 .c-empty{color:#cbd5e1;}
-.serie-star{color:var(--goldL);font-size:14px;cursor:pointer;margin-right:2px;vertical-align:middle;filter:drop-shadow(0 0 2px rgba(251,191,36,.5));}
+.serie-star{color:#f59e0b;font-size:18px;cursor:pointer;margin-right:3px;vertical-align:middle;text-shadow:0 0 2px #fff,0 0 4px #fff,0 1px 2px rgba(180,83,9,.6);filter:drop-shadow(0 0 3px rgba(245,158,11,.7));transition:transform .12s,color .12s;line-height:1;}
+.serie-star:hover{transform:scale(1.25);color:#d97706;}
+/* Cellule date sur chaque ligne (remplace la colonne #) */
+.td-date{background:#fff;color:#334155;font-weight:600;font-size:11px;text-align:center;cursor:pointer;font-family:Consolas,monospace;letter-spacing:.3px;padding:1px 2px;}
+.td-date:hover{background:#f1f5f9;}
+.td-date input{width:100%;background:#fff;border:1px solid #3b82f6;color:#1e293b;padding:1px 2px;border-radius:2px;font-size:11px;outline:none;font-family:inherit;}
 .serie-dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin-right:3px;}
 .row-x{cursor:pointer;opacity:0;font-size:10px;color:#94a3b8;transition:opacity .15s;padding:0 2px;}
 tr:hover .row-x{opacity:.5;}
@@ -362,7 +367,7 @@ var _serieCache={};
 
 /* ═══ COLUMN DEFINITIONS ═══ */
 var ALL_COLS=[
-  {id:'num',label:'#',w:30,fixed:true},
+  {id:'num',label:'Date',w:80,fixed:true},
   {id:'cmd',label:'Commande',w:90,field:'cmd',ph:'# cmd',align:'center',cls:'c-cmd'},
   {id:'po',label:'PO',w:80,field:'po',ph:'PO',align:'center',cls:'c-po'},
   {id:'client',label:'Client',w:130,field:'client',ph:'Client',cls:'c-client'},
@@ -389,6 +394,25 @@ function escNl(s){if(!s)return'';return esc(s).replace(/\n/g,'<br>');}
 function toast(msg,t){var c=document.getElementById('toastBox');if(!c)return;var e=document.createElement('div');e.className='toast '+(t||'info');e.textContent=msg;c.appendChild(e);setTimeout(function(){e.remove();},2500);}
 function setSB(s){var e=document.getElementById('syncBadge');if(!e)return;e.className='sync-indicator '+s;e.style.display='inline-flex';e.textContent=s==='online'?'⬤ Sync':s==='syncing'?'⬤ …':'⬤ Local';}
 function todayStr(){var t=new Date();return String(t.getDate()).padStart(2,'0')+'/'+String(t.getMonth()+1).padStart(2,'0')+'/'+t.getFullYear();}
+/* Format JJ/MM/AAAA → YYYY-MM-DD pour input type=date */
+function ddmmyyyyToISO(s){if(!s)return'';var p=s.split('/');if(p.length!==3)return'';return p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');}
+/* Format YYYY-MM-DD → JJ/MM/AAAA */
+function isoToDdmmyyyy(s){if(!s)return'';var p=s.split('-');if(p.length!==3)return'';return p[2]+'/'+p[1]+'/'+p[0];}
+/* Trouve la date courante pour une nouvelle entry : remonte au dernier séparateur 📅, sinon today */
+function _findCurrentDate(rows,beforeIdx){
+  if(beforeIdx==null)beforeIdx=rows.length;
+  for(var i=beforeIdx-1;i>=0;i--){
+    var r=rows[i];if(!r)continue;
+    if(r.type==='date'&&r.dateLabel){
+      // Le dateLabel peut être "5-01-2026" ou "JJ/MM/AAAA" — on tente de normaliser en JJ/MM/AAAA
+      var lbl=String(r.dateLabel).trim();
+      var m=lbl.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if(m)return m[1].padStart(2,'0')+'/'+m[2].padStart(2,'0')+'/'+m[3];
+      return lbl;
+    }
+  }
+  return todayStr();
+}
 function gmk(d){d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
 function gml(k){var p=k.split('-'),ms=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];return ms[parseInt(p[1])]+' '+p[0];}
 
@@ -692,6 +716,95 @@ function stopSync(){
 }
 
 /* ═══ START FIREBASE SYNC (from Inspection Atelier) ═══ */
+/* ═══ MIGRATION ONE-SHOT : remplir r.date depuis les séparateurs 📅 ═══
+   Parcourt chaque mois ; pour chaque entry, si r.date est vide, prend la date
+   du dernier séparateur 📅 qui la précède.
+   Si aucun séparateur précédent → laisse vide (Daniel mettra manuellement).
+   Marqué comme fait dans Firebase pour ne s'exécuter qu'UNE FOIS (cross-utilisateurs).
+   Le flag n'est marqué que si AU MOINS 1 entry a été remplie OU si force=true. */
+var FB_DATES_BACKFILL_FLAG='inspFinaleDatesBackfilled_v1';
+
+function _doBackfillCore(force){
+  var data=load();var totalFilled=0;var totalEntries=0;var totalSep=0;
+  Object.keys(data||{}).forEach(function(m){
+    var rows=data[m]||[];if(!Array.isArray(rows))return;
+    var currentDate='';
+    rows.forEach(function(r){
+      if(!r||typeof r!=='object')return;
+      if(r.type==='date'&&r.dateLabel){
+        totalSep++;
+        var lbl=String(r.dateLabel).trim();
+        var mm=lbl.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if(mm)currentDate=mm[1].padStart(2,'0')+'/'+mm[2].padStart(2,'0')+'/'+mm[3];
+        else currentDate=lbl;
+      }else if(r.type==='entry'){
+        totalEntries++;
+        var hasContent=(r.cmd||r.po||r.client||r.desc||r.item||r.qty||r.noboite||r.comment);
+        if(hasContent&&!r.date&&currentDate){
+          r.date=currentDate;
+          totalFilled++;
+        }
+      }
+    });
+  });
+  console.log('[BACKFILL DATES] Stats: séparateurs='+totalSep+' entries='+totalEntries+' filled='+totalFilled);
+  return {data:data,totalFilled:totalFilled,totalEntries:totalEntries,totalSep:totalSep};
+}
+
+function _backfillDatesFromSeparators(force){
+  if(!fbDb||!fbUser){console.warn('[BACKFILL DATES] Firebase non prêt');return Promise.resolve(false);}
+  var checkFlag=force?Promise.resolve({val:function(){return null;}}):fbDb.ref(FB_DATES_BACKFILL_FLAG).once('value');
+  return checkFlag.then(function(snap){
+    if(!force&&snap.val()===true){console.log('[BACKFILL DATES] flag=true, déjà fait, skip');return false;}
+    console.log('[BACKFILL DATES] ═══ Démarrage migration'+(force?' (FORCE)':'')+' ═══');
+    var result=_doBackfillCore(force);
+    if(result.totalFilled===0){
+      console.log('[BACKFILL DATES] Aucune date à remplir (séparateurs='+result.totalSep+', entries='+result.totalEntries+')');
+      // Ne PAS marquer le flag : permet à un futur run de réessayer
+      // (au cas où Firebase n'a pas encore livré les données au moment du check)
+      toast('📅 Aucune date à remplir','info');
+      return false;
+    }
+    save(result.data);
+    return new Promise(function(resolve){
+      try{
+        var clean={};
+        Object.keys(result.data).forEach(function(m){
+          var filtered=(result.data[m]||[]).filter(function(r){
+            if(r.type==='date')return true;
+            if(r.type==='entry')return(r.cmd||r.po||r.client||r.desc||r.item||r.qty||r.noboite||r.comment);
+            return false;
+          });
+          if(filtered.length>0)clean[m]=filtered;
+        });
+        setFbWriting(true);
+        fbDb.ref(FB).set(clean).then(function(){
+          setFbWriting(false);
+          return fbDb.ref(FB_DATES_BACKFILL_FLAG).set(true);
+        }).then(function(){
+          console.log('[BACKFILL DATES] ✅ Push + flag OK ('+result.totalFilled+' dates)');
+          toast('📅 '+result.totalFilled+' dates remplies','ok');
+          renderTable();
+          resolve(true);
+        }).catch(function(e){
+          setFbWriting(false);
+          console.error('[BACKFILL DATES] ❌ Erreur push:',e&&e.message);
+          toast('❌ Erreur sync dates: '+(e&&e.message||''),'err');
+          resolve(false);
+        });
+      }catch(e){
+        console.error('[BACKFILL DATES] ❌ Erreur:',e&&e.message);resolve(false);
+      }
+    });
+  }).catch(function(e){console.warn('[BACKFILL DATES] Erreur flag:',e&&e.message);return false;});
+}
+
+/* Fonction manuelle exposée : taper forceMigrateDatesNow() dans la console F12 pour forcer */
+window.forceMigrateDatesNow=function(){
+  console.log('[BACKFILL DATES] 🔧 Lancement manuel forcé...');
+  return _backfillDatesFromSeparators(true);
+};
+
 function startFirebaseSync(){
   if(_syncPhase!=='idle')return;
   _syncPhase='syncing';
@@ -760,6 +873,12 @@ function startFirebaseSync(){
         pushFB();
       }
     }).catch(function(e){console.error('[SYNC] Main data error:',e);});
+  }).then(function(){
+    // Step 3.5: Backfill dates from separators (one-shot migration)
+    return _backfillDatesFromSeparators().catch(function(e){
+      console.warn('[SYNC] Backfill dates error (continuing):',e&&e.message);
+      return false;
+    });
   }).then(function(){
     // FINAL: Go live
     _syncPhase='live';
@@ -1086,12 +1205,14 @@ function addBon(){
   for(var j=startSearch;j<data[m].length;j++){
     var rr=data[m][j];
     if(rr.type==='entry'&&!rr.cmd&&!rr.po&&!rr.client&&!rr.desc&&!rr.item&&!rr.qty&&!rr.noboite&&!rr.comment){
-      rr.cmd=bon;targetIdx=j;break;
+      rr.cmd=bon;
+      if(!rr.date)rr.date=_findCurrentDate(data[m],j);
+      targetIdx=j;break;
     }
   }
   if(targetIdx<0){
     var insertAt=lastFilledIdx+1;
-    var newRow={id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),type:'entry',cmd:bon,po:'',client:'',desc:'',item:'',qty:'',noboite:'',comment:'',serieLinked:false};
+    var newRow={id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),type:'entry',cmd:bon,po:'',client:'',desc:'',item:'',qty:'',noboite:'',comment:'',serieLinked:false,date:_findCurrentDate(data[m],insertAt)};
     data[m].splice(insertAt,0,newRow);targetIdx=insertAt;
   }
   // Garantir 20 lignes vides après la dernière remplie
@@ -1177,16 +1298,19 @@ function confirmSerie(){
     var row=rows[targetIdx];
     row.cmd=ctx.bon;row.po=card.numeroPO||'';row.client=ctx.clientLabel;
     row.item=itemLines.join('\n');row.qty=String(totalQty);row.serieLinked=true;
+    if(!row.date)row.date=_findCurrentDate(rows,targetIdx);
   }else{
     var filled=false;
     for(var ri=0;ri<rows.length;ri++){
       var rr=rows[ri];
       if(rr.type==='entry'&&!rr.cmd&&!rr.po&&!rr.client&&!rr.desc&&!rr.item&&!rr.qty&&!rr.noboite&&!rr.comment){
         rr.cmd=ctx.bon;rr.po=card.numeroPO||'';rr.client=ctx.clientLabel;
-        rr.item=itemLines.join('\n');rr.qty=String(totalQty);rr.serieLinked=true;filled=true;break;
+        rr.item=itemLines.join('\n');rr.qty=String(totalQty);rr.serieLinked=true;
+        if(!rr.date)rr.date=_findCurrentDate(rows,ri);
+        filled=true;break;
       }
     }
-    if(!filled)rows.push({id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),type:'entry',cmd:ctx.bon,po:card.numeroPO||'',client:ctx.clientLabel,desc:'',item:itemLines.join('\n'),qty:String(totalQty),noboite:'',comment:'',serieLinked:true});
+    if(!filled)rows.push({id:'e-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),type:'entry',cmd:ctx.bon,po:card.numeroPO||'',client:ctx.clientLabel,desc:'',item:itemLines.join('\n'),qty:String(totalQty),noboite:'',comment:'',serieLinked:true,date:_findCurrentDate(rows,rows.length)});
   }
   save(data);
   // 2. Update Série+ in Firebase
@@ -1628,7 +1752,8 @@ function renderTable(){
     if(_delMode)h+='<td class="td-chk"><input type="checkbox" id="dchk_'+i+'"'+(isDelSel?' checked':'')+' onchange="toggleDelCheck('+i+')"></td>';
     vis.forEach(function(c){
       if(c.id==='num'){
-        h+='<td style="color:#94a3b8;font-size:9px;">'+(isSerie?'<span class="serie-star" title="Série+" onclick="reopenSerie(\''+esc(r.cmd).replace(/'/g,"\\'")+'\','+i+')">⭐</span>':num)+'</td>';
+        var dateStr=r.date||'';
+        h+='<td class="td-date" data-date-idx="'+i+'" title="Cliquer pour modifier la date"><span class="date-txt">'+esc(dateStr)+'</span></td>';
       }else if(c.id==='del'){
         h+='<td><span class="row-x" onclick="delRow('+i+')" title="Supprimer">✕</span></td>';
       }else if(c.id==='client'){
@@ -1643,6 +1768,11 @@ function renderTable(){
         else if(cvL.indexOf('inventaire')>=0)clColor='#c2410c';
         var cStyle=clColor?'color:'+clColor+';font-weight:800;':'';
         h+='<td class="td-edit c-client'+(cv?'':' c-empty')+'" style="'+cStyle+'cursor:pointer;" data-field="client" data-idx="'+i+'">'+(cv?esc(cv):'')+'</td>';
+      }else if(c.id==='cmd'){
+        var cmdVal=r.cmd||'';
+        var starHtml=isSerie?'<span class="serie-star" title="Série+" onclick="event.stopPropagation();reopenSerie(\''+esc(r.cmd).replace(/'/g,"\\'")+'\','+i+')">⭐</span>':'';
+        var alignCmd='text-align:center;';
+        h+='<td class="td-edit '+(c.cls||'c-cmd')+(cmdVal?'':' c-empty')+'" style="'+alignCmd+'cursor:pointer;" data-field="cmd" data-idx="'+i+'">'+starHtml+(cmdVal?esc(cmdVal):'')+'</td>';
       }else{
         var val=r[c.field]||'';var cls=c.cls||'c-item';
         var align=(c.align==='center')?'text-align:center;':'text-align:left;';
@@ -1662,6 +1792,13 @@ document.addEventListener('DOMContentLoaded',function(){
   var tb=document.getElementById('tbody');
   if(tb)tb.addEventListener('click',function(e){
     if(e.target.tagName==='INPUT')return;
+    /* Handle date cell click */
+    var dateTd=e.target.closest('td.td-date[data-date-idx]');
+    if(dateTd&&!e.target.classList.contains('serie-star')){
+      if(dateTd.querySelector('input'))return;
+      var dIdx=parseInt(dateTd.getAttribute('data-date-idx'));
+      editDateOnRow(dIdx,dateTd);return;
+    }
     var td=e.target.closest('td[data-field][data-idx]');if(!td)return;
     if(td.querySelector('input'))return;
     var idx=parseInt(td.getAttribute('data-idx'));var field=td.getAttribute('data-field');
@@ -1669,6 +1806,33 @@ document.addEventListener('DOMContentLoaded',function(){
     editCell(idx,field,td,{ph:colDef?colDef.ph:'',align:colDef?colDef.align:''});
   });
 });
+
+/* ═══ ÉDITION DE LA DATE SUR UNE LIGNE ═══ */
+function editDateOnRow(idx,td){
+  if(!hasPerm('M')&&!hasPerm('A')){toast('⛔ Permission refusée','err');return;}
+  var el=document.getElementById('insp-month');var m=el?el.value:gmk();
+  var data=load();var rows=data[m]||[];var r=rows[idx];if(!r||r.type!=='entry')return;
+  var curIso=ddmmyyyyToISO(r.date||'')||(function(){var t=new Date();return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');})();
+  td.innerHTML='<input type="date" value="'+curIso+'">';
+  var inp=td.querySelector('input');inp.focus();
+  var saved=false;
+  function commit(){
+    if(saved)return;saved=true;
+    var newIso=inp.value;
+    var newStr=newIso?isoToDdmmyyyy(newIso):'';
+    var d2=load();if(!d2[m])d2[m]=[];if(d2[m][idx]&&d2[m][idx].type==='entry'){
+      d2[m][idx].date=newStr;save(d2);
+    }
+    renderTable();
+  }
+  function cancel(){if(saved)return;saved=true;renderTable();}
+  inp.addEventListener('change',commit);
+  inp.addEventListener('blur',commit);
+  inp.addEventListener('keydown',function(ev){
+    if(ev.key==='Enter'){ev.preventDefault();commit();}
+    else if(ev.key==='Escape'){ev.preventDefault();cancel();}
+  });
+}
 
 /* ═══ PRINT SYSTEM ═══ */
 function openPrintModal(){
@@ -1719,13 +1883,16 @@ function buildPrintHTML(){
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Inspection Finale — '+gml(m)+'</title>';
   html+='<style>body{font-family:Segoe UI,Tahoma,sans-serif;margin:20px;color:#000;}.print-header{text-align:center;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #2563eb;}.print-header h1{font-size:18px;color:#1e293b;margin:0;}.print-header .sub{font-size:12px;color:#64748b;margin-top:2px;}table{border-collapse:collapse;width:100%;font-size:11px;}th{background:#2563eb;color:#fff;padding:6px 8px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;border:1px solid #1d4ed8;-webkit-print-color-adjust:exact;print-color-adjust:exact;}td{padding:4px 6px;border:1px solid #cbd5e1;vertical-align:middle;}tr:nth-child(even){background:#f8fafc;}.date-row td{background:#fef3c7;color:#92400e;font-weight:700;font-size:12px;text-align:left;border-color:#fcd34d;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.c-cmd{font-weight:700;color:#1d4ed8;font-family:Consolas,monospace;text-align:center;}.c-po{font-weight:600;color:#6d28d9;text-align:center;}.c-client{font-weight:600;}.footer{text-align:center;margin-top:12px;font-size:9px;color:#94a3b8;}@page{margin:15mm 10mm;}</style></head><body>';
   html+='<div class="print-header"><h1>🔍 PhysiPro — Inspection Finale</h1><div class="sub">'+gml(m)+' — '+todayStr()+'</div></div>';
-  html+='<table><thead><tr><th>#</th>';
+  html+='<table><thead><tr><th>Date</th>';
   vis.forEach(function(c){if(c.id!=='num')html+='<th>'+c.label+'</th>';});
   html+='</tr></thead><tbody>';
   var num=0;
   rows.forEach(function(r){
     if(r.type==='date'){html+='<tr class="date-row"><td colspan="'+vis.length+'">📅 '+esc(r.dateLabel)+'</td></tr>';return;}
-    num++;html+='<tr><td style="text-align:center;color:#94a3b8;font-size:9px;">'+(r.serieLinked?'⭐':num)+'</td>';
+    num++;
+    var dt=r.date||'';
+    var starP=r.serieLinked?'⭐ ':'';
+    html+='<tr><td style="text-align:center;color:#334155;font-size:10px;font-weight:600;font-family:Consolas,monospace;background:#fff;">'+starP+esc(dt)+'</td>';
     vis.forEach(function(c){if(c.id==='num')return;html+='<td class="'+(c.cls||'')+'">'+escNl(r[c.field]||'')+'</td>';});
     html+='</tr>';
   });
