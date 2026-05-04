@@ -8,7 +8,7 @@
            <script src="PhysiPro_Nav.js"></script>
 
       2) Après l'authentification Firebase, appeler :
-           initPhysiProNav('calcmat', user.email);
+           initPhysiProNav('moulage', user.email);
 
          où le 1er argument est l'ID du module courant
          et le 2e est l'email de l'utilisateur connecté.
@@ -33,7 +33,7 @@
     serie:       { icon: '📋', label: 'Série+',            sub: 'Commandes de série',         file: 'PhysiPro_Serie_.html',                  color: '#f97316' },
     inspection:  { icon: '☑️', label: 'Insp. Atelier',     sub: 'Inspection Atelier',         file: 'PhysiPro_Inspection_Atelier.html',      color: '#22c55e' },
     inspcouture: { icon: '🧵', label: 'Prod. Couture',     sub: 'Production Couture',         file: 'PhysiPro_Production_Couture.html',      color: '#a855f7' },
-    psm:         { icon: '🔧', label: 'PSM',               sub: 'Plan de santé matières',     file: 'PhysiPro_PSM.html',                     color: '#ef4444' },
+    psm:         { icon: '🔧', label: 'Liste Matériaux Atelier', sub: 'Liste des matériaux',       file: 'PhysiPro_Liste_Materiaux.html',         color: '#ef4444' },
     jobs:        { icon: '🎧', label: 'Service Client',    sub: 'Service Client',             file: 'PhysiPro_ServiceClient.html',           color: '#f59e0b' },
     photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' },
     jobsattente: { icon: '⏳', label: 'Commandes en attente',   sub: 'Commandes en attente',       file: 'PhysiPro_Jobs_Attente.html',             color: '#f59e0b' },
@@ -65,30 +65,30 @@
   //  ACCÈS PAR UTILISATEUR (emails en base64)
   // ══════════════════════════════════════
   var HUB_ACCESS = {
-    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','calcmat','jobsattente'],  // atelieratp (Daniel)
-    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],  // valerie18 (Valérie)
-    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','jobs','calcmat','jobsattente'],                // simdut (Cassie)
-    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],  // michelle.bouchard
-    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],  // sroy (Stéphanie)
-    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','serie','inspfinale','jobs','calcmat','jobsattente'],                             // sonia.boulanger
-    'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','jobs','calcmat','jobsattente'],                                                  // service3 (Jacynthe)
-    'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','jobs','calcmat','jobsattente'],                                                  // service1 (Jonathan)
-    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspfinale','jobs','calcmat','jobsattente'],                            // ngagne (Nadia)
-    'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':             ['moulage','jobs','calcmat','jobsattente'],                                                        // mplanguedoc (Marie-Pier)
-    'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':         ['moulage','jobs','calcmat','jobsattente'],                                                        // mariesoleilr (Marie-Soleil)
-    'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':     ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],  // fabrys.frechette
-    'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':                 ['moulage','inspfinale','jobs','calcmat','jobsattente'],                                            // cncatp (Sina)
-    'cGV0ZXJiYXNzNzZAZ21haWwuY29t':                 ['moulage','jobs','calcmat','jobsattente'],                                                        // peterbass76 (Pierre)
-    'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':         ['moulage','jobs','calcmat','jobsattente'],                                                        // mario.jacques (Mario J.)
-    'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat'],                // marioouellette (Mario O.)
-    'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':             ['jobs','calcmat','jobsattente'],                                                                  // magasinatp2 (Sylvain)
-    'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':             ['jobs','calcmat','jobsattente'],                                                                  // magasinatp3 (Stéphane Del.)
-    'cmhAcGh5c2lwcm8uY29t':                         ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente'],  // rh (Roxanne)
-    'Y29vcmRvLm1hZy5hdHBAcGh5c2lwcm8uY29t':         ['calcmat','jobsattente'],                                                                         // coordo.mag.atp (Patrick C.)
-    'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':         ['calcmat'],                                                                                       // elyse.bolduc (Élyse)
-    'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':         ['calcmat'],                                                                                       // eric.poirier (Éric)
-    'Y29udGFjdEBwaHlzaXByby5mcg==':                 ['jobs','calcmat'],                                                                                // contact (France)
-    'amVhbmNocmlzdG9waGVkYW5qb3VAcGh5c2lwcm8uY29t': ['moulage','serie','inspection','inspcouture','inspfinale','jobs','calcmat','jobsattente']   // jeanchristophedanjou (Jean-Christophe)
+    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','jobsattente'],  // atelieratp (Daniel)
+    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','jobs','jobsattente'],  // valerie18 (Valérie)
+    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','jobs','jobsattente'],                // simdut (Cassie)
+    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','jobs','jobsattente'],  // michelle.bouchard
+    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','serie','inspection','inspcouture','inspfinale','jobs','jobsattente'],  // sroy (Stéphanie)
+    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','serie','inspfinale','jobs','jobsattente'],                             // sonia.boulanger
+    'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','jobs','jobsattente'],                                                  // service3 (Jacynthe)
+    'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','jobs','jobsattente'],                                                  // service1 (Jonathan)
+    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspfinale','jobs','jobsattente'],                            // ngagne (Nadia)
+    'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':             ['moulage','jobs','jobsattente'],                                                        // mplanguedoc (Marie-Pier)
+    'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':         ['moulage','jobs','jobsattente'],                                                        // mariesoleilr (Marie-Soleil)
+    'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':     ['moulage','serie','inspection','inspcouture','inspfinale','jobs','jobsattente'],  // fabrys.frechette
+    'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':                 ['moulage','inspfinale','jobs','jobsattente'],                                            // cncatp (Sina)
+    'cGV0ZXJiYXNzNzZAZ21haWwuY29t':                 ['moulage','jobs','jobsattente'],                                                        // peterbass76 (Pierre)
+    'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':         ['moulage','jobs','jobsattente'],                                                        // mario.jacques (Mario J.)
+    'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage','serie','inspection','inspcouture','inspfinale','jobs'],                // marioouellette (Mario O.)
+    'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':             ['jobs','jobsattente'],                                                                  // magasinatp2 (Sylvain)
+    'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':             ['jobs','jobsattente'],                                                                  // magasinatp3 (Stéphane Del.)
+    'cmhAcGh5c2lwcm8uY29t':                         ['moulage','serie','inspection','inspcouture','inspfinale','jobs','jobsattente'],  // rh (Roxanne)
+    'Y29vcmRvLm1hZy5hdHBAcGh5c2lwcm8uY29t':         ['jobsattente'],                                                                         // coordo.mag.atp (Patrick C.)
+    'ZWx5c2UuYm9sZHVjQHBoeXNpcHJvLmNvbQ==':         [],                                                                                       // elyse.bolduc (Élyse)
+    'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':         [],                                                                                       // eric.poirier (Éric)
+    'Y29udGFjdEBwaHlzaXByby5mcg==':                 ['jobs'],                                                                                // contact (France)
+    'amVhbmNocmlzdG9waGVkYW5qb3VAcGh5c2lwcm8uY29t': ['moulage','serie','inspection','inspcouture','inspfinale','jobs','jobsattente']   // jeanchristophedanjou (Jean-Christophe)
   };
 
   // ══════════════════════════════════════
@@ -182,7 +182,7 @@
   /**
    * initPhysiProNav(currentModuleId, userEmail)
    *
-   *   currentModuleId : string — clé du module courant (ex: 'calcmat', 'moulage', 'serie')
+   *   currentModuleId : string — clé du module courant (ex:  'moulage', 'serie')
    *   userEmail       : string — email de l'utilisateur connecté
    *
    * Appeler une seule fois après l'auth Firebase.
