@@ -227,7 +227,7 @@ body.metal-mode .psm-field-soumission input{color:#fff}
 .print-overlay.show{display:block;position:fixed;inset:0;background:#475569;color:#000;z-index:9999;overflow:auto;padding:30px 0;font-family:'DM Sans',Arial,sans-serif}
 
 /* ─── Conteneur PDF : largeur fixe lettre US pour un rendu prévisible ─── */
-.print-overlay #printRoot{max-width:200mm;margin:0 auto;background:#fff;padding:14mm 12mm;box-shadow:0 8px 30px rgba(0,0,0,.35);color:#0f172a}
+.print-overlay #printRoot{max-width:192mm;margin:0 auto;background:#fff;padding:14mm 12mm;box-shadow:0 8px 30px rgba(0,0,0,.35);color:#0f172a;box-sizing:border-box}
 
 /* ─── En-tête doc ─── */
 .print-overlay .print-header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f172a;padding-bottom:8px;margin-bottom:14px}
@@ -965,17 +965,44 @@ var MATERIAUX_COUTURE_BASE = [
 var currentDept = 'atelier';
 var customCatalog = [];
 
-// PSM = liste d'items. Chaque item a son nom, ses heures, ses matériaux et ses notes.
+// PSM = liste d'items. Chaque item a son nom, ses heures, ses matériaux et ses notes (par dept).
 function _newItem(name) {
   return {
     name: name || 'Item 1',
     hoursCouture: 0,
     hoursAtelier: 0,
     hoursMetal: 0,
-    notes: '',
+    notes: { atelier: '', couture: '', metal: '' },
     image: null,
     mats: { atelier: [], couture: [], metal: [] }
   };
+}
+
+// Helper : retourne la note du dept courant pour l'item courant
+// Gère aussi la rétrocompatibilité avec l'ancien format (notes:'string') :
+// si l'item a une note string ancienne, on la migre vers le dept actif
+function _getItemNote(it, dept) {
+  if (!it) return '';
+  if (typeof it.notes === 'string') {
+    // Ancien format : on convertit à la volée vers le nouveau format
+    var oldNote = it.notes;
+    it.notes = { atelier: '', couture: '', metal: '' };
+    // On préserve l'ancienne note en l'attribuant au dept actuel par défaut
+    // Si l'utilisateur l'avait écrite alors qu'il était sur Atelier, elle reste sur Atelier
+    it.notes[dept] = oldNote;
+  }
+  if (!it.notes || typeof it.notes !== 'object') {
+    it.notes = { atelier: '', couture: '', metal: '' };
+  }
+  return it.notes[dept] || '';
+}
+
+function _setItemNote(it, dept, val) {
+  if (!it) return;
+  if (typeof it.notes === 'string' || !it.notes || typeof it.notes !== 'object') {
+    it.notes = { atelier: '', couture: '', metal: '' };
+  }
+  it.notes[dept] = val;
 }
 var psmItems = [_newItem('Item 1')];
 var currentItemIdx = 0;
@@ -1024,9 +1051,29 @@ function loadCurrentItemIntoUI() {
   var it = _curItem();
   document.getElementById('itemName').value = it.name || '';
   _renderHoursForCurrentDept();
-  document.getElementById('psmNotes').value = it.notes || '';
+  // Notes : par dept × item
+  document.getElementById('psmNotes').value = _getItemNote(it, currentDept);
+  _updateNotesLabel();
   _renderItemImage();
   renderMatList();
+}
+
+// Met à jour le label des notes selon le dept courant
+function _updateNotesLabel() {
+  var lbl = document.querySelector('label[for="psmNotes"]');
+  var area = document.getElementById('psmNotes');
+  var labels = {
+    atelier: '📝 Notes pour technicien (Atelier)',
+    couture: '📝 Notes pour couturière (Couture)',
+    metal:   '📝 Notes pour atelier métal'
+  };
+  var placeholders = {
+    atelier: 'Notes pour le technicien d\'atelier sur cet item…',
+    couture: 'Notes pour la couturière sur cet item…',
+    metal:   'Notes pour l\'atelier métal sur cet item…'
+  };
+  if (lbl) lbl.textContent = labels[currentDept] || '📝 Notes';
+  if (area) area.placeholder = placeholders[currentDept] || 'Notes pour cet item…';
 }
 
 function _hoursKey(dept) {
@@ -1444,7 +1491,7 @@ function updateItemHours(val) {
 }
 
 function updateItemNotes(val) {
-  _curItem().notes = val;
+  _setItemNote(_curItem(), currentDept, val);
   _markDirty();
 }
 
@@ -1522,6 +1569,9 @@ function switchDept(dept) {
   document.body.classList.toggle('couture-mode', dept === 'couture');
   document.body.classList.toggle('metal-mode', dept === 'metal');
   _renderHoursForCurrentDept();
+  // Recharger la note du bon dept et mettre à jour le label
+  document.getElementById('psmNotes').value = _getItemNote(_curItem(), currentDept);
+  _updateNotesLabel();
   renderCatalogBrowser();
   renderMatList();
 }
@@ -1771,7 +1821,11 @@ function _hasContent() {
   for (var i = 0; i < psmItems.length; i++) {
     var it = psmItems[i];
     if (it.hoursAtelier || it.hoursCouture || it.hoursMetal) return true;
-    if (it.notes) return true;
+    // Notes : peut être string (ancien format) ou objet (nouveau format)
+    if (typeof it.notes === 'string' && it.notes) return true;
+    if (it.notes && typeof it.notes === 'object') {
+      if (it.notes.atelier || it.notes.couture || it.notes.metal) return true;
+    }
     if (it.image) return true;
     if (it.mats.atelier.length || it.mats.couture.length || it.mats.metal.length) return true;
   }
@@ -1785,12 +1839,26 @@ function loadSoumission(id) {
   currentSoumissionId = id;
   // Restaurer items, en s'assurant que chaque item a la structure complète
   psmItems = (data.items || [_newItem('Item 1')]).map(function(it){
+    // Migration : si l'ancienne note est une string, on la garde sur Atelier par défaut
+    // (la majorité des anciennes notes ont été tapées sur l'onglet Atelier)
+    var notesObj;
+    if (typeof it.notes === 'string') {
+      notesObj = { atelier: it.notes || '', couture: '', metal: '' };
+    } else if (it.notes && typeof it.notes === 'object') {
+      notesObj = {
+        atelier: it.notes.atelier || '',
+        couture: it.notes.couture || '',
+        metal:   it.notes.metal   || ''
+      };
+    } else {
+      notesObj = { atelier: '', couture: '', metal: '' };
+    }
     return {
       name: it.name || 'Item 1',
       hoursCouture: it.hoursCouture || 0,
       hoursAtelier: it.hoursAtelier || 0,
       hoursMetal: it.hoursMetal || 0,
-      notes: it.notes || '',
+      notes: notesObj,
       image: it.image || null,
       mats: {
         atelier: (it.mats && it.mats.atelier) || [],
@@ -2317,7 +2385,7 @@ function _buildPrintHtml() {
   // 3. Header du document
   var html = '';
   html += '<div class="print-header">';
-  html += '<h1>📋 ' + esc(psmName) + '</h1>';
+  html += '<h1><span style="font-size:14px;font-weight:600;letter-spacing:1px;color:#475569;display:block;margin-bottom:2px">SOUMISSION:</span><span style="font-size:28px">' + esc(psmName) + '</span></h1>';
   html += '<div class="print-meta">';
   html += '<div><b>Date :</b> ' + esc(_formatDateFr(psmDate)) + '</div>';
   html += '<div><b>Items :</b> ' + psmItems.length + ' &nbsp;·&nbsp; <b>Sections :</b> ' + blocks.length + '</div>';
@@ -2380,8 +2448,8 @@ function _buildPrintHtml() {
     }
     html += '</div>';
 
-    // Colonne 2 : Notes
-    var notes = (it.notes || '').trim();
+    // Colonne 2 : Notes (par dept)
+    var notes = _getItemNote(it, dept).trim();
     html += '<div class="dept-notes">';
     html += '<div class="dept-notes-label">' + notesLabel + '</div>';
     html += '<div class="dept-notes-content' + (notes ? '' : ' empty') + '">';
@@ -2578,12 +2646,25 @@ function exportCostXlsm() {
     showToast('Bibliothèque ZIP non chargée. Réessaie dans 2 sec.', 'error');
     return;
   }
+  // S'assurer que la soumission est sauvegardée dans Firebase avant l'export
+  _ensureSoumissionExists(function(){ _doExportCostXlsm(); });
+}
+
+function _doExportCostXlsm() {
   var psmName = (document.getElementById('psmName').value || '').trim();
   var psmDate = (document.getElementById('psmDate').value || '').trim();
   // Récupérer l'item courant (et non plus les valeurs des champs qui pointent dessus)
   var it = _curItem();
   var itemName = (it.name || '').trim();
-  var itemNotes = (it.notes || '').trim();
+  // Combiner les notes des 3 départements (avec préfixe pour chacune)
+  var nA = _getItemNote(it, 'atelier').trim();
+  var nC = _getItemNote(it, 'couture').trim();
+  var nM = _getItemNote(it, 'metal').trim();
+  var noteParts = [];
+  if (nA) noteParts.push('[Atelier] ' + nA);
+  if (nC) noteParts.push('[Couture] ' + nC);
+  if (nM) noteParts.push('[Métal] ' + nM);
+  var itemNotes = noteParts.join('\n\n');
   var hC = it.hoursCouture || 0;
   var hA = it.hoursAtelier || 0;
   var hM = it.hoursMetal || 0;
