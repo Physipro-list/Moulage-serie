@@ -432,16 +432,26 @@ auth.onAuthStateChanged(function(user){
   var access=getAccess(user.email);
   
   // Sur mobile/tablette : filtrer selon une liste de modules disponibles sur mobile
-  // Modules disponibles sur mobile: moulage, jobs (Service Client), photos
-  // L'utilisateur voit ceux auxquels il a accès parmi ces modules
+  // Modules disponibles sur mobile: moulage, jobs (Service Client), photos (PhotoSender)
   var _isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
   if (_isMobile) {
-    var _isAdmin = user.email && user.email.toLowerCase() === 'atelieratp@physipro.com';
+    var _emailLow = (user.email || '').toLowerCase();
+    // Emails qui ont accès complet aux 3 modules mobiles (Moulage + Service Client + PhotoSender)
+    var MOBILE_FULL_ACCESS = [
+      'atelieratp@physipro.com',       // Daniel
+      'sroy@physipro.com',             // Stéphanie
+      'eric.poirier@physipro.com',     // Éric
+      'service3@physipro.com',         // Jacynthe
+      'service1@physipro.com',         // Jonathan
+      'ngagne@physipro.com',           // Nadia
+      'sonia.boulanger@physipro.com',  // Sonia
+      'mplanguedoc@physipro.com',      // Marie-Pier
+      'mariesoleilr@physipro.com'      // Marie-Soleil
+    ];
     var MOBILE_MODULES = ['moulage', 'jobs', 'photos'];
-    if (_isAdmin) {
-      // Admin voit tous les modules mobiles
-      access = MOBILE_MODULES.filter(function(m){ return access.indexOf(m) !== -1; });
-      if (access.length === 0) access = ['moulage','jobs','photos'];
+    if (MOBILE_FULL_ACCESS.indexOf(_emailLow) !== -1) {
+      // Accès complet aux 3 modules mobiles
+      access = ['moulage', 'jobs', 'photos'];
     } else {
       // Utilisateurs normaux: intersection de leurs permissions avec les modules mobiles
       access = access.filter(function(m){ return MOBILE_MODULES.indexOf(m) !== -1; });
@@ -538,14 +548,24 @@ auth.onAuthStateChanged(function(user){
     var MOBILE_LABELS = { photos: 'Photos', jobs: 'Service Client' };
 
     // Grille de tuiles — GROSSES pastilles centrées
-    mContent += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:18px;width:100%;max-width:320px;">';
+    // Si 3 modules → 3 colonnes (côte à côte), sinon 2 colonnes
+    var _nCols = (access.length === 3) ? 3 : 2;
+    var _gridMaxW = (access.length === 3) ? '420px' : '320px';
+    var _tileMinH = (access.length === 3) ? '130px' : '155px';
+    var _tilePad = (access.length === 3) ? '18px 8px 14px' : '24px 14px 20px';
+    var _iconSize = (access.length === 3) ? '60px' : '72px';
+    var _iconFont = (access.length === 3) ? '30px' : '36px';
+    var _labelFont = (access.length === 3) ? '13px' : '16px';
+    var _gap = (access.length === 3) ? '10px' : '18px';
+    
+    mContent += '<div style="display:grid;grid-template-columns:repeat('+_nCols+',1fr);gap:'+_gap+';width:100%;max-width:'+_gridMaxW+';">';
     access.forEach(function(key){
       var m=MODULES[key];if(!m)return;
-      var icon = MOBILE_ICONS[key] || ('<span style="font-size:40px;">'+m.icon+'</span>');
+      var icon = MOBILE_ICONS[key] || ('<span style="font-size:'+_iconFont+';">'+m.icon+'</span>');
       var label = MOBILE_LABELS[key] || m.label;
-      mContent += '<a href="'+m.file+'" class="hub-tile '+m.cls+'" style="min-height:155px;padding:24px 14px 20px;text-decoration:none;">';
-      mContent += '<div class="hub-tile-icon" style="width:72px;height:72px;font-size:36px;border-radius:18px;display:flex;align-items:center;justify-content:center;">'+icon+'</div>';
-      mContent += '<div class="hub-tile-label" style="font-size:16px;margin-top:4px;">'+label+'</div>';
+      mContent += '<a href="'+m.file+'" class="hub-tile '+m.cls+'" style="min-height:'+_tileMinH+';padding:'+_tilePad+';text-decoration:none;">';
+      mContent += '<div class="hub-tile-icon" style="width:'+_iconSize+';height:'+_iconSize+';font-size:'+_iconFont+';border-radius:14px;display:flex;align-items:center;justify-content:center;">'+icon+'</div>';
+      mContent += '<div class="hub-tile-label" style="font-size:'+_labelFont+';margin-top:4px;text-align:center;line-height:1.1;">'+label+'</div>';
       mContent += '</a>';
     });
     mContent += '</div>';
