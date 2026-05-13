@@ -47,8 +47,8 @@
   ];
 
   // Modules autorisés sur mobile
-  var MOBILE_ALLOWED = ['moulage'];
-  var MOBILE_ALLOWED_ADMIN = ['moulage'];
+  var MOBILE_ALLOWED = ['moulage', 'jobs'];
+  var MOBILE_ALLOWED_ADMIN = ['moulage', 'jobs'];
 
   // Emails qui voient TOUS leurs modules sur mobile (pas limités à MOBILE_ALLOWED)
   // Daniel, Valérie, Michelle Bouchard, Stéphanie, Sylvain, Stéphane Delorme
