@@ -2262,6 +2262,8 @@ body {
 /* Zone chat intégrée dans la fiche */
 .mobile-fiche-chat-section { background:#fff; border-radius:8px; padding:8px; border:1px solid #e5e7eb; margin-top:10px; }
 .mobile-fiche-chat-header { font-size: 12px; font-weight: 700; color: #1f2937; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb; margin-bottom: 8px; display:flex; align-items:center; gap:6px; }
+.mobile-chat-header-photo-btn { padding: 5px 10px; background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 4px rgba(59,130,246,0.3); white-space: nowrap; }
+.mobile-chat-header-photo-btn:active { transform: scale(0.96); }
 .mobile-fiche-chat-messages { display:flex; flex-direction:column; gap:8px; }
 .mobile-fiche-chat-compose { margin-top:10px; padding-top:10px; border-top: 1px solid #e5e7eb; }
 
@@ -9801,7 +9803,12 @@ function openMobileFiche(jobId) {
     </div>
     <!-- Chat intégré : photos du chat + messages + compose -->
     <div class="mobile-fiche-chat-section" id="mobileFicheChatSection">
-      <div class="mobile-fiche-chat-header">💬 Conversation</div>
+      <div class="mobile-fiche-chat-header">
+        <span>💬 Conversation</span>
+        <span style="flex:1;"></span>
+        <input type="file" id="mobileChatHeaderPhotoInput" accept="image/*" capture="environment" style="display:none" onchange="mobileChatHeaderCapturePhoto(this)">
+        <button type="button" class="mobile-chat-header-photo-btn" onclick="document.getElementById('mobileChatHeaderPhotoInput').click()" title="Prendre une photo pour cette conversation">📷 Prendre</button>
+      </div>
       <div class="mobile-fiche-chat-messages" id="mobileChatMessages"></div>
       <div class="mobile-fiche-chat-compose" id="mobileChatCompose"></div>
     </div>
@@ -9880,6 +9887,55 @@ function closeMobileFiche() {
   document.getElementById('mobileFichePage').classList.remove('active');
   mobileCurrentJobId = null;
 }
+
+// Bouton 📷 dans l'en-tête "💬 Conversation" : capture photo → ouvre compose mobile en mode Questionnement avec la photo
+function mobileChatHeaderCapturePhoto(input) {
+  if (!input || !input.files || !input.files[0]) return;
+  if (!mobileCurrentJobId) { showToast('Aucune commande ouverte', 'warning'); return; }
+  var file = input.files[0];
+  
+  // 1) Activer la zone compose mobile en mode Questionnement (problem)
+  mobileComposeType = 'problem';
+  var zone = document.getElementById('mobileComposeZone');
+  if (zone) zone.className = 'mobile-compose-zone active problem';
+  var typeLabel = document.getElementById('mobileComposeTypeLabel');
+  if (typeLabel) typeLabel.textContent = '❓ QUESTIONNEMENT';
+  
+  // 2) Compresser la photo et l'ajouter à mobilePhotosData
+  if (mobilePhotosData.length >= 6) {
+    showToast('Max 6 photos', 'warning');
+    input.value = '';
+    return;
+  }
+  if (typeof compressMobileImage === 'function') {
+    compressMobileImage(file, function(compressed) {
+      mobilePhotosData.push(compressed);
+      updateMobilePhotosPreview();
+      // Focus sur le textarea pour saisie immédiate
+      var ta = document.getElementById('mobileComposeTextarea');
+      if (ta) { ta.focus(); ta.placeholder = 'Décrivez le questionnement...'; }
+      // Scroll vers la zone compose
+      setTimeout(function() {
+        var zone = document.getElementById('mobileComposeZone');
+        if (zone && zone.scrollIntoView) zone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    });
+  } else {
+    // Fallback simple sans compression
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      mobilePhotosData.push(ev.target.result);
+      updateMobilePhotosPreview();
+      var ta = document.getElementById('mobileComposeTextarea');
+      if (ta) ta.focus();
+    };
+    reader.readAsDataURL(file);
+  }
+  
+  // Reset l'input pour permettre une nouvelle capture
+  input.value = '';
+}
+window.mobileChatHeaderCapturePhoto = mobileChatHeaderCapturePhoto;
 
 function deleteMobileJob() {
   if (!mobileCurrentJobId) return;
@@ -10011,7 +10067,20 @@ function _renderMobileChatInFiche() {
 }
 
 function openMobileCompose(type) {
-  QuestChat.openCompose('conversation');
+  // type peut être : 'problem', 'normal', 'pinned'
+  mobileComposeType = type || 'normal';
+  var zone = document.getElementById('mobileComposeZone');
+  if (zone) zone.className = 'mobile-compose-zone active ' + mobileComposeType;
+  var typeLabel = document.getElementById('mobileComposeTypeLabel');
+  if (typeLabel) {
+    var labels = { problem: '❓ QUESTIONNEMENT', normal: '💬 DISCUSSION', pinned: '📌 ÉPINGLÉ', reply: '↩️ RÉPONSE' };
+    typeLabel.textContent = labels[mobileComposeType] || '💬 MESSAGE';
+  }
+  var ta = document.getElementById('mobileComposeTextarea');
+  if (ta) {
+    ta.placeholder = (mobileComposeType === 'problem') ? 'Décrivez le questionnement...' : 'Écrivez ici...';
+    ta.focus();
+  }
 }
 
 function closeMobileCompose() {
@@ -10052,7 +10121,89 @@ function mobileReplyTo(questionIdx) {
 }
 
 function sendMobileMessage() {
-  QuestChat.send();
+  if (!mobileCurrentJobId) return;
+  var database = (typeof db !== 'undefined') ? db : null;
+  if (!database) { showToast('❌ Firebase non initialisé', 'error'); return; }
+  
+  var ta = document.getElementById('mobileComposeTextarea');
+  var text = ta ? (ta.value || '').trim() : '';
+  
+  if (!text && (!mobilePhotosData || mobilePhotosData.length === 0)) {
+    showToast('Message vide', 'warning');
+    return;
+  }
+  
+  var myEmail = (currentUser && currentUser.email) || '';
+  var myName = (typeof getCurrentUserName === 'function') ? getCurrentUserName() : 'Utilisateur';
+  var job = jobsData[mobileCurrentJobId] || {};
+  
+  // Détermine le type : problem si questionnement, normal sinon
+  var msgType = mobileComposeType || 'normal';
+  if (msgType === 'reply' && typeof window.mobileReplyToIdx === 'undefined') msgType = 'normal';
+  
+  // Description fallback
+  var contentDesc = text;
+  if (!contentDesc && mobilePhotosData.length > 0) {
+    contentDesc = '📷 ' + mobilePhotosData.length + ' photo' + (mobilePhotosData.length > 1 ? 's' : '');
+  }
+  
+  var msgData = {
+    content: contentDesc,
+    type: msgType,
+    authorEmail: myEmail,
+    authorName: myName,
+    timestamp: Date.now(),
+    createdAt: firebase.database.ServerValue.TIMESTAMP,
+    dest: job.assignee || '',
+    jobId: mobileCurrentJobId
+  };
+  
+  // Photos
+  if (mobilePhotosData.length === 1) msgData.image = mobilePhotosData[0];
+  else if (mobilePhotosData.length > 1) msgData.images = mobilePhotosData.slice();
+  
+  // Reply
+  if (msgType === 'reply' && typeof window.mobileReplyToIdx !== 'undefined') {
+    // mobileReplyToIdx est un index dans messages[] — on cherche l'ID Firebase
+    var messages = job.messages || [];
+    var target = messages[window.mobileReplyToIdx];
+    if (target && target._fbId) msgData.replyTo = target._fbId;
+    window.mobileReplyToIdx = undefined;
+  }
+  
+  database.ref('questChat/' + mobileCurrentJobId + '/messages').push().set(msgData)
+    .then(function() {
+      // Reset zone compose
+      if (ta) ta.value = '';
+      mobilePhotosData = [];
+      updateMobilePhotosPreview();
+      var zone = document.getElementById('mobileComposeZone');
+      if (zone) zone.className = 'mobile-compose-zone';
+      mobileComposeType = 'normal';
+      showToast('📤 Message envoyé', 'success');
+      
+      // Notification au destinataire (assignee)
+      try {
+        var recipName = job.assignee || '';
+        if (recipName) {
+          var recipEmail = (typeof nameToEmail === 'function') ? nameToEmail(recipName) : '';
+          if (recipEmail && recipEmail !== myEmail && typeof createNotification === 'function') {
+            createNotification({
+              to: recipEmail,
+              toName: recipName,
+              from: myEmail,
+              fromName: myName,
+              jobId: mobileCurrentJobId,
+              jobName: '#' + (job.order || '---'),
+              messageType: msgType === 'problem' ? 'problem' : 'normal',
+              messageContent: (text || '📷 Photo').substring(0, 120),
+              timestamp: Date.now()
+            });
+          }
+        }
+      } catch (e) { console.error('[Mobile send notif]', e); }
+    })
+    .catch(function(e) { showToast('❌ Erreur: ' + e.message, 'error'); });
 }
 
 function deleteMobileMessage(msgIndex) {
