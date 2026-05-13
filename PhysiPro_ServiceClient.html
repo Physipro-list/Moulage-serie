@@ -2266,6 +2266,30 @@ body {
 .mobile-chat-header-photo-btn:active { transform: scale(0.96); }
 .mobile-fiche-chat-messages { display:flex; flex-direction:column; gap:8px; }
 .mobile-fiche-chat-compose { margin-top:10px; padding-top:10px; border-top: 1px solid #e5e7eb; }
+/* Messages individuels */
+.m-msg { border-radius: 10px; padding: 10px; position: relative; word-wrap: break-word; }
+.m-msg.problem { background: #fef2f2; border-left: 4px solid #ef4444; }
+.m-msg.normal { background: #eff6ff; border-left: 4px solid #3b82f6; }
+.m-msg.reply { background: #f5f3ff; border-left: 4px solid #8b5cf6; margin-left: 16px; }
+.m-msg.pinned { background: #fefce8; border-left: 4px solid #f59e0b; }
+.m-msg-type { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.m-msg.problem .m-msg-type { color: #dc2626; }
+.m-msg.normal .m-msg-type { color: #2563eb; }
+.m-msg.reply .m-msg-type { color: #7c3aed; }
+.m-msg.pinned .m-msg-type { color: #ca8a04; }
+.m-msg-author { font-size: 11px; font-weight: 700; color: #1e293b; }
+.m-msg-time { font-size: 9px; color: #94a3b8; font-weight: 400; margin-left: 5px; }
+.m-msg-content { font-size: 13px; color: #334155; white-space: pre-wrap; margin-top: 5px; line-height: 1.4; }
+.m-msg-images { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.m-msg-images img { width: 100%; max-width: 220px; max-height: 220px; border-radius: 6px; object-fit: cover; cursor: pointer; border: 1px solid #e5e7eb; }
+.m-msg-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 4px; }
+.m-msg-menu-btn { background: rgba(0,0,0,0.06); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 14px; color: #64748b; display: flex; align-items: center; justify-content: center; padding: 0; }
+.m-msg-menu-btn:active { background: rgba(0,0,0,0.12); }
+.m-msg-menu { position: absolute; top: 32px; right: 5px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; min-width: 130px; overflow: hidden; }
+.m-msg-menu button { display: block; width: 100%; text-align: left; padding: 10px 14px; background: none; border: none; font-size: 13px; color: #1e293b; cursor: pointer; }
+.m-msg-menu button:active, .m-msg-menu button:hover { background: #f1f5f9; }
+.m-msg-menu button.danger { color: #dc2626; border-top: 1px solid #fee2e2; }
+.m-empty-chat { text-align: center; padding: 16px; color: #9ca3af; font-size: 12px; font-style: italic; }
 
 /* Mobile Chat Page */
 .mobile-chat-page { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f8fafc; z-index: 600; display: none; flex-direction: column; }
@@ -3478,6 +3502,10 @@ let mobileComposeType = 'normal';
 let mobilePhotosData = [];
 let mobileCurrentTab = 'jobs';
 let currentLightboxZoom = 1;
+let _mobileChatListener = null;
+let _mobileChatListenerJobId = null;
+let _mobileChatMessages = []; // [{id, data}, ...]
+let _mobileReplyToFbId = null;
 
 // Delete confirm state
 let deleteMsgCurrentJobId = null;
@@ -9872,6 +9900,8 @@ function openMobileFiche(jobId) {
 }
 
 function closeMobileFiche() {
+  // Détache le listener Firebase pour éviter les fuites mémoire
+  _detachMobileChatListener();
   document.getElementById('mobileFichePage').classList.remove('active');
   mobileCurrentJobId = null;
 }
@@ -9949,88 +9979,194 @@ function openMobileChat() {
   _renderMobileChatInFiche();
 }
 
-function _renderMobileChatInFiche() {
-  if (!mobileCurrentJobId) return;
-  const job = jobsData[mobileCurrentJobId];
-  if (!job) return;
+// Détache le listener Firebase précédent s'il existe
+function _detachMobileChatListener() {
+  if (_mobileChatListener && _mobileChatListenerJobId && typeof db !== 'undefined' && db) {
+    try {
+      db.ref('questChat/' + _mobileChatListenerJobId + '/messages').off('value', _mobileChatListener);
+    } catch (e) { console.error('[MobileChat] detach failed:', e); }
+  }
+  _mobileChatListener = null;
+  _mobileChatListenerJobId = null;
+  _mobileChatMessages = [];
+  _mobileReplyToFbId = null;
+}
+
+// Attache un listener Firebase pour les messages de ce job
+function _attachMobileChatListener(jobId) {
+  if (!jobId || typeof db === 'undefined' || !db) return;
+  // Détache l'ancien
+  _detachMobileChatListener();
+  _mobileChatListenerJobId = jobId;
+  _mobileChatListener = db.ref('questChat/' + jobId + '/messages').orderByChild('timestamp').on('value', function(snap) {
+    var data = snap.val() || {};
+    _mobileChatMessages = Object.entries(data)
+      .map(function(e) { return { id: e[0], data: e[1] }; })
+      .sort(function(a, b) { return (a.data.timestamp || 0) - (b.data.timestamp || 0); });
+    _renderMobileMessages();
+  });
+}
+
+// Rend la liste des messages mobile (appelée au démarrage et à chaque changement Firebase)
+function _renderMobileMessages() {
+  var container = document.getElementById('mobileChatMessages');
+  if (!container) return;
   
-  QuestChat.loadForJob(mobileCurrentJobId);
-  
-  const messages = job.messages || [];
-  let html = '';
-  
-  // Pinned
-  const pinnedMsgs = messages.filter(m => m.type === 'pinned');
-  if (pinnedMsgs.length > 0) {
-    html += '<div class="mobile-pinned-section"><div class="mobile-pinned-header">📌 Messages épinglés</div>';
-    pinnedMsgs.forEach(msg => {
-      const idx = messages.indexOf(msg);
-      html += `<div class="mobile-chat-msg" data-index="${idx}" style="background:#fff;border-radius:6px;padding:8px;margin-bottom:6px;position:relative;">
-        <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${idx})">✕</button>
-        <button class="mobile-msg-edit-btn" onclick="editMessage(${idx})">✏️</button>
-        <div class="mobile-msg-author">${msg.author||''} • ${msg.date||''}</div>
-        <div class="mobile-msg-content">${escapeHtml(msg.content||'')}</div>
-        ${renderMsgImages(msg)}
-      </div>`;
-    });
-    html += '</div>';
+  if (_mobileChatMessages.length === 0) {
+    container.innerHTML = '<div class="m-empty-chat">Aucun message — utilisez le bouton 📷 ou les boutons en bas pour commencer.</div>';
+    return;
   }
   
-  // Questions & threads
-  html += '<div class="mobile-questions-section"><div class="mobile-questions-header">❓ Questions & discussions</div>';
+  // Grouper : questions/problems d'abord avec leurs réponses, puis normaux, puis pinned en haut
+  var pinned = [];
+  var problems = [];
+  var normals = [];
+  var repliesByParent = {};
   
-  const threads = {};
-  messages.forEach((msg, idx) => { if (msg.type === 'problem') threads[idx] = { question: msg, questionIdx: idx, replies: [] }; });
-  messages.forEach((msg, idx) => {
-    if (msg.type === 'reply' && msg.parentQuestionIndex !== undefined && threads[msg.parentQuestionIndex]) {
-      threads[msg.parentQuestionIndex].replies.push(msg);
+  _mobileChatMessages.forEach(function(m) {
+    var t = m.data.type || 'normal';
+    if (t === 'pinned') pinned.push(m);
+    else if (t === 'problem') problems.push(m);
+    else if (t === 'reply' && m.data.replyTo) {
+      if (!repliesByParent[m.data.replyTo]) repliesByParent[m.data.replyTo] = [];
+      repliesByParent[m.data.replyTo].push(m);
+    } else {
+      normals.push(m);
     }
   });
   
-  Object.values(threads).forEach(thread => {
-    const qIdx = messages.indexOf(thread.question);
-    html += `<div class="mobile-thread-block">
-      <div class="mobile-thread-question mobile-chat-msg" data-index="${qIdx}" style="position:relative;">
-        <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${qIdx})">✕</button>
-        <button class="mobile-msg-edit-btn" onclick="editMessage(${qIdx})">✏️</button>
-        <div class="mobile-msg-type question">❓ Question</div>
-        <div class="mobile-msg-author">${thread.question.author||''} • ${thread.question.date||''}</div>
-        <div class="mobile-msg-content">${escapeHtml(thread.question.content||'')}</div>
-        ${renderMsgImages(thread.question)}
-      </div>`;
-    thread.replies.forEach(reply => {
-      const rIdx = messages.indexOf(reply);
-      html += `<div class="mobile-thread-reply mobile-chat-msg" data-index="${rIdx}" style="position:relative;">
-        <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${rIdx})">✕</button>
-        <button class="mobile-msg-edit-btn" onclick="editMessage(${rIdx})">✏️</button>
-        <div class="mobile-msg-type reply">💬 Réponse</div>
-        <div class="mobile-msg-author">${reply.author||''} • ${reply.date||''}</div>
-        <div class="mobile-msg-content">${escapeHtml(reply.content||'')}</div>
-        ${renderMsgImages(reply)}
-      </div>`;
-    });
-    html += `<button class="mobile-reply-btn" onclick="mobileReplyTo(${thread.questionIdx})">💬 Répondre</button></div>`;
+  var h = '';
+  
+  // Pinned en haut
+  pinned.forEach(function(m) { h += _renderOneMobileMessage(m, 'pinned'); });
+  
+  // Questions + leurs réponses
+  problems.forEach(function(p) {
+    h += _renderOneMobileMessage(p, 'problem');
+    var replies = repliesByParent[p.id] || [];
+    replies.forEach(function(r) { h += _renderOneMobileMessage(r, 'reply'); });
   });
   
-  // Normal messages
-  messages.filter(m => m.type === 'normal').forEach(msg => {
-    const idx = messages.indexOf(msg);
-    html += `<div class="mobile-chat-msg" data-index="${idx}" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;position:relative;">
-      <button class="mobile-msg-delete-btn" onclick="deleteMobileMessage(${idx})">✕</button>
-      <button class="mobile-msg-edit-btn" onclick="editMessage(${idx})">✏️</button>
-      <div class="mobile-msg-author">💬 ${msg.author||''} • ${msg.date||''}</div>
-      <div class="mobile-msg-content">${escapeHtml(msg.content||'')}</div>
-      ${renderMsgImages(msg)}
-    </div>`;
+  // Messages normaux
+  normals.forEach(function(m) { h += _renderOneMobileMessage(m, 'normal'); });
+  
+  // Réponses orphelines (parent supprimé) — afficher quand même
+  Object.keys(repliesByParent).forEach(function(parentId) {
+    var parentExists = problems.some(function(p) { return p.id === parentId; });
+    if (!parentExists) {
+      repliesByParent[parentId].forEach(function(r) { h += _renderOneMobileMessage(r, 'reply'); });
+    }
   });
   
-  if (messages.length === 0) html += '<div style="text-align:center;padding:20px;color:#9ca3af;">Aucun message</div>';
-  html += '</div>';
+  container.innerHTML = h;
+}
+
+// Rend un seul message mobile
+function _renderOneMobileMessage(m, displayType) {
+  var d = m.data;
+  var typeLabels = {
+    problem: '❓ Questionnement',
+    normal: '💬 Discussion',
+    reply: '↩️ Réponse',
+    pinned: '📌 Épinglé'
+  };
+  var typeLabel = typeLabels[displayType] || '💬 Message';
+  var author = (d.authorName || d.author || 'Inconnu');
+  var time = '';
+  if (d.timestamp) {
+    var dt = new Date(d.timestamp);
+    time = dt.toLocaleDateString('fr-CA') + ' ' + dt.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+  }
   
-  var msgEl = document.getElementById('mobileChatMessages');
-  if (msgEl) msgEl.innerHTML = html;
+  // Images
+  var imgs = '';
+  var imgArr = [];
+  if (d.image) imgArr.push(d.image);
+  if (d.images && Array.isArray(d.images)) imgArr = imgArr.concat(d.images);
+  if (imgArr.length > 0) {
+    imgs = '<div class="m-msg-images">' + imgArr.map(function(src) {
+      return '<img src="' + src + '" onclick="openLightbox(this.src)">';
+    }).join('') + '</div>';
+  }
   
-  // Compose zone — intégrée dans la fiche
+  // Contenu texte
+  var content = escapeHtml(d.content || '');
+  
+  // Menu actions (3 points) — Répondre + Supprimer
+  var canReply = (displayType === 'problem' || displayType === 'normal');
+  var menuId = 'm-menu-' + m.id;
+  var menuBtn = '<div class="m-msg-actions">' +
+    '<button class="m-msg-menu-btn" onclick="event.stopPropagation();toggleMobileMsgMenu(\'' + m.id + '\')" title="Actions">⋯</button>' +
+    '</div>' +
+    '<div class="m-msg-menu" id="' + menuId + '" style="display:none;">' +
+    (canReply ? '<button onclick="event.stopPropagation();mobileChatReplyTo(\'' + m.id + '\')">↩️ Répondre</button>' : '') +
+    '<button class="danger" onclick="event.stopPropagation();mobileChatDeleteMsg(\'' + m.id + '\')">🗑️ Supprimer</button>' +
+    '</div>';
+  
+  return '<div class="m-msg ' + displayType + '">' +
+    menuBtn +
+    '<div class="m-msg-type">' + typeLabel + '</div>' +
+    '<div><span class="m-msg-author">' + escapeHtml(author) + '</span><span class="m-msg-time">' + time + '</span></div>' +
+    (content ? '<div class="m-msg-content">' + content + '</div>' : '') +
+    imgs +
+  '</div>';
+}
+
+// Toggle menu actions sur un message
+function toggleMobileMsgMenu(msgId) {
+  // Ferme tous les autres menus
+  document.querySelectorAll('.m-msg-menu').forEach(function(el) {
+    if (el.id !== 'm-menu-' + msgId) el.style.display = 'none';
+  });
+  var menu = document.getElementById('m-menu-' + msgId);
+  if (!menu) return;
+  menu.style.display = (menu.style.display === 'none' || !menu.style.display) ? 'block' : 'none';
+}
+window.toggleMobileMsgMenu = toggleMobileMsgMenu;
+
+// Répondre à un message
+function mobileChatReplyTo(msgId) {
+  _mobileReplyToFbId = msgId;
+  mobileComposeType = 'reply';
+  var zone = document.getElementById('mobileComposeZone');
+  if (zone) zone.className = 'mobile-compose-zone active reply';
+  var typeLabel = document.getElementById('mobileComposeTypeLabel');
+  if (typeLabel) typeLabel.textContent = '↩️ RÉPONSE';
+  // Ferme le menu
+  var menu = document.getElementById('m-menu-' + msgId);
+  if (menu) menu.style.display = 'none';
+  // Focus textarea
+  var ta = document.getElementById('mobileComposeTextarea');
+  if (ta) { ta.placeholder = 'Votre réponse...'; ta.focus(); }
+  // Scroll vers la zone compose
+  setTimeout(function() {
+    if (zone && zone.scrollIntoView) zone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 100);
+}
+window.mobileChatReplyTo = mobileChatReplyTo;
+
+// Supprimer un message
+function mobileChatDeleteMsg(msgId) {
+  if (!mobileCurrentJobId) return;
+  if (!confirm('Supprimer ce message?')) return;
+  var menu = document.getElementById('m-menu-' + msgId);
+  if (menu) menu.style.display = 'none';
+  db.ref('questChat/' + mobileCurrentJobId + '/messages/' + msgId).remove()
+    .then(function() { showToast('🗑️ Message supprimé', 'success'); })
+    .catch(function(e) { showToast('❌ ' + e.message, 'error'); });
+}
+window.mobileChatDeleteMsg = mobileChatDeleteMsg;
+
+// Ferme les menus 3-points mobile si on clique ailleurs
+document.addEventListener('click', function(e) {
+  if (e.target.classList && (e.target.classList.contains('m-msg-menu-btn') || e.target.closest('.m-msg-menu'))) return;
+  document.querySelectorAll('.m-msg-menu').forEach(function(el) { el.style.display = 'none'; });
+});
+
+function _renderMobileChatInFiche() {
+  if (!mobileCurrentJobId) return;
+  
+  // 1) Injecter le HTML statique du compose (une seule fois)
   var composeEl = document.getElementById('mobileChatCompose');
   if (composeEl) {
     composeEl.innerHTML = `
@@ -10052,6 +10188,13 @@ function _renderMobileChatInFiche() {
         <button class="mobile-type-btn pinned" onclick="openMobileCompose('pinned')"><span class="btn-icon">📌</span><span class="btn-label">Épinglé</span></button>
       </div>`;
   }
+  
+  // 2) Placeholder dans la zone messages avant que Firebase réponde
+  var msgEl = document.getElementById('mobileChatMessages');
+  if (msgEl) msgEl.innerHTML = '<div class="m-empty-chat">Chargement...</div>';
+  
+  // 3) Attacher le listener Firebase qui va peupler les messages
+  _attachMobileChatListener(mobileCurrentJobId);
 }
 
 function openMobileCompose(type) {
@@ -10075,6 +10218,7 @@ function closeMobileCompose() {
   document.getElementById('mobileComposeZone').className = 'mobile-compose-zone';
   document.getElementById('mobileComposeTextarea').value = '';
   mobilePhotosData = []; updateMobilePhotosPreview();
+  _mobileReplyToFbId = null;
 }
 
 function handleMobilePhoto(input) {
@@ -10127,7 +10271,7 @@ function sendMobileMessage() {
   
   // Détermine le type : problem si questionnement, normal sinon
   var msgType = mobileComposeType || 'normal';
-  if (msgType === 'reply' && typeof window.mobileReplyToIdx === 'undefined') msgType = 'normal';
+  if (msgType === 'reply' && !_mobileReplyToFbId) msgType = 'normal';
   
   // Description fallback
   var contentDesc = text;
@@ -10150,13 +10294,9 @@ function sendMobileMessage() {
   if (mobilePhotosData.length === 1) msgData.image = mobilePhotosData[0];
   else if (mobilePhotosData.length > 1) msgData.images = mobilePhotosData.slice();
   
-  // Reply
-  if (msgType === 'reply' && typeof window.mobileReplyToIdx !== 'undefined') {
-    // mobileReplyToIdx est un index dans messages[] — on cherche l'ID Firebase
-    var messages = job.messages || [];
-    var target = messages[window.mobileReplyToIdx];
-    if (target && target._fbId) msgData.replyTo = target._fbId;
-    window.mobileReplyToIdx = undefined;
+  // Reply : utilise l'ID Firebase stocké dans _mobileReplyToFbId
+  if (msgType === 'reply' && _mobileReplyToFbId) {
+    msgData.replyTo = _mobileReplyToFbId;
   }
   
   database.ref('questChat/' + mobileCurrentJobId + '/messages').push().set(msgData)
@@ -10168,6 +10308,7 @@ function sendMobileMessage() {
       var zone = document.getElementById('mobileComposeZone');
       if (zone) zone.className = 'mobile-compose-zone';
       mobileComposeType = 'normal';
+      _mobileReplyToFbId = null;
       showToast('📤 Message envoyé', 'success');
       
       // Notification au destinataire (assignee)
