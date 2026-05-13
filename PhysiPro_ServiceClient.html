@@ -2241,14 +2241,29 @@ body {
 .mobile-fiche-page.active { display: flex; }
 .mobile-fiche-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); color: #fff; }
 .mobile-fiche-back { padding: 6px 10px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; color: #fff; font-size: 12px; cursor: pointer; }
-.mobile-fiche-title { flex: 1; font-size: 14px; font-weight: 700; text-align: center; }
-.mobile-fiche-chat-btn { padding: 6px 12px; background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; border-radius: 6px; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+.mobile-fiche-resolve-btn { padding: 6px 14px; background: linear-gradient(135deg, #22c55e, #16a34a); border: none; border-radius: 6px; color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 6px rgba(34,197,94,0.35); }
+.mobile-fiche-resolve-btn:active { transform: scale(0.96); }
 .mobile-fiche-delete-btn { padding: 6px 10px; background: linear-gradient(135deg, #ef4444, #dc2626); border: none; border-radius: 6px; color: #fff; font-size: 11px; cursor: pointer; }
-.mobile-fiche-body { flex: 1; overflow-y: auto; padding: 12px; }
-.mobile-fiche-field { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
-.mobile-fiche-field-label { width: 120px; font-size: 12px; font-weight: 600; color: #374151; }
+.mobile-fiche-body { flex: 1; overflow-y: auto; padding: 8px; }
+/* Grille compacte pour les champs : 2 colonnes, peu d'espace */
+.mobile-fiche-compact { background:#fff; border-radius:8px; padding:8px; border:1px solid #e5e7eb; margin-bottom:8px; }
+.mobile-fiche-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
+.mobile-fiche-grid-full { grid-column: 1 / -1; }
+.mobile-fiche-cell { display: flex; flex-direction: column; gap: 2px; }
+.mobile-fiche-cell-label { font-size: 9.5px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.3px; }
+.mobile-fiche-cell-value input, .mobile-fiche-cell-value select { width: 100%; padding: 5px 7px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 12px; color: #1f2937; background: #fff; box-sizing: border-box; }
+.mobile-fiche-cell-value .date-field { padding: 5px 7px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 12px; cursor: pointer; color: #3b82f6; font-weight: 500; background:#fff; }
+/* Ancienne classe gardée pour compat mais réduite */
+.mobile-fiche-field { display: flex; align-items: center; padding: 4px 0; border-bottom: 1px solid #e5e7eb; }
+.mobile-fiche-field:last-child { border-bottom: none; }
+.mobile-fiche-field-label { width: 105px; font-size: 11px; font-weight: 600; color: #374151; }
 .mobile-fiche-field-value { flex: 1; }
-.mobile-fiche-field-value input, .mobile-fiche-field-value select { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; color: #1f2937; background: #fff; }
+.mobile-fiche-field-value input, .mobile-fiche-field-value select { width: 100%; padding: 6px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 12px; color: #1f2937; background: #fff; }
+/* Zone chat intégrée dans la fiche */
+.mobile-fiche-chat-section { background:#fff; border-radius:8px; padding:8px; border:1px solid #e5e7eb; margin-top:10px; }
+.mobile-fiche-chat-header { font-size: 12px; font-weight: 700; color: #1f2937; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb; margin-bottom: 8px; display:flex; align-items:center; gap:6px; }
+.mobile-fiche-chat-messages { display:flex; flex-direction:column; gap:8px; }
+.mobile-fiche-chat-compose { margin-top:10px; padding-top:10px; border-top: 1px solid #e5e7eb; }
 
 /* Mobile Chat Page */
 .mobile-chat-page { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f8fafc; z-index: 600; display: none; flex-direction: column; }
@@ -2808,8 +2823,9 @@ body {
 <div class="mobile-fiche-page" id="mobileFichePage">
   <div class="mobile-fiche-header">
     <button class="mobile-fiche-back" onclick="closeMobileFiche()">← Retour</button>
-    <div class="mobile-fiche-title" id="mobileFicheTitle">Job</div>
-    <button class="mobile-fiche-chat-btn" onclick="openMobileChat()">💬 Chat</button>
+    <span style="flex:1;"></span>
+    <button class="mobile-fiche-resolve-btn" id="mobileFicheHeaderResolveBtn" onclick="mobileFicheToggleResolve()">✅ Réglé</button>
+    <span style="flex:1;"></span>
     <button class="mobile-fiche-delete-btn" onclick="deleteMobileJob()">🗑️</button>
   </div>
   <div class="mobile-fiche-body" id="mobileFicheBody"></div>
@@ -5979,26 +5995,25 @@ function mobileClosePhotoViewer() {
 }
 window.mobileClosePhotoViewer = mobileClosePhotoViewer;
 
-// ─── Toggle resolved sur fiche mobile ──────────────────────
+// ─── Action "Réglé" sur fiche mobile (action simple, pas une bascule) ───
 function mobileFicheToggleResolve() {
   if (!mobileCurrentJobId) return;
   var job = jobsData[mobileCurrentJobId];
   if (!job) return;
   if (job.resolved) {
-    // Marquer non résolu
-    db.ref('jobs/' + mobileCurrentJobId).update({ resolved: false, resolvedAt: null, resolvedBy: null });
-    showToast('↩️ Marqué non réglé', 'info');
-  } else {
-    // Marquer résolu
-    var resolverName = typeof getCurrentUserName === 'function' ? getCurrentUserName() : 'Service Client';
-    db.ref('jobs/' + mobileCurrentJobId).update({
-      resolved: true,
-      resolvedAt: new Date().toISOString(),
-      resolvedBy: (currentUser && currentUser.email) || '',
-      resolvedByName: resolverName
-    });
-    showToast('✅ Marqué réglé', 'success');
+    // Déjà réglé — pas d'action
+    showToast('✅ Déjà marqué réglé', 'info');
+    return;
   }
+  // Marquer résolu
+  var resolverName = typeof getCurrentUserName === 'function' ? getCurrentUserName() : 'Service Client';
+  db.ref('jobs/' + mobileCurrentJobId).update({
+    resolved: true,
+    resolvedAt: new Date().toISOString(),
+    resolvedBy: (currentUser && currentUser.email) || '',
+    resolvedByName: resolverName
+  });
+  showToast('✅ Marqué réglé', 'success');
   // Reload après court délai
   setTimeout(function() { openMobileFiche(mobileCurrentJobId); }, 300);
 }
@@ -9737,19 +9752,46 @@ function openMobileFiche(jobId) {
   // Marque comme lues les notifs pour ce job — même rôle qu'en desktop.
   if (typeof _markJobNotifsRead === 'function') _markJobNotifsRead(jobId);
   
-  document.getElementById('mobileFicheTitle').textContent = `#${job.order || '?'} — ${job.assignee || ''}`;
+  // Pas de titre dans le header — il a été retiré
   
   document.getElementById('mobileFicheBody').innerHTML = `
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🔢 Commande</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.order)}" onchange="updateJobField('${jobId}','order',this.value)"></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👤 Client ⚙️</div><div class="mobile-fiche-field-value"><select onchange="updateJobField('${jobId}','client',this.value)"><option value="">—</option>${_questClientList.map(c=>'<option'+(c===job.client?' selected':'')+'>'+escapeHtml(c)+'</option>').join('')}</select></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👥 Assigné à</div><div class="mobile-fiche-field-value"><select onchange="updateJobField('${jobId}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===job.assignee?'selected':''}>${a}</option>`).join('')}</select></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">🧾 N° PO</div><div class="mobile-fiche-field-value"><input value="${escapeHtml(job.numeroPO||'')}" onchange="updateJobField('${jobId}','numeroPO',this.value)"></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">👩‍💼 Représentant</div><div class="mobile-fiche-field-value"><select onchange="updateJobField('${jobId}','representant',this.value)"><option value="">—</option>${_questRepList.map(r=>'<option'+(r===(job.representant||'')?' selected':'')+'>'+escapeHtml(r)+'</option>').join('')}</select></div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📥 Date Reçue</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateRecue','${jobId}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateRecue)||'Sélectionner...'}</div></div>
-    <div class="mobile-fiche-field"><div class="mobile-fiche-field-label">📦 Livraison</div><div class="mobile-fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison','${jobId}')" style="padding:8px;cursor:pointer;color:#3b82f6;font-weight:500;">${formatDateDisplay(job.dateLivraison)||'Sélectionner...'}</div></div>
-    <div id="mobileRappelSection" style="margin-top:8px;"></div>
-    <!-- Section Photos (v_mobile1) -->
-    <div class="mobile-photos-section" id="mobileFichePhotosSection" style="margin-top:12px;">
+    <!-- Bloc compact : tous les champs en grille 2 colonnes -->
+    <div class="mobile-fiche-compact">
+      <div class="mobile-fiche-grid">
+        <div class="mobile-fiche-cell">
+          <div class="mobile-fiche-cell-label">🔢 Commande</div>
+          <div class="mobile-fiche-cell-value"><input value="${escapeHtml(job.order)}" onchange="updateJobField('${jobId}','order',this.value)"></div>
+        </div>
+        <div class="mobile-fiche-cell">
+          <div class="mobile-fiche-cell-label">🧾 N° PO</div>
+          <div class="mobile-fiche-cell-value"><input value="${escapeHtml(job.numeroPO||'')}" onchange="updateJobField('${jobId}','numeroPO',this.value)"></div>
+        </div>
+        <div class="mobile-fiche-cell mobile-fiche-grid-full">
+          <div class="mobile-fiche-cell-label">👤 Client</div>
+          <div class="mobile-fiche-cell-value"><select onchange="updateJobField('${jobId}','client',this.value)"><option value="">—</option>${_questClientList.map(c=>'<option'+(c===job.client?' selected':'')+'>'+escapeHtml(c)+'</option>').join('')}</select></div>
+        </div>
+        <div class="mobile-fiche-cell">
+          <div class="mobile-fiche-cell-label">👥 Assigné</div>
+          <div class="mobile-fiche-cell-value"><select onchange="updateJobField('${jobId}','assignee',this.value)">${ASSIGNEES.map(a=>`<option ${a===job.assignee?'selected':''}>${a}</option>`).join('')}</select></div>
+        </div>
+        <div class="mobile-fiche-cell">
+          <div class="mobile-fiche-cell-label">👩‍💼 Représentant</div>
+          <div class="mobile-fiche-cell-value"><select onchange="updateJobField('${jobId}','representant',this.value)"><option value="">—</option>${_questRepList.map(r=>'<option'+(r===(job.representant||'')?' selected':'')+'>'+escapeHtml(r)+'</option>').join('')}</select></div>
+        </div>
+        <div class="mobile-fiche-cell">
+          <div class="mobile-fiche-cell-label">📥 Date Reçue</div>
+          <div class="mobile-fiche-cell-value"><div class="date-field" onclick="openCalendar(this,'dateRecue','${jobId}')">${formatDateDisplay(job.dateRecue)||'Sélectionner...'}</div></div>
+        </div>
+        <div class="mobile-fiche-cell">
+          <div class="mobile-fiche-cell-label">📦 Livraison</div>
+          <div class="mobile-fiche-cell-value"><div class="date-field" onclick="openCalendar(this,'dateLivraison','${jobId}')">${formatDateDisplay(job.dateLivraison)||'Sélectionner...'}</div></div>
+        </div>
+      </div>
+    </div>
+    <!-- Rappel -->
+    <div id="mobileRappelSection"></div>
+    <!-- Photos -->
+    <div class="mobile-photos-section" id="mobileFichePhotosSection" style="margin-top:8px;">
       <div class="mobile-photos-section-header">
         <span class="mobile-photos-section-title">📷 Photos <span id="mobileFichePhotoCount" style="font-size:11px;color:#6b7280;font-weight:400;"></span></span>
         <button type="button" class="mobile-photos-capture-btn" onclick="mobileFicheCapturePhoto()">📷 Prendre</button>
@@ -9757,9 +9799,11 @@ function openMobileFiche(jobId) {
       <input type="file" id="mobileFichePhotoInput" accept="image/*" capture="environment" style="display:none" onchange="mobileFicheHandlePhoto(this.files)">
       <div class="mobile-photos-grid" id="mobileFichePhotosGrid"></div>
     </div>
-    <!-- Bouton "Marquer comme résolu" -->
-    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
-      <button id="mobileFicheResolveBtn" onclick="mobileFicheToggleResolve()" style="flex:1;min-width:120px;padding:10px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(34,197,94,0.35);">✅ Marquer réglé</button>
+    <!-- Chat intégré : photos du chat + messages + compose -->
+    <div class="mobile-fiche-chat-section" id="mobileFicheChatSection">
+      <div class="mobile-fiche-chat-header">💬 Conversation</div>
+      <div class="mobile-fiche-chat-messages" id="mobileChatMessages"></div>
+      <div class="mobile-fiche-chat-compose" id="mobileChatCompose"></div>
     </div>
   `;
   
@@ -9814,15 +9858,20 @@ function openMobileFiche(jobId) {
   // Rendre la grille des photos existantes
   if (typeof _renderMobileFichePhotos === 'function') _renderMobileFichePhotos();
   
-  // Mettre à jour le bouton résolu selon l'état
-  var rbtn = document.getElementById('mobileFicheResolveBtn');
-  if (rbtn) {
+  // Charger le chat directement dans la fiche (plus de page séparée)
+  _renderMobileChatInFiche();
+  
+  // Mettre à jour le bouton Réglé du header selon l'état
+  var hbtn = document.getElementById('mobileFicheHeaderResolveBtn');
+  if (hbtn) {
     if (job.resolved) {
-      rbtn.innerHTML = '↩️ Marquer non réglé';
-      rbtn.style.background = 'linear-gradient(135deg,#94a3b8,#64748b)';
+      hbtn.innerHTML = '✅ Réglé';
+      hbtn.style.background = 'linear-gradient(135deg,#94a3b8,#64748b)';
+      hbtn.style.opacity = '0.8';
     } else {
-      rbtn.innerHTML = '✅ Marquer réglé';
-      rbtn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
+      hbtn.innerHTML = '✅ Réglé';
+      hbtn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
+      hbtn.style.opacity = '1';
     }
   }
 }
@@ -9852,11 +9901,15 @@ function renderMsgImages(msg) {
 }
 
 function openMobileChat() {
+  // Compat : redirige vers le rendu intégré à la fiche
+  _renderMobileChatInFiche();
+}
+
+function _renderMobileChatInFiche() {
   if (!mobileCurrentJobId) return;
   const job = jobsData[mobileCurrentJobId];
   if (!job) return;
   
-  document.getElementById('mobileChatTitle').textContent = `💬 #${job.order || '?'}`;
   QuestChat.loadForJob(mobileCurrentJobId);
   
   const messages = job.messages || [];
@@ -9930,29 +9983,31 @@ function openMobileChat() {
   if (messages.length === 0) html += '<div style="text-align:center;padding:20px;color:#9ca3af;">Aucun message</div>';
   html += '</div>';
   
-  document.getElementById('mobileChatMessages').innerHTML = html;
+  var msgEl = document.getElementById('mobileChatMessages');
+  if (msgEl) msgEl.innerHTML = html;
   
-  // Compose zone
-  document.getElementById('mobileChatCompose').innerHTML = `
-    <div class="mobile-compose-zone" id="mobileComposeZone">
-      <button class="mobile-compose-close" onclick="closeMobileCompose()">✕</button>
-      <div class="mobile-compose-type" id="mobileComposeTypeLabel">❓ QUESTIONNEMENT</div>
-      <div class="mobile-compose-author">${getCurrentUserName()}</div>
-      <div class="mobile-compose-content-wrapper"><textarea class="mobile-compose-textarea" id="mobileComposeTextarea" placeholder="Écrivez ici..."></textarea></div>
-      <div class="mobile-compose-preview" id="mobileComposePreview"></div>
-      <div class="mobile-compose-footer">
-        <button class="mobile-compose-photo-btn" onclick="document.getElementById('mobilePhotoInput').click()"><span class="btn-icon">📷</span><span class="btn-label">Photo</span></button>
-        <input type="file" id="mobilePhotoInput" accept="image/*" capture="environment" style="display:none" onchange="handleMobilePhoto(this)">
-        <button class="mobile-compose-send-btn" onclick="sendMobileMessage()"><span class="btn-icon">➤</span><span class="btn-label">Envoyer</span></button>
+  // Compose zone — intégrée dans la fiche
+  var composeEl = document.getElementById('mobileChatCompose');
+  if (composeEl) {
+    composeEl.innerHTML = `
+      <div class="mobile-compose-zone" id="mobileComposeZone">
+        <button class="mobile-compose-close" onclick="closeMobileCompose()">✕</button>
+        <div class="mobile-compose-type" id="mobileComposeTypeLabel">❓ QUESTIONNEMENT</div>
+        <div class="mobile-compose-author">${getCurrentUserName()}</div>
+        <div class="mobile-compose-content-wrapper"><textarea class="mobile-compose-textarea" id="mobileComposeTextarea" placeholder="Écrivez ici..."></textarea></div>
+        <div class="mobile-compose-preview" id="mobileComposePreview"></div>
+        <div class="mobile-compose-footer">
+          <button class="mobile-compose-photo-btn" onclick="document.getElementById('mobilePhotoInput').click()"><span class="btn-icon">📷</span><span class="btn-label">Photo</span></button>
+          <input type="file" id="mobilePhotoInput" accept="image/*" capture="environment" style="display:none" onchange="handleMobilePhoto(this)">
+          <button class="mobile-compose-send-btn" onclick="sendMobileMessage()"><span class="btn-icon">➤</span><span class="btn-label">Envoyer</span></button>
+        </div>
       </div>
-    </div>
-    <div class="mobile-type-buttons">
-      <button class="mobile-type-btn problem" onclick="openMobileCompose('problem')"><span class="btn-icon">❓</span><span class="btn-label">Question</span></button>
-      <button class="mobile-type-btn normal" onclick="openMobileCompose('normal')"><span class="btn-icon">💬</span><span class="btn-label">Discussion</span></button>
-      <button class="mobile-type-btn pinned" onclick="openMobileCompose('pinned')"><span class="btn-icon">📌</span><span class="btn-label">Épinglé</span></button>
-    </div>`;
-  
-  document.getElementById('mobileChatPage').classList.add('active');
+      <div class="mobile-type-buttons">
+        <button class="mobile-type-btn problem" onclick="openMobileCompose('problem')"><span class="btn-icon">❓</span><span class="btn-label">Question</span></button>
+        <button class="mobile-type-btn normal" onclick="openMobileCompose('normal')"><span class="btn-icon">💬</span><span class="btn-label">Discussion</span></button>
+        <button class="mobile-type-btn pinned" onclick="openMobileCompose('pinned')"><span class="btn-icon">📌</span><span class="btn-label">Épinglé</span></button>
+      </div>`;
+  }
 }
 
 function openMobileCompose(type) {
