@@ -9872,13 +9872,17 @@ function mobileUpdateGlobalBell() {
   var bell = document.getElementById('mobileGlobalBell');
   var countEl = document.getElementById('mobileGlobalBellCount');
   if (!bell || !countEl) return;
-  // Compte les rappels actifs : exclut tout ce qui touche Moulage
-  function isMoulageJob(j) {
-    return !!(j.fromPSM || j.psmCardId || j.psmType || j.psmName || j.psmCreatedAt || j.psmSentBy || j.psmQuestText);
+  var SCA = (typeof ASSIGNEES !== 'undefined' && ASSIGNEES) ? ASSIGNEES.map(function(a){ return a.toLowerCase(); }) : [];
+  function isServiceClientJob(j) {
+    if (j.fromPSM || j.psmCardId || j.psmType || j.psmName || j.psmCreatedAt || j.psmSentBy || j.psmQuestText) return false;
+    var a = (j.assignee || '').toString().trim().toLowerCase();
+    if (!a) return false;
+    if (SCA.length > 0 && SCA.indexOf(a) === -1) return false;
+    return true;
   }
   var count = 0;
   Object.values(jobsData || {}).forEach(function(j) {
-    if (isMoulageJob(j)) return;
+    if (!isServiceClientJob(j)) return;
     if (j.resolved) return;
     if (j.rappelJours && parseInt(j.rappelJours, 10) > 0) count++;
   });
@@ -9938,10 +9942,13 @@ function renderMobileList() {
   // Filtrer les jobs
   var entries = Object.entries(jobsData);
   
-  // EXCLURE TOTALEMENT toute carte ayant un lien quelconque avec Moulage/PSM
-  // Vérifie plusieurs signaux pour ne rien laisser passer
+  // EXCLURE TOTALEMENT toute carte qui n'est pas du Service Client.
+  // Stratégie : whitelist par assignee (seuls les 9 agents Service Client passent)
+  // + exclusion par tous les signaux Moulage/PSM connus.
+  var SERVICE_CLIENT_ASSIGNEES_LC = (typeof ASSIGNEES !== 'undefined' && ASSIGNEES) ? ASSIGNEES.map(function(a){ return a.toLowerCase(); }) : [];
   entries = entries.filter(function(e) {
     var j = e[1];
+    // Exclusion par signaux Moulage/PSM
     if (j.fromPSM) return false;
     if (j.psmCardId) return false;
     if (j.psmType) return false;
@@ -9949,7 +9956,11 @@ function renderMobileList() {
     if (j.psmCreatedAt) return false;
     if (j.psmSentBy) return false;
     if (j.psmQuestText) return false;
-    // Champ destination si jamais existe
+    // Whitelist par assignee : doit être dans la liste officielle des agents Service Client
+    var assigneeLc = (j.assignee || '').toString().trim().toLowerCase();
+    if (!assigneeLc) return false; // pas d'assignee = pas Service Client
+    if (SERVICE_CLIENT_ASSIGNEES_LC.length > 0 && SERVICE_CLIENT_ASSIGNEES_LC.indexOf(assigneeLc) === -1) return false;
+    // Exclusion par champs destination si jamais ils existent
     if (typeof j.destination === 'string' && j.destination.toLowerCase().indexOf('moulage') !== -1) return false;
     if (typeof j.dept === 'string' && j.dept.toLowerCase().indexOf('moulage') !== -1) return false;
     if (typeof j.department === 'string' && j.department.toLowerCase().indexOf('moulage') !== -1) return false;
