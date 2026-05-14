@@ -37,13 +37,14 @@
     jobs:        { icon: '🎧', label: 'Service Client',    sub: 'Service Client',             file: 'PhysiPro_ServiceClient.html',           color: '#f59e0b' },
     photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' },
     jobsattente: { icon: '⏳', label: 'Commandes en attente',   sub: 'Commandes en attente',       file: 'PhysiPro_Jobs_Attente.html',             color: '#f59e0b' },
-    inspfinale:  { icon: '🔍', label: 'Insp. Finale',      sub: 'Inspection finale',          file: 'PhysiPro_Inspection_Finale.html',        color: '#6366f1' }
+    inspfinale:  { icon: '🔍', label: 'Insp. Finale',      sub: 'Inspection finale',          file: 'PhysiPro_Inspection_Finale.html',        color: '#6366f1' },
+    fichesphoto: { icon: '🗂️', label: 'Fiches Photo',      sub: 'Fiches avec photos',         file: 'PhysiPro_FichesPhoto.html',              color: '#14b8a6' }
   };
 
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
     'moulage', 'serie', 'inspection', 'inspcouture', 'inspfinale', 'psm', 'jobs',
-    'jobsattente'
+    'fichesphoto', 'jobsattente'
   ];
 
   // Modules autorisés sur mobile
@@ -65,8 +66,8 @@
   //  ACCÈS PAR UTILISATEUR (emails en base64)
   // ══════════════════════════════════════
   var HUB_ACCESS = {
-    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs'],          // atelieratp (Daniel)
-    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','jobs'],                // valerie18 (Valérie)
+    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','psm','jobs','fichesphoto'], // atelieratp (Daniel)
+    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','jobs','fichesphoto'],   // valerie18 (Valérie)
     'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','jobs'],                              // simdut (Cassie)
     'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','jobs'],                // michelle.bouchard
     'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','serie','inspection','inspcouture','inspfinale','jobs'],                // sroy (Stéphanie)
