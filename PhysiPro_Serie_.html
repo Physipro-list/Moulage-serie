@@ -11680,15 +11680,15 @@ au lieu de :
 
 ## RÈGLE #1 — PRODUITS PRINCIPAUX SEULEMENT
 
-Tu dois IGNORER :
+Tu dois IGNORER (sauf exception France ci-dessous) :
 - La ligne "PRODUCTION" (ligne 1) et "INFO CLIENT" (ligne 2)
 - Housses, couvres, covers, installations, découpes, mousses, accessoires, sangles, velcro, hardware
   Exemples : HP01, S1900-RES, S2200, S2465, VR10077, S5001, S5002, S1271, S1277, UL7530, VIF10, PHY7530, D4695, S1902, S2828, PZ7525
 - Ceintures, harnais, règles coulissantes, ancrages, supports déportés
 
-**EXCEPTION FRANCE** : Pour client "France" OU "FOR VERMEIREN FRANCE", inclure ces items normalement ignorés AVEC \\"accessoire\\": true.
+**EXCEPTION FRANCE** : Pour les commandes destinées à la France (voir Règle #5 pour la détection), inclure ces items normalement ignorés AVEC \\"accessoire\\": true. Ils apparaîtront dans la carte mais marqués comme accessoires (ne passent pas par l'atelier).
 
-Tu gardes UNIQUEMENT : coussins, dossiers, appuis thoraciques, pommeaux, latéraux, appuis-tête, wedges, extensions.
+Tu gardes UNIQUEMENT (sauf exception France) : coussins, dossiers, appuis thoraciques, pommeaux, latéraux, appuis-tête, wedges, extensions.
 
 ---
 
@@ -11778,10 +11778,32 @@ Pas Left/Right dans la grandeur. Sans dimension, utilise "Std".
 ## RÈGLE #4 — ITEMS (badge Item)
 
 \\"item\\": true pour :
-- Housses commandées SEULES (D4695 sans coussin)
-- Pièces de rechange, hardware
+- **Housses commandées SEULES** (D4695, S1900, S2200, etc. sans coussin associé dans la même commande)
+- Pièces de rechange, hardware commandés seuls
+- Top Cover, Lycra Top Cover commandés seuls
+- Tout produit qui ne passe PAS par l'atelier (va directement à finition)
 
-Coussins/dossiers/appuis/wedges/extensions → PAS d'item:true
+Coussins/dossiers/appuis/wedges/extensions → PAS d'item:true (production atelier normale)
+
+**IMPORTANT** : Si D4695 (ou autre code dans la liste des items exclus) est marqué \\"item\\": true, il sera GARDÉ dans la carte. Sinon il sera supprimé silencieusement.
+
+---
+
+## RÈGLE #5 — DÉTECTION FRANCE (CRITIQUE pour l'exception accessoires)
+
+Le système détecte qu'une commande est destinée à la France de deux façons :
+1. Le champ \\"client\\" contient le mot "france" (ex: \\"France\\", \\"Vermeiren France\\")
+2. Le champ \\"client\\" contient "vermeiren" ET le champ \\"notes\\" contient "france"
+
+**RÈGLE PRATIQUE** :
+- Si le bon de commande indique "FOR VERMEIREN FRANCE" ou mentionne Vermeiren France comme destinataire :
+  → \\"client\\": \\"Vermeiren\\" ET \\"notes\\": \\"FRANCE\\"
+- Si le client est directement "France" (distributeur France Angers) :
+  → \\"client\\": \\"France\\" ET \\"notes\\": \\"\\"
+- Sinon (Vermeiren NV Belgique, HME, C1SOUTH, Cubro, etc.) :
+  → \\"client\\": [nom du client] ET \\"notes\\": \\"\\"
+
+**NB** : C'est UNIQUEMENT dans ce cas (commande France) que le champ \\"notes\\" doit contenir quelque chose. Dans tous les autres cas, \\"notes\\": \\"\\".
 
 ---
 
@@ -11809,6 +11831,64 @@ Réponds UNIQUEMENT avec le JSON brut, sans explications, sans backticks markdow
         "grandeur": "16x20",
         "quantite": 2,
         "notes": ""
+      },
+      {
+        "nom": "Coussin Pression Zéro",
+        "code": "S1265-2020",
+        "grandeur": "20x20",
+        "quantite": 1,
+        "notes": ""
+      }
+    ]
+  },
+  {
+    "commande": {
+      "numero": "00291200",
+      "client": "Vermeiren",
+      "po": "FR-2025-088",
+      "soumission": "",
+      "dateCommande": "2026-02-15",
+      "dateLivraison": "2026-03-20",
+      "notes": "FRANCE",
+      "type": ""
+    },
+    "items": [
+      {
+        "nom": "Coussin Pression Zéro",
+        "code": "S1265-1820",
+        "grandeur": "18x20",
+        "quantite": 1,
+        "notes": ""
+      },
+      {
+        "nom": "Housse Premium 6 ceintures",
+        "code": "D4695",
+        "grandeur": "Std",
+        "quantite": 2,
+        "notes": "",
+        "accessoire": true
+      }
+    ]
+  },
+  {
+    "commande": {
+      "numero": "00291205",
+      "client": "France",
+      "po": "STOCK-FR-001",
+      "soumission": "",
+      "dateCommande": "2026-02-16",
+      "dateLivraison": "2026-04-01",
+      "notes": "",
+      "type": "stock"
+    },
+    "items": [
+      {
+        "nom": "Housse Premium 6 ceintures",
+        "code": "D4695",
+        "grandeur": "Std",
+        "quantite": 5,
+        "notes": "",
+        "item": true
       }
     ]
   }
@@ -11817,16 +11897,23 @@ Réponds UNIQUEMENT avec le JSON brut, sans explications, sans backticks markdow
 
 ### Champs
 **Commande** :
-- numero : SALES ORDER # string avec zéros de tête
-- client : un de [${clientsList}]. Vermeiren NV = "Vermeiren" même si "FOR VERMEIREN FRANCE"
-- po, soumission ("" si absent), dateCommande, dateLivraison (AAAA-MM-JJ)
-- notes : toujours ""
-- type : "stock" si réapprovisionnement
+- **numero** : SALES ORDER # string avec zéros de tête (ex: \\"00291161\\")
+- **client** : un de [${clientsList}, Cubro, Inventaire]. Vermeiren NV Belgique = \\"Vermeiren\\". Si le client commence par "Vermeiren" (Vermeiren Chili, Vermeiren Spain, etc.), utilise quand même \\"Vermeiren\\". Voir Règle #5 pour les commandes France.
+- **po** : numéro de PO/Purchase Order (\\"\\" si absent)
+- **soumission** : numéro de soumission (\\"\\" si absent)
+- **dateCommande** : date de la commande, format AAAA-MM-JJ
+- **dateLivraison** : date de livraison, format AAAA-MM-JJ
+- **notes** : \\"\\" par défaut. SEULE EXCEPTION : \\"FRANCE\\" pour les commandes "FOR VERMEIREN FRANCE" (voir Règle #5)
+- **type** : \\"stock\\" si commande de réapprovisionnement/stock (pas un client final). Si \\"type\\": \\"stock\\" + \\"client\\": \\"France\\", la commande sera routée vers la colonne France spéciale.
 
 **Items** :
-- nom, code, grandeur, quantite (entier), notes ("")
-- accessoire : true si France + item ignoré
-- item : true si pas atelier
+- **nom** : nom du produit (selon les tables de la Règle #2)
+- **code** : code produit complet (ex: \\"HPC1620\\", \\"S1265-2020\\")
+- **grandeur** : dimensions WWHH ou \\"Std\\" si pas de dimension (voir Règle #3)
+- **quantite** : entier (additionne si même code+grandeur sur plusieurs lignes)
+- **notes** : \\"\\" par défaut
+- **accessoire** : true UNIQUEMENT pour les items ignorés normalement, mais inclus pour commandes France (Règle #1 EXCEPTION FRANCE)
+- **item** : true pour housses seules, hardware, pièces de rechange qui ne passent pas par l'atelier (Règle #4)
 
 ---
 
@@ -11853,12 +11940,15 @@ Réponds UNIQUEMENT avec le JSON brut, sans explications, sans backticks markdow
 1. **Chaque ligne produit = un item dans le JSON** — lis LIGNE PAR LIGNE
 2. **Lignes sans numéro** : INCLURE (Règle #0)
 3. **Grandeurs différentes** → items séparés
-4. **Mêmes grandeurs** → additionner
+4. **Mêmes grandeurs** → additionner les quantités
 5. **Vérifier le total** : somme JSON + filtrés = total document
 6. **Ne JAMAIS inventer d'items**
 7. **Items souvent oubliés** : appuis-tête, pommeaux, thoraciques, latéraux, wedges, extensions, Top Cover, **GRANDEURS LARGES (20x__, 22x__)**
 8. **Plusieurs commandes** = tableau JSON avec TOUTES
-9. **Réponds UNIQUEMENT avec le JSON brut**
+9. **Détection France (Règle #5)** : "FOR VERMEIREN FRANCE" → \\"client\\": \\"Vermeiren\\" + \\"notes\\": \\"FRANCE\\". Client France direct → \\"client\\": \\"France\\" + \\"notes\\": \\"\\".
+10. **notes** : toujours \\"\\" sauf cas FRANCE (point 9)
+11. **Vermeiren préfixe** : Vermeiren NV, Vermeiren Chili, Vermeiren Spain... → tous \\"client\\": \\"Vermeiren\\"
+12. **Réponds UNIQUEMENT avec le JSON brut**
 `;
 }
 

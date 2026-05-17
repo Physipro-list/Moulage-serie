@@ -160,6 +160,20 @@
   .toast.success { border-color: rgba(34,197,94,0.6); background: rgba(34,197,94,0.18); color: #86efac; }
   .toast.error { border-color: rgba(239,68,68,0.6); background: rgba(239,68,68,0.18); color: #fca5a5; }
   @media (max-width: 768px) { .pc-panel { display: none !important; } }
+
+  /* Badge de statut PC récepteur (mobile uniquement) */
+  .mobile-pc-status {
+    font-size: 13px; padding: 12px 14px; border-radius: 10px;
+    display: flex; align-items: center; gap: 10px; line-height: 1.4;
+    font-weight: 600; border: 1.5px solid;
+  }
+  .mobile-pc-status.checking { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.4); color: var(--orange); }
+  .mobile-pc-status.online { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.35); color: var(--green); }
+  .mobile-pc-status.offline { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.4); color: var(--red); }
+  .mobile-pc-status .pc-status-icon { font-size: 18px; flex-shrink: 0; }
+  .mobile-pc-status .pc-status-sub { font-size: 11px; opacity: 0.85; font-weight: 500; }
+  /* Afficher SEULEMENT sur mobile */
+  @media (min-width: 769px) { #mobilePcStatus { display: none !important; } }
 </style>
 </head>
 <body>
@@ -211,6 +225,12 @@
         <button class="pc-panel-btn" onclick="chooseFolder()" id="pcChooseFolderBtn">Choisir dossier</button>
       </div>
       <div class="pc-log" id="pcLog" style="display:none;"></div>
+    </div>
+
+    <!-- Badge de statut PC pour mobile uniquement -->
+    <div id="mobilePcStatus" class="mobile-pc-status checking" style="display:none;">
+      <span id="mobilePcStatusIcon">🔄</span>
+      <span id="mobilePcStatusText">Vérification du PC récepteur…</span>
     </div>
 
     <div class="section-label">📝 Nom de l'item</div>
@@ -288,6 +308,15 @@ let isProcessing = false;
 let processedCount = 0;
 let processingQueue = Promise.resolve();
 
+// === Heartbeat / détection PC récepteur ===
+const HEARTBEAT_INTERVAL_MS = 10000;   // PC écrit son heartbeat toutes les 10s
+const HEARTBEAT_FRESH_MS = 30000;      // Téléphone considère un PC "en ligne" si heartbeat < 30s
+const FIRESTORE_FICHE_TTL_MS = 600000; // Auto-clean fiches non traitées > 10 min (safety net)
+let pcId = null;                       // Identifiant unique de ce PC (pour heartbeat)
+let pcHeartbeatTimer = null;           // setInterval du heartbeat PC
+let mobilePcCheckTimer = null;         // setInterval du téléphone qui vérifie les PCs
+let onlinePcs = [];                    // Liste des PCs actuellement en ligne (vu côté mobile)
+
 function detectPC() {
   const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   return !isMobileUA && (typeof window.showDirectoryPicker === 'function');
@@ -320,7 +349,12 @@ auth.onAuthStateChanged(async function (user) {
   currentUser = user;
   const btn = document.getElementById('loginBtn');
   if (btn) { btn.disabled = false; btn.textContent = 'Se connecter'; }
-  if (!user) { showScreen('screenLogin'); return; }
+  if (!user) {
+    stopMobilePcMonitor();
+    await stopPcHeartbeat();
+    showScreen('screenLogin');
+    return;
+  }
   const email = (user.email || '').toLowerCase();
   if (ALLOWED_EMAILS.indexOf(email) === -1) { showScreen('screenDenied'); return; }
   try { if (typeof window.initPhysiProNav === 'function') window.initPhysiProNav('fichesphoto', user.email); } catch (e) {}
@@ -330,6 +364,12 @@ auth.onAuthStateChanged(async function (user) {
     document.getElementById('pcPanel').style.display = 'block';
     await tryRestoreFolder();
     updatePcUI();
+    // Le PC fait aussi un auto-clean des fiches orphelines > 10 min
+    cleanStaleFiches();
+    setInterval(cleanStaleFiches, 120000); // toutes les 2 min
+  } else {
+    // Mobile : démarrer la surveillance des PC récepteurs
+    startMobilePcMonitor();
   }
   showScreen('screenMain');
   setTimeout(() => { try { document.getElementById('formNomItem').focus(); } catch (e) {} }, 200);
@@ -403,28 +443,62 @@ function _readExifOrientation(file) {
 function _drawWithOrientation(img, orientation, maxSize) {
   const iw = img.width, ih = img.height;
   const rotated = orientation >= 5 && orientation <= 8;
-  let w = rotated ? ih : iw;
-  let h = rotated ? iw : ih;
-  if (w > maxSize || h > maxSize) {
-    if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
-    else       { w = Math.round(w * maxSize / h); h = maxSize; }
+
+  // Dimensions finales du canvas (après rotation éventuelle)
+  let outW = rotated ? ih : iw;
+  let outH = rotated ? iw : ih;
+
+  // Calcul du facteur de réduction si trop gros
+  let scale = 1;
+  if (outW > maxSize || outH > maxSize) {
+    scale = Math.min(maxSize / outW, maxSize / outH);
+    outW = Math.round(outW * scale);
+    outH = Math.round(outH * scale);
   }
+
   const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
+  canvas.width = outW;
+  canvas.height = outH;
   const ctx = canvas.getContext('2d');
-  const scaleX = rotated ? h / iw : w / iw;
-  const scaleY = rotated ? w / ih : h / ih;
+
+  // Dimensions à utiliser pour drawImage (avant la rotation, dans l'espace AVANT transform)
+  // Pour orientations rotatives, l'image est dessinée dans un repère tourné,
+  // donc on dessine aux dimensions "swappées" puis on transforme.
+  const drawW = rotated ? outH : outW;  // largeur dans le repère pré-transform
+  const drawH = rotated ? outW : outH;  // hauteur dans le repère pré-transform
+
+  // Appliquer la transformation EXIF
+  // Référence : EXIF orientation tags
+  // 1 = normal, 2 = miroir H, 3 = 180°, 4 = miroir V,
+  // 5 = miroir H + 90° CW, 6 = 90° CW, 7 = miroir H + 90° CCW, 8 = 90° CCW
   switch (orientation) {
-    case 2: ctx.transform(-1, 0, 0, 1, w, 0); break;
-    case 3: ctx.transform(-1, 0, 0, -1, w, h); break;
-    case 4: ctx.transform(1, 0, 0, -1, 0, h); break;
-    case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
-    case 6: ctx.transform(0, 1, -1, 0, w, 0); break;
-    case 7: ctx.transform(0, -1, -1, 0, w, h); break;
-    case 8: ctx.transform(0, -1, 1, 0, 0, h); break;
+    case 2: // miroir horizontal
+      ctx.transform(-1, 0, 0, 1, outW, 0);
+      break;
+    case 3: // 180°
+      ctx.transform(-1, 0, 0, -1, outW, outH);
+      break;
+    case 4: // miroir vertical
+      ctx.transform(1, 0, 0, -1, 0, outH);
+      break;
+    case 5: // miroir horizontal + 90° CW
+      ctx.transform(0, 1, 1, 0, 0, 0);
+      break;
+    case 6: // 90° CW (le plus fréquent sur iPhone tenu en portrait)
+      ctx.transform(0, 1, -1, 0, outW, 0);
+      break;
+    case 7: // miroir horizontal + 90° CCW
+      ctx.transform(0, -1, -1, 0, outW, outH);
+      break;
+    case 8: // 90° CCW
+      ctx.transform(0, -1, 1, 0, 0, outH);
+      break;
+    default: // 1 = normal, rien à faire
+      break;
   }
-  if (rotated) { ctx.scale(scaleX, scaleY); ctx.drawImage(img, 0, 0); }
-  else         { ctx.drawImage(img, 0, 0, w, h); }
+
+  // Dessiner l'image aux dimensions cibles (dans l'espace pré-transform)
+  ctx.drawImage(img, 0, 0, drawW, drawH);
   return canvas;
 }
 function readAndCompress(file, maxSize, targetBytes) {
@@ -486,7 +560,27 @@ function updateSendBtn() {
   const btn = document.getElementById('btnSend');
   if (!btn) return;
   const nom = (document.getElementById('formNomItem').value || '').trim();
-  btn.disabled = isSending || !nom || photos.length === 0;
+  const hasContent = !!nom && photos.length > 0;
+  // Sur mobile, exiger qu'au moins un PC soit en ligne
+  const pcAvailable = isPC || onlinePcs.length > 0;
+  btn.disabled = isSending || !hasContent || !pcAvailable;
+
+  // Mettre à jour le texte d'info sous le bouton
+  const info = document.getElementById('submitInfo');
+  if (info && !isPC) {
+    if (onlinePcs.length === 0) {
+      info.innerHTML = '⚠️ Envoi désactivé — aucun ordinateur en mode réception.';
+      info.style.background = 'rgba(239,68,68,0.08)';
+      info.style.borderColor = 'rgba(239,68,68,0.3)';
+      info.style.color = 'var(--red)';
+    } else {
+      const names = onlinePcs.map(function (p) { return p.name; }).join(', ');
+      info.innerHTML = '💡 La fiche sera envoyée à ' + escHtml(names) + ' et automatiquement enregistrée en PDF dans OneDrive.';
+      info.style.background = '';
+      info.style.borderColor = '';
+      info.style.color = '';
+    }
+  }
 }
 document.addEventListener('input', function (e) {
   if (e.target && (e.target.id === 'formNomItem' || e.target.id === 'formTexte')) updateSendBtn();
@@ -499,6 +593,17 @@ async function sendFiche() {
   const texte = (document.getElementById('formTexte').value || '').trim();
   if (!nom) { showToast("Donne un nom à l'item.", 'error'); return; }
   if (!photos.length) { showToast('Ajoute au moins une photo.', 'error'); return; }
+
+  // 🛡️ Bloquer l'envoi si aucun PC en mode réception (sauf si on est nous-mêmes le PC)
+  if (!isPC) {
+    // Vérification fraîche avant envoi (au cas où le state aurait changé)
+    await checkOnlinePcs();
+    if (onlinePcs.length === 0) {
+      showToast('❌ Aucun ordinateur en mode réception. Ouvre Fiches Photo sur un PC.', 'error', 5000);
+      alert('Aucun ordinateur n\'est en mode réception.\n\nDemande à quelqu\'un d\'ouvrir l\'app PhysiPro Fiches Photo sur un PC pour activer le récepteur. Sans ça, ta fiche ne peut pas être convertie en PDF.\n\nLes photos restent sur ton téléphone — réessaie quand un PC sera connecté.');
+      return;
+    }
+  }
 
   isSending = true;
   const btn = document.getElementById('btnSend');
@@ -543,6 +648,110 @@ async function sendFiche() {
     label.textContent = 'Envoyer la fiche';
     updateSendBtn();
   }
+}
+
+// ═══ HEARTBEAT — détection PC récepteur ═══
+// Le PC en mode réception écrit régulièrement son timestamp dans pcReceivers/{pcId}
+// Le téléphone lit cette liste avant d'envoyer pour vérifier qu'au moins un PC écoute
+
+function _generatePcId() {
+  // Stable par session, unique par appareil
+  let id = sessionStorage.getItem('physipro_pc_id');
+  if (!id) {
+    id = 'pc_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    sessionStorage.setItem('physipro_pc_id', id);
+  }
+  return id;
+}
+
+async function startPcHeartbeat() {
+  if (!isPC || !currentUser) return;
+  if (!pcId) pcId = _generatePcId();
+
+  const writeBeat = async function () {
+    if (!receiverOn || !dirHandle) return; // n'écrit le heartbeat QUE si vraiment prêt à recevoir
+    try {
+      await db.ref('pcReceivers/' + pcId).set({
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        name: getTeamName(currentUser.email),
+        email: currentUser.email,
+        folder: dirHandle.name || '',
+        processedCount: processedCount
+      });
+    } catch (e) {
+      console.error('Heartbeat write error:', e);
+    }
+  };
+
+  // Premier écriture immédiate, puis à intervalle régulier
+  await writeBeat();
+  if (pcHeartbeatTimer) clearInterval(pcHeartbeatTimer);
+  pcHeartbeatTimer = setInterval(writeBeat, HEARTBEAT_INTERVAL_MS);
+  // S'assurer de nettoyer en cas de déconnexion réseau / fermeture onglet
+  try {
+    db.ref('pcReceivers/' + pcId).onDisconnect().remove();
+  } catch (e) { /* ignore */ }
+}
+
+async function stopPcHeartbeat() {
+  if (pcHeartbeatTimer) { clearInterval(pcHeartbeatTimer); pcHeartbeatTimer = null; }
+  if (pcId) {
+    try { await db.ref('pcReceivers/' + pcId).remove(); } catch (e) {}
+  }
+}
+
+async function checkOnlinePcs() {
+  // Lit la liste des PCs avec heartbeat < HEARTBEAT_FRESH_MS
+  try {
+    const snap = await db.ref('pcReceivers').once('value');
+    const data = snap.val() || {};
+    const now = Date.now();
+    onlinePcs = [];
+    Object.keys(data).forEach(function (id) {
+      const pc = data[id];
+      if (!pc || !pc.timestamp) return;
+      if ((now - pc.timestamp) < HEARTBEAT_FRESH_MS) {
+        onlinePcs.push({ id: id, name: pc.name || '?', email: pc.email || '', folder: pc.folder || '' });
+      }
+    });
+  } catch (e) {
+    console.error('checkOnlinePcs error:', e);
+    onlinePcs = [];
+  }
+  updateMobilePcStatusUI();
+  updateSendBtn();
+}
+
+function updateMobilePcStatusUI() {
+  if (isPC) return; // pas sur PC, badge réservé au mobile
+  const el = document.getElementById('mobilePcStatus');
+  const icon = document.getElementById('mobilePcStatusIcon');
+  const text = document.getElementById('mobilePcStatusText');
+  if (!el || !icon || !text) return;
+  el.style.display = 'flex';
+  el.classList.remove('checking', 'online', 'offline');
+  if (onlinePcs.length === 0) {
+    el.classList.add('offline');
+    icon.textContent = '❌';
+    text.innerHTML = '<strong>Aucun ordinateur en mode réception</strong><br><span class="pc-status-sub">Ouvre l\'app Fiches Photo sur un PC pour activer le récepteur.</span>';
+  } else {
+    el.classList.add('online');
+    icon.textContent = '✅';
+    const names = onlinePcs.map(function (p) { return escHtml(p.name); }).join(', ');
+    text.innerHTML = '<strong>PC' + (onlinePcs.length > 1 ? 's' : '') + ' connecté' + (onlinePcs.length > 1 ? 's' : '') + ' : ' + names + '</strong><br><span class="pc-status-sub">Les fiches seront converties en PDF automatiquement.</span>';
+  }
+}
+
+function startMobilePcMonitor() {
+  if (isPC) return;
+  // Vérification immédiate puis périodique
+  checkOnlinePcs();
+  if (mobilePcCheckTimer) clearInterval(mobilePcCheckTimer);
+  mobilePcCheckTimer = setInterval(checkOnlinePcs, HEARTBEAT_INTERVAL_MS);
+}
+
+function stopMobilePcMonitor() {
+  if (mobilePcCheckTimer) { clearInterval(mobilePcCheckTimer); mobilePcCheckTimer = null; }
 }
 
 // ═══ RÉCEPTEUR PC ═══
@@ -620,6 +829,8 @@ function startReceiver() {
   db.ref('fichesPhoto').on('child_added', receiverListener, function (err) {
     pcLog('❌ Erreur Firebase : ' + err.message, 'err');
   });
+  // Démarrer le heartbeat pour signaler la disponibilité aux téléphones
+  startPcHeartbeat();
   updatePcUI();
 }
 function stopReceiver() {
@@ -629,6 +840,8 @@ function stopReceiver() {
     db.ref('fichesPhoto').off('child_added', receiverListener);
     receiverListener = null;
   }
+  // Stopper le heartbeat pour que les téléphones ne nous voient plus en ligne
+  stopPcHeartbeat();
   pcLog('⏸ Récepteur arrêté.', 'info');
   updatePcUI();
 }
@@ -660,8 +873,9 @@ async function processFiche(fiche) {
     await w.write(pdfBlob);
     await w.close();
     pcLog('✅ PDF sauvé : ' + fileName + ' (' + (pdfBlob.size / 1024).toFixed(0) + ' Ko)', 'ok');
+    // Suppression immédiate de Firebase une fois le PDF écrit sur disque
     await db.ref('fichesPhoto/' + fiche.id).remove();
-    pcLog('🗑️ Fiche supprimée de Firebase.', 'info');
+    pcLog('🗑️ Fiche supprimée de Firebase (photos plus sur le cloud).', 'info');
     processedCount++;
     showToast('📄 PDF créé : ' + fileName, 'success', 3500);
   } catch (e) {
@@ -671,6 +885,42 @@ async function processFiche(fiche) {
   } finally {
     isProcessing = false;
     updatePcUI();
+  }
+}
+
+// === Auto-clean : supprime les fiches Firebase non traitées depuis > 10 min ===
+// Sécurité au cas où un PC plante après réception sans avoir fini le traitement
+async function cleanStaleFiches() {
+  if (!isPC) return;
+  try {
+    const snap = await db.ref('fichesPhoto').once('value');
+    const data = snap.val() || {};
+    const now = Date.now();
+    let cleaned = 0;
+    const promises = [];
+    Object.keys(data).forEach(function (id) {
+      const f = data[id];
+      const ts = f && (typeof f.timestamp === 'number' ? f.timestamp : null);
+      // Fallback : utiliser dateEnvoi si timestamp serveur absent
+      let age;
+      if (ts) {
+        age = now - ts;
+      } else if (f && f.dateEnvoi) {
+        age = now - new Date(f.dateEnvoi).getTime();
+      } else {
+        age = 0;
+      }
+      if (age > FIRESTORE_FICHE_TTL_MS) {
+        promises.push(db.ref('fichesPhoto/' + id).remove());
+        cleaned++;
+      }
+    });
+    if (cleaned > 0) {
+      await Promise.all(promises);
+      pcLog('🧹 Auto-clean : ' + cleaned + ' fiche(s) orpheline(s) > 10 min supprimée(s).', 'info');
+    }
+  } catch (e) {
+    console.error('cleanStaleFiches:', e);
   }
 }
 
@@ -896,6 +1146,10 @@ function pcLog(msg, type) {
 
 window.addEventListener('beforeunload', function (e) {
   if (isSending || isProcessing) { e.preventDefault(); e.returnValue = ''; }
+  // Tenter une suppression synchrone du heartbeat (best-effort, peut ne pas finir)
+  if (pcId) {
+    try { db.ref('pcReceivers/' + pcId).remove(); } catch (err) {}
+  }
 });
 </script>
 </body>
