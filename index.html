@@ -608,16 +608,35 @@ auth.onAuthStateChanged(function(user){
 
   var grid=document.getElementById('hubGrid');
   grid.innerHTML='';
-  access.forEach(function(key,idx){
-    var m=MODULES[key];if(!m)return;
-    var t=document.createElement('a');
-    t.className='hub-tile '+m.cls;
-    t.href=m.file;
-    t.style.animationDelay=(idx*0.06)+'s';
-    t.innerHTML='<div class="hub-tile-icon">'+m.icon+'</div><div class="hub-tile-label">'+m.label+'</div><div class="hub-tile-desc">'+m.desc+'</div>';
-    // Inspection Finale: ouvrir dans une fenêtre étroite (40% largeur, pleine hauteur, à droite)
-    if(key==='inspfinale'){
-      t.onclick=function(e){
+
+  // ═══ LAYOUT FIXE 2 LIGNES ═══
+  // Ligne du haut  : Moulage + Service Client  (2 grandes tuiles = largeur de 3)
+  // Ligne du bas   : Insp. Atelier | Prod. Couture | Insp. Finale  (3 tuiles)
+  var ROW_TOP    = ['moulage','jobs'];
+  var ROW_BOTTOM = ['inspection','inspcouture','inspfinale'];
+
+  // Grille 3 colonnes, ligne du haut chaque tuile = span 1.5 via grid-column
+  grid.style.gridTemplateColumns = 'repeat(6, 1fr)';
+  grid.style.maxWidth = '860px';
+  grid.style.margin   = '0 auto';
+  grid.style.gap      = '18px';
+
+  function makeTile(key, spanCols, idx) {
+    var m = MODULES[key]; if (!m) return;
+    if (access.indexOf(key) === -1) return; // respecter les permissions
+    var t = document.createElement('a');
+    t.className = 'hub-tile ' + m.cls;
+    t.href = m.file;
+    t.style.animationDelay = (idx * 0.08) + 's';
+    t.style.gridColumn = 'span ' + spanCols;
+    t.style.minHeight  = '170px';
+    t.style.padding    = '32px 16px 26px';
+    t.innerHTML =
+      '<div class="hub-tile-icon" style="width:80px;height:80px;font-size:40px;border-radius:20px;">' + m.icon + '</div>' +
+      '<div class="hub-tile-label" style="font-size:17px;margin-top:8px;">' + m.label + '</div>' +
+      '<div class="hub-tile-desc" style="font-size:12px;">' + m.desc + '</div>';
+    if (key === 'inspfinale') {
+      t.onclick = function(e) {
         e.preventDefault();
         var w=Math.round(screen.width*0.40);
         var h=screen.availHeight;
@@ -627,30 +646,12 @@ auth.onAuthStateChanged(function(user){
       };
     }
     grid.appendChild(t);
-  });
-
-  var count=access.length;
-  var cols;
-  if(count<=2) cols=2;
-  else if(count<=4) cols=2;
-  else if(count<=6) cols=3;
-  else cols=Math.min(Math.ceil(count/2),6);
-  grid.style.gridTemplateColumns='repeat('+cols+',1fr)';
-  grid.style.margin='0 auto';
-  if(count<=4){
-    grid.style.maxWidth='600px';
-    grid.style.gap='18px';
-    var tiles=grid.querySelectorAll('.hub-tile');
-    tiles.forEach(function(t){t.style.minHeight='160px';t.style.padding='30px 16px 24px';});
-    var icons=grid.querySelectorAll('.hub-tile-icon');
-    icons.forEach(function(i){i.style.width='72px';i.style.height='72px';i.style.fontSize='36px';i.style.borderRadius='18px';});
-    var labels=grid.querySelectorAll('.hub-tile-label');
-    labels.forEach(function(l){l.style.fontSize='16px';});
-    var descs=grid.querySelectorAll('.hub-tile-desc');
-    descs.forEach(function(d){d.style.fontSize='12px';});
-  } else if(count<=6){
-    grid.style.maxWidth='900px';
   }
+
+  // Ligne 1 : 2 tuiles × span 3 = 6 colonnes
+  ROW_TOP.forEach(function(key, i) { makeTile(key, 3, i); });
+  // Ligne 2 : 3 tuiles × span 2 = 6 colonnes
+  ROW_BOTTOM.forEach(function(key, i) { makeTile(key, 2, ROW_TOP.length + i); });
 });
 </script>
 <!-- ===== PCHAT SYSTEM ===== -->
