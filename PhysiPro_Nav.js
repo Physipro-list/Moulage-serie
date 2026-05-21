@@ -40,7 +40,7 @@
 
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
-    'moulage', 'serie', 'inspection', 'inspcouture', 'inspfinale', 'jobs'
+    'moulage', 'jobs', 'inspection', 'inspcouture', 'inspfinale'
   ];
 
   // Modules autorisés sur mobile
@@ -97,7 +97,10 @@
 .ppnav-header{text-align:center;margin-bottom:16px;}\
 .ppnav-title{font-size:16px;font-weight:700;color:#fff;letter-spacing:.3px;}\
 .ppnav-subtitle{font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;}\
-.ppnav-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}\
+.ppnav-grid{display:flex;flex-direction:column;gap:10px;}\
+.ppnav-row{display:grid;gap:10px;}\
+.ppnav-row.row1{grid-template-columns:1fr 1fr;}\
+.ppnav-row.row2{grid-template-columns:1fr 1fr 1fr;}\
 .ppnav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 6px 10px;border-radius:12px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.03);cursor:pointer;text-decoration:none;transition:all .2s;position:relative;}\
 .ppnav-item:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.3);}\
 .ppnav-item.current{border-color:rgba(74,142,245,0.4);background:rgba(74,142,245,0.1);}\
@@ -108,8 +111,7 @@
 .ppnav-close:hover{color:#fff;}\
 @keyframes ppnavFadeIn{from{opacity:0}to{opacity:1}}\
 @keyframes ppnavScaleIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}\
-@media(max-width:500px){.ppnav-grid{grid-template-columns:repeat(3,1fr);gap:8px;}.ppnav-modal{padding:18px 14px 14px;}}\
-@media(max-width:360px){.ppnav-grid{grid-template-columns:repeat(2,1fr);}}\
+@media(max-width:500px){.ppnav-row.row2{grid-template-columns:1fr 1fr;}.ppnav-modal{padding:18px 14px 14px;}}\
 ';
 
   // ══════════════════════════════════════
@@ -197,21 +199,40 @@
 
     grid.innerHTML = '';
 
-    DISPLAY_ORDER.forEach(function (mod) {
-      if (access.indexOf(mod) === -1) return;
-      // Filtre mobile appliqué seulement si l'utilisateur n'est PAS dans la liste d'accès complet
-      if (mobile && !hasFullMobile && mobileList.indexOf(mod) === -1) return;
-      var m = NAV_MODULES[mod];
-      if (!m) return;
+    // Rangée 1 : moulage + jobs (2 colonnes)
+    var ROW1 = ['moulage', 'jobs'];
+    // Rangée 2 : inspection + inspcouture + inspfinale (3 colonnes)
+    var ROW2 = ['inspection', 'inspcouture', 'inspfinale'];
 
+    function _buildItem(mod) {
+      if (access.indexOf(mod) === -1) return null;
+      if (mobile && !hasFullMobile && mobileList.indexOf(mod) === -1) return null;
+      var m = NAV_MODULES[mod];
+      if (!m) return null;
       var a = document.createElement('a');
       a.className = 'ppnav-item' + (mod === currentMod ? ' current' : '');
       a.href = m.file;
       a.innerHTML =
         '<span class="ppnav-icon">' + m.icon + '</span>' +
         '<span class="ppnav-label" style="color:' + m.color + '">' + m.label + '</span>';
-      grid.appendChild(a);
+      return a;
+    }
+
+    var row1El = document.createElement('div');
+    row1El.className = 'ppnav-row row1';
+    ROW1.forEach(function(mod) {
+      var el = _buildItem(mod);
+      if (el) row1El.appendChild(el);
     });
+    if (row1El.children.length) grid.appendChild(row1El);
+
+    var row2El = document.createElement('div');
+    row2El.className = 'ppnav-row row2';
+    ROW2.forEach(function(mod) {
+      var el = _buildItem(mod);
+      if (el) row2El.appendChild(el);
+    });
+    if (row2El.children.length) grid.appendChild(row2El);
 
     // Attacher le clic sur le logo
     var logo = document.getElementById('logoFlipContainer')
