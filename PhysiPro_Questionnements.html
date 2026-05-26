@@ -2393,6 +2393,38 @@ body {
 .mobile-agent-group-header.daniel { border-left-color: #06b6d4; }
 .mobile-agent-group-header.stephanie { border-left-color: #06b6d4; }
 .mobile-agent-group-header.sansassigne { border-left-color: #94a3b8; }
+
+/* ===== BANDE "ASSIGNÉ À" SUR CHAQUE CARTE MOBILE ===== */
+.mjc-assignee-bar {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px;
+  margin: -12px -12px 10px -12px;
+  padding: 6px 10px;
+  border-radius: 8px 8px 0 0;
+  font-weight: 700;
+  border-bottom: 2px solid rgba(0,0,0,0.1);
+}
+.mjc-assignee-bar-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  opacity: 0.85;
+}
+.mjc-assignee-bar-name {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+/* Couleurs par agent — fond pleine couleur, texte blanc */
+.mjc-assignee-bar.jacynthe   { background: linear-gradient(135deg,#dc2626,#b91c1c); color:#fff; }
+.mjc-assignee-bar.jonathan   { background: linear-gradient(135deg,#16a34a,#15803d); color:#fff; }
+.mjc-assignee-bar.sonia      { background: linear-gradient(135deg,#ea580c,#c2410c); color:#fff; }
+.mjc-assignee-bar.mariesoleil{ background: linear-gradient(135deg,#8b5cf6,#7c3aed); color:#fff; }
+.mjc-assignee-bar.mariepier  { background: linear-gradient(135deg,#a855f7,#9333ea); color:#fff; }
+.mjc-assignee-bar.france     { background: linear-gradient(135deg,#ca8a04,#a16207); color:#fff; }
+.mjc-assignee-bar.daniel     { background: linear-gradient(135deg,#06b6d4,#0891b2); color:#fff; }
+.mjc-assignee-bar.stephanie  { background: linear-gradient(135deg,#06b6d4,#0e7490); color:#fff; }
 .mobile-job-card[data-assignee="jacynthe"] { background: linear-gradient(135deg, #fef2f2, #fee2e2); border-color: #fca5a5; border-left-color: #dc2626; }
 .mobile-job-card[data-assignee="nadia"] { background: linear-gradient(135deg, #eff6ff, #dbeafe); border-color: #93c5fd; border-left-color: #2563eb; }
 .mobile-job-card[data-assignee="sonia"] { background: linear-gradient(135deg, #f0fdf4, #dcfce7); border-color: #86efac; border-left-color: #16a34a; }
@@ -3673,7 +3705,7 @@ function _diagPermissions() {
 }
 
 // ===== VERSION PROTECTION =====
-var APP_VERSION = 20260568;
+var APP_VERSION = 20260569;
 var APP_MODULE = 'questionnement';
 var _versionOK = true;
 var _versionBanner = null;
@@ -10778,6 +10810,15 @@ function renderMobileList() {
     var rappelActive = (!job.resolved && job.rappelJours && parseInt(job.rappelJours, 10) > 0);
     var rappelBellHtml = rappelActive ? '<span class="mjc-rappel-bell" title="Rappel actif">🔔</span>' : '';
     
+    // Bande "Assigné à" — visible sur chaque carte, colorée selon l'agent
+    var assigneeBarHtml = '';
+    if (job.assignee) {
+      assigneeBarHtml = '<div class="mjc-assignee-bar ' + assigneeCls + '">'
+        + '<span class="mjc-assignee-bar-label">Assigné à</span>'
+        + '<span class="mjc-assignee-bar-name">' + escapeHtml(job.assignee) + '</span>'
+        + '</div>';
+    }
+    
     var headerHtml = '<div class="mjc-header-row">'
       + rappelBellHtml
       + '<div class="mjc-order-center">' + psmBadge + '#' + escapeHtml(job.order || '---') + '</div>'
@@ -10830,6 +10871,7 @@ function renderMobileList() {
     
     return '<div class="mobile-job-card" data-assignee="' + assigneeCls + '" onclick="openMobileFiche(\'' + id + '\')">'
       + (msgCount > 0 ? '<span class="mobile-job-badge' + (hasQ?' alert':'') + '">' + msgCount + '</span>' : '')
+      + assigneeBarHtml
       + headerHtml
       + refsHtml
       + clientHtml
@@ -10840,7 +10882,14 @@ function renderMobileList() {
   
   // Rendu : groupé par agent en mode "Tous", liste plate en mode "Mes"
   if (showOnlyMine) {
-    // Mode "Mes questionnements" : liste plate
+    // Mode "Mes questionnements" : trier ancien en haut, récent en bas (non-résolus avant)
+    entries.sort(function(x, y) {
+      var xr = x[1].resolved ? 1 : 0, yr = y[1].resolved ? 1 : 0;
+      if (xr !== yr) return xr - yr;
+      var xd = new Date(x[1].createdAt || x[1].dateRecue || 0).getTime();
+      var yd = new Date(y[1].createdAt || y[1].dateRecue || 0).getTime();
+      return xd - yd;
+    });
     list.innerHTML = entries.map(renderOneCard).join('');
   } else {
     // Mode "Tous" : grouper par agent dans l'ordre défini par ASSIGNEES
@@ -10849,6 +10898,18 @@ function renderMobileList() {
       var a = pair[1].assignee || 'Sans assigné';
       if (!byAgent[a]) byAgent[a] = [];
       byAgent[a].push(pair);
+    });
+    
+    // Dans chaque groupe : trier par date CROISSANTE (ancien en haut, récent en bas)
+    // Mais on garde les résolus en bas du non-résolu (à la toute fin du groupe)
+    Object.keys(byAgent).forEach(function(a) {
+      byAgent[a].sort(function(x, y) {
+        var xr = x[1].resolved ? 1 : 0, yr = y[1].resolved ? 1 : 0;
+        if (xr !== yr) return xr - yr; // non-résolus d'abord (en haut)
+        var xd = new Date(x[1].createdAt || x[1].dateRecue || 0).getTime();
+        var yd = new Date(y[1].createdAt || y[1].dateRecue || 0).getTime();
+        return xd - yd; // ancien en haut, récent en bas
+      });
     });
     
     // Ordre d'affichage : suivre l'ordre dans ASSIGNEES, puis tout reste
