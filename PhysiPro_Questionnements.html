@@ -3198,15 +3198,7 @@ body {
   <div class="mobile-fiche-body" id="mobileFicheBody"></div>
 </div>
 
-<!-- MOBILE CHAT PAGE -->
-<div class="mobile-chat-page" id="mobileChatPage">
-  <div class="mobile-chat-header">
-    <button class="mobile-chat-back" onclick="closeMobileChat()">← Fiche</button>
-    <div class="mobile-chat-title" id="mobileChatTitle">💬 Chat</div>
-  </div>
-  <div class="mobile-chat-messages" id="mobileChatMessages"></div>
-  <div class="mobile-chat-compose" id="mobileChatCompose"></div>
-</div>
+<!-- (Ancienne page mobile chat dédiée retirée v20260567 — remplacée par _renderMobileChatInFiche) -->
 
 <!-- FICHE OVERLAY (DESKTOP) -->
 <div class="fiche-overlay hidden" id="ficheOverlay" onclick="closeFiche(event)">
@@ -3221,13 +3213,18 @@ body {
     </div>
     <div class="fiche-notes-zone">
       <div class="qchat-container" id="qchatContainer">
-        <!-- Header bar unifié : Vu par + Réglé + Imprimer + ✕ Fermer (tout à droite) -->
+        <!-- Header bar unifié : Vu par + Renvoyer + Réglé + Imprimer + ✕ Fermer (tout à droite) -->
         <div class="qchat-header-bar" style="gap:8px;">
           <span id="ficheSeenBadge" style="display:none;font-size:9px;font-weight:600;color:#4ade80;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.25);border-radius:4px;padding:2px 8px;white-space:nowrap;"></span>
           <span id="qchatDestName" style="display:none;"></span>
           <div class="qchat-dest-picker" id="qchatDestPicker" style="display:none;"></div>
           <div class="qchat-extra-dests" id="qchatExtraDests" style="display:none;"></div>
           <span style="flex:1;"></span>
+          <div style="display:flex;align-items:center;gap:5px;background:rgba(15,23,42,0.6);border:1px solid rgba(148,163,184,0.3);border-radius:6px;padding:3px 8px;box-shadow:0 1px 3px rgba(0,0,0,0.2);">
+            <span style="font-size:10px;font-weight:700;color:#cbd5e1;letter-spacing:0.2px;white-space:nowrap;">↻ Renvoyer le courriel pour aviser :</span>
+            <button onclick="resendEmailToSC()" title="Renvoyer au Service Client (agent assigné)" style="background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:1px solid #60a5fa;border-radius:10px;padding:2px 8px;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,0.25);">📞 Service client</button>
+            <button onclick="resendEmailToCreator()" title="Renvoyer au questionneur (créateur)" style="background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;border:1px solid #22d3ee;border-radius:10px;padding:2px 8px;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,0.25);">❓ Questionneur</button>
+          </div>
           <button class="qchat-resolve-btn" id="ficheResolveBtn" onclick="openResolveModal()" style="display:none;">✅ Questionnement réglé</button>
           <button class="qchat-resolve-btn" id="ficheAckBtn" style="display:none;background:linear-gradient(135deg,#3b82f6,#2563eb);cursor:default;opacity:0.9;">✅ A été vu et réglé</button>
           <button class="qchat-action-btn" onclick="QuestChat.printChat()" title="Imprimer">🖨️</button>
@@ -3257,7 +3254,6 @@ body {
           <button class="qchat-annot-btn" data-tool="rect" onclick="QuestChat.setAnnotTool('rect')" title="Carré sur photo">▢</button>
           <button class="qchat-annot-btn" onclick="QuestChat.annotUndo()" title="Annuler dernière forme">↩</button>
           <span style="flex:1;"></span>
-          <button id="ficheResendEmailBtn" onclick="resendLastMessageEmail()" style="background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;border:1px solid #fb923c;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.2);">↻ Renvoyer le courriel</button>
         </div>
         <!-- Messages scroll -->
         <div class="qchat-scroll" id="qchatScroll">
@@ -3644,7 +3640,7 @@ function _diagPermissions() {
 }
 
 // ===== VERSION PROTECTION =====
-var APP_VERSION = 20260563;
+var APP_VERSION = 20260567;
 var APP_MODULE = 'questionnement';
 var _versionOK = true;
 var _versionBanner = null;
@@ -7361,29 +7357,24 @@ function getAgentEmail(name) {
   return member ? member.email : '';
 }
 
-// Renvoyer par courriel le DERNIER message du chat (utilisé par le bouton dans le header de la fiche)
-function resendLastMessageEmail() {
+// Helper interne : récupère contenu et infos du dernier message
+function _getLastMessageInfo() {
   if (typeof currentJobId === 'undefined' || !currentJobId) {
     if (typeof showToast === 'function') showToast('Ouvrez d\'abord un questionnement', 'warning');
-    return;
+    return null;
   }
   var job = (typeof jobsData !== 'undefined' && jobsData[currentJobId]) ? jobsData[currentJobId] : null;
   if (!job) {
     if (typeof showToast === 'function') showToast('Questionnement introuvable', 'error');
-    return;
+    return null;
   }
-  
-  // Récupérer les messages du chat (via _messages exposé par QuestChat)
   var messages = (typeof QuestChat !== 'undefined' && QuestChat._getMessages) ? QuestChat._getMessages() : [];
   if (!messages || messages.length === 0) {
     if (typeof showToast === 'function') showToast('Aucun message à renvoyer', 'warning');
-    return;
+    return null;
   }
-  
-  // Prendre le dernier message
   var lastMsgEntry = messages[messages.length - 1];
   var lastMsg = lastMsgEntry[1] || lastMsgEntry;
-  
   var content = '';
   if (lastMsg.contentHtml) {
     var tmp = document.createElement('div');
@@ -7392,63 +7383,64 @@ function resendLastMessageEmail() {
   } else {
     content = lastMsg.content || lastMsg.text || '';
   }
+  return {
+    job: job,
+    content: content,
+    authorName: lastMsg.authorName || 'Service Client',
+    orderNum: job.order || '',
+    clientName: job.client || job.nom || ''
+  };
+}
+
+// Renvoyer le courriel au Service Client (l'agent assigné au questionnement)
+function resendEmailToSC() {
+  var info = _getLastMessageInfo();
+  if (!info) return;
   
-  var orderNum = job.order || '';
-  var clientName = job.client || job.nom || '';
-  var authorName = lastMsg.authorName || 'Service Client';
-  var authorEmail = (lastMsg.authorEmail || '').toLowerCase();
-  
-  // Déterminer si l'auteur est un agent SC
-  var serviceDepts = ['Service', 'Représentante', 'France'];
-  var authorMember = (typeof TEAM_MEMBERS !== 'undefined') ? TEAM_MEMBERS.find(function(m){
-    return (m.email && m.email.toLowerCase() === authorEmail) || (m.name && m.name.toLowerCase().indexOf(authorName.toLowerCase()) === 0);
-  }) : null;
-  var isFromSC = authorMember && serviceDepts.indexOf(authorMember.dept) !== -1;
-  
-  var subject, body, recipient;
-  
-  if (isFromSC) {
-    // Auteur = agent SC → renvoyer au créateur (ou à toi par défaut)
-    var creatorName = job.createdByName || job.psmSentBy || 'Daniel';
-    var creatorEmail = job.createdByEmail || (typeof _scNameToEmail === 'function' ? _scNameToEmail(creatorName) : '');
-    if (!creatorEmail) creatorEmail = 'atelieratp@physipro.com';
-    recipient = creatorEmail;
-    subject = encodeURIComponent('Réponse questionnement — #' + orderNum + (clientName ? ' ' + clientName : ''));
-    body = encodeURIComponent(
-      'Bonjour ' + (creatorName || '') + ',\n\n' +
-      authorName + ' a répondu à votre questionnement.\n\n' +
-      '📋 Commande: #' + orderNum + '\n' +
-      (clientName ? '👤 Client: ' + clientName + '\n' : '') +
-      '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-      '💬 Réponse:\n\n' +
-      (content || '(Voir dans l\'application)') +
-      '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
-      'Cordialement.'
-    );
-  } else {
-    // Auteur = créateur (toi/ATP) → renvoyer à l'agent assigné
-    var assignee = job.assignee || '';
-    var agentEmail = assignee ? getAgentEmail(assignee) : '';
-    if (!agentEmail) {
-      if (typeof showToast === 'function') showToast('Agent destinataire introuvable', 'error');
-      return;
-    }
-    recipient = agentEmail;
-    subject = encodeURIComponent('Questionnement — #' + orderNum + (clientName ? ' ' + clientName : ''));
-    body = encodeURIComponent(
-      'Bonjour ' + assignee + ',\n\n' +
-      authorName + ' vous a envoyé un questionnement dans la page Service Client.\n\n' +
-      '📋 Commande: #' + orderNum + '\n' +
-      (clientName ? '👤 Client: ' + clientName + '\n' : '') +
-      '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-      '💬 Message:\n\n' +
-      (content || '(Voir dans l\'application)') +
-      '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
-      'Veuillez consulter la page Service Client pour répondre.'
-    );
+  var assignee = info.job.assignee || '';
+  var agentEmail = assignee ? getAgentEmail(assignee) : '';
+  if (!agentEmail) {
+    if (typeof showToast === 'function') showToast('Agent SC destinataire introuvable', 'error');
+    return;
   }
   
-  window.open('mailto:' + recipient + '?subject=' + subject + '&body=' + body);
+  var subject = encodeURIComponent('Questionnement — #' + info.orderNum + (info.clientName ? ' ' + info.clientName : ''));
+  var body = encodeURIComponent(
+    'Bonjour ' + assignee + ',\n\n' +
+    info.authorName + ' vous a envoyé un message dans la page Questionnements.\n\n' +
+    '📋 Commande: #' + info.orderNum + '\n' +
+    (info.clientName ? '👤 Client: ' + info.clientName + '\n' : '') +
+    '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+    '💬 Message:\n\n' +
+    (info.content || '(Voir dans l\'application)') +
+    '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
+    'Veuillez consulter la page Questionnements pour répondre.'
+  );
+  window.open('mailto:' + agentEmail + '?subject=' + subject + '&body=' + body);
+}
+
+// Renvoyer le courriel au Questionneur (la personne qui a créé le questionnement)
+function resendEmailToCreator() {
+  var info = _getLastMessageInfo();
+  if (!info) return;
+  
+  var creatorName = info.job.createdByName || info.job.psmSentBy || 'Daniel';
+  var creatorEmail = info.job.createdByEmail || (typeof _scNameToEmail === 'function' ? _scNameToEmail(creatorName) : '');
+  if (!creatorEmail) creatorEmail = 'atelieratp@physipro.com';
+  
+  var subject = encodeURIComponent('Réponse questionnement — #' + info.orderNum + (info.clientName ? ' ' + info.clientName : ''));
+  var body = encodeURIComponent(
+    'Bonjour ' + (creatorName || '') + ',\n\n' +
+    info.authorName + ' a répondu à votre questionnement.\n\n' +
+    '📋 Commande: #' + info.orderNum + '\n' +
+    (info.clientName ? '👤 Client: ' + info.clientName + '\n' : '') +
+    '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+    '💬 Réponse:\n\n' +
+    (info.content || '(Voir dans l\'application)') +
+    '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
+    'Cordialement.'
+  );
+  window.open('mailto:' + creatorEmail + '?subject=' + subject + '&body=' + body);
 }
 
 function sendJobNotifEmail(assignee, orderNum, clientName, jobId, messageContent) {
@@ -11405,7 +11397,8 @@ function deleteMobileMessage(msgIndex) {
 }
 
 function closeMobileChat() {
-  document.getElementById('mobileChatPage').classList.remove('active');
+  var page = document.getElementById('mobileChatPage');
+  if (page) page.classList.remove('active');
 }
 
 // ===== SEARCH =====
