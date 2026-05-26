@@ -1749,8 +1749,8 @@ body {
 .job-card.job-resolved { border-color: rgba(34,197,94,0.5); }
 .job-card.job-resolved:hover { border-color: rgba(34,197,94,0.8); }
 .job-card-resolved-badge { font-size: 9px; font-weight: 800; color: #10b981; text-align: center; padding: 2px 5px; letter-spacing: 0.2px; background: rgba(16,185,129,0.1); border-radius: 4px; margin: 2px 3px; line-height: 1.35; }
-.job-card-status-footer { font-size: 8px; font-weight: 800; text-align: center; padding: 1px 5px; border-radius: 0 0 5px 5px; margin: 2px -5px -2px; letter-spacing: 0.2px; }
-.job-card-status-footer.nouveau { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; animation: nouveauPulse 1.2s ease-in-out infinite; font-size: 9px; }
+.job-card-status-footer { font-size: 8px; font-weight: 800; text-align: center; padding: 1px 5px; border-radius: 0 0 5px 5px; margin: 2px -5px -2px; letter-spacing: 0.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job-card-status-footer.nouveau { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; animation: nouveauPulse 1.2s ease-in-out infinite; font-size: 8px; }
 @keyframes nouveauPulse { 0%,100% { opacity:1; box-shadow:0 0 8px rgba(59,130,246,0.5); } 50% { opacity:0.2; box-shadow:0 0 25px rgba(59,130,246,1), 0 0 50px rgba(59,130,246,0.4); } }
 .job-card-status-footer.en-traitement { background: linear-gradient(135deg, #eab308, #ca8a04); color: #fff; }
 .job-card-status-footer.complete { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; }
@@ -3292,6 +3292,7 @@ body {
           </div>
           <button class="qchat-resolve-btn" id="ficheResolveBtn" onclick="openResolveModal()" style="display:none;">✅ Questionnement réglé</button>
           <button class="qchat-resolve-btn" id="ficheAckBtn" style="display:none;background:linear-gradient(135deg,#3b82f6,#2563eb);cursor:default;opacity:0.9;">✅ A été vu et réglé</button>
+          <button class="qchat-action-btn" onclick="openDeleteFromFicheModal()" title="Supprimer ce questionnement" style="background:linear-gradient(135deg,#dc2626,#991b1b);">🗑️</button>
           <button class="qchat-action-btn" onclick="QuestChat.printChat()" title="Imprimer">🖨️</button>
           <button class="fiche-close-btn" onclick="closeFiche(event)" title="Fermer la fenêtre">✕</button>
         </div>
@@ -3705,7 +3706,7 @@ function _diagPermissions() {
 }
 
 // ===== VERSION PROTECTION =====
-var APP_VERSION = 20260569;
+var APP_VERSION = 20260571;
 var APP_MODULE = 'questionnement';
 var _versionOK = true;
 var _versionBanner = null;
@@ -8531,6 +8532,136 @@ function _sendResolvedEmail(toEmail, job, resolverName) {
 }
 
 // ═══ QUICK DELETE FROM CARD — Daniel only ═══
+// ═══ MODALE SUPPRESSION DEPUIS LA FICHE — demande si imprimer avant ═══
+function openDeleteFromFicheModal() {
+  if (typeof currentJobId === 'undefined' || !currentJobId) return;
+  var job = jobsData[currentJobId];
+  if (!job) return;
+  
+  var existing = document.getElementById('deleteFromFicheOverlay');
+  if (existing) existing.remove();
+  
+  var orderLabel = '#' + (job.order || '---') + (job.client ? ' \u2014 ' + job.client : '');
+  
+  var overlay = document.createElement('div');
+  overlay.className = 'email-confirm-overlay';
+  overlay.id = 'deleteFromFicheOverlay';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  
+  var box = document.createElement('div');
+  box.className = 'email-confirm-box';
+  box.style.cssText = 'max-width:440px;width:95vw;';
+  
+  var hdr = document.createElement('div');
+  hdr.className = 'email-confirm-header';
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding-right:8px;';
+  var hdrSpan = document.createElement('span');
+  hdrSpan.textContent = '\ud83d\uddd1\ufe0f Supprimer ce questionnement?';
+  hdr.appendChild(hdrSpan);
+  
+  var btnClose = document.createElement('button');
+  btnClose.textContent = '\u2715';
+  btnClose.title = 'Fermer';
+  btnClose.style.cssText = 'background:transparent;border:none;color:#94a3b8;font-size:18px;font-weight:700;cursor:pointer;padding:4px 8px;line-height:1;border-radius:4px;transition:all 0.15s;';
+  btnClose.addEventListener('mouseenter', function() { btnClose.style.background = 'rgba(239,68,68,0.2)'; btnClose.style.color = '#fca5a5'; });
+  btnClose.addEventListener('mouseleave', function() { btnClose.style.background = 'transparent'; btnClose.style.color = '#94a3b8'; });
+  btnClose.addEventListener('click', function() { overlay.remove(); });
+  hdr.appendChild(btnClose);
+  
+  var body = document.createElement('div');
+  body.className = 'email-confirm-body';
+  body.style.textAlign = 'left';
+  body.style.padding = '16px';
+  
+  var subT = document.createElement('div');
+  subT.style.cssText = 'font-size:12px;color:#94a3b8;margin-bottom:14px;text-align:center;';
+  subT.textContent = orderLabel;
+  body.appendChild(subT);
+  
+  var warn = document.createElement('div');
+  warn.style.cssText = 'background:rgba(220,38,38,0.15);border:1px solid rgba(220,38,38,0.3);border-radius:6px;padding:10px;font-size:11px;color:#fca5a5;margin-bottom:14px;text-align:center;line-height:1.5;';
+  warn.innerHTML = '\u26a0\ufe0f <b>Cette action est irr\u00e9versible.</b><br>Le questionnement et tout son historique seront supprim\u00e9s d\u00e9finitivement.';
+  body.appendChild(warn);
+  
+  var q = document.createElement('div');
+  q.style.cssText = 'font-weight:700;color:#cbd5e1;margin-bottom:10px;font-size:13px;text-align:center;';
+  q.textContent = 'Voulez-vous imprimer la conversation avant?';
+  body.appendChild(q);
+  
+  var ftr = document.createElement('div');
+  ftr.style.cssText = 'padding:12px;background:rgba(0,0,0,0.2);display:flex;gap:8px;flex-wrap:wrap;';
+  
+  var btnCancel = document.createElement('button');
+  btnCancel.textContent = 'Annuler';
+  btnCancel.style.cssText = 'flex:1;min-width:80px;padding:10px;border-radius:6px;border:1px solid #475569;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;font-weight:600;';
+  btnCancel.addEventListener('click', function() { overlay.remove(); });
+  
+  var btnDeleteOnly = document.createElement('button');
+  btnDeleteOnly.textContent = '\ud83d\uddd1\ufe0f Supprimer sans imprimer';
+  btnDeleteOnly.style.cssText = 'flex:1;min-width:160px;padding:10px;border-radius:6px;border:none;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;font-weight:700;font-size:12px;cursor:pointer;';
+  btnDeleteOnly.addEventListener('click', function() {
+    overlay.remove();
+    _confirmDeleteFromFiche(false);
+  });
+  
+  var btnPrintDelete = document.createElement('button');
+  btnPrintDelete.textContent = '\ud83d\udda8\ufe0f Imprimer puis supprimer';
+  btnPrintDelete.style.cssText = 'flex:1;min-width:160px;padding:10px;border-radius:6px;border:none;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-weight:700;font-size:12px;cursor:pointer;';
+  btnPrintDelete.addEventListener('click', function() {
+    overlay.remove();
+    _confirmDeleteFromFiche(true);
+  });
+  
+  ftr.appendChild(btnCancel);
+  ftr.appendChild(btnDeleteOnly);
+  ftr.appendChild(btnPrintDelete);
+  
+  box.appendChild(hdr);
+  box.appendChild(body);
+  box.appendChild(ftr);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+function _confirmDeleteFromFiche(printFirst) {
+  var jobId = currentJobId;
+  if (!jobId) return;
+  var job = jobsData[jobId];
+  if (!job) return;
+  
+  // Imprimer d'abord si demandé
+  if (printFirst && typeof printJobConversation === 'function') {
+    try {
+      printJobConversation(jobId);
+    } catch(e) {
+      console.error('Print error:', e);
+    }
+  }
+  
+  // Supprimer (passe tous les contrôles de quickDeleteJob mais sans le confirm)
+  var updates = {};
+  updates['jobs/' + jobId] = null;
+  updates['questChat/' + jobId] = null;
+  
+  // Délai si on imprime d'abord pour laisser le temps à la fenêtre d'impression de s'ouvrir
+  var delay = printFirst ? 800 : 0;
+  setTimeout(function() {
+    db.ref().update(updates).then(function() {
+      if (typeof showToast === 'function') showToast('\ud83d\uddd1\ufe0f Questionnement supprim\u00e9', 'info');
+      // Fermer la fiche manuellement
+      var overlay = document.getElementById('ficheOverlay');
+      if (overlay) overlay.classList.add('hidden');
+      if (typeof QuestChat !== 'undefined' && QuestChat.detach) QuestChat.detach();
+      currentJobId = null;
+      var colselContainer = document.getElementById('colselBtnContainer');
+      if (colselContainer) colselContainer.style.display = '';
+      if (typeof renderJobs === 'function') renderJobs();
+    }).catch(function(e) {
+      if (typeof showToast === 'function') showToast('\u274c Erreur: ' + e.message, 'error');
+    });
+  }, delay);
+}
+
 function quickDeleteJob(jobId) {
   if (!currentUser || currentUser.email.toLowerCase() !== 'atelieratp@physipro.com') {
     showToast('🔒 Seul Daniel peut supprimer les cartes', 'error');
