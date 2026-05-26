@@ -432,6 +432,31 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════ PENDING REQUESTS SCREEN ══ -->
+<div class="screen hidden" id="screenPending">
+  <div class="topbar">
+    <div class="topbar-logo">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="5" y="25" width="90" height="60" rx="10" fill="#4a8ef5"/>
+        <circle cx="50" cy="55" r="18" fill="#fff" opacity=".25"/>
+        <circle cx="50" cy="55" r="12" fill="#fff"/>
+        <circle cx="50" cy="55" r="6" fill="#4a8ef5"/>
+        <rect x="30" y="15" width="26" height="14" rx="4" fill="#4a8ef5"/>
+        <circle cx="78" cy="36" r="5" fill="#22c55e"/>
+      </svg>
+      <div><div class="topbar-title">📷 Demandes de photos</div></div>
+    </div>
+    <a href="index.html" style="background:rgba(59,130,246,0.12);border:1.5px solid rgba(59,130,246,0.4);border-radius:8px;color:#60a5fa;font-size:13px;font-weight:700;padding:6px 12px;text-decoration:none;display:flex;align-items:center;gap:5px;flex-shrink:0;transition:all 0.15s;">← Menu</a>
+    <span class="status-dot connected" id="pendingDot"></span>
+  </div>
+  <div class="main-body" style="padding:20px;">
+    <div id="pendingList" style="display:flex;flex-direction:column;gap:14px;"></div>
+    <div style="margin-top:24px;text-align:center;">
+      <button onclick="showScreen('screenJobs')" style="background:rgba(148,163,184,0.15);border:1.5px solid rgba(148,163,184,0.4);border-radius:8px;color:#cbd5e1;font-size:13px;font-weight:600;padding:10px 20px;cursor:pointer;transition:all 0.15s;">📋 Voir tous les jobs</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════ PHOTO SCREEN ══ -->
 <div class="screen hidden" id="screenPhoto">
   <div class="topbar">
@@ -452,7 +477,7 @@
   </div>
 
   <div class="photo-job-bar">
-    <button class="photo-job-back" onclick="goToJobs()">← Menu</button>
+    <a href="index.html" class="photo-job-back" style="text-decoration:none;display:inline-flex;align-items:center;">← Menu</a>
     <div class="photo-job-info">
       <div class="photo-job-order" id="photoJobOrder">—</div>
       <div class="photo-job-client" id="photoJobClient">—</div>
@@ -595,7 +620,10 @@ auth.onAuthStateChanged(function(user) {
     db.ref('.info/connected').on('value', s => setDots(s.val()));
     loadJobs();
     listenForRequests();
-    showScreen('screenJobs');
+    // Afficher l'écran des demandes en attente par défaut
+    // (listenForRequests redirigera automatiquement si 1 seule demande)
+    showScreen('screenPending');
+    renderPendingList();
     document.getElementById('jobsUserLabel').innerHTML = '<strong>' + esc(currentUserName) + '</strong>' + esc(email);
   } else {
     currentUser = null;
@@ -661,39 +689,94 @@ var _pendingRequest = null;
 
 var _lastHandledRequestId = null;
 
+var _activePendingRequests = []; // Toutes les demandes actives
+
 function listenForRequests() {
   if (!db) return;
   if (_requestRef) { db.ref('photoRequests').off('value'); }
   _requestRef = db.ref('photoRequests');
   _requestRef.on('value', function(snap) {
     var all = snap.val() || {};
-    var found = null;
-    // Find oldest waiting or answering request
+    var pendings = [];
+    // Collecter TOUTES les demandes actives
     Object.entries(all).forEach(function([jobId, req]) {
       if (req.status === 'waiting' || req.status === 'answering') {
-        if (!found || req.timestamp < found.timestamp) {
-          found = Object.assign({ jobId: jobId }, req);
-        }
+        pendings.push(Object.assign({ jobId: jobId }, req));
       }
     });
-    if (found) {
+    // Trier par date (plus ancienne d'abord)
+    pendings.sort(function(a, b) { return (a.timestamp || 0) - (b.timestamp || 0); });
+    _activePendingRequests = pendings;
+    
+    // Mettre à jour l'affichage des pastilles si on est sur l'écran pending
+    if (!document.getElementById('screenPending').classList.contains('hidden')) {
+      renderPendingList();
+    }
+    
+    if (pendings.length === 0) {
+      // Aucune demande active
+      _pendingRequest = null;
+      document.getElementById('requestBanner').classList.remove('active');
+    } else if (pendings.length === 1) {
+      // Une seule demande : aller directement à l'écran photo
+      var found = pendings[0];
       var reqKey = found.jobId + '_' + found.timestamp;
       if (reqKey !== _lastHandledRequestId) {
         _lastHandledRequestId = reqKey;
         _pendingRequest = found;
-        // Auto-navigate directly to photo screen for this job
         db.ref('photoRequests/' + found.jobId).update({ status: 'answering' }).catch(function(){});
         selectJob(found.jobId);
       }
     } else {
-      // Request cancelled or done — if we're on the photo screen for that job, show a brief notice
-      if (_pendingRequest && selectedJob && selectedJob.id === _pendingRequest.jobId) {
-        // Don't force back — user might still want to send
-      }
+      // 2+ demandes : afficher l'écran de sélection (pastilles)
       _pendingRequest = null;
-      document.getElementById('requestBanner').classList.remove('active');
+      // Ne pas auto-naviguer si on est déjà sur photo screen
+      if (document.getElementById('screenPhoto').classList.contains('hidden')) {
+        showScreen('screenPending');
+        renderPendingList();
+      }
     }
   });
+}
+
+// Rendu des pastilles de demandes actives
+function renderPendingList() {
+  var list = document.getElementById('pendingList');
+  if (!list) return;
+  
+  if (_activePendingRequests.length === 0) {
+    list.innerHTML = '<div style="background:rgba(15,23,42,0.6);border:1px solid rgba(148,163,184,0.3);border-radius:10px;padding:30px 20px;text-align:center;color:#94a3b8;font-size:14px;line-height:1.6;">'
+      + '<div style="font-size:40px;margin-bottom:12px;">📭</div>'
+      + '<div style="font-weight:700;color:#cbd5e1;margin-bottom:6px;">Aucune demande de photo en cours</div>'
+      + '<div style="font-size:12px;">Tu peux quand même envoyer une photo en sélectionnant un job ci-dessous.</div>'
+      + '</div>';
+    return;
+  }
+  
+  list.innerHTML = '<div style="color:#cbd5e1;font-size:13px;font-weight:600;margin-bottom:6px;text-align:center;">📥 ' + _activePendingRequests.length + ' demande(s) de photo en attente — sélectionne :</div>'
+    + _activePendingRequests.map(function(req) {
+        var job = jobsData[req.jobId] || {};
+        var orderTxt = job.order || req.jobId.substring(0,8);
+        var clientTxt = job.client || 'Client non spécifié';
+        var assignee = job.assignee || '';
+        return '<button onclick="selectPendingRequest(\''+esc(req.jobId)+'\')" style="background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:2px solid #60a5fa;border-radius:12px;padding:14px 18px;font-size:14px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:12px;box-shadow:0 4px 12px rgba(59,130,246,0.3);width:100%;">'
+          + '<span style="font-size:24px;">📷</span>'
+          + '<div style="flex:1;">'
+          + '<div style="font-size:16px;font-weight:800;">#'+esc(orderTxt)+'</div>'
+          + '<div style="font-size:12px;font-weight:500;opacity:0.95;margin-top:2px;">'+esc(clientTxt)+'</div>'
+          + (assignee ? '<div style="font-size:10px;font-weight:500;opacity:0.85;margin-top:3px;">👤 '+esc(assignee)+'</div>' : '')
+          + '</div>'
+          + '<span style="font-size:18px;opacity:0.9;">→</span>'
+          + '</button>';
+      }).join('');
+}
+
+function selectPendingRequest(jobId) {
+  var found = _activePendingRequests.find(function(r) { return r.jobId === jobId; });
+  if (!found) return;
+  _pendingRequest = found;
+  db.ref('photoRequests/' + jobId).update({ status: 'answering' }).catch(function(){});
+  selectJob(jobId);
 }
 
 function answerRequest() {
@@ -782,7 +865,8 @@ function _doSelectJob(id) {
 
 function goToJobs() {
   pendingPhotos = [];
-  showScreen('screenJobs');
+  showScreen('screenPending');
+  renderPendingList();
 }
 
 // ═══ PHOTO HANDLING ═══
