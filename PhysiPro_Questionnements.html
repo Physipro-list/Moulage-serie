@@ -2360,6 +2360,39 @@ body {
 
 /* Carte mobile : couleur pastel douce selon assignee, avec petite bordure colorée pour bien identifier */
 .mobile-job-card { background: linear-gradient(135deg, #eef2ff, #e0e7ff); border: 1px solid #c7d2fe; border-radius: 10px; padding: 12px; margin-bottom: 10px; cursor: pointer; position: relative; box-shadow: 0 2px 6px rgba(0,0,0,0.08); border-left: 5px solid #6366f1; color: #1e293b; text-align: center; transition: transform 0.08s ease, box-shadow 0.15s ease; }
+
+/* ===== GROUPES D'AGENTS EN VUE MOBILE "TOUS" ===== */
+.mobile-agent-group { margin-bottom: 16px; }
+.mobile-agent-group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; margin-bottom: 8px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  color: #fff;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  border-left: 4px solid #6366f1;
+  position: sticky; top: 0; z-index: 5;
+}
+.mobile-agent-group-name { display: flex; align-items: center; gap: 6px; }
+.mobile-agent-group-count {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 10px;
+  min-width: 22px; text-align: center;
+}
+/* Couleurs par agent : assorties aux cartes */
+.mobile-agent-group-header.jacynthe { border-left-color: #dc2626; }
+.mobile-agent-group-header.jonathan { border-left-color: #16a34a; }
+.mobile-agent-group-header.sonia { border-left-color: #ea580c; }
+.mobile-agent-group-header.mariesoleil { border-left-color: #8b5cf6; }
+.mobile-agent-group-header.mariepier { border-left-color: #a855f7; }
+.mobile-agent-group-header.france { border-left-color: #ca8a04; }
+.mobile-agent-group-header.daniel { border-left-color: #06b6d4; }
+.mobile-agent-group-header.stephanie { border-left-color: #06b6d4; }
+.mobile-agent-group-header.sansassigne { border-left-color: #94a3b8; }
 .mobile-job-card[data-assignee="jacynthe"] { background: linear-gradient(135deg, #fef2f2, #fee2e2); border-color: #fca5a5; border-left-color: #dc2626; }
 .mobile-job-card[data-assignee="nadia"] { background: linear-gradient(135deg, #eff6ff, #dbeafe); border-color: #93c5fd; border-left-color: #2563eb; }
 .mobile-job-card[data-assignee="sonia"] { background: linear-gradient(135deg, #f0fdf4, #dcfce7); border-color: #86efac; border-left-color: #16a34a; }
@@ -3640,7 +3673,7 @@ function _diagPermissions() {
 }
 
 // ===== VERSION PROTECTION =====
-var APP_VERSION = 20260567;
+var APP_VERSION = 20260568;
 var APP_MODULE = 'questionnement';
 var _versionOK = true;
 var _versionBanner = null;
@@ -10730,19 +10763,18 @@ function renderMobileList() {
     return;
   }
   
-  list.innerHTML = entries.map(function(pair) {
+  // Fonction helper qui rend une seule carte
+  function renderOneCard(pair) {
     var id = pair[0], job = pair[1];
     var msgCount = getMessageCount(id);
     var hasQ = hasUnresolvedQuestions(id);
     var assigneeCls = (job.assignee || '').toLowerCase().replace(/[^a-z]/g, '');
     var psmBadge = job.fromPSM ? '<span style="display:inline-block;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px;">' + escapeHtml(job.psmType || 'PSM') + '</span>' : '';
     
-    // Header : N° Commande au centre (toujours) + badge assignee à droite (uniquement dans "Tous les questionnements")
+    // En vue groupée par agent : on n'affiche PAS le badge assignee (puisque l'en-tête du groupe le dit déjà)
+    // En vue "Mes" ou en vue plate : pas de badge non plus
     var assigneeBadgeHtml = '';
-    if (!showOnlyMine && job.assignee) {
-      assigneeBadgeHtml = '<span class="mjc-assignee-inline ' + assigneeCls + '">👤 ' + escapeHtml(job.assignee) + '</span>';
-    }
-    // Cloche rappel sur la carte (clignote si rappel actif)
+    
     var rappelActive = (!job.resolved && job.rappelJours && parseInt(job.rappelJours, 10) > 0);
     var rappelBellHtml = rappelActive ? '<span class="mjc-rappel-bell" title="Rappel actif">🔔</span>' : '';
     
@@ -10763,7 +10795,7 @@ function renderMobileList() {
     if (job.fromPSM && job.psmName) clientTxt += ' — ' + job.psmName;
     var clientHtml = '<div class="mjc-provenance"><span class="mjc-prov-lbl">Client:</span> ' + escapeHtml(clientTxt) + '</div>';
     
-    // Ligne 4 : Questionnement envoyé par (auteur du premier problem)
+    // Ligne 4 : Questionnement envoyé par
     var senderName = job.firstProblemBy || job.createdByName || '';
     if (!senderName && job.createdBy) {
       var emailParts = (job.createdBy || '').split('@')[0].split('.');
@@ -10771,11 +10803,7 @@ function renderMobileList() {
     }
     var senderHtml = senderName ? '<div class="mjc-sender"><span class="mjc-sender-lbl">Questionnement envoyé par:</span> ' + escapeHtml(senderName) + '</div>' : '';
     
-    // Pastille d'état en bas (pleine largeur) :
-    // - Résolu + non imprimé → mi-vert "Réglé" / mi-bouton "🖨️ Imprimer"
-    // - Résolu + imprimé → mi-vert "Réglé" / mi-bouton "🗑️ Supprimer" (Daniel uniquement)
-    // - seenBy défini → jaune "En traitement"
-    // - sinon → bleu clignotant "Nouveau questionnement"
+    // Pastille d'état en bas
     var statusFooterHtml = '';
     if (job.resolved) {
       var isPrinted = !!job.printed;
@@ -10808,7 +10836,42 @@ function renderMobileList() {
       + senderHtml
       + statusFooterHtml
       + '</div>';
-  }).join('');
+  }
+  
+  // Rendu : groupé par agent en mode "Tous", liste plate en mode "Mes"
+  if (showOnlyMine) {
+    // Mode "Mes questionnements" : liste plate
+    list.innerHTML = entries.map(renderOneCard).join('');
+  } else {
+    // Mode "Tous" : grouper par agent dans l'ordre défini par ASSIGNEES
+    var byAgent = {};
+    entries.forEach(function(pair) {
+      var a = pair[1].assignee || 'Sans assigné';
+      if (!byAgent[a]) byAgent[a] = [];
+      byAgent[a].push(pair);
+    });
+    
+    // Ordre d'affichage : suivre l'ordre dans ASSIGNEES, puis tout reste
+    var orderedAgents = [];
+    if (typeof ASSIGNEES !== 'undefined' && ASSIGNEES) {
+      ASSIGNEES.forEach(function(a) {
+        if (byAgent[a]) orderedAgents.push(a);
+      });
+    }
+    Object.keys(byAgent).forEach(function(a) {
+      if (orderedAgents.indexOf(a) === -1) orderedAgents.push(a);
+    });
+    
+    list.innerHTML = orderedAgents.map(function(agentName) {
+      var cards = byAgent[agentName];
+      var agentCls = (agentName || '').toLowerCase().replace(/[^a-z]/g, '');
+      var headerEl = '<div class="mobile-agent-group-header ' + agentCls + '">'
+        + '<span class="mobile-agent-group-name">👤 ' + escapeHtml(agentName) + '</span>'
+        + '<span class="mobile-agent-group-count">' + cards.length + '</span>'
+        + '</div>';
+      return '<div class="mobile-agent-group">' + headerEl + cards.map(renderOneCard).join('') + '</div>';
+    }).join('');
+  }
   
   // Met à jour l'icône cloche globale dans la barre de navigation
   if (typeof mobileUpdateGlobalBell === 'function') mobileUpdateGlobalBell();
