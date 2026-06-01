@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🛡️ Sauvegarde v4</title>
+<title>🛡️ Sauvegarde v6</title>
+<!-- v6 : photos sidebar visibles immédiatement par lien Firebase, copies locales permanentes après déblocage CORS -->
+<!-- v5 : fix discussions (champ content), rush YES/NO, photos sidebar robustes + détection CORS -->
 <!-- v4 : export Excel (.xlsx) pour Insp.Atelier / Prod.Couture / Insp.Finale -->
 <!-- v3 : 4 modules seulement (Moulage, Insp.Atelier, Prod.Couture, Insp.Finale) -->
 <!-- v2 : archivage Moulage par dossier OneDrive (Fiche.html + Photos) -->
@@ -225,7 +227,7 @@ function mlgPad(n){return (n<10?'00':n<100?'0':'')+n;}
 
 function mlgBuildFiche(card,gallery){
   var esc=mlgEsc;
-  var infos=[['N° Commande',card.order],['Bénéficiaire',card.name],['Client',card.client],['Région',card.region],['Intervenant',card.intervenant],['Représentante',card.representante],['PO',card.po],['Soumission',card.soumission],['Item',card.item],['Statut',mlgColName(card.colonne)],['Raison attente',card.raisonAttente],['Rush',card.rush?'OUI':''],['Expédié',card.expedie?'OUI':''],['Date reçue',card.dateRecue],['Date livraison',card.dateLivraison],['Date essayage',card.dateEssayage],['Date expédition',card.dateExpedition],['Créé le',card.createdAt],['Modifié le',card.updatedAt]];
+  var infos=[['N° Commande',card.order],['Bénéficiaire',card.name],['Client',card.client],['Région',card.region],['Intervenant',card.intervenant],['Représentante',card.representante],['PO',card.po],['Soumission',card.soumission],['Item',card.item],['Étape',card.etat],['Statut',mlgColName(card.colonne)],['Raison attente',card.raisonAttente],['Rush',(card.rush==='YES'||card.rush===true)?'OUI':''],['Date reçue',card.dateRecue],['Date livraison',card.dateLivraison],['Date essayage',card.dateEssayage],['Date expédition',card.dateExpedition],['Créé le',card.createdAt]];
   var rows=infos.filter(function(r){return r[1]!==undefined&&r[1]!==null&&r[1]!=='';}).map(function(r){return '<tr><th>'+esc(r[0])+'</th><td>'+esc(r[1])+'</td></tr>';}).join('');
   var track='';
   if(card.tracking&&typeof card.tracking==='object'){var tk=Object.keys(card.tracking);if(tk.length)track='<h2>Suivi de production</h2><table class="info">'+tk.map(function(k){var v=card.tracking[k];var d=(v&&typeof v==='object')?JSON.stringify(v):v;return '<tr><th>'+esc(k)+'</th><td>'+esc(d)+'</td></tr>';}).join('')+'</table>';}
@@ -233,9 +235,9 @@ function mlgBuildFiche(card,gallery){
   var msgs=card.messages||[];
   var TL={problem:'❓ Questionnement',solution:'✅ Réponse',pinned:'📌 Épinglé',normal:'💬 Discussion'};
   var TC={problem:'q',solution:'s',pinned:'p',normal:'n'};
-  var disc=msgs.length?msgs.map(function(m){var t=m.type||'normal';var ph=(m.__photos||[]).map(function(fn){return '<a href="Photos/'+fn+'" target="_blank"><img src="Photos/'+fn+'"></a>';}).join('');var who=m.author||m.nom||'';var when=m.date||m.timestamp||'';return '<div class="msg '+(TC[t]||'n')+'"><div class="mh"><span class="ty">'+(TL[t]||'💬')+'</span><span class="wh">'+esc(who)+'</span><span class="dt">'+esc(when)+'</span></div>'+(m.text?'<div class="bd">'+esc(m.text).replace(/\n/g,'<br>')+'</div>':'')+(ph?'<div class="ph">'+ph+'</div>':'')+'</div>';}).join(''):'<div class="empty">Aucune discussion</div>';
-  var seen={},uniq=[];(gallery||[]).forEach(function(f){if(!seen[f]){seen[f]=1;uniq.push(f);}});
-  var gal=uniq.length?'<div class="gal">'+uniq.map(function(f){return '<a href="Photos/'+f+'" target="_blank"><img src="Photos/'+f+'"></a>';}).join('')+'</div>':'<div class="empty">Aucune photo</div>';
+  var disc=msgs.length?msgs.map(function(m){var t=m.type||'normal';var ph=(m.__photos||[]).map(function(fn){return '<a href="Photos/'+fn+'" target="_blank"><img src="Photos/'+fn+'"></a>';}).join('');var who=m.author||m.nom||'';var when=m.date||m.timestamp||'';return '<div class="msg '+(TC[t]||'n')+'"><div class="mh"><span class="ty">'+(TL[t]||'💬')+'</span><span class="wh">'+esc(who)+'</span><span class="dt">'+esc(when)+'</span></div>'+(m.content?'<div class="bd">'+esc(m.content).replace(/\n/g,'<br>')+'</div>':'')+(ph?'<div class="ph">'+ph+'</div>':'')+'</div>';}).join(''):'<div class="empty">Aucune discussion</div>';
+  var seen={},uniq=[];(gallery||[]).forEach(function(f){var n=(f&&f.n)?f.n:f;if(!seen[n]){seen[n]=1;uniq.push(f);}});
+  var gal=uniq.length?'<div class="gal">'+uniq.map(function(f){var src=(f&&f.src)?f.src:'Photos/'+f;return '<a href="'+src+'" target="_blank"><img src="'+src+'" loading="lazy"></a>';}).join('')+'</div>':'<div class="empty">Aucune photo</div>';
   var title=esc((card.order||'')+(card.name?' — '+card.name:''));
   return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+'</title><style>'
     +'*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:20px;line-height:1.5}'
@@ -266,6 +268,7 @@ function mlgBuildFiche(card,gallery){
 
 async function archiveMoulages(trig){
   if(!dirH)return;
+  var mlgCorsHint=false;
   var moulages={},pArch={};
   try{moulages=(await fbDb.ref('moulages').once('value')).val()||{};}catch(e){return;}
   try{pArch=(await fbDb.ref('photoArchives').once('value')).val()||{};}catch(e){}
@@ -285,19 +288,31 @@ async function archiveMoulages(trig){
       var pf=await mf.getDirectoryHandle('Photos',{create:true});
       var have={};for await(var en of pf.values()){if(en.kind==='file')have[en.name]=1;}
       var gallery=[],sbNames=[];
-      // 1) Photos sidebar (Firebase Storage)
-      var order=card.order||'';
+      // 1) Photos sidebar (Firebase Storage) — téléchargement des VRAIS octets
+      var order=card.order||'',sbFail=0,sbLocal=0;
       if(order){
-        try{
-          var res=await fbStorage.ref('photos/moulages/'+order).listAll();
+        var res=null;
+        try{res=await fbStorage.ref('photos/moulages/'+order).listAll();}catch(e){lg('  ⚠️ Liste photos '+order+': '+e.message,'warn');}
+        if(res){
           for(var s=0;s<res.items.length;s++){
             var it=res.items[s];var fn=mlgSanFile(it.name);
             if(!/\.(jpg|jpeg|png|webp|gif|heic)$/i.test(fn))fn+='.jpg';
             sbNames.push(fn);
-            if(!have[fn]){var url=await it.getDownloadURL();var rp=await fetch(url);var bl=await rp.blob();var fh=await pf.getFileHandle(fn,{create:true});var w=await fh.createWritable();await w.write(bl);await w.close();have[fn]=1;}
-            gallery.push(fn);
+            if(!have[fn]){
+              try{
+                var bl=null;
+                if(it.getBlob){try{bl=await it.getBlob();}catch(_g){bl=null;}}
+                var url2=await it.getDownloadURL();
+                if(!bl){var rp=await fetch(url2);if(!rp.ok)throw new Error('HTTP '+rp.status);bl=await rp.blob();}
+                var fh=await pf.getFileHandle(fn,{create:true});var w=await fh.createWritable();await w.write(bl);await w.close();have[fn]=1;gallery.push({n:fn,src:'Photos/'+fn});sbLocal++;
+              }catch(e){
+                sbFail++;mlgCorsHint=mlgCorsHint||/cors|failed to fetch|network/i.test(e.message);
+                try{var ru=await it.getDownloadURL();gallery.push({n:fn,src:ru});}catch(_u){}
+              }
+            }else{gallery.push({n:fn,src:'Photos/'+fn});sbLocal++;}
           }
-        }catch(e){}
+          if(sbFail>0)lg('  ⚠️ '+order+': '+sbFail+' photo(s) sidebar non téléchargée(s)','warn');
+        }
       }
       // 2) Photos collées dans les discussions (base64)
       var ci=0,msgs=card.messages||[];
@@ -310,7 +325,7 @@ async function archiveMoulages(trig){
           if(typeof imgs[x]!=='string'||imgs[x].indexOf('data:')!==0)continue;
           ci++;var cn='chat_'+mlgPad(ci)+'.jpg';
           if(!have[cn]){var b=mlgB64ToBlob(imgs[x]);if(b){var fh2=await pf.getFileHandle(cn,{create:true});var w2=await fh2.createWritable();await w2.write(b);await w2.close();have[cn]=1;}}
-          msg.__photos.push(cn);gallery.push(cn);
+          msg.__photos.push(cn);gallery.push({n:cn,src:'Photos/'+cn});
         }
       }
       // 3) Photos d'archive envoyées du mobile (photoArchives, base64)
@@ -319,10 +334,10 @@ async function archiveMoulages(trig){
         if(typeof arr[a]!=='string'||arr[a].indexOf('data:')!==0)continue;
         ai++;var an='archive_'+mlgPad(ai)+'.jpg';
         if(!have[an]){var ba=mlgB64ToBlob(arr[a]);if(ba){var fh3=await pf.getFileHandle(an,{create:true});var w3=await fh3.createWritable();await w3.write(ba);await w3.close();have[an]=1;}}
-        gallery.push(an);
+        gallery.push({n:an,src:'Photos/'+an});
       }
       // 4) Signature : ne réécrit la fiche que si quelque chose a changé
-      var sig=sH(JSON.stringify(card))+'|'+sbNames.sort().join(',')+'|c'+ci+'|a'+ai;
+      var sig='v6|'+sH(JSON.stringify(card))+'|'+sbNames.sort().join(',')+'|L'+sbLocal+'|c'+ci+'|a'+ai;
       var hk='mlg_h_'+cid;
       if(localStorage.getItem(hk)===sig&&trig!=='Forcée')continue;
       // 5) Fiche.html
@@ -332,6 +347,7 @@ async function archiveMoulages(trig){
     }catch(e){lg('  ⚠️ '+(card.order||cid)+': '+e.message,'err');}
   }
   if(done>0)lg('  🏭 '+done+' moulage(s) → OneDrive','ok');
+  if(mlgCorsHint)lg('  ℹ️ Photos sidebar affichées par lien (déblocage Firebase requis pour copies permanentes)','warn');
 }
 
 /* ═══ EXPORT EXCEL (.xlsx) — Insp.Atelier / Prod.Couture / Insp.Finale ═══
