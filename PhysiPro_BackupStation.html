@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🛡️ Sauvegarde v8</title>
+<title>🛡️ Sauvegarde v10</title>
+<!-- v10 : fiche simplifiée — notes en belle écriture, suivi de production lisible (deux-points) -->
+<!-- v9 : fiches de moulage dans PhysiPro_Backups/Moulages (un seul dossier de base, 4 sous-dossiers) -->
 <!-- v8 : vérification 1x/heure (au lieu de 5 min), sauvegarde seulement sur changement -->
 <!-- v7 : photos intégrées dans Fiche.html (base64), suppression du sous-dossier Photos -->
 <!-- v6 : photos sidebar visibles immédiatement par lien Firebase, copies locales permanentes après déblocage CORS -->
@@ -232,9 +234,20 @@ function mlgBuildFiche(card,gallery){
   var esc=mlgEsc;
   var infos=[['N° Commande',card.order],['Bénéficiaire',card.name],['Client',card.client],['Région',card.region],['Intervenant',card.intervenant],['Représentante',card.representante],['PO',card.po],['Soumission',card.soumission],['Item',card.item],['Étape',card.etat],['Statut',mlgColName(card.colonne)],['Raison attente',card.raisonAttente],['Rush',(card.rush==='YES'||card.rush===true)?'OUI':''],['Date reçue',card.dateRecue],['Date livraison',card.dateLivraison],['Date essayage',card.dateEssayage],['Date expédition',card.dateExpedition],['Créé le',card.createdAt]];
   var rows=infos.filter(function(r){return r[1]!==undefined&&r[1]!==null&&r[1]!=='';}).map(function(r){return '<tr><th>'+esc(r[0])+'</th><td>'+esc(r[1])+'</td></tr>';}).join('');
+  var TRK_DEPT={robot:'Robot',degauchage:'Dégauchage',essayage:'Essayage',atelier:'Atelier',couture:'Couture',peinture:'Peinture',expedition:'Expédition',attente:'En attente'};
+  var TRK_FIELD={entree:'Entrée',sortie:'Sortie',heure:'Heure',date:'Date'};
   var track='';
-  if(card.tracking&&typeof card.tracking==='object'){var tk=Object.keys(card.tracking);if(tk.length)track='<h2>Suivi de production</h2><table class="info">'+tk.map(function(k){var v=card.tracking[k];var d=(v&&typeof v==='object')?JSON.stringify(v):v;return '<tr><th>'+esc(k)+'</th><td>'+esc(d)+'</td></tr>';}).join('')+'</table>';}
-  var notes=card.notes?'<h2>Notes</h2><div class="notes">'+esc(card.notes).replace(/\n/g,'<br>')+'</div>':'';
+  if(card.tracking&&typeof card.tracking==='object'){
+    var tk=Object.keys(card.tracking);
+    if(tk.length)track='<h2>Suivi de production</h2><table class="info">'+tk.map(function(k){
+      var v=card.tracking[k];var label=TRK_DEPT[k]||(k.charAt(0).toUpperCase()+k.slice(1));var det='';
+      if(v&&typeof v==='object'){det=Object.keys(v).filter(function(f){return v[f]!==''&&v[f]!=null;}).map(function(f){return (TRK_FIELD[f]||f)+' : '+esc(v[f]);}).join('&nbsp;&nbsp;·&nbsp;&nbsp;');}
+      else{det=esc(v);}
+      return det?'<tr><th>'+esc(label)+'</th><td>'+det+'</td></tr>':'';
+    }).join('')+'</table>';
+  }
+  var notes='';
+  if(card.notes){var nv=String(card.notes);var nh=/<[a-z][\s\S]*>/i.test(nv)?nv:esc(nv).replace(/\n/g,'<br>');notes='<h2>Notes</h2><div class="notes">'+nh+'</div>';}
   var msgs=card.messages||[];
   var TL={problem:'❓ Questionnement',solution:'✅ Réponse',pinned:'📌 Épinglé',normal:'💬 Discussion'};
   var TC={problem:'q',solution:'s',pinned:'p',normal:'n'};
@@ -250,6 +263,8 @@ function mlgBuildFiche(card,gallery){
     +'table.info th{text-align:left;width:170px;padding:7px 12px;color:#93c5fd;font-size:12px;font-weight:600;vertical-align:top;border-bottom:1px solid #0f172a}'
     +'table.info td{padding:7px 12px;font-size:13px;border-bottom:1px solid #0f172a;word-break:break-word}'
     +'.notes{background:#1e293b;border-radius:8px;padding:12px;font-size:13px}'
+    +'.notes>div{margin-bottom:8px}.notes>div:last-child{margin-bottom:0}'
+    +'.note-timestamp{font-size:11px;margin-bottom:2px}.note-user{color:#93c5fd;font-weight:600}.note-datetime{color:#64748b}'
     +'.msg{background:#1e293b;border-left:3px solid #475569;border-radius:6px;padding:9px 12px;margin-bottom:8px}'
     +'.msg.q{border-left-color:#f59e0b}.msg.s{border-left-color:#22c55e}.msg.p{border-left-color:#3b82f6}'
     +'.mh{display:flex;gap:10px;align-items:center;font-size:11px;margin-bottom:4px;flex-wrap:wrap}'
@@ -279,7 +294,7 @@ async function archiveMoulages(trig){
   var archByCard={};
   Object.keys(pArch).forEach(function(k){var d=pArch[k];if(!d||!d.cardId)return;(d.photos||[]).forEach(function(p){if(p&&p.data){(archByCard[d.cardId]=archByCard[d.cardId]||[]).push(p.data);}});});
   var aroot;
-  try{aroot=await dirH.getDirectoryHandle('PhysiPro_Moulages',{create:true});}catch(e){lg('  ⚠️ Dossier Moulages: '+e.message,'err');return;}
+  try{var bkRoot=await dirH.getDirectoryHandle('PhysiPro_Backups',{create:true});aroot=await bkRoot.getDirectoryHandle('Moulages',{create:true});}catch(e){lg('  ⚠️ Dossier Moulages: '+e.message,'err');return;}
   var ids=Object.keys(moulages),done=0;
   for(var i=0;i<ids.length;i++){
     var cid=ids[i],card=moulages[cid];
@@ -315,7 +330,7 @@ async function archiveMoulages(trig){
       }
 
       // ── Signature : ne régénère que si quelque chose a changé ──
-      var sig='v7|'+sH(JSON.stringify(card))+'|'+sbNames.slice().sort().join(',')+'|c'+ci+'|a'+ai;
+      var sig='v9|'+sH(JSON.stringify(card))+'|'+sbNames.slice().sort().join(',')+'|c'+ci+'|a'+ai;
       var hk='mlg_h_'+cid;
       if(localStorage.getItem(hk)===sig&&trig!=='Forcée')continue;
 
