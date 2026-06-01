@@ -3,10 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🛡️ Sauvegarde</title>
+<title>🛡️ Sauvegarde v4</title>
+<!-- v4 : export Excel (.xlsx) pour Insp.Atelier / Prod.Couture / Insp.Finale -->
+<!-- v3 : 4 modules seulement (Moulage, Insp.Atelier, Prod.Couture, Insp.Finale) -->
+<!-- v2 : archivage Moulage par dossier OneDrive (Fiche.html + Photos) -->
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:-apple-system,sans-serif;background:#0a1628;color:#e2e8f0;overflow:hidden;font-size:10px;width:100vw;max-width:100vw;}
@@ -109,7 +115,7 @@ body{font-family:-apple-system,sans-serif;background:#0a1628;color:#e2e8f0;overf
 
 var _k=['AIza','SyCk','7bqV','nx08','Kz1f','Vq1W','24Au','W854','KY9j','Pno'];
 firebase.initializeApp({apiKey:_k.join(''),authDomain:"liste-des-moulages-physipro.firebaseapp.com",databaseURL:"https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",projectId:"liste-des-moulages-physipro",storageBucket:"liste-des-moulages-physipro.firebasestorage.app"});
-var fbDb=firebase.database(),fbAuth=firebase.auth(),fbUser=null;
+var fbDb=firebase.database(),fbAuth=firebase.auth(),fbStorage=firebase.storage(),fbUser=null;
 var HA={'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','archives','backup'],'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','archives','backup'],'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':['moulage','jobs','inspection','inspcouture','serie','psm','entrepot','archives','backup'],'c3JveUBwaHlzaXByby5jb20=':['moulage','jobs','inspection','inspcouture','serie','psm','archives'],'cGV0ZXJiYXNzNzZAZ21haWwuY29t':['moulage','jobs'],'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':['moulage','jobs'],'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':['moulage','jobs'],'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':['moulage','jobs'],'bWFnYXNpbmF0cDFAcGh5c2lwcm8uY29t':['entrepot'],'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':['entrepot']};
 var NM={moulage:{i:'🏭',l:'Moulage',f:'Physipro_moulage.html',c:'#3b82f6'},jobs:{i:'🎧',l:'Svc Client',f:'PhysiPro_ServiceClient.html',c:'#f59e0b'},inspection:{i:'☑️',l:'Inspection',f:'PhysiPro_Inspection_Atelier.html',c:'#22c55e'},inspcouture:{i:'🧵',l:'Couture',f:'PhysiPro_Production_Couture.html',c:'#a855f7'},serie:{i:'📋',l:'Série+',f:'PhysiPro_Serie_.html',c:'#f97316'},psm:{i:'🔧',l:'PSM',f:'PhysiPro_PSM.html',c:'#ef4444'},entrepot:{i:'📦',l:'Entrepôt',f:'PhysiPro_Entrepot.html',c:'#8b5cf6'},archives:{i:'🗄️',l:'Archives',f:'PhysiPro_Archives.html',c:'#6366f1'},backup:{i:'🛡️',l:'Sauvegarde',f:'PhysiPro_BackupStation.html',c:'#22c55e'}};
 function initNav(){var g=document.getElementById('navG');if(!g)return;var a=HA[btoa((fbUser?fbUser.email:'').toLowerCase().trim())]||[];g.innerHTML='';['moulage','inspection','inspcouture','serie','jobs','psm','entrepot','archives','backup'].forEach(function(k){if(a.indexOf(k)<0)return;var m=NM[k];if(!m)return;var el=document.createElement('a');el.className='ni'+(k==='backup'?' cur':'');el.href=m.f;el.innerHTML='<span class="ic">'+m.i+'</span><span class="la" style="color:'+m.c+'">'+m.l+'</span>';g.appendChild(el);});}
@@ -130,16 +136,15 @@ function toggleDetails(){
   }catch(e){}
 }
 
+/* ═══ 4 MODULES SAUVEGARDÉS (et SEULEMENT ces 4) ═══
+   PSM, Questionnements, Série+, Chat : RETIRÉS volontairement.
+   serieCommandes = base centrale des commandes de production, partagée
+   par Atelier/Couture/Finale → sauvegardée une fois sous Inspection_Atelier. */
 var M={
   Moulages:{i:'🏭',c:'#3b82f6',p:{a:{r:'moulages'},b:{r:'moulageAssociations'},c:{r:'listes'},d:{r:'listes_history'},e:{r:'moulageLogs'},f:{r:'moulageNotifications'},g:{r:'photoArchives'}}},
-  Questionnement:{i:'❓',c:'#f59e0b',p:{a:{r:'jobs'},b:{r:'commandesAttente'},c:{r:'materiauxBO'},d:{r:'jobNotifications'}}},
-  PSM:{i:'🔧',c:'#ef4444',p:{a:{r:'psm'},b:{r:'psm_materiaux_custom'},c:{r:'psmNotifications'}}},
-  Inspection:{i:'☑️',c:'#22c55e',p:{a:{r:'inspectionData'},b:{r:'inspectionLists'},c:{r:'inspectionColCfg'},d:{r:'inspectionColWidths'}}},
-  Couture:{i:'🧵',c:'#a855f7',p:{a:{r:'inspectionCoutureData'},b:{r:'coutureData'},c:{r:'coutureLists'}}},
-  Serie:{i:'📋',c:'#f97316',p:{a:{r:'serieCommandes'},b:{r:'serieDeletedCards'},c:{r:'customRecettes'},d:{r:'deletedRecettes'}}},
-  Entrepot:{i:'📦',c:'#8b5cf6',p:{a:{r:'magentComm'},b:{r:'magentInventaire'},c:{r:'magentOrders'},d:{r:'magentLog'},e:{r:'magentChat'}}},
-  Archives:{i:'🗄️',c:'#6366f1',p:{a:{r:'archives'},b:{r:'archiveLogs'}}},
-  Chat:{i:'💬',c:'#06b6d4',p:{a:{r:'crossAppChat'}}}
+  Inspection_Atelier:{i:'☑️',c:'#22c55e',p:{a:{r:'inspectionData'},b:{r:'coutureData'},c:{r:'inspectionLists'},d:{r:'inspectionColCfg'},e:{r:'inspectionColWidths'},f:{r:'inspectionDeletedIds'},g:{r:'serieCommandes'},h:{r:'serieDeletedCards'}}},
+  Production_Couture:{i:'🧵',c:'#f59e0b',p:{a:{r:'inspectionCoutureData'},b:{r:'coutureLists'},c:{r:'coutureBackups'}}},
+  Inspection_Finale:{i:'🔍',c:'#a855f7',p:{a:{r:'inspectionFinaleData'},b:{r:'inspFinaleDeletedIds'}}}
 };
 var isOn=false,dirH=null,ckT=null,scT=null,lastH={},mS={},mZ={},logs=[],hasError=false;
 
@@ -175,9 +180,11 @@ async function runC(trig){
     var n=mk[i],mod=M[n],md={},pk=Object.keys(mod.p);mS[n]='run';renderM();
     for(var j=0;j<pk.length;j++){try{var s=await fbDb.ref(mod.p[pk[j]].r).once('value');var v=s.val();if(v!==null)md[pk[j]]=v;}catch(e){}}
     var h=sH(JSON.stringify(md));if(h===lastH[n]&&trig!=='Forcée'){mS[n]='ok';renderM();continue;}lastH[n]=h;
-    try{var mf=await root.getDirectoryHandle(n,{create:true});var fn=day+'_'+ts+'.json';var c=JSON.stringify({module:n,backup:{date:day,heure:ts,trigger:trig,user:fbUser?fbUser.email:'?'},data:md},null,2);var fh=await mf.getFileHandle(fn,{create:true});var w=await fh.createWritable();await w.write(new Blob([c],{type:'application/json'}));await w.close();var mb=(c.length/(1024*1024)).toFixed(1);tf++;tb+=c.length;mS[n]='ok';mZ[n]=mb+'M';lg('  ✅ '+n+' '+mb+'M','ok');}catch(e){mS[n]='err';hasError=true;lg('  ❌ '+n,'err');}renderM();
+    try{var mf=await root.getDirectoryHandle(n,{create:true});var fn=day+'_'+ts+'.json';var c=JSON.stringify({module:n,backup:{date:day,heure:ts,trigger:trig,user:fbUser?fbUser.email:'?'},data:md},null,2);var fh=await mf.getFileHandle(fn,{create:true});var w=await fh.createWritable();await w.write(new Blob([c],{type:'application/json'}));await w.close();if(n!=='Moulages'){try{await xlsWriteModule(mf,n,md);}catch(_x){console.error('xlsx '+n,_x);}}var mb=(c.length/(1024*1024)).toFixed(1);tf++;tb+=c.length;mS[n]='ok';mZ[n]=mb+'M';lg('  ✅ '+n+' '+mb+'M','ok');}catch(e){mS[n]='err';hasError=true;lg('  ❌ '+n,'err');}renderM();
   }
-  if(tf>0){localStorage.setItem('bk_last',new Date().toISOString());lg('✅ '+tf+' mod ('+(tb/(1024*1024)).toFixed(1)+'M)','ok');toast('✅ '+tf+' sauvegardés','ok');var tk='bk_td_'+day;var td=JSON.parse(localStorage.getItem(tk)||'[]');td.push(ts);localStorage.setItem(tk,JSON.stringify(td));}else{lg('— Aucun chang.','t');}upUI();upS();
+  if(tf>0){localStorage.setItem('bk_last',new Date().toISOString());lg('✅ '+tf+' mod ('+(tb/(1024*1024)).toFixed(1)+'M)','ok');toast('✅ '+tf+' sauvegardés','ok');var tk='bk_td_'+day;var td=JSON.parse(localStorage.getItem(tk)||'[]');td.push(ts);localStorage.setItem(tk,JSON.stringify(td));}else{lg('— Aucun chang.','t');}
+  try{await archiveMoulages(trig);}catch(e){lg('  ⚠️ Archive Moulage: '+e.message,'err');hasError=true;}
+  upUI();upS();
 }
 function sH(s){var h=0;for(var i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}return h.toString(36);}
 
@@ -197,6 +204,183 @@ function upS(){var day=new Date().toISOString().substring(0,10),done=JSON.parse(
 window.addEventListener('online',function(){document.getElementById('offBar').style.display='none';});
 window.addEventListener('offline',function(){document.getElementById('offBar').style.display='block';});
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeNav();});
+
+/* ═══════════════════════════════════════════════════════════════════
+   ARCHIVAGE MOULAGE → ONEDRIVE  (v2)
+   Pour CHAQUE moulage : un dossier "Commande - Nom" contenant
+   Fiche.html (toutes les infos + discussions + galerie photos) et un
+   sous-dossier Photos/ avec les VRAIES photos :
+     • sidebar  (téléchargées de Firebase Storage)
+     • chat     (base64 collées dans les discussions)
+     • archive  (envoyées du mobile, nœud photoArchives)
+   Maintenu par la station à chaque cycle. NON destructif : n'efface
+   jamais rien dans Firebase.
+   ═══════════════════════════════════════════════════════════════════ */
+function mlgEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function mlgSanFolder(s){return (String(s==null?'':s).replace(/[\\\/:*?"<>|]/g,'-').replace(/\s+/g,' ').trim().substring(0,120))||'sans-nom';}
+function mlgSanFile(s){return (String(s==null?'':s).replace(/[^a-zA-Z0-9._-]/g,'_').substring(0,80))||'photo.jpg';}
+function mlgColName(id){var c={colRobot:'⚙️ Robot',colDegauchage:'🪚 Dégauchage',colEssayage:'👔 Essayage',colAtelier:'🔧 Atelier',colCouture:'🧵 Couture',colPeinture:'🎨 Peinture',colExpedition:'📦 Expédition',colAttente:'⏳ En attente'};return c[id]||id||'—';}
+function mlgB64ToBlob(d){try{var p=String(d).split(',');var m=(p[0].match(/data:([^;]+)/)||[])[1]||'image/jpeg';var bin=atob(p[1]);var u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new Blob([u],{type:m});}catch(e){return null;}}
+function mlgPad(n){return (n<10?'00':n<100?'0':'')+n;}
+
+function mlgBuildFiche(card,gallery){
+  var esc=mlgEsc;
+  var infos=[['N° Commande',card.order],['Bénéficiaire',card.name],['Client',card.client],['Région',card.region],['Intervenant',card.intervenant],['Représentante',card.representante],['PO',card.po],['Soumission',card.soumission],['Item',card.item],['Statut',mlgColName(card.colonne)],['Raison attente',card.raisonAttente],['Rush',card.rush?'OUI':''],['Expédié',card.expedie?'OUI':''],['Date reçue',card.dateRecue],['Date livraison',card.dateLivraison],['Date essayage',card.dateEssayage],['Date expédition',card.dateExpedition],['Créé le',card.createdAt],['Modifié le',card.updatedAt]];
+  var rows=infos.filter(function(r){return r[1]!==undefined&&r[1]!==null&&r[1]!=='';}).map(function(r){return '<tr><th>'+esc(r[0])+'</th><td>'+esc(r[1])+'</td></tr>';}).join('');
+  var track='';
+  if(card.tracking&&typeof card.tracking==='object'){var tk=Object.keys(card.tracking);if(tk.length)track='<h2>Suivi de production</h2><table class="info">'+tk.map(function(k){var v=card.tracking[k];var d=(v&&typeof v==='object')?JSON.stringify(v):v;return '<tr><th>'+esc(k)+'</th><td>'+esc(d)+'</td></tr>';}).join('')+'</table>';}
+  var notes=card.notes?'<h2>Notes</h2><div class="notes">'+esc(card.notes).replace(/\n/g,'<br>')+'</div>':'';
+  var msgs=card.messages||[];
+  var TL={problem:'❓ Questionnement',solution:'✅ Réponse',pinned:'📌 Épinglé',normal:'💬 Discussion'};
+  var TC={problem:'q',solution:'s',pinned:'p',normal:'n'};
+  var disc=msgs.length?msgs.map(function(m){var t=m.type||'normal';var ph=(m.__photos||[]).map(function(fn){return '<a href="Photos/'+fn+'" target="_blank"><img src="Photos/'+fn+'"></a>';}).join('');var who=m.author||m.nom||'';var when=m.date||m.timestamp||'';return '<div class="msg '+(TC[t]||'n')+'"><div class="mh"><span class="ty">'+(TL[t]||'💬')+'</span><span class="wh">'+esc(who)+'</span><span class="dt">'+esc(when)+'</span></div>'+(m.text?'<div class="bd">'+esc(m.text).replace(/\n/g,'<br>')+'</div>':'')+(ph?'<div class="ph">'+ph+'</div>':'')+'</div>';}).join(''):'<div class="empty">Aucune discussion</div>';
+  var seen={},uniq=[];(gallery||[]).forEach(function(f){if(!seen[f]){seen[f]=1;uniq.push(f);}});
+  var gal=uniq.length?'<div class="gal">'+uniq.map(function(f){return '<a href="Photos/'+f+'" target="_blank"><img src="Photos/'+f+'"></a>';}).join('')+'</div>':'<div class="empty">Aucune photo</div>';
+  var title=esc((card.order||'')+(card.name?' — '+card.name:''));
+  return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+'</title><style>'
+    +'*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:20px;line-height:1.5}'
+    +'.wrap{max-width:900px;margin:0 auto}h1{font-size:22px;color:#fff;margin-bottom:4px}.sub{color:#94a3b8;font-size:13px;margin-bottom:18px}'
+    +'h2{font-size:15px;color:#fbbf24;margin:22px 0 8px;border-bottom:1px solid #1e293b;padding-bottom:4px}'
+    +'table.info{width:100%;border-collapse:collapse;background:#1e293b;border-radius:8px;overflow:hidden}'
+    +'table.info th{text-align:left;width:170px;padding:7px 12px;color:#93c5fd;font-size:12px;font-weight:600;vertical-align:top;border-bottom:1px solid #0f172a}'
+    +'table.info td{padding:7px 12px;font-size:13px;border-bottom:1px solid #0f172a;word-break:break-word}'
+    +'.notes{background:#1e293b;border-radius:8px;padding:12px;font-size:13px}'
+    +'.msg{background:#1e293b;border-left:3px solid #475569;border-radius:6px;padding:9px 12px;margin-bottom:8px}'
+    +'.msg.q{border-left-color:#f59e0b}.msg.s{border-left-color:#22c55e}.msg.p{border-left-color:#3b82f6}'
+    +'.mh{display:flex;gap:10px;align-items:center;font-size:11px;margin-bottom:4px;flex-wrap:wrap}'
+    +'.ty{font-weight:700}.wh{color:#93c5fd}.dt{color:#64748b;margin-left:auto}'
+    +'.bd{font-size:13px}'
+    +'.ph{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.ph img{height:90px;border-radius:4px;border:1px solid #334155;object-fit:cover}'
+    +'.gal{display:flex;flex-wrap:wrap;gap:8px}.gal img{height:130px;border-radius:6px;border:1px solid #334155;object-fit:cover;cursor:pointer}'
+    +'.empty{color:#64748b;font-style:italic;font-size:13px;padding:6px 0}'
+    +'.foot{margin-top:24px;color:#475569;font-size:11px;text-align:center}'
+    +'</style></head><body><div class="wrap">'
+    +'<h1>'+title+'</h1><div class="sub">Archive PhysiPro — Moulage'+(card.archivedAt?' · archivé le '+esc(String(card.archivedAt).substring(0,10)):'')+'</div>'
+    +'<h2>Informations</h2><table class="info">'+rows+'</table>'
+    +track+notes
+    +'<h2>Discussions ('+msgs.length+')</h2>'+disc
+    +'<h2>Photos ('+uniq.length+')</h2>'+gal
+    +'<div class="foot">Généré par PhysiPro BackupStation — '+new Date().toLocaleString('fr-CA')+'</div>'
+    +'</div></body></html>';
+}
+
+async function archiveMoulages(trig){
+  if(!dirH)return;
+  var moulages={},pArch={};
+  try{moulages=(await fbDb.ref('moulages').once('value')).val()||{};}catch(e){return;}
+  try{pArch=(await fbDb.ref('photoArchives').once('value')).val()||{};}catch(e){}
+  // Regrouper les photos d'archive mobile par cardId
+  var archByCard={};
+  Object.keys(pArch).forEach(function(k){var d=pArch[k];if(!d||!d.cardId)return;(d.photos||[]).forEach(function(p){if(p&&p.data){(archByCard[d.cardId]=archByCard[d.cardId]||[]).push(p.data);}});});
+  var aroot;
+  try{aroot=await dirH.getDirectoryHandle('PhysiPro_Moulages',{create:true});}catch(e){lg('  ⚠️ Dossier Moulages: '+e.message,'err');return;}
+  var ids=Object.keys(moulages),done=0;
+  for(var i=0;i<ids.length;i++){
+    var cid=ids[i],card=moulages[cid];
+    if(!card||card.isNote)continue;
+    if(!card.order&&!card.name)continue;
+    try{
+      var folder=mlgSanFolder((card.order||'SANS-NUM')+' - '+(card.name||'Sans nom'));
+      var mf=await aroot.getDirectoryHandle(folder,{create:true});
+      var pf=await mf.getDirectoryHandle('Photos',{create:true});
+      var have={};for await(var en of pf.values()){if(en.kind==='file')have[en.name]=1;}
+      var gallery=[],sbNames=[];
+      // 1) Photos sidebar (Firebase Storage)
+      var order=card.order||'';
+      if(order){
+        try{
+          var res=await fbStorage.ref('photos/moulages/'+order).listAll();
+          for(var s=0;s<res.items.length;s++){
+            var it=res.items[s];var fn=mlgSanFile(it.name);
+            if(!/\.(jpg|jpeg|png|webp|gif|heic)$/i.test(fn))fn+='.jpg';
+            sbNames.push(fn);
+            if(!have[fn]){var url=await it.getDownloadURL();var rp=await fetch(url);var bl=await rp.blob();var fh=await pf.getFileHandle(fn,{create:true});var w=await fh.createWritable();await w.write(bl);await w.close();have[fn]=1;}
+            gallery.push(fn);
+          }
+        }catch(e){}
+      }
+      // 2) Photos collées dans les discussions (base64)
+      var ci=0,msgs=card.messages||[];
+      for(var m=0;m<msgs.length;m++){
+        var msg=msgs[m];var imgs=[];
+        if(msg.image)imgs.push(msg.image);
+        if(msg.images&&msg.images.length)imgs=imgs.concat(msg.images);
+        msg.__photos=[];
+        for(var x=0;x<imgs.length;x++){
+          if(typeof imgs[x]!=='string'||imgs[x].indexOf('data:')!==0)continue;
+          ci++;var cn='chat_'+mlgPad(ci)+'.jpg';
+          if(!have[cn]){var b=mlgB64ToBlob(imgs[x]);if(b){var fh2=await pf.getFileHandle(cn,{create:true});var w2=await fh2.createWritable();await w2.write(b);await w2.close();have[cn]=1;}}
+          msg.__photos.push(cn);gallery.push(cn);
+        }
+      }
+      // 3) Photos d'archive envoyées du mobile (photoArchives, base64)
+      var ai=0,arr=archByCard[cid]||[];
+      for(var a=0;a<arr.length;a++){
+        if(typeof arr[a]!=='string'||arr[a].indexOf('data:')!==0)continue;
+        ai++;var an='archive_'+mlgPad(ai)+'.jpg';
+        if(!have[an]){var ba=mlgB64ToBlob(arr[a]);if(ba){var fh3=await pf.getFileHandle(an,{create:true});var w3=await fh3.createWritable();await w3.write(ba);await w3.close();have[an]=1;}}
+        gallery.push(an);
+      }
+      // 4) Signature : ne réécrit la fiche que si quelque chose a changé
+      var sig=sH(JSON.stringify(card))+'|'+sbNames.sort().join(',')+'|c'+ci+'|a'+ai;
+      var hk='mlg_h_'+cid;
+      if(localStorage.getItem(hk)===sig&&trig!=='Forcée')continue;
+      // 5) Fiche.html
+      var html=mlgBuildFiche(card,gallery);
+      var fhF=await mf.getFileHandle('Fiche.html',{create:true});var wF=await fhF.createWritable();await wF.write(new Blob([html],{type:'text/html'}));await wF.close();
+      localStorage.setItem(hk,sig);done++;
+    }catch(e){lg('  ⚠️ '+(card.order||cid)+': '+e.message,'err');}
+  }
+  if(done>0)lg('  🏭 '+done+' moulage(s) → OneDrive','ok');
+}
+
+/* ═══ EXPORT EXCEL (.xlsx) — Insp.Atelier / Prod.Couture / Insp.Finale ═══
+   En PLUS du JSON (qui sert à restaurer). Un fichier "{Module}_actuel.xlsx"
+   écrasé à chaque sauvegarde, un onglet par type de données, une ligne par
+   enregistrement, cherchable dans Excel. Aplatissement automatique :
+   aucune colonne n'est devinée, donc rien n'est oublié. */
+function xlsFlat(obj,prefix,out){
+  out=out||{};prefix=prefix||'';
+  if(obj===null||obj===undefined){out[prefix||'valeur']='';return out;}
+  if(typeof obj!=='object'){out[prefix||'valeur']=obj;return out;}
+  if(Array.isArray(obj)){
+    var allPrim=obj.every(function(x){return x===null||typeof x!=='object';});
+    out[prefix||'valeur']=allPrim?obj.join(', '):JSON.stringify(obj);
+    return out;
+  }
+  var keys=Object.keys(obj);
+  if(keys.length===0){out[prefix||'valeur']='';return out;}
+  keys.forEach(function(k){xlsFlat(obj[k],prefix?prefix+'.'+k:k,out);});
+  return out;
+}
+function xlsRows(node){
+  if(node===null||node===undefined)return [{valeur:''}];
+  if(typeof node!=='object')return [{valeur:node}];
+  if(Array.isArray(node))return node.map(function(v,i){var r=(v&&typeof v==='object'&&!Array.isArray(v))?xlsFlat(v):{valeur:(v&&typeof v==='object')?JSON.stringify(v):v};r._index=i;return r;});
+  var keys=Object.keys(node);
+  if(!keys.length)return [{info:'(vide)'}];
+  var objVals=keys.filter(function(k){return node[k]&&typeof node[k]==='object'&&!Array.isArray(node[k]);}).length;
+  if(objVals>=keys.length*0.5){
+    return keys.map(function(id){var r=xlsFlat(node[id]);r._id=id;return r;});
+  }
+  return keys.map(function(k){var v=node[k];return {cle:k,valeur:(v&&typeof v==='object')?JSON.stringify(v):v};});
+}
+async function xlsWriteModule(modDir,n,md){
+  if(typeof XLSX==='undefined'){lg('  ⚠️ Excel: librairie non chargée','warn');return;}
+  var wb=XLSX.utils.book_new(),added=0;
+  Object.keys(md).forEach(function(key){
+    var rows=xlsRows(md[key]);
+    if(!rows||!rows.length)return;
+    var ws=XLSX.utils.json_to_sheet(rows);
+    var sn=key.substring(0,31).replace(/[\\\/?*\[\]:]/g,'_');
+    XLSX.utils.book_append_sheet(wb,ws,sn);added++;
+  });
+  if(!added)return;
+  var buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
+  var fh=await modDir.getFileHandle(n+'_actuel.xlsx',{create:true});
+  var w=await fh.createWritable();await w.write(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));await w.close();
+}
+
 upS();
 </script>
 </body>
