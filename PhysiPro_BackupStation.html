@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🛡️ Sauvegarde v10</title>
+<title>🛡️ Sauvegarde v11</title>
+<!-- v11 : clic photo = agrandissement dans la fiche (lightbox), fini la page blanche des liens base64 -->
 <!-- v10 : fiche simplifiée — notes en belle écriture, suivi de production lisible (deux-points) -->
 <!-- v9 : fiches de moulage dans PhysiPro_Backups/Moulages (un seul dossier de base, 4 sous-dossiers) -->
 <!-- v8 : vérification 1x/heure (au lieu de 5 min), sauvegarde seulement sur changement -->
@@ -251,9 +252,9 @@ function mlgBuildFiche(card,gallery){
   var msgs=card.messages||[];
   var TL={problem:'❓ Questionnement',solution:'✅ Réponse',pinned:'📌 Épinglé',normal:'💬 Discussion'};
   var TC={problem:'q',solution:'s',pinned:'p',normal:'n'};
-  var disc=msgs.length?msgs.map(function(m){var t=m.type||'normal';var ph=(m.__photos||[]).map(function(src){return '<a href="'+src+'" target="_blank"><img src="'+src+'" loading="lazy"></a>';}).join('');var who=m.author||m.nom||'';var when=m.date||m.timestamp||'';return '<div class="msg '+(TC[t]||'n')+'"><div class="mh"><span class="ty">'+(TL[t]||'💬')+'</span><span class="wh">'+esc(who)+'</span><span class="dt">'+esc(when)+'</span></div>'+(m.content?'<div class="bd">'+esc(m.content).replace(/\n/g,'<br>')+'</div>':'')+(ph?'<div class="ph">'+ph+'</div>':'')+'</div>';}).join(''):'<div class="empty">Aucune discussion</div>';
+  var disc=msgs.length?msgs.map(function(m){var t=m.type||'normal';var ph=(m.__photos||[]).map(function(src){return '<img class="z" src="'+src+'" loading="lazy">';}).join('');var who=m.author||m.nom||'';var when=m.date||m.timestamp||'';return '<div class="msg '+(TC[t]||'n')+'"><div class="mh"><span class="ty">'+(TL[t]||'💬')+'</span><span class="wh">'+esc(who)+'</span><span class="dt">'+esc(when)+'</span></div>'+(m.content?'<div class="bd">'+esc(m.content).replace(/\n/g,'<br>')+'</div>':'')+(ph?'<div class="ph">'+ph+'</div>':'')+'</div>';}).join(''):'<div class="empty">Aucune discussion</div>';
   var seen={},uniq=[];(gallery||[]).forEach(function(f){var n=(f&&f.n)?f.n:f;if(!seen[n]){seen[n]=1;uniq.push(f);}});
-  var gal=uniq.length?'<div class="gal">'+uniq.map(function(f){var src=(f&&f.src)?f.src:f;return '<a href="'+src+'" target="_blank"><img src="'+src+'" loading="lazy"></a>';}).join('')+'</div>':'<div class="empty">Aucune photo</div>';
+  var gal=uniq.length?'<div class="gal">'+uniq.map(function(f){var src=(f&&f.src)?f.src:f;return '<img class="z" src="'+src+'" loading="lazy">';}).join('')+'</div>':'<div class="empty">Aucune photo</div>';
   var title=esc((card.order||'')+(card.name?' — '+card.name:''));
   return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+'</title><style>'
     +'*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:20px;line-height:1.5}'
@@ -271,7 +272,10 @@ function mlgBuildFiche(card,gallery){
     +'.ty{font-weight:700}.wh{color:#93c5fd}.dt{color:#64748b;margin-left:auto}'
     +'.bd{font-size:13px}'
     +'.ph{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.ph img{height:90px;border-radius:4px;border:1px solid #334155;object-fit:cover}'
-    +'.gal{display:flex;flex-wrap:wrap;gap:8px}.gal img{height:130px;border-radius:6px;border:1px solid #334155;object-fit:cover;cursor:pointer}'
+    +'.gal{display:flex;flex-wrap:wrap;gap:8px}.gal img{height:130px;border-radius:6px;border:1px solid #334155;object-fit:cover}'
+    +'.z{cursor:zoom-in}'
+    +'.lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;cursor:zoom-out;align-items:center;justify-content:center;padding:16px}'
+    +'.lb.show{display:flex}.lb img{max-width:96vw;max-height:96vh;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.6)}'
     +'.empty{color:#64748b;font-style:italic;font-size:13px;padding:6px 0}'
     +'.foot{margin-top:24px;color:#475569;font-size:11px;text-align:center}'
     +'</style></head><body><div class="wrap">'
@@ -281,7 +285,10 @@ function mlgBuildFiche(card,gallery){
     +'<h2>Discussions ('+msgs.length+')</h2>'+disc
     +'<h2>Photos ('+uniq.length+')</h2>'+gal
     +'<div class="foot">Généré par PhysiPro BackupStation — '+new Date().toLocaleString('fr-CA')+'</div>'
-    +'</div></body></html>';
+    +'</div>'
+    +'<div class="lb" id="lb"><img id="lbi" alt=""></div>'
+    +'<scr'+'ipt>document.addEventListener("click",function(e){var t=e.target,lb=document.getElementById("lb");if(t&&t.classList&&t.classList.contains("z")){document.getElementById("lbi").src=t.src;lb.classList.add("show");return;}if(lb&&lb.classList.contains("show"))lb.classList.remove("show");});document.addEventListener("keydown",function(e){if(e.key==="Escape"){var lb=document.getElementById("lb");if(lb)lb.classList.remove("show");}});</scr'+'ipt>'
+    +'</body></html>';
 }
 
 async function archiveMoulages(trig){
@@ -330,7 +337,7 @@ async function archiveMoulages(trig){
       }
 
       // ── Signature : ne régénère que si quelque chose a changé ──
-      var sig='v9|'+sH(JSON.stringify(card))+'|'+sbNames.slice().sort().join(',')+'|c'+ci+'|a'+ai;
+      var sig='v10|'+sH(JSON.stringify(card))+'|'+sbNames.slice().sort().join(',')+'|c'+ci+'|a'+ai;
       var hk='mlg_h_'+cid;
       if(localStorage.getItem(hk)===sig&&trig!=='Forcée')continue;
 
