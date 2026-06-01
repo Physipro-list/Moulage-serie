@@ -3,10 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🛡️ Sauvegarde v11</title>
-<!-- v11 : clic photo = agrandissement dans la fiche (lightbox), fini la page blanche des liens base64 -->
-<!-- v10 : fiche simplifiée — notes en belle écriture, suivi de production lisible (deux-points) -->
-<!-- v9 : fiches de moulage dans PhysiPro_Backups/Moulages (un seul dossier de base, 4 sous-dossiers) -->
+<title>🛡️ Sauvegarde v12</title>
+<!-- v12 : modules directement dans le dossier choisi (plus de sous-dossier PhysiPro_Backups) -->
+<!-- v11 : clic photo = agrandissement dans la fiche (lightbox) -->
 <!-- v8 : vérification 1x/heure (au lieu de 5 min), sauvegarde seulement sur changement -->
 <!-- v7 : photos intégrées dans Fiche.html (base64), suppression du sous-dossier Photos -->
 <!-- v6 : photos sidebar visibles immédiatement par lien Firebase, copies locales permanentes après déblocage CORS -->
@@ -181,7 +180,7 @@ async function runC(trig){
   if(!dirH||!isOn)return;if(!await vP()){lg('⚠️ Perm','err');hasError=true;upUI();return;}
   var day=new Date().toISOString().substring(0,10),ts=new Date().toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}).replace(':','h');
   lg('═ ['+trig+'] ═','info');hasError=false;
-  var root;try{root=await dirH.getDirectoryHandle('PhysiPro_Backups',{create:true});}catch(e){lg('❌ '+e.message,'err');hasError=true;upUI();return;}
+  var root=dirH; // les modules vont directement dans le dossier choisi (ex: "Back up logiciel")
   var tf=0,tb=0,mk=Object.keys(M);
   for(var i=0;i<mk.length;i++){
     var n=mk[i],mod=M[n],md={},pk=Object.keys(mod.p);mS[n]='run';renderM();
@@ -195,7 +194,7 @@ async function runC(trig){
 }
 function sH(s){var h=0;for(var i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}return h.toString(36);}
 
-async function doRestore(){if(!confirm('⚠️ RESTAURER?\nÉcrasera Firebase.'))return;if(!window.showDirectoryPicker)return;try{var dir=await window.showDirectoryPicker({id:'pr',mode:'read'});var bD;try{bD=await dir.getDirectoryHandle('PhysiPro_Backups');}catch(e){bD=dir;}lg('📥 Restauration','info');var c=0;for await(var en of bD.values()){if(en.kind!=='directory')continue;var mod=M[en.name];if(!mod)continue;var la=null,ln='';for await(var f of en.values()){if(f.kind==='file'&&f.name.endsWith('.json')&&f.name>ln){la=f;ln=f.name;}}if(!la)continue;var o=await la.getFile();var d=JSON.parse(await o.text()).data||{};for(var k of Object.keys(mod.p)){if(d[k]!==undefined){await fbDb.ref(mod.p[k].r).set(d[k]);c++;}}lg('  ✅ '+en.name,'ok');}lg('📥 '+c+' sections','ok');toast('📥 Restauré','ok');}catch(e){lg('❌ '+e.message,'err');}}
+async function doRestore(){if(!confirm('⚠️ RESTAURER?\nÉcrasera Firebase.'))return;if(!window.showDirectoryPicker)return;try{var dir=await window.showDirectoryPicker({id:'pr',mode:'read'});var bD=dir;lg('📥 Restauration','info');var c=0;for await(var en of bD.values()){if(en.kind!=='directory')continue;var mod=M[en.name];if(!mod)continue;var la=null,ln='';for await(var f of en.values()){if(f.kind==='file'&&f.name.endsWith('.json')&&f.name>ln){la=f;ln=f.name;}}if(!la)continue;var o=await la.getFile();var d=JSON.parse(await o.text()).data||{};for(var k of Object.keys(mod.p)){if(d[k]!==undefined){await fbDb.ref(mod.p[k].r).set(d[k]);c++;}}lg('  ✅ '+en.name,'ok');}lg('📥 '+c+' sections','ok');toast('📥 Restauré','ok');}catch(e){lg('❌ '+e.message,'err');}}
 
 function upUI(){
   var btn=document.getElementById('onoff');
@@ -301,7 +300,7 @@ async function archiveMoulages(trig){
   var archByCard={};
   Object.keys(pArch).forEach(function(k){var d=pArch[k];if(!d||!d.cardId)return;(d.photos||[]).forEach(function(p){if(p&&p.data){(archByCard[d.cardId]=archByCard[d.cardId]||[]).push(p.data);}});});
   var aroot;
-  try{var bkRoot=await dirH.getDirectoryHandle('PhysiPro_Backups',{create:true});aroot=await bkRoot.getDirectoryHandle('Moulages',{create:true});}catch(e){lg('  ⚠️ Dossier Moulages: '+e.message,'err');return;}
+  try{aroot=await dirH.getDirectoryHandle('Moulages',{create:true});}catch(e){lg('  ⚠️ Dossier Moulages: '+e.message,'err');return;}
   var ids=Object.keys(moulages),done=0;
   for(var i=0;i<ids.length;i++){
     var cid=ids[i],card=moulages[cid];
@@ -337,7 +336,7 @@ async function archiveMoulages(trig){
       }
 
       // ── Signature : ne régénère que si quelque chose a changé ──
-      var sig='v10|'+sH(JSON.stringify(card))+'|'+sbNames.slice().sort().join(',')+'|c'+ci+'|a'+ai;
+      var sig='v11|'+sH(JSON.stringify(card))+'|'+sbNames.slice().sort().join(',')+'|c'+ci+'|a'+ai;
       var hk='mlg_h_'+cid;
       if(localStorage.getItem(hk)===sig&&trig!=='Forcée')continue;
 
