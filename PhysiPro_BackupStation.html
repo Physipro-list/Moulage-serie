@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🛡️ Sauvegarde v6</title>
+<title>🛡️ Sauvegarde v7</title>
+<!-- v7 : photos intégrées dans Fiche.html (base64), suppression du sous-dossier Photos -->
 <!-- v6 : photos sidebar visibles immédiatement par lien Firebase, copies locales permanentes après déblocage CORS -->
 <!-- v5 : fix discussions (champ content), rush YES/NO, photos sidebar robustes + détection CORS -->
 <!-- v4 : export Excel (.xlsx) pour Insp.Atelier / Prod.Couture / Insp.Finale -->
@@ -223,6 +224,7 @@ function mlgSanFolder(s){return (String(s==null?'':s).replace(/[\\\/:*?"<>|]/g,'
 function mlgSanFile(s){return (String(s==null?'':s).replace(/[^a-zA-Z0-9._-]/g,'_').substring(0,80))||'photo.jpg';}
 function mlgColName(id){var c={colRobot:'⚙️ Robot',colDegauchage:'🪚 Dégauchage',colEssayage:'👔 Essayage',colAtelier:'🔧 Atelier',colCouture:'🧵 Couture',colPeinture:'🎨 Peinture',colExpedition:'📦 Expédition',colAttente:'⏳ En attente'};return c[id]||id||'—';}
 function mlgB64ToBlob(d){try{var p=String(d).split(',');var m=(p[0].match(/data:([^;]+)/)||[])[1]||'image/jpeg';var bin=atob(p[1]);var u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new Blob([u],{type:m});}catch(e){return null;}}
+function mlgBlobToDataURL(blob){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result);};r.onerror=function(){rej(new Error('read'));};r.readAsDataURL(blob);});}
 function mlgPad(n){return (n<10?'00':n<100?'0':'')+n;}
 
 function mlgBuildFiche(card,gallery){
@@ -235,9 +237,9 @@ function mlgBuildFiche(card,gallery){
   var msgs=card.messages||[];
   var TL={problem:'❓ Questionnement',solution:'✅ Réponse',pinned:'📌 Épinglé',normal:'💬 Discussion'};
   var TC={problem:'q',solution:'s',pinned:'p',normal:'n'};
-  var disc=msgs.length?msgs.map(function(m){var t=m.type||'normal';var ph=(m.__photos||[]).map(function(fn){return '<a href="Photos/'+fn+'" target="_blank"><img src="Photos/'+fn+'"></a>';}).join('');var who=m.author||m.nom||'';var when=m.date||m.timestamp||'';return '<div class="msg '+(TC[t]||'n')+'"><div class="mh"><span class="ty">'+(TL[t]||'💬')+'</span><span class="wh">'+esc(who)+'</span><span class="dt">'+esc(when)+'</span></div>'+(m.content?'<div class="bd">'+esc(m.content).replace(/\n/g,'<br>')+'</div>':'')+(ph?'<div class="ph">'+ph+'</div>':'')+'</div>';}).join(''):'<div class="empty">Aucune discussion</div>';
+  var disc=msgs.length?msgs.map(function(m){var t=m.type||'normal';var ph=(m.__photos||[]).map(function(src){return '<a href="'+src+'" target="_blank"><img src="'+src+'" loading="lazy"></a>';}).join('');var who=m.author||m.nom||'';var when=m.date||m.timestamp||'';return '<div class="msg '+(TC[t]||'n')+'"><div class="mh"><span class="ty">'+(TL[t]||'💬')+'</span><span class="wh">'+esc(who)+'</span><span class="dt">'+esc(when)+'</span></div>'+(m.content?'<div class="bd">'+esc(m.content).replace(/\n/g,'<br>')+'</div>':'')+(ph?'<div class="ph">'+ph+'</div>':'')+'</div>';}).join(''):'<div class="empty">Aucune discussion</div>';
   var seen={},uniq=[];(gallery||[]).forEach(function(f){var n=(f&&f.n)?f.n:f;if(!seen[n]){seen[n]=1;uniq.push(f);}});
-  var gal=uniq.length?'<div class="gal">'+uniq.map(function(f){var src=(f&&f.src)?f.src:'Photos/'+f;return '<a href="'+src+'" target="_blank"><img src="'+src+'" loading="lazy"></a>';}).join('')+'</div>':'<div class="empty">Aucune photo</div>';
+  var gal=uniq.length?'<div class="gal">'+uniq.map(function(f){var src=(f&&f.src)?f.src:f;return '<a href="'+src+'" target="_blank"><img src="'+src+'" loading="lazy"></a>';}).join('')+'</div>':'<div class="empty">Aucune photo</div>';
   var title=esc((card.order||'')+(card.name?' — '+card.name:''));
   return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+'</title><style>'
     +'*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:20px;line-height:1.5}'
@@ -285,37 +287,15 @@ async function archiveMoulages(trig){
     try{
       var folder=mlgSanFolder((card.order||'SANS-NUM')+' - '+(card.name||'Sans nom'));
       var mf=await aroot.getDirectoryHandle(folder,{create:true});
-      var pf=await mf.getDirectoryHandle('Photos',{create:true});
-      var have={};for await(var en of pf.values()){if(en.kind==='file')have[en.name]=1;}
-      var gallery=[],sbNames=[];
-      // 1) Photos sidebar (Firebase Storage) — téléchargement des VRAIS octets
-      var order=card.order||'',sbFail=0,sbLocal=0;
+
+      // ── Étape légère : noms des photos sidebar + comptage chat/archive (pas de téléchargement) ──
+      var order=card.order||'',sbItems=[],sbNames=[];
       if(order){
-        var res=null;
-        try{res=await fbStorage.ref('photos/moulages/'+order).listAll();}catch(e){lg('  ⚠️ Liste photos '+order+': '+e.message,'warn');}
-        if(res){
-          for(var s=0;s<res.items.length;s++){
-            var it=res.items[s];var fn=mlgSanFile(it.name);
-            if(!/\.(jpg|jpeg|png|webp|gif|heic)$/i.test(fn))fn+='.jpg';
-            sbNames.push(fn);
-            if(!have[fn]){
-              try{
-                var bl=null;
-                if(it.getBlob){try{bl=await it.getBlob();}catch(_g){bl=null;}}
-                var url2=await it.getDownloadURL();
-                if(!bl){var rp=await fetch(url2);if(!rp.ok)throw new Error('HTTP '+rp.status);bl=await rp.blob();}
-                var fh=await pf.getFileHandle(fn,{create:true});var w=await fh.createWritable();await w.write(bl);await w.close();have[fn]=1;gallery.push({n:fn,src:'Photos/'+fn});sbLocal++;
-              }catch(e){
-                sbFail++;mlgCorsHint=mlgCorsHint||/cors|failed to fetch|network/i.test(e.message);
-                try{var ru=await it.getDownloadURL();gallery.push({n:fn,src:ru});}catch(_u){}
-              }
-            }else{gallery.push({n:fn,src:'Photos/'+fn});sbLocal++;}
-          }
-          if(sbFail>0)lg('  ⚠️ '+order+': '+sbFail+' photo(s) sidebar non téléchargée(s)','warn');
-        }
+        try{var res=await fbStorage.ref('photos/moulages/'+order).listAll();sbItems=res.items;}catch(e){lg('  ⚠️ Liste photos '+order+': '+e.message,'warn');}
+        sbItems.forEach(function(it){var fn=mlgSanFile(it.name);if(!/\.(jpg|jpeg|png|webp|gif|heic)$/i.test(fn))fn+='.jpg';sbNames.push(fn);});
       }
-      // 2) Photos collées dans les discussions (base64)
-      var ci=0,msgs=card.messages||[];
+      // Photos collées dans les discussions (déjà en base64, en mémoire)
+      var extra=[],ci=0,msgs=card.messages||[];
       for(var m=0;m<msgs.length;m++){
         var msg=msgs[m];var imgs=[];
         if(msg.image)imgs.push(msg.image);
@@ -323,31 +303,51 @@ async function archiveMoulages(trig){
         msg.__photos=[];
         for(var x=0;x<imgs.length;x++){
           if(typeof imgs[x]!=='string'||imgs[x].indexOf('data:')!==0)continue;
-          ci++;var cn='chat_'+mlgPad(ci)+'.jpg';
-          if(!have[cn]){var b=mlgB64ToBlob(imgs[x]);if(b){var fh2=await pf.getFileHandle(cn,{create:true});var w2=await fh2.createWritable();await w2.write(b);await w2.close();have[cn]=1;}}
-          msg.__photos.push(cn);gallery.push({n:cn,src:'Photos/'+cn});
+          ci++;msg.__photos.push(imgs[x]);extra.push({n:'chat_'+mlgPad(ci),src:imgs[x]});
         }
       }
-      // 3) Photos d'archive envoyées du mobile (photoArchives, base64)
+      // Photos d'archive mobile (déjà en base64)
       var ai=0,arr=archByCard[cid]||[];
       for(var a=0;a<arr.length;a++){
         if(typeof arr[a]!=='string'||arr[a].indexOf('data:')!==0)continue;
-        ai++;var an='archive_'+mlgPad(ai)+'.jpg';
-        if(!have[an]){var ba=mlgB64ToBlob(arr[a]);if(ba){var fh3=await pf.getFileHandle(an,{create:true});var w3=await fh3.createWritable();await w3.write(ba);await w3.close();have[an]=1;}}
-        gallery.push({n:an,src:'Photos/'+an});
+        ai++;extra.push({n:'archive_'+mlgPad(ai),src:arr[a]});
       }
-      // 4) Signature : ne réécrit la fiche que si quelque chose a changé
-      var sig='v6|'+sH(JSON.stringify(card))+'|'+sbNames.sort().join(',')+'|L'+sbLocal+'|c'+ci+'|a'+ai;
+
+      // ── Signature : ne régénère que si quelque chose a changé ──
+      var sig='v7|'+sH(JSON.stringify(card))+'|'+sbNames.slice().sort().join(',')+'|c'+ci+'|a'+ai;
       var hk='mlg_h_'+cid;
       if(localStorage.getItem(hk)===sig&&trig!=='Forcée')continue;
-      // 5) Fiche.html
+
+      // ── Étape lourde (seulement si changé) : télécharger les photos sidebar → base64 ──
+      var sbGallery=[],sbFail=0;
+      for(var s=0;s<sbItems.length;s++){
+        var it=sbItems[s];
+        try{
+          var bl=null;
+          if(it.getBlob){try{bl=await it.getBlob();}catch(_g){bl=null;}}
+          if(!bl){var url=await it.getDownloadURL();var rp=await fetch(url);if(!rp.ok)throw new Error('HTTP '+rp.status);bl=await rp.blob();}
+          var durl=await mlgBlobToDataURL(bl);
+          sbGallery.push({n:sbNames[s],src:durl});
+        }catch(e){
+          sbFail++;mlgCorsHint=mlgCorsHint||/cors|failed to fetch|network/i.test(e.message);
+          try{var ru=await it.getDownloadURL();sbGallery.push({n:sbNames[s],src:ru});}catch(_u){}
+        }
+      }
+      if(sbFail>0)lg('  ⚠️ '+order+': '+sbFail+' photo(s) sidebar non récupérée(s)','warn');
+
+      // ── Fiche.html (photos intégrées) ──
+      var gallery=sbGallery.concat(extra);
       var html=mlgBuildFiche(card,gallery);
       var fhF=await mf.getFileHandle('Fiche.html',{create:true});var wF=await fhF.createWritable();await wF.write(new Blob([html],{type:'text/html'}));await wF.close();
+
+      // ── Nettoyage : retirer l'ancien sous-dossier Photos (photos désormais dans la fiche) ──
+      try{await mf.removeEntry('Photos',{recursive:true});}catch(_e){}
+
       localStorage.setItem(hk,sig);done++;
     }catch(e){lg('  ⚠️ '+(card.order||cid)+': '+e.message,'err');}
   }
   if(done>0)lg('  🏭 '+done+' moulage(s) → OneDrive','ok');
-  if(mlgCorsHint)lg('  ℹ️ Photos sidebar affichées par lien (déblocage Firebase requis pour copies permanentes)','warn');
+  if(mlgCorsHint)lg('  ℹ️ Certaines photos sidebar via lien (déblocage Firebase requis)','warn');
 }
 
 /* ═══ EXPORT EXCEL (.xlsx) — Insp.Atelier / Prod.Couture / Insp.Finale ═══
