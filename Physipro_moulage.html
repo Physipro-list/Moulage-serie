@@ -8,6 +8,150 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
+    v1638 - ACCUSÉS DE LECTURE: UN SEUL NOM PAR PERSONNE PAR BULLE (anti-doublon)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1638:
+
+    1. BUG corrigé: le changement de clé (v1634) faisait apparaître le nom d'une
+       même personne DEUX fois sur la même bulle (ancienne clé + nouvelle clé).
+    2. Rendu: dédoublonnage par courriel → chaque personne n'apparaît qu'UNE
+       fois par bulle, avec l'heure du 1er visionnage. La prochaine bulle qu'elle
+       voit affichera son nom à son tour (une fois).
+    3. Écriture: on ne réécrit plus un « vu » si la personne (par courriel) a déjà
+       vu cette bulle, peu importe la clé → plus de doublon créé.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1637 - FIX CRITIQUE: CONNEXION BLOQUÉE (récursion infinie isMobileView)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1637:
+
+    1. ⚠️ BUG v1635: lors du remplacement des tests de largeur, la fonction
+       isMobileView() s'appelait elle-même (récursion infinie) → le script
+       plantait au chargement → l'authentification ne démarrait plus → bouton
+       bloqué sur « Connexion… ». CORRIGÉ: isMobileView retourne bien
+       (forcé OU largeur ≤ 768).
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1636 - RETRAIT DU POP-UP DE MISE À JOUR AUTOMATIQUE (ancien message OneDrive)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1636:
+
+    1. L'ancien système d'annonces (appSettings/updateMessage) affichait
+       automatiquement un vieux message (« changement système photos OneDrive »)
+       à l'ouverture. L'affichage automatique de ce pop-up est DÉSACTIVÉ.
+       → Plus aucune fenêtre de mise à jour non désirée à la connexion.
+       (Le panneau d'annonces dans les réglages reste présent, mais ne force
+        plus de pop-up.)
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1635 - VERSION TÉLÉPHONE FORCÉE (tablettes Amazon Fire) + BASCULE MÉMORISÉE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1635:
+
+    1. Détection mobile ne dépend plus uniquement de la largeur d'écran.
+       • Auto: tablettes Amazon Fire (Silk/KF…) et tablettes Android → version
+         téléphone automatiquement, même si l'écran est large.
+       • Helper isMobileView() = forcé OU largeur ≤768 (remplace les 15 tests
+         window.innerWidth).
+    2. Classe html.force-mobile: duplique le bloc @media 768px pour appliquer la
+       mise en page mobile à n'importe quelle largeur (et neutralise le zoom
+       desktop 0.8 dans ce mode).
+    3. Bouton bascule MÉMORISÉ (localStorage):
+       • Version desktop: bouton « 📱 Téléphone » dans l'entête.
+       • Version mobile: bouton « 💻 PC » à côté de « ← Menu ».
+       Le choix est conservé au rechargement (physipro_force_mobile: 1/0/auto).
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1634 - ACCUSÉS DE LECTURE: AFFICHAGE INSTANTANÉ (vu dès l'ouverture)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1634:
+
+    1. Quand on ouvre/voit un message, la pastille « 👁️ Nom HH:MM » s'affiche
+       IMMÉDIATEMENT (mise à jour locale + render tout de suite), sans attendre
+       le retour de Firebase. L'écriture Firebase se fait ensuite en arrière-plan
+       pour propager aux autres en temps réel.
+    2. Clé d'accusé de lecture rendue Firebase-safe (base64url: /, +, = remplacés)
+       pour éviter tout échec d'écriture silencieux selon l'adresse courriel.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1633 - ANNONCE UNIQUE À LA CONNEXION (vue 1 seule fois par compte)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1633:
+
+    1. À la connexion, une fenêtre d'annonce s'affiche UNE SEULE FOIS par compte.
+       Dès qu'on clique « ✓ Compris », c'est marqué dans Firebase
+       (moulageAnnonceSeen/{compte}/{id}) → ne réapparaît plus jamais, même
+       sur un autre appareil.
+    2. Texte de l'annonce (ANNONCE_ID = 'annonce-2026-06-chat-vu'):
+       nouveautés du chat + accusés de lecture en temps réel.
+    3. Pour une PROCHAINE annonce: changer ANNONCE_ID + ANNONCE_TEXTE → elle
+       réapparaîtra une fois pour tout le monde.
+
+    ⚠️ Règles Firebase: ajouter le nœud "moulageAnnonceSeen" (inclus dans
+       firebase_rules_corrige.json fourni).
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1632 - ACCUSÉS DE LECTURE: SUIVI PAR MESSAGE (corrige les incohérences)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1632:
+
+    1. BUG corrigé: avant, le "vu" était au niveau de la conversation (une seule
+       heure par personne) → les messages DÉJÀ présents n'affichaient pas tout
+       de suite "vu par X", et certains noms apparaissaient à tort sous des
+       messages envoyés après leur visite.
+    2. Nouveau: suivi PAR MESSAGE. À l'ouverture, chaque message visible est
+       marqué comme vu par la personne (moulages/{cardId}/chatV2/seen/{msgId}/
+       {emailEncodé} = {name, ts}). On marque aussi les nouveaux messages qui
+       arrivent pendant qu'on regarde.
+    3. Sous chaque bulle: « 👁️ Prénom HH:MM » pour CHAQUE personne ayant vu CE
+       message précis (sauf l'auteur), triées par heure. L'heure du 1er
+       visionnage est conservée (on n'écrase pas si déjà vu). Temps réel.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1631 - ACCUSÉS DE LECTURE: HEURE À CÔTÉ DU NOM + TRI PAR HEURE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1631:
+
+    1. La pastille "vu" affiche maintenant l'HEURE à laquelle la personne a vu:
+       « 👁️ Prénom 14:32 ». Pastilles triées par heure de visualisation.
+    2. En direct: chaque ouverture du chat met à jour l'horodatage (ts) et le
+       listener temps réel rafraîchit l'affichage immédiatement chez tout le monde.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1630 - ACCUSÉS DE LECTURE: PASTILLE « 👁️ Nom » SOUS CHAQUE BULLE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1630:
+
+    1. Quand quelqu'un ouvre le chat d'une carte, il est enregistré comme ayant
+       vu la conversation (moulages/{cardId}/chatV2/seen/{emailEncodé}).
+    2. Sous chaque bulle s'affichent de petites pastilles « 👁️ Prénom » pour
+       chaque personne qui a vu le message (vu APRÈS son envoi), sauf l'auteur.
+       Petit mais bien visible (turquoise). Mobile + desktop.
+    3. Temps réel: si une représentante (ou autre) ouvre la carte, son nom
+       apparaît sous les messages qu'elle a vus, chez tout le monde.
+
+    ⚠️ Le nœud chatV2/seen est sous la carte (mêmes permissions que moulages),
+    donc rien à changer côté règles Firebase.
+
+    ═══════════════════════════════════════════════════════════════════
+
     v1629 - DIAGNOSTIC CONNEXION + MESSAGE CLAIR SI LECTURE FIREBASE REFUSÉE
     ═══════════════════════════════════════════════════════════════════
 
@@ -824,7 +968,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1629</title>
+  <title>PhysiPro Moulages v1638</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -4205,14 +4349,951 @@
 .qchat-compose.pinned-type .qchat-compose-type{color:#ca8a04;}
 .qchat-dest-label{font-size:9px;color:#cbd5e1;font-weight:600;white-space:nowrap;}
 .fiche-chat-zone.qchat-container{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;background:#fff;position:relative;}
+/* Pastilles "vu" sous chaque bulle */
+.qmsg-seen{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;padding-top:3px;border-top:1px dashed rgba(0,0,0,0.08);}
+.qmsg-seen-pill{display:inline-flex;align-items:center;gap:2px;font-size:9px;font-weight:600;color:#0e7490;background:#cffafe;border:1px solid #67e8f9;border-radius:8px;padding:0 5px;line-height:1.5;white-space:nowrap;}
+.qmsg-seen-time{font-weight:700;color:#0891b2;margin-left:1px;}
 /* === Compensation hauteur sous zoom desktop 0.8 (placée en fin pour priorité) === */
 @media (min-width: 769px) {
   .main-container { height: calc(125vh - 75px) !important; }
   .fiche-container { height: calc(125vh - 40px) !important; max-height: 1190px !important; }
 }
+
+/* ===== FORCE MOBILE (tablette / bascule manuelle) — duplique le bloc @media 768px ===== */
+html.force-mobile /* Cacher la version desktop */
+      .topbar, html.force-mobile .main-container, html.force-mobile .fiche-overlay { display: none !important; }
+html.force-mobile /* S'assurer que le login overlay caché reste caché */
+      .login-overlay.hidden { display: none !important; }
+html.force-mobile /* Afficher la version mobile */
+      .mobile-app { 
+        display: flex !important; 
+        flex-direction: column; 
+        height: 100vh; 
+        width: 100vw; 
+        overflow: hidden; 
+        background: linear-gradient(180deg, #04152c 0%, #1e3a5f 50%, #04152c 100%);
+        position: relative;
+        z-index: 500;
+      }
+html.force-mobile /* Pages fiche et chat - affichables via JS */
+      .mobile-fiche-page, html.force-mobile .mobile-chat-page { display: none !important; }
+html.force-mobile .mobile-fiche-page.active, html.force-mobile .mobile-chat-page.active, html.force-mobile .mobile-photos-page.active { display: flex !important; }
+html.force-mobile /* Chat unifié (MChat) hébergé dans la page mobile */
+      #mobileChatMount { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+html.force-mobile #mobileChatMount #ficheChatZone { display:flex !important; flex:1; min-height:0; width:100%; border-radius:0; }
+html.force-mobile #mobileChatMount .qchat-scroll { flex:1; min-height:0; }
+html.force-mobile /* L'entête mobile gère le retour; on masque l'entête interne MChat sur mobile
+         mais on garde les actions utiles (Épinglé / Imprimer) accessibles */
+      #mobileChatMount .qchat-header-bar .chat-header-title, html.force-mobile #mobileChatMount .qchat-header-bar .fiche-close-btn { display:none !important; }
+html.force-mobile /* ===== HEADER MOBILE ===== */
+      .mobile-header { 
+        display: flex; align-items: center;
+        padding: 10px 12px; 
+        background: linear-gradient(to bottom, #04152c 0%, #3b6eb5 100%);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        position: relative; z-index: 100;
+      }
+html.force-mobile .mobile-header-left {
+        display: flex; align-items: center; flex-shrink: 0;
+        min-width: 90px;
+      }
+html.force-mobile .mobile-header-back {
+        width: 36px; height: 36px; border-radius: 50%;
+        background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
+        color: #fff; font-size: 18px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+      }
+html.force-mobile .mobile-header-back:active { background: rgba(255,255,255,0.3); transform: scale(0.93); }
+html.force-mobile .mobile-header-center { flex: 1; display: flex; justify-content: center; align-items: center; }
+html.force-mobile .mobile-logo { height: 40px; }
+html.force-mobile .mobile-header-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; min-width: 90px; }
+html.force-mobile .mobile-header-title { font-size: 18px; font-weight: 800; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+html.force-mobile .mobile-refresh-btn { 
+        width: 38px; height: 38px; border-radius: 50%; 
+        background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3);
+        color: #fff; font-size: 18px; cursor: pointer; 
+        display: flex; align-items: center; justify-content: center;
+        transition: all 0.2s;
+        padding: 0;
+      }
+html.force-mobile .mobile-refresh-btn:active { background: rgba(255,255,255,0.3); transform: scale(0.95); }
+html.force-mobile .mobile-refresh-btn.rotating { animation: spin 1s linear infinite; }
+html.force-mobile /* Bouton Installer mobile - toujours visible */
+      .mobile-install-btn { 
+        display: flex;
+        width: 40px; height: 40px; border-radius: 50%; 
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); 
+        border: 2px solid #1d4ed8;
+        color: #fff; font-size: 18px; cursor: pointer; 
+        align-items: center; justify-content: center;
+        transition: all 0.2s;
+      }
+html.force-mobile /* Bouton cloche notifications mobile */
+      .mobile-notif-btn {
+        position: relative; display: flex;
+        width: 38px; height: 38px; border-radius: 50%; 
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); 
+        border: 2px solid #4338ca;
+        color: #fff; font-size: 18px; cursor: pointer; 
+        align-items: center; justify-content: center;
+        transition: all 0.2s;
+        padding: 0;
+      }
+html.force-mobile .mobile-notif-btn:active { transform: scale(0.95); }
+html.force-mobile .mobile-notif-btn.has-notifs { 
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); 
+        border-color: #b91c1c;
+        animation: mobileNotifFlash 0.4s ease-in-out infinite;
+      }
+html.force-mobile .mobile-notif-btn.has-notifs .mobile-notif-icon { animation: bellShake 0.3s ease-in-out infinite; }
+html.force-mobile .mobile-notif-icon { font-size: 18px; line-height: 1; }
+html.force-mobile .mobile-notif-badge {
+        position: absolute; top: -5px; right: -5px;
+        min-width: 20px; height: 20px; padding: 0 4px;
+        background: #fbbf24; border-radius: 10px;
+        font-size: 11px; font-weight: 800; color: #000;
+        display: none; align-items: center; justify-content: center;
+        border: 2px solid #fff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        animation: badgePulse 0.6s ease-in-out infinite;
+      }
+html.force-mobile .mobile-notif-badge.active { display: flex; }
+html.force-mobile /* ===== BARRE DE RECHERCHE MOBILE ===== */
+      .mobile-search-bar {
+        padding: 12px 16px;
+        background: rgba(0,0,0,0.2);
+      }
+html.force-mobile .mobile-search-input {
+        width: 100%; padding: 14px 18px 14px 45px;
+        border-radius: 25px; border: 2px solid rgba(255,255,255,0.2);
+        background: rgba(255,255,255,0.1); color: #fff;
+        font-size: 16px; outline: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23fff' viewBox='0 0 24 24'%3E%3Cpath d='M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: 14px center;
+        background-size: 22px;
+      }
+html.force-mobile .mobile-search-input::placeholder { color: rgba(255,255,255,0.5); }
+html.force-mobile .mobile-search-input:focus { border-color: #3b82f6; background-color: rgba(255,255,255,0.15); }
+html.force-mobile /* ===== FILTRE COLONNES MOBILE - CACHÉ ===== */
+      .mobile-filters { display: none; }
+html.force-mobile /* ===== LISTE DES CARTES MOBILE ===== */
+      .mobile-cards-list {
+        flex: 1; overflow-y: auto; padding: 12px 12px;
+        display: flex; flex-direction: column; gap: 8px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE/Edge */
+      }
+html.force-mobile .mobile-cards-list::-webkit-scrollbar { display: none; }
+html.force-mobile /* Chrome/Safari */
+      .mobile-cards-count { display: none; }
+html.force-mobile /* Séparateur de section/colonne - JAUNE SOLEIL PLEINE LARGEUR */
+      .mobile-section-header {
+        padding: 5px 16px; margin: 22px -12px 18px -12px;
+        background: linear-gradient(to bottom, #f59e0b 0%, #fbbf24 50%, #fcd34d 100%);
+        border-radius: 0; 
+        border-top: 4px solid #000;
+        border-bottom: 4px solid #000;
+        font-size: 35px; font-weight: 800; color: #1f2937;
+        display: flex; align-items: center; gap: 10px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+        text-shadow: 1px 1px 0 rgba(255,255,255,0.5);
+      }
+html.force-mobile .mobile-section-header.en-attente {
+        background: linear-gradient(to bottom, #dc2626 0%, #ef4444 50%, #f87171 100%);
+        color: #fff;
+        text-shadow: 1px 1px 2px #000;
+      }
+html.force-mobile .mobile-section-header .section-icon { font-size: 38px; }
+html.force-mobile .mobile-section-header .section-count {
+        margin-left: auto; padding: 4px 14px;
+        background: rgba(0,0,0,0.2); border-radius: 12px;
+        font-size: 28px; font-weight: 700;
+        border: 1px solid rgba(0,0,0,0.3);
+        color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+html.force-mobile /* ===== CARTE MOBILE - Nouvelle disposition ===== */
+      .mobile-card {
+        display: flex; flex-direction: column;
+        border-radius: 12px;
+        margin: 0 4px 10px 4px;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.3);
+        cursor: pointer; transition: all 0.2s;
+        position: relative; overflow: visible;
+        border: 2px solid #000;
+      }
+html.force-mobile .mobile-card:active { transform: scale(0.98); opacity: 0.9; }
+html.force-mobile .mobile-card.region-qc { background: linear-gradient(135deg, #1a3a5a 0%, #3a6a9a 50%, #5a9acf 100%); }
+html.force-mobile .mobile-card.region-on { background: linear-gradient(135deg, #704414 0%, #a66a2a 50%, #E8B97A 100%); }
+html.force-mobile .mobile-card.region-ma { background: linear-gradient(135deg, #451238 0%, #8D2E6A 50%, #C7458C 100%); }
+html.force-mobile /* Ligne 1: Nom | Commande */
+      .mobile-card-top {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 14px 10px 14px;
+      }
+html.force-mobile .mobile-card-name {
+        flex: 1;
+        font-size: 20px; font-weight: 800; color: #fff;
+        text-shadow: 2px 2px 2px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+html.force-mobile .mobile-card-order {
+        font-size: 18px; font-weight: 700; color: #fff;
+        text-shadow: 2px 2px 2px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+        padding-left: 10px;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+html.force-mobile /* Séparateur - VISIBLE */
+      .mobile-card-separator {
+        height: 2px;
+        background: rgba(255,255,255,0.5);
+        margin: 0 10px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      }
+html.force-mobile /* Ligne 2: Item centré - BIEN VISIBLE et auto-ajusté */
+      .mobile-card-item {
+        padding: 8px 14px 10px 14px;
+        text-align: center;
+        font-size: 21px; font-weight: 800; color: #fff;
+        text-shadow: 2px 2px 2px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+        letter-spacing: 0.5px;
+        min-height: 20px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+html.force-mobile .mobile-card-item:empty::after {
+        content: '—';
+        color: rgba(255,255,255,0.5);
+        text-shadow: none;
+      }
+html.force-mobile /* Pastilles de raison d'attente sur mobile */
+      .mobile-card-item.mobile-item-pill.en-attente {
+        background: linear-gradient(to bottom, #dc2626, #7f1d1d);
+        border-radius: 8px;
+        padding: 8px 14px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 700;
+      }
+html.force-mobile .mobile-card-item.mobile-item-pill.en-attente.no-raison {
+        background: linear-gradient(to bottom, #f97316, #c2410c);
+        animation: clignoteNoRaison 0.8s infinite;
+        border: 2px solid #fbbf24;
+      }
+html.force-mobile .mobile-card-item.mobile-item-pill.en-attente.alerte {
+        animation: clignoteAttente 1s infinite;
+      }
+html.force-mobile /* On enlève les anciens styles */
+      .mobile-card-arrow { display: none; }
+html.force-mobile .mobile-card-pills { display: none; }
+html.force-mobile .mobile-card-pill { display: none; }
+html.force-mobile /* ===== PAGE FICHE MOBILE - IDENTIQUE AU DESKTOP ===== */
+      .mobile-fiche-page {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: #fff;
+        z-index: 1000; display: flex; flex-direction: column;
+        transform: translateX(100%); transition: transform 0.3s ease;
+      }
+html.force-mobile .mobile-fiche-page.active { transform: translateX(0); }
+html.force-mobile .mobile-fiche-header {
+        display: flex; align-items: center; gap: 10px;
+        padding: 12px 14px;
+        background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      }
+html.force-mobile .mobile-back-btn {
+        width: 36px; height: 36px; border-radius: 50%;
+        background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.4);
+        color: #fff; font-size: 18px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+      }
+html.force-mobile .mobile-back-btn:active { background: rgba(255,255,255,0.4); transform: scale(0.95); }
+html.force-mobile .mobile-fiche-title {
+        flex: 1; font-size: 15px; font-weight: 700; color: #fff;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+html.force-mobile .mobile-nav-btn {
+        padding: 6px 12px; border-radius: 16px;
+        background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4);
+        color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
+        display: flex; align-items: center; gap: 4px;
+        flex-shrink: 0;
+      }
+html.force-mobile .mobile-nav-btn:active { background: rgba(255,255,255,0.4); transform: scale(0.95); }
+html.force-mobile /* Bouton X pour fermer */
+      .mobile-close-btn {
+        width: 36px; height: 36px; border-radius: 50%;
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        border: 2px solid rgba(255,255,255,0.5);
+        color: #fff; font-size: 18px; font-weight: 700; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+      }
+html.force-mobile .mobile-close-btn:active { 
+        background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); 
+        transform: scale(0.95); 
+      }
+html.force-mobile .mobile-delete-btn {
+        width: 36px; height: 36px; border-radius: 50%;
+        background: rgba(220,38,38,0.8); border: 2px solid rgba(255,255,255,0.4);
+        color: #fff; font-size: 16px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+      }
+html.force-mobile .mobile-delete-btn:active { background: rgba(220,38,38,1); transform: scale(0.95); }
+html.force-mobile .mobile-fiche-content {
+        flex: 1; overflow-y: auto; background: #fff;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+html.force-mobile .mobile-fiche-content::-webkit-scrollbar { display: none; }
+html.force-mobile /* Barre de navigation en bas de la fiche mobile */
+      .mobile-fiche-nav-bar {
+        display: flex;
+        gap: 10px;
+        padding: 12px;
+        background: linear-gradient(to top, #04152c 0%, #1e3a5f 100%);
+        border-top: 3px solid #3b82f6;
+      }
+html.force-mobile .mobile-nav-big-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 16px 12px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.3);
+        color: #fff;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+html.force-mobile .mobile-nav-big-btn.photos-btn {
+        background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+        border-color: #7c3aed;
+      }
+html.force-mobile .mobile-nav-big-btn.chat-btn {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        border-color: #2563eb;
+      }
+html.force-mobile .mobile-nav-big-btn:active {
+        transform: scale(0.97);
+        filter: brightness(0.9);
+      }
+html.force-mobile .mobile-nav-big-btn .nav-arrow {
+        font-size: 22px;
+        font-weight: 900;
+      }
+html.force-mobile .mobile-nav-big-btn .nav-label {
+        font-size: 14px;
+      }
+html.force-mobile /* IDENTIQUE AU DESKTOP - fiche-field-row */
+      .mobile-fiche-fields { display: flex; flex-direction: column; background: #fff; }
+html.force-mobile .mobile-fiche-row {
+        display: flex; align-items: center;
+        padding: 6px 12px; border-bottom: 1px solid #e5e7eb;
+      }
+html.force-mobile .mobile-fiche-row:hover { background: #f1f5f9; }
+html.force-mobile .mobile-fiche-row:last-child { border-bottom: none; }
+html.force-mobile .mobile-fiche-label {
+        width: 160px; flex-shrink: 0;
+        font-size: 16px; font-weight: 700; color: #374151;
+        text-align: left; padding-left: 4px;
+        white-space: nowrap;
+        display: flex; align-items: center; gap: 6px;
+      }
+html.force-mobile .mobile-fiche-manage-btn {
+        background: transparent;
+        border: none;
+        color: #6b7280;
+        font-size: 16px;
+        cursor: pointer;
+        padding: 0;
+        display: flex; align-items: center; justify-content: center;
+      }
+html.force-mobile .mobile-fiche-manage-btn:active {
+        color: #3b82f6;
+      }
+html.force-mobile .mobile-fiche-value {
+        flex: 1; text-align: center; font-size: 17px; font-weight: 600; color: #1f2937;
+        padding: 2px 4px; border-radius: 4px; min-height: 22px;
+      }
+html.force-mobile .mobile-fiche-value input, html.force-mobile .mobile-fiche-value select {
+        width: 100%; text-align: center; text-align-last: center;
+        font-size: 17px; font-weight: 600; color: #1f2937;
+        background: transparent; border: none; outline: none;
+        cursor: pointer; padding: 2px;
+        -webkit-appearance: none; -moz-appearance: none; appearance: none;
+      }
+html.force-mobile .mobile-fiche-value input:focus, html.force-mobile .mobile-fiche-value select:focus {
+        background: #fff; box-shadow: 0 0 0 2px #3b82f6; border-radius: 4px;
+      }
+html.force-mobile .mobile-fiche-value textarea {
+        width: 100%; min-height: 40px; padding: 6px;
+        font-size: 17px; color: #1f2937;
+        border: 1px solid #d1d5db; border-radius: 6px;
+        resize: vertical; background: #fff;
+      }
+html.force-mobile /* Champ date cliquable */
+      .mobile-fiche-value.date-field {
+        color: #3b82f6; font-weight: 600; cursor: pointer;
+        background: transparent;
+        padding: 2px 4px;
+        font-size: 17px;
+        text-align: center;
+      }
+html.force-mobile .mobile-fiche-value.date-field:active {
+        background: #f1f5f9;
+      }
+html.force-mobile .mobile-fiche-manage-btn:active {
+        filter: brightness(0.85);
+      }
+html.force-mobile /* BANDE DE STATUT - JAUNE FLASH */
+      .mobile-fiche-status-band {
+        padding: 8px 12px;
+        background: linear-gradient(135deg, #b45309 0%, #f59e0b 50%, #fbbf24 100%);
+        color: #000;
+        font-size: 14px; font-weight: 800;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        border-bottom: 2px solid #92400e;
+        text-shadow: 1px 1px 0 rgba(255,255,255,0.5);
+        box-shadow: 0 2px 8px rgba(245,158,11,0.4);
+      }
+html.force-mobile .mobile-fiche-status-band.en-attente {
+        background: linear-gradient(135deg, #991b1b 0%, #dc2626 50%, #ef4444 100%);
+        border-bottom-color: #7f1d1d;
+        box-shadow: 0 2px 8px rgba(220,38,38,0.4);
+        color: #fff;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        animation: pulseStatus 2s ease-in-out infinite;
+      }
+html.force-mobile /* Section Bénéficiaire - format vertical (label en haut, html.force-mobile valeur en bas) */
+      .mobile-fiche-beneficiaire {
+        display: flex; flex-direction: column;
+        padding: 10px 12px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #fff;
+      }
+html.force-mobile .mobile-fiche-beneficiaire:hover { background: #f8fafc; }
+html.force-mobile .mobile-fiche-beneficiaire-label {
+        font-size: 16px; font-weight: 600; color: #6b7280;
+        text-align: center; margin-bottom: 4px;
+      }
+html.force-mobile .mobile-fiche-beneficiaire-value {
+        text-align: center; font-size: 22px; font-weight: 700; color: #1e293b;
+      }
+html.force-mobile .mobile-fiche-beneficiaire-value input {
+        width: 100%; font-size: 22px; font-weight: 700; color: #1e293b;
+        background: transparent; border: none; outline: none;
+        text-align: center;
+      }
+html.force-mobile .mobile-fiche-beneficiaire-value input:focus {
+        background: #fff; box-shadow: 0 0 0 2px #3b82f6; border-radius: 4px;
+      }
+html.force-mobile /* Section Centre/Client - même style que bénéficiaire */
+      .mobile-fiche-client {
+        display: flex; flex-direction: column;
+        padding: 10px 12px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #fff;
+      }
+html.force-mobile .mobile-fiche-client:hover { background: #f8fafc; }
+html.force-mobile .mobile-fiche-client-label {
+        font-size: 16px; font-weight: 600; color: #6b7280;
+        text-align: center; margin-bottom: 4px;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+      }
+html.force-mobile .mobile-fiche-client-value {
+        text-align: center; font-size: 20px; font-weight: 700; color: #1e293b;
+      }
+html.force-mobile .mobile-fiche-client-value select {
+        width: 100%; font-size: 20px; font-weight: 700; color: #1e293b;
+        background: transparent; border: none; outline: none;
+        text-align: center; text-align-last: center;
+        -webkit-appearance: none; -moz-appearance: none; appearance: none;
+        cursor: pointer;
+      }
+html.force-mobile .mobile-fiche-client-value select:focus {
+        background: #fff; box-shadow: 0 0 0 2px #3b82f6; border-radius: 4px;
+      }
+html.force-mobile /* Section Item - même style que bénéficiaire */
+      .mobile-fiche-item {
+        display: flex; flex-direction: column;
+        padding: 10px 12px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #fff;
+      }
+html.force-mobile .mobile-fiche-item:hover { background: #f8fafc; }
+html.force-mobile .mobile-fiche-item-label {
+        font-size: 16px; font-weight: 600; color: #6b7280;
+        text-align: center; margin-bottom: 4px;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+      }
+html.force-mobile .mobile-fiche-item-value {
+        text-align: center; font-size: 20px; font-weight: 700; color: #1e293b;
+      }
+html.force-mobile .mobile-fiche-item-value select {
+        width: 100%; font-size: 20px; font-weight: 700; color: #1e293b;
+        background: transparent; border: none; outline: none;
+        text-align: center; text-align-last: center;
+        -webkit-appearance: none; -moz-appearance: none; appearance: none;
+        cursor: pointer;
+      }
+html.force-mobile .mobile-fiche-item-value select:focus {
+        background: #fff; box-shadow: 0 0 0 2px #3b82f6; border-radius: 4px;
+      }
+html.force-mobile /* Rangée double (2 colonnes côte à côte) */
+      .mobile-fiche-row-double {
+        display: flex;
+        border-bottom: 1px solid #e5e7eb;
+        background: #fff;
+      }
+html.force-mobile .mobile-fiche-row-double:hover { background: #f1f5f9; }
+html.force-mobile /* Rangée triple (3 colonnes côte à côte) */
+      .mobile-fiche-row-triple {
+        display: flex;
+        border-bottom: 1px solid #e5e7eb;
+        background: #fff;
+      }
+html.force-mobile .mobile-fiche-row-triple:hover { background: #f1f5f9; }
+html.force-mobile .mobile-fiche-row-triple .mobile-fiche-col {
+        border-right: 1px solid #e5e7eb;
+      }
+html.force-mobile .mobile-fiche-row-triple .mobile-fiche-col:last-child {
+        border-right: none;
+      }
+html.force-mobile .mobile-fiche-row-triple .mobile-fiche-col-label {
+        font-size: 11px;
+      }
+html.force-mobile .mobile-fiche-row-triple .mobile-fiche-col-value {
+        font-size: 14px;
+      }
+html.force-mobile .mobile-fiche-row-triple .mobile-fiche-col-value input, html.force-mobile .mobile-fiche-row-triple .mobile-fiche-col-value select {
+        font-size: 14px;
+      }
+html.force-mobile .mobile-fiche-col {
+        flex: 1;
+        display: flex; flex-direction: column;
+        padding: 8px 8px;
+        text-align: center;
+      }
+html.force-mobile .mobile-fiche-col:first-child {
+        border-right: 1px solid #e5e7eb;
+      }
+html.force-mobile .mobile-fiche-col-label {
+        font-size: 14px; font-weight: 600; color: #6b7280;
+        margin-bottom: 4px;
+        display: flex; align-items: center; justify-content: center; gap: 4px;
+      }
+html.force-mobile .mobile-fiche-col-value {
+        font-size: 17px; font-weight: 700; color: #1e293b;
+      }
+html.force-mobile .mobile-fiche-col-value input, html.force-mobile .mobile-fiche-col-value select {
+        width: 100%; font-size: 17px; font-weight: 700; color: #1e293b;
+        background: transparent; border: none; outline: none;
+        text-align: center; text-align-last: center;
+        -webkit-appearance: none; -moz-appearance: none; appearance: none;
+        cursor: pointer; padding: 2px;
+      }
+html.force-mobile .mobile-fiche-col-value input:focus, html.force-mobile .mobile-fiche-col-value select:focus {
+        background: #fff; box-shadow: 0 0 0 2px #3b82f6; border-radius: 4px;
+      }
+html.force-mobile .mobile-fiche-col-value.date-field {
+        color: #3b82f6; font-weight: 700; cursor: pointer;
+        font-size: 17px;
+      }
+html.force-mobile .mobile-fiche-col-value.date-field:active {
+        background: #f1f5f9; border-radius: 4px;
+      }
+html.force-mobile /* ===== PAGE CHAT MOBILE - Identique au desktop ===== */
+      .mobile-chat-page {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: #f8fafc;
+        z-index: 1001; display: none; flex-direction: column;
+        transform: translateX(100%); transition: transform 0.3s ease;
+      }
+html.force-mobile .mobile-chat-page.active { display: flex; transform: translateX(0); }
+html.force-mobile /* ===== PAGE PHOTOS ONEDRIVE MOBILE ===== */
+      .mobile-photos-page {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(to bottom, #04152c 0%, #1e3a5f 100%);
+        z-index: 1001; display: none; flex-direction: column;
+        transform: translateX(-100%); transition: transform 0.3s ease;
+      }
+html.force-mobile .mobile-photos-page.active { display: flex; transform: translateX(0); }
+html.force-mobile .mobile-photos-header {
+        display: flex; align-items: center; gap: 10px;
+        padding: 12px 14px;
+        background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      }
+html.force-mobile .mobile-photos-camera-btn {
+        width: 36px; height: 36px; background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+        color: #fff; border: 2px solid #a78bfa; border-radius: 50%;
+        font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 2px 8px rgba(139,92,246,0.5); transition: all 0.2s;
+      }
+html.force-mobile .mobile-photos-camera-btn:active { transform: scale(0.9); background: #6d28d9; }
+html.force-mobile .mobile-photos-title {
+        flex: 1; font-size: 15px; font-weight: 700; color: #fff;
+      }
+html.force-mobile .mobile-photos-folder {
+        padding: 8px 12px;
+        background: rgba(0,0,0,0.3);
+        color: #93c5fd;
+        font-size: 11px;
+        text-align: center;
+      }
+html.force-mobile .mobile-photos-grid {
+        flex: 1; overflow-y: auto; padding: 10px;
+        display: grid; grid-template-columns: repeat(2, 1fr);
+        gap: 10px; align-content: start;
+      }
+html.force-mobile .mobile-photos-thumb {
+        aspect-ratio: 1; border-radius: 10px; overflow: hidden;
+        cursor: pointer; border: 2px solid rgba(255,255,255,0.2);
+        background: rgba(0,0,0,0.3);
+      }
+html.force-mobile .mobile-photos-thumb:active { border-color: #60a5fa; }
+html.force-mobile .mobile-photos-thumb img { width: 100%; height: 100%; object-fit: cover; }
+html.force-mobile .mobile-photos-empty {
+        grid-column: 1 / -1; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; padding: 40px;
+        color: #93c5fd; text-align: center;
+      }
+html.force-mobile .mobile-photos-empty-icon { font-size: 48px; margin-bottom: 15px; opacity: 0.5; }
+html.force-mobile .mobile-photos-loading {
+        grid-column: 1 / -1; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; padding: 40px; gap: 15px;
+      }
+html.force-mobile .mobile-photos-spinner {
+        width: 40px; height: 40px;
+        border: 4px solid rgba(255,255,255,0.2);
+        border-top-color: #60a5fa;
+        border-radius: 50%; animation: spin 1s linear infinite;
+      }
+html.force-mobile .mobile-photos-connect {
+        grid-column: 1 / -1; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; padding: 40px; gap: 15px;
+      }
+html.force-mobile .mobile-photos-connect-btn {
+        padding: 14px 24px; background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        color: white; border: none; border-radius: 10px;
+        font-size: 14px; font-weight: 600; cursor: pointer;
+      }
+html.force-mobile .mobile-nav-btn.mobile-photos-nav {
+        padding: 6px 10px; background: rgba(255,255,255,0.2);
+        border: none; border-radius: 6px; color: #fff;
+        font-size: 16px; cursor: pointer;
+      }
+html.force-mobile .mobile-chat-header {
+        display: flex; align-items: center; gap: 10px;
+        padding: 12px 14px;
+        background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      }
+html.force-mobile .mobile-chat-title {
+        flex: 1; font-size: 15px; font-weight: 700; color: #fff;
+      }
+html.force-mobile .mobile-chat-messages {
+        flex: 1; overflow-y: auto; padding: 10px; background: #f8fafc;
+      }
+html.force-mobile /* Messages épinglés mobile */
+      .mobile-pinned-section {
+        background: linear-gradient(135deg, #fefce8, #fef9c3);
+        border: 1px solid #fde047; border-radius: 8px;
+        padding: 10px; margin-bottom: 10px;
+      }
+html.force-mobile .mobile-pinned-header {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 11px; font-weight: 700; color: #a16207;
+        margin-bottom: 8px; text-transform: uppercase;
+      }
+html.force-mobile /* Questions mobile */
+      .mobile-questions-section {
+        background: #fff; border-radius: 8px;
+        padding: 10px; margin-bottom: 10px;
+      }
+html.force-mobile .mobile-questions-header {
+        font-size: 11px; font-weight: 700; color: #dc2626;
+        margin-bottom: 8px; text-transform: uppercase;
+      }
+html.force-mobile /* Thread mobile */
+      .mobile-thread-block { margin-bottom: 16px; }
+html.force-mobile .mobile-thread-question {
+        background: #fef2f2; border: 1px solid #fca5a5;
+        border-radius: 8px 8px 0 0; padding: 10px;
+      }
+html.force-mobile .mobile-thread-reply {
+        background: #eff6ff; border: 1px solid #93c5fd;
+        border-top: 1px solid #cbd5e1; padding: 10px;
+      }
+html.force-mobile .mobile-thread-reply:last-child { border-radius: 0 0 8px 8px; }
+html.force-mobile .mobile-msg-type {
+        font-size: 10px; font-weight: 700; text-transform: uppercase;
+        margin-bottom: 2px;
+      }
+html.force-mobile .mobile-msg-type.question { color: #dc2626; }
+html.force-mobile .mobile-msg-type.reply { color: #2563eb; }
+html.force-mobile .mobile-msg-type.pinned { color: #d97706; }
+html.force-mobile .mobile-msg-author {
+        font-size: 11px; color: #64748b; margin-bottom: 4px;
+      }
+html.force-mobile .mobile-msg-content {
+        font-size: 13px; color: #1e293b; line-height: 1.5;
+      }
+html.force-mobile .mobile-msg-image {
+        max-width: 100%; border-radius: 6px; margin-top: 8px;
+      }
+html.force-mobile /* Grille d'images dans les messages */
+      .mobile-msg-images-grid {
+        display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;
+      }
+html.force-mobile .mobile-msg-images-grid img {
+        width: 80px; height: 80px; object-fit: cover;
+        border-radius: 6px; cursor: pointer;
+      }
+html.force-mobile .mobile-msg-images-grid.single img {
+        width: auto; height: auto; max-width: 100%; max-height: 200px;
+      }
+html.force-mobile /* Bouton répondre mobile */
+      .mobile-reply-btn {
+        margin-top: 8px; padding: 8px 16px;
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        border: none; border-radius: 6px;
+        color: #fff; font-size: 12px; font-weight: 600;
+        cursor: pointer;
+      }
+html.force-mobile /* Bouton supprimer message mobile */
+      .mobile-msg-delete-btn {
+        position: absolute; top: 4px; right: 4px;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: #ef4444; border: 2px solid #fff;
+        color: #fff; font-size: 12px; font-weight: 700;
+        cursor: pointer; display: flex;
+        align-items: center; justify-content: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        z-index: 5;
+      }
+html.force-mobile .mobile-msg-delete-btn:hover { background: #dc2626; }
+html.force-mobile /* Bouton modifier message mobile */
+      .mobile-msg-edit-btn {
+        position: absolute; top: 4px; right: 30px;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: #3b82f6; border: 2px solid #fff;
+        color: #fff; font-size: 11px; font-weight: 700;
+        cursor: pointer; display: flex;
+        align-items: center; justify-content: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        z-index: 5;
+      }
+html.force-mobile .mobile-msg-edit-btn:hover { background: #2563eb; }
+html.force-mobile /* Zone composition mobile */
+      .mobile-chat-compose {
+        padding: 10px; background: #fff;
+        border-top: 2px solid #e5e7eb;
+      }
+html.force-mobile /* Zone de composition (comme le desktop) */
+      .mobile-compose-zone {
+        display: none;
+        padding: 12px; border-radius: 8px;
+        margin-bottom: 10px; position: relative;
+      }
+html.force-mobile .mobile-compose-zone.active { display: block; }
+html.force-mobile .mobile-compose-zone.problem { background: #fef2f2; border: 2px solid #fca5a5; }
+html.force-mobile .mobile-compose-zone.solution { background: #f0fdf4; border: 2px solid #86efac; }
+html.force-mobile .mobile-compose-zone.normal { background: #eff6ff; border: 2px solid #93c5fd; }
+html.force-mobile .mobile-compose-zone.pinned { background: #fefce8; border: 2px solid #fde047; }
+html.force-mobile .mobile-compose-close {
+        position: absolute; top: 6px; right: 6px;
+        width: 24px; height: 24px; border-radius: 50%;
+        background: rgba(239,68,68,0.15); border: none;
+        color: #dc2626; font-size: 14px; cursor: pointer;
+      }
+html.force-mobile .mobile-compose-type {
+        font-weight: 700; font-size: 11px;
+        text-transform: uppercase; margin-bottom: 4px;
+      }
+html.force-mobile .mobile-compose-zone.problem .mobile-compose-type { color: #dc2626; }
+html.force-mobile .mobile-compose-zone.solution .mobile-compose-type { color: #16a34a; }
+html.force-mobile .mobile-compose-zone.normal .mobile-compose-type { color: #2563eb; }
+html.force-mobile .mobile-compose-zone.pinned .mobile-compose-type { color: #ca8a04; }
+html.force-mobile .mobile-compose-author {
+        font-size: 11px; font-weight: 600; color: #1e293b; margin-bottom: 8px;
+      }
+html.force-mobile .mobile-compose-content-wrapper {
+        border: 1px dashed rgba(0,0,0,0.2);
+        border-radius: 6px; background: #fff; overflow: hidden;
+      }
+html.force-mobile .mobile-compose-content-wrapper:focus-within {
+        border-style: solid; border-color: #3b82f6;
+      }
+html.force-mobile .mobile-compose-textarea {
+        width: 100%; min-height: 100px; padding: 12px;
+        border: none; background: transparent;
+        color: #1e293b; font-size: 14px; font-family: inherit;
+        resize: vertical; outline: none;
+      }
+html.force-mobile .mobile-compose-footer {
+        display: flex; gap: 8px;
+        align-items: center; margin-top: 10px;
+      }
+html.force-mobile .mobile-compose-send-btn {
+        flex: 1; padding: 8px 8px; border-radius: 6px;
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        border: none; color: #fff;
+        font-size: 12px; font-weight: 600; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; gap: 1px;
+      }
+html.force-mobile .mobile-compose-send-btn .btn-icon { font-size: 14px; }
+html.force-mobile .mobile-compose-send-btn .btn-label { font-size: 9px; text-transform: uppercase; }
+html.force-mobile .mobile-compose-send-btn:active { filter: brightness(0.9); }
+html.force-mobile /* Bouton photo mobile */
+      .mobile-compose-photo-btn {
+        flex: 1; padding: 8px 8px; border-radius: 6px;
+        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        border: none; color: #fff;
+        font-size: 12px; font-weight: 600; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; gap: 1px;
+      }
+html.force-mobile .mobile-compose-photo-btn .btn-icon { font-size: 14px; }
+html.force-mobile .mobile-compose-photo-btn .btn-label { font-size: 9px; text-transform: uppercase; }
+html.force-mobile .mobile-compose-photo-btn:active { filter: brightness(0.9); }
+html.force-mobile /* Bouton fichier mobile */
+      .mobile-compose-file-btn {
+        flex: 1; padding: 8px 8px; border-radius: 6px;
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        border: none; color: #fff;
+        font-size: 12px; font-weight: 600; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; gap: 1px;
+      }
+html.force-mobile .mobile-compose-file-btn .btn-icon { font-size: 14px; }
+html.force-mobile .mobile-compose-file-btn .btn-label { font-size: 9px; text-transform: uppercase; }
+html.force-mobile .mobile-compose-file-btn:active { filter: brightness(0.9); }
+html.force-mobile /* Preview de l'image */
+      .mobile-compose-preview {
+        display: none; margin-top: 8px;
+        width: 100%;
+      }
+html.force-mobile .mobile-compose-preview.active { display: flex; flex-wrap: wrap; gap: 6px; }
+html.force-mobile .mobile-compose-preview-item {
+        position: relative; width: 70px; height: 70px;
+      }
+html.force-mobile .mobile-compose-preview-item img {
+        width: 70px; height: 70px; object-fit: cover;
+        border-radius: 8px; border: 2px solid #e2e8f0;
+      }
+html.force-mobile .mobile-compose-preview-item .photo-remove-btn {
+        position: absolute; top: -6px; right: -6px;
+        width: 20px; height: 20px; border-radius: 50%;
+        background: #ef4444; border: 2px solid #fff;
+        color: #fff; font-size: 10px; font-weight: 700;
+        cursor: pointer; display: flex;
+        align-items: center; justify-content: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      }
+html.force-mobile .mobile-compose-preview-remove {
+        position: absolute; top: -8px; right: -8px;
+        width: 24px; height: 24px; border-radius: 50%;
+        background: #ef4444; border: 2px solid #fff;
+        color: #fff; font-size: 12px; font-weight: 700;
+        cursor: pointer; display: flex;
+        align-items: center; justify-content: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      }
+html.force-mobile /* Boutons de type (comme le desktop) */
+      .mobile-type-buttons {
+        display: flex; gap: 6px; justify-content: center;
+        padding: 8px; background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+      }
+html.force-mobile .mobile-type-btn {
+        flex: 1; padding: 10px 6px;
+        border: 1px solid transparent; border-radius: 8px;
+        font-size: 12px; font-weight: 600;
+        cursor: pointer; display: flex; flex-direction: column;
+        align-items: center; gap: 2px; transition: all 0.2s;
+      }
+html.force-mobile .mobile-type-btn .btn-icon { font-size: 18px; }
+html.force-mobile .mobile-type-btn .btn-label { font-size: 9px; text-transform: uppercase; }
+html.force-mobile .mobile-type-btn.problem { background: #fef2f2; color: #dc2626; border-color: #fca5a5; }
+html.force-mobile .mobile-type-btn.problem:active { background: #fee2e2; }
+html.force-mobile .mobile-type-btn.solution { background: #f0fdf4; color: #16a34a; border-color: #86efac; }
+html.force-mobile .mobile-type-btn.solution:active { background: #dcfce7; }
+html.force-mobile .mobile-type-btn.normal { background: #eff6ff; color: #2563eb; border-color: #93c5fd; }
+html.force-mobile .mobile-type-btn.normal:active { background: #dbeafe; }
+html.force-mobile .mobile-type-btn.pinned { background: #fefce8; color: #ca8a04; border-color: #fde047; }
+html.force-mobile .mobile-type-btn.pinned:active { background: #fef9c3; }
+html.force-mobile /* ===== ÉCRAN D'ACCUEIL MOBILE ===== */
+      .mobile-home-screen {
+        position: fixed; inset: 0;
+        background: linear-gradient(to bottom, #04152c, #1e3a5f);
+        z-index: 1002; display: none; flex-direction: column;
+        align-items: center; justify-content: center; gap: 24px; padding: 30px;
+      }
+html.force-mobile .mobile-home-screen.active { display: flex !important; }
+html.force-mobile .mobile-home-logo { height: 60px; margin-bottom: 8px; }
+html.force-mobile .mobile-home-btn {
+        width: 90%; max-width: 300px; padding: 20px; border-radius: 16px;
+        border: 2px solid rgba(255,255,255,0.2); font-size: 18px; font-weight: 700;
+        color: #fff; cursor: pointer; text-align: center;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.4); transition: all 0.2s; position: relative;
+      }
+html.force-mobile .mobile-home-btn:active { transform: scale(0.97); }
+html.force-mobile .mobile-home-btn.moulage-btn { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+html.force-mobile .mobile-home-badge {
+        position: absolute; top: -8px; right: -8px; min-width: 24px; height: 24px;
+        background: #ef4444; border-radius: 12px; font-size: 12px; font-weight: 800;
+        display: none; align-items: center; justify-content: center; padding: 0 6px;
+        border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      }
+html.force-mobile .mobile-home-badge.has-count { display: flex; }
+
+/* Neutraliser le zoom desktop quand on force le mode mobile */
+html.force-mobile body { zoom: 1 !important; height: 100vh !important; }
+html.force-mobile .main-container, html.force-mobile .fiche-container { height: 100vh !important; }
+
 </style>
 </head>
 <body>
+<script>
+  // ===== Détection / bascule "Version téléphone" (tablettes Amazon Fire, etc.) =====
+  (function(){
+    try {
+      var ua = navigator.userAgent || '';
+      var isFire = /\bSilk\b|\bKF[A-Z]{2,}\b|; Kindle|Amazon/i.test(ua);
+      var isAndroidTablet = /Android/i.test(ua) && !/Mobile/i.test(ua);
+      var saved = null;
+      try { saved = localStorage.getItem('physipro_force_mobile'); } catch(e){}
+      var force;
+      if (saved === '1') force = true;
+      else if (saved === '0') force = false;
+      else force = (isFire || isAndroidTablet);
+      window.__forceMobile = !!force;
+      if (force) document.documentElement.classList.add('force-mobile');
+    } catch(e){ window.__forceMobile = false; }
+  })();
+  function isMobileView(){ return window.__forceMobile === true || window.innerWidth <= 768; }
+  window.isMobileView = isMobileView;
+  function togglePhoneVersion(){
+    var now = !(window.__forceMobile === true);
+    try { localStorage.setItem('physipro_force_mobile', now ? '1' : '0'); } catch(e){}
+    location.reload();
+  }
+  window.togglePhoneVersion = togglePhoneVersion;
+</script>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════
        ═══════════════════ VERSION MOBILE ═══════════════════════════════════════
@@ -4233,6 +5314,7 @@
     <div class="mobile-header">
       <div class="mobile-header-left">
         <a href="index.html" style="display:flex;align-items:center;gap:3px;background:rgba(59,130,246,0.2);border:1.5px solid rgba(59,130,246,0.5);border-radius:8px;color:#60a5fa;font-size:11px;font-weight:700;padding:5px 8px;text-decoration:none;flex-shrink:0;">← Menu</a>
+        <button onclick="togglePhoneVersion()" title="Basculer vers la version ordinateur" style="margin-left:6px;background:rgba(148,163,184,0.2);border:1.5px solid rgba(148,163,184,0.45);border-radius:8px;color:#cbd5e1;font-size:11px;font-weight:700;padding:5px 8px;cursor:pointer;flex-shrink:0;">💻 PC</button>
       </div>
       <div class="mobile-header-center">
         <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" class="mobile-logo" alt="PhysiPro">
@@ -4387,7 +5469,7 @@
         </div>
       </div>
     </div>
-    <div class="tb-create-btn"><button class="btn-pill" onclick="openCreateModal()"><span>+</span><span>Créer moulage</span></button><button class="btn-pill btn-associate-pill" id="btnAssociate" onclick="event.stopPropagation(); toggleAssociationMode()"><span>🔗</span><span>Associer</span></button></div>
+    <div class="tb-create-btn"><button class="btn-pill" onclick="openCreateModal()"><span>+</span><span>Créer moulage</span></button><button class="btn-pill btn-associate-pill" id="btnAssociate" onclick="event.stopPropagation(); toggleAssociationMode()"><span>🔗</span><span>Associer</span></button><button class="btn-pill" onclick="togglePhoneVersion()" title="Forcer la version téléphone (tablette)" style="background:rgba(148,163,184,0.18);"><span>📱</span><span>Téléphone</span></button></div>
     <div class="tb-center"><span class="top-title">Outil de gestion des moulages</span></div>
     <div class="tb-right" style="flex-direction:row;align-items:center;gap:6px;">
         <div style="display:flex;align-items:center;gap:2px;">
@@ -6548,7 +7630,7 @@
         console.log('✅ Firebase connecté');
         
         // Mettre à jour la vue mobile si on est sur mobile
-        if (window.innerWidth <= 768 && typeof renderMobileCards === 'function') {
+        if (isMobileView() && typeof renderMobileCards === 'function') {
           renderMobileCards();
         }
         
@@ -7520,7 +8602,7 @@
         }
         
         // Synchroniser la vue mobile
-        if (window.innerWidth <= 768 && typeof renderMobileCards === 'function') {
+        if (isMobileView() && typeof renderMobileCards === 'function') {
           renderMobileCards();
         }
         
@@ -7806,7 +8888,7 @@
       saveCardToFirebase(currentAttenteCardId, cardsData[currentAttenteCardId]);
       
       // Mise à jour de l'affichage selon le mode
-      if (window.innerWidth <= 768 && typeof renderMobileCards === 'function') {
+      if (isMobileView() && typeof renderMobileCards === 'function') {
         renderMobileCards(); // Mode mobile: re-rendre toutes les cartes
       } else {
         updateCardInDOM(currentAttenteCardId); // Mode PC: mise à jour individuelle
@@ -7825,7 +8907,7 @@
       saveCardToFirebase(currentAttenteCardId, cardsData[currentAttenteCardId]);
       
       // Mise à jour de l'affichage selon le mode
-      if (window.innerWidth <= 768 && typeof renderMobileCards === 'function') {
+      if (isMobileView() && typeof renderMobileCards === 'function') {
         renderMobileCards();
       } else {
         updateCardInDOM(currentAttenteCardId);
@@ -11676,7 +12758,7 @@
         openFiche(currentCardId);
       }
       // Rafraîchir aussi la fiche mobile si ouverte
-      if (mobileCurrentCardId && window.innerWidth <= 768) {
+      if (mobileCurrentCardId && isMobileView()) {
         openMobileFiche(mobileCurrentCardId);
       }
     }
@@ -12990,7 +14072,7 @@
         
         // Mettre à jour la vue mobile si on est sur mobile
         // v1588: Appel unique contrôlé (évite clignotement)
-        if (window.innerWidth <= 768 && !mobileInitDone) {
+        if (isMobileView() && !mobileInitDone) {
           console.log('📱 renderMobileCards depuis initializeApp (fallback)');
           if (typeof renderMobileCards === 'function') {
             renderMobileCards();
@@ -13021,7 +14103,7 @@
       console.log('🚀 PhysiPro Moulage v1527 - Firebase Realtime DB');
       
       // Afficher le bouton retour menu sur mobile
-      var _isMob = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+      var _isMob = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isMobileView();
       if (_isMob) {
         var backBtn = document.getElementById('mobileBackBtn');
         if (backBtn) backBtn.style.display = 'flex';
@@ -13071,7 +14153,7 @@
           await initializeApp();
           
           // v1588: Appel unique et centralisé pour mobile après initializeApp
-          if (window.innerWidth <= 768) {
+          if (isMobileView()) {
             console.log('📱 Init mobile après auth - appel unique');
             // S'assurer que le home screen est caché (direct aux cartes)
             const hs = document.getElementById('mobileHomeScreen');
@@ -13090,6 +14172,9 @@
           // Initialiser les notifications
           initNotifications();
           initPsmCrossNotifications();
+          
+          // Annonce unique (s'affiche une seule fois par compte)
+          setTimeout(function(){ checkAnnonce(); }, 800);
           
         } else {
           // Utilisateur déconnecté
@@ -14633,6 +15718,66 @@
     }
     window.testNotification = testNotification;
     
+    // ═══ ANNONCE UNIQUE (affichée 1 seule fois par compte) ═══
+    var ANNONCE_ID = 'annonce-2026-06-chat-vu';
+    var ANNONCE_TITRE = '📢 Nouveautés du chat';
+    var ANNONCE_TEXTE = "Bonjour,\n\nJ'ai fait de nouvelles améliorations sur le système de chat pour le rendre le plus simple et le plus efficace possible. J'ai maintenant ajouté la possibilité de voir qui a vu votre message, en temps réel.\n\nSi vous avez des questions ou si vous détectez certains problèmes, faites-le-moi savoir.\n\nBonne journée.";
+
+    function checkAnnonce() {
+      try {
+        if (!firebaseDb || !currentUser || !currentUser.email) return;
+        var key = '';
+        try { key = btoa(currentUser.email); } catch(e){ key = currentUser.email.replace(/[.#$/\[\]]/g,'_'); }
+        firebaseDb.ref('moulageAnnonceSeen/' + key + '/' + ANNONCE_ID).once('value').then(function(snap){
+          if (snap.val()) return; // déjà vue → ne plus jamais afficher
+          showAnnonce();
+        }).catch(function(){});
+      } catch(e) {}
+    }
+    window.checkAnnonce = checkAnnonce;
+
+    function showAnnonce() {
+      var ov = document.getElementById('annonceOverlay');
+      if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'annonceOverlay';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(4,21,44,0.75);display:flex;align-items:center;justify-content:center;padding:20px;';
+        var box = document.createElement('div');
+        box.style.cssText = 'max-width:460px;width:100%;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.4);overflow:hidden;';
+        var head = document.createElement('div');
+        head.style.cssText = 'background:linear-gradient(135deg,#1e3a5f,#3b82f6);color:#fff;padding:16px 20px;font-size:17px;font-weight:800;';
+        head.textContent = ANNONCE_TITRE;
+        var body = document.createElement('div');
+        body.style.cssText = 'padding:20px;color:#1f2937;font-size:14px;line-height:1.6;white-space:pre-line;';
+        body.textContent = ANNONCE_TEXTE;
+        var foot = document.createElement('div');
+        foot.style.cssText = 'padding:0 20px 20px;text-align:right;';
+        var btn = document.createElement('button');
+        btn.style.cssText = 'background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none;padding:10px 24px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+        btn.textContent = '✓ Compris';
+        btn.onclick = dismissAnnonce;
+        foot.appendChild(btn);
+        box.appendChild(head); box.appendChild(body); box.appendChild(foot);
+        ov.appendChild(box);
+        document.body.appendChild(ov);
+      } else {
+        ov.style.display = 'flex';
+      }
+    }
+
+    function dismissAnnonce() {
+      var ov = document.getElementById('annonceOverlay');
+      if (ov) ov.style.display = 'none';
+      try {
+        if (firebaseDb && currentUser && currentUser.email) {
+          var key = '';
+          try { key = btoa(currentUser.email); } catch(e){ key = currentUser.email.replace(/[.#$/\[\]]/g,'_'); }
+          firebaseDb.ref('moulageAnnonceSeen/' + key + '/' + ANNONCE_ID).set(Date.now()).catch(function(){});
+        }
+      } catch(e) {}
+    }
+    window.dismissAnnonce = dismissAnnonce;
+    
     function initNotifications() {
       if (!firebaseDb || !currentUser) return;
       
@@ -14816,7 +15961,7 @@
       
       // Ouvrir la carte (PC ou mobile)
       if (cardsData[notif.cardId]) {
-        if (window.innerWidth <= 768) {
+        if (isMobileView()) {
           mobileCurrentCardId = notif.cardId;
           openMobileFiche(notif.cardId);
           setTimeout(() => goToMobileChat(), 300);
@@ -15043,7 +16188,7 @@
       
       // Ouvrir la carte (PC ou mobile)
       if (cardsData[cardId]) {
-        if (window.innerWidth <= 768) {
+        if (isMobileView()) {
           // Mobile
           mobileCurrentCardId = cardId;
           openMobileFiche(cardId);
@@ -15157,9 +16302,9 @@
           if (key && data.seenBy && data.seenBy[key] === data.id) {
             // Déjà vu — ne pas afficher
             console.log('📢 Annonce déjà vue par', currentUser.email);
-          } else if (!_updateAnnouncementShown) {
+          } else {
+            // Affichage automatique désactivé (ancien message OneDrive non désiré)
             _updateAnnouncementShown = true;
-            showUpdateAnnouncement(data);
           }
         } else {
           const display = document.getElementById('currentUpdateMessage');
@@ -15177,13 +16322,8 @@
           
           if (data.id !== _currentUpdateId) {
             _currentUpdateId = data.id;
-            const key = _getSeenByKey();
-            if (key && data.seenBy && data.seenBy[key] === data.id) {
-              // Déjà vu
-            } else if (!_updateAnnouncementShown) {
-              _updateAnnouncementShown = true;
-              showUpdateAnnouncement(data);
-            }
+            // Affichage automatique désactivé (ne plus forcer de pop-up de mise à jour)
+            _updateAnnouncementShown = true;
           }
         } else {
           const display = document.getElementById('currentUpdateMessage');
@@ -16819,7 +17959,7 @@
     // Initialiser après le chargement - OPTIMISÉ v1588: skip menu, direct au moulage
     let mobileInitDone = false;
     function initMobileView() {
-      if (window.innerWidth > 768) return;
+      if (!isMobileView()) return;
       if (mobileInitDone && Object.keys(cardsData).length > 0) return; // Déjà fait et cartes chargées
       
       console.log('📱 initMobileView - largeur:', window.innerWidth, 'cartes:', Object.keys(cardsData).length);
@@ -17092,16 +18232,16 @@
     
     // v1588: initMobileView appelé seulement si pas déjà initialisé (fallback de sécurité)
     setTimeout(() => {
-      if (!mobileInitDone && window.innerWidth <= 768 && isAuthenticated) {
+      if (!mobileInitDone && isMobileView() && isAuthenticated) {
         console.log('📱 Fallback: initMobileView après 2s');
         initMobileView();
       }
     }, 2000);
     
     // IMPORTANT: Détecter le changement de taille d'écran (pour DevTools responsive)
-    let wasDesktop = window.innerWidth > 768;
+    let wasDesktop = !isMobileView();
     window.addEventListener('resize', () => {
-      const isMobile = window.innerWidth <= 768;
+      const isMobile = isMobileView();
       if (isMobile && wasDesktop) {
         // On vient de passer en mode mobile!
         console.log('📱 RESIZE: Passage en mode mobile détecté');
@@ -17439,6 +18579,8 @@
       var _extraDests = [];
       var _destChosen = false;
       var _sendAfterPicker = false;
+      var _seen = {}; // accusés de lecture: { emailEncodé: {name, ts} }
+      var _seenListener = null;
       
       function _normName(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
       var _DEST_REMOVE = ['patrick bouchard','eric poirier','elise bolduc','elyse bolduc','roxane valois','roxanne valois','mario ouellet','mario ouellette','fabrice frechette','fabrys frechette','sylvie carrier','sylvain carrier','stephane duchesneau','stephane delorme','sonia boulanger','nadia gagne','nadia gagner','jacynthe gaumond','jacinthe gaumond','jacinthe gourmond','jonathan perreault','jonathan perrault'];
@@ -17546,6 +18688,7 @@
           var legacy = _legacyMessages(jobId);
           _messages = legacy.concat(v2).sort(function(a,b){ return (a[1].timestamp||0)-(b[1].timestamp||0); });
           render();
+          _markSeen(jobId); // marquer comme vus les messages affichés (dont ceux déjà présents)
         });
         
         // If this job came from PSM, also listen to psmChat messages
@@ -17557,6 +18700,52 @@
             render();
           });
         }
+        
+        // ---- Accusés de lecture (qui a vu chaque message) ----
+        _seen = {};
+        _seenListener = database.ref('moulages/' + jobId + '/chatV2/seen').on('value', function(snap) {
+          _seen = snap.val() || {};
+          render();
+          _markSeen(jobId); // au cas où des messages seraient déjà chargés
+        });
+      }
+      
+      // Marque comme "vu" CHAQUE message actuellement affiché (par message) — affichage INSTANTANÉ
+      function _markSeen(jobId) {
+        var database = getDb();
+        var email = getMyEmail();
+        if (!database || !jobId || !email || !_messages || !_messages.length) return;
+        var key = '';
+        try { key = btoa(email).replace(/\//g,'_').replace(/\+/g,'-').replace(/=/g,''); } catch(e){ key = email.replace(/[.#$/\[\]@]/g,'_'); }
+        var myName = getMyName();
+        var updates = {};
+        var changed = false;
+        _messages.forEach(function(entry) {
+          var mid = entry[0], m = entry[1];
+          if (!mid) return;
+          if (m.authorEmail && m.authorEmail.toLowerCase() === email) return; // pas ses propres messages
+          // Déjà vu par cette personne (peu importe l'ancienne ou nouvelle clé) ? -> ne pas réécrire
+          var already = false;
+          var existing = _seen[mid];
+          if (existing) {
+            for (var ek in existing) {
+              var ee = existing[ek];
+              if (ee && ((ee.email && ee.email.toLowerCase() === email) || ek === key)) { already = true; break; }
+            }
+          }
+          if (already) return;
+          var rec = { name: myName, email: email, ts: Date.now() };
+          // 1) Mise à jour LOCALE immédiate (affichage instantané)
+          if (!_seen[mid]) _seen[mid] = {};
+          _seen[mid][key] = rec;
+          // 2) Préparer l'écriture Firebase
+          updates['moulages/' + jobId + '/chatV2/seen/' + mid + '/' + key] = rec;
+          changed = true;
+        });
+        if (changed) {
+          render(); // afficher la pastille tout de suite
+          database.ref().update(updates).catch(function(){});
+        }
       }
       
       function detach() {
@@ -17567,6 +18756,10 @@
         if (_psmListener && _psmCardId && database) {
           database.ref('psmChat/' + _psmCardId + '/messages').off('value', _psmListener);
         }
+        if (_seenListener && _currentJobId && database) {
+          database.ref('moulages/' + _currentJobId + '/chatV2/seen').off('value', _seenListener);
+        }
+        _seenListener = null;
         _listener = null;
         _psmListener = null;
         if (typeof MChat !== 'undefined' && MChat.cancelPhotoRequest) MChat.cancelPhotoRequest(true);
@@ -17766,6 +18959,29 @@
         // Petite icône courriel cliquable à côté de l'heure (envoi optionnel par mail)
         var resendBtn = '<button class="qmsg-email-btn" onclick="MChat.emailMsg(\''+id+'\')" title="Envoyer ce message par courriel" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px;line-height:1;">✉️</button>';
         
+        // Pastilles "vu" : une SEULE fois par personne sur cette bulle (dédoublonnage par courriel)
+        var seenHtml = '';
+        var seenMap = _seen[id] || {};
+        var seenByEmail = {};
+        for (var k in seenMap) {
+          var s = seenMap[k];
+          if (!s || !s.name) continue;
+          if (msg.authorEmail && s.email && s.email.toLowerCase() === msg.authorEmail.toLowerCase()) continue; // pas l'auteur
+          var ek = (s.email || s.name).toLowerCase();
+          // garder la PREMIÈRE heure de visionnage si la personne apparaît sous plusieurs clés
+          if (!seenByEmail[ek] || (s.ts && s.ts < seenByEmail[ek].ts)) {
+            seenByEmail[ek] = { name: s.name.split(' ')[0], ts: s.ts || 0 };
+          }
+        }
+        var seenList = Object.keys(seenByEmail).map(function(ek){ return seenByEmail[ek]; });
+        seenList.sort(function(a,b){ return a.ts - b.ts; });
+        if (seenList.length) {
+          seenHtml = '<div class="qmsg-seen">' + seenList.map(function(s){
+            var t = s.ts ? fmtTime(s.ts) : '';
+            return '<span class="qmsg-seen-pill">👁️ ' + esc(s.name) + (t ? ' <span class="qmsg-seen-time">' + t + '</span>' : '') + '</span>';
+          }).join('') + '</div>';
+        }
+        
         return '<div class="'+cls+'" data-msgid="'+id+'">' +
           '<div class="qmsg-actions">'+resendBtn+editBtn+delBtn+'</div>' +
           '<div class="qmsg-type" style="display:flex;align-items:center;gap:6px;">'+(isPinned?'📌 ':(isReply?'↩️ ':''))+'<span class="qmsg-author-inline" style="font-weight:700;color:inherit;">'+esc(msg.authorName||'?')+(isMe?' (moi)':'')+'</span> <span class="qmsg-time">'+fmtTime(msg.timestamp)+'</span></div>' +
@@ -17773,6 +18989,7 @@
           imgHtml +
           filesHtml +
           replyBtn +
+          seenHtml +
         '</div>';
       }
       
