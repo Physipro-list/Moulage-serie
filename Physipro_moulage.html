@@ -8,6 +8,455 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
+    v1629 - DIAGNOSTIC CONNEXION + MESSAGE CLAIR SI LECTURE FIREBASE REFUSÉE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1629:
+
+    1. Constat: Pierre (peterbass76@gmail.com) et Mario CNC (mario.jacques@
+       physipro.com) ONT déjà tous les droits dans _P (V,A,M,S,N). Le « connecté
+       mais ne voit pas les cartes » ne vient donc PAS de _P.
+    2. Cause la plus probable: les RÈGLES Firebase (Realtime DB → Rules) refusent
+       la LECTURE de "moulages" pour ces comptes. Avant: écran vide silencieux.
+    3. AJOUT: si la lecture Firebase est refusée et qu'aucune carte n'est chargée,
+       un message clair s'affiche (au lieu d'un écran noir) expliquant que c'est
+       un réglage des règles Firebase + bouton Réessayer.
+
+    👉 SOLUTION À APPLIQUER DANS FIREBASE CONSOLE (Realtime Database → Rules):
+       "moulages": { ".read": "auth != null", ".write": "auth != null" }
+       (idem moulageAssociations, moulageBackups, moulageSettings, listes,
+        moulageNotifications [+ ".indexOn":["to","read"]], jobNotifications)
+       => tout utilisateur connecté peut lire/écrire. Pas de liste blanche d'emails.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1628 - ANCIENS MESSAGES VISIBLES (mobile+desktop) + RETOUCHES CHAT MOBILE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1628:
+
+    1. ANCIENS MESSAGES: le chat unifié (MChat) charge maintenant aussi les
+       anciens messages stockés dans card.messages, les convertit au format
+       d'affichage (LECTURE SEULE) et les fusionne par date avec les nouveaux
+       (chatV2). → On revoit tout l'historique, mobile ET desktop.
+       • Aucune réécriture Firebase (zéro risque de doublon).
+       • Les anciens messages n'ont ni ✏️ ni ✕ (lecture seule, ils ne sont pas
+         dans chatV2). Les nouveaux restent éditables/supprimables.
+    2. Chat mobile: l'entête interne MChat (titre + ✕) est masquée sur mobile
+       car la page mobile a déjà son propre bouton retour; Épinglé/Imprimer
+       restent accessibles.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1627 - FIX (vrai): COMPENSATION HAUTEUR PLACÉE EN FIN DE CSS (priorité)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1627:
+
+    1. En v1626, la compensation (.main-container/.fiche-container à 125vh)
+       était DÉCLARÉE AVANT la règle de base (.main-container à 100vh ligne
+       ~1013) → la base l'écrasait (même spécificité = ordre source) et les
+       colonnes restaient coupées avec un vide noir en bas.
+    2. La compensation est maintenant en FIN de CSS, avec !important, donc
+       elle gagne. Topbar = 75px confirmée → calc(125vh - 75px) remplit
+       exactement l'écran sous le zoom 0.8.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1626 - FIX: COLONNES (ET FICHE) DESCENDENT JUSQU'EN BAS AVEC LE ZOOM 80%
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1626:
+
+    1. Avec le zoom desktop 0.8, les hauteurs en 100vh étaient réduites à 80%
+       → les colonnes (et la fiche) s'arrêtaient avant le bas, laissant un
+         grand vide noir en dessous.
+    2. Compensation sous @media(min-width:769px):
+       • .main-container: height calc(125vh - 75px)
+       • .fiche-container: height calc(125vh - 40px), max-height 1190px
+       Les colonnes remplissent maintenant tout l'écran jusqu'en bas.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1625 - CHAT UNIFIÉ MOBILE + DESKTOP (même système MChat, mêmes données)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1625:
+
+    1. Le téléphone utilise maintenant le MÊME chat simplifié que le desktop
+       (module MChat). Plus de système mobile distinct.
+       → À l'ouverture du chat mobile (bouton 💬 Chat), la zone de chat unifiée
+         (#ficheChatZone) est déplacée dans la page mobile et MChat.loadForJob()
+         est appelé. Au retour, MChat.detach().
+       → openFiche (desktop) remet la zone à sa place d'origine (ancre
+         #ficheChatHomeAnchor) si elle avait été déplacée sur mobile.
+    2. Données unifiées: tout le chat (mobile + desktop) lit/écrit dans
+       moulages/{cardId}/chatV2 → les conversations sont les mêmes partout.
+       Notifications, destinataires par département, annotations photo,
+       « Démarrer discussion »/« Répondre »: identiques sur les deux.
+    3. CSS mobile ajouté pour que la zone de chat unifiée remplisse l'écran.
+    4. L'ancien refresh temps réel mobile (basé sur card.messages) est neutralisé;
+       MChat gère son propre temps réel via chatV2.
+
+    ⚠️ Les anciens messages stockés dans card.messages (avant unification) ne
+    sont PAS migrés automatiquement (risque en prod). Les nouvelles conversations
+    partent sur chatV2 partout. Migration de l'historique = opération séparée si voulue.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1624 - FIX CRITIQUE: ZOOM 80% DESKTOP SEULEMENT (corrige connexion mobile)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1624:
+
+    1. ⚠️ FIX CONNEXION: le zoom:0.8 global (v1622) s'appliquait AUSSI sur
+       mobile et décalait/coupait l'écran de connexion et l'app mobile —
+       cause probable des « impossible de se connecter ».
+       → Le zoom 80% est maintenant limité au DESKTOP via
+         @media (min-width:769px). Sur mobile: aucun zoom, height 100vh normal.
+    2. Vérification mobile: la zone chat desktop (fiche-overlay) est bien
+       masquée sur mobile; l'app mobile (.mobile-app) occupe 100vh sans zoom.
+       L'écran de login (position:fixed; inset:0; centré) reste accessible.
+
+    NOTE TECHNIQUE (à valider plus tard, NON bloquant pour la connexion):
+    Le chat MOBILE utilise un système distinct stockant dans card.messages,
+    alors que le chat DESKTOP (MChat) stocke dans moulages/{id}/chatV2/messages.
+    Les messages mobile et desktop ne se voient donc pas mutuellement. Si tu
+    veux les unifier, me le dire (changement plus important, fait séparément).
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1623 - FIX BOUTON BAS: « DÉMARRER DISCUSSION » SI AUCUNE NOTE (état fiable)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1623:
+
+    1. BUG corrigé: _messages n'était pas réinitialisé entre deux cartes →
+       en rouvrant une carte VIDE, le bouton héritait de l'état précédent et
+       affichait « Répondre ». Maintenant _messages est remis à [] au chargement.
+    2. Le bouton est forcé à l'état vide dès l'ouverture (avant la réponse de
+       Firebase), puis recalculé quand les messages arrivent (_updateConvoBtn).
+    3. Libellé: « 💬 Démarrer discussion » quand il n'y a aucune note/question;
+       « ↩️ Répondre » dès qu'il y a au moins un message.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1622 - AFFICHAGE: APP À 80% PAR DÉFAUT (plus besoin de zoomer le navigateur)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1622:
+
+    1. Toute l'app Moulage s'affiche d'emblée à 80% (body zoom:0.8), comme si on
+       mettait le navigateur à 80%. Hauteur compensée à 125vh pour remplir
+       l'écran (125 × 0.8 = 100). Plus besoin d'ajuster le zoom manuellement.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1621 - ANNOTATION TEXTE: ZONE VISIBLE (rectangle) + FOND POUR L'ÉCRITURE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1621:
+
+    1. Outil Texte: en traçant, un rectangle pointillé d'aperçu montre où le
+       texte ira (fini le clic « dans le vide »).
+    2. Le texte saisi s'affiche dans une boîte à fond blanc semi-opaque avec
+       un cadre de la couleur choisie → bien lisible sur la photo.
+    3. La hauteur du rectangle tracé détermine la taille de police (plus la
+       zone est grande, plus le texte est gros, jusqu'à 60px).
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1620 - CHECK-UP CHAT: ANNOTATIONS IMAGE SAUVEGARDÉES + TACTILE + NOTIFS
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1620:
+
+    1. ANNOTATIONS IMAGE (écriture/dessin sur photos):
+       • Les annotations faites dans le zoom sont maintenant SAUVEGARDÉES dans
+         Firebase (moulages/{id}/chatV2/annotations) à la fermeture du zoom —
+         avant, elles disparaissaient. Elles se rechargent à l'ouverture.
+       • Support TACTILE ajouté (dessin au doigt sur tablette/téléphone), en
+         plus de la souris. Outils: carré, cercle, flèche, texte, couleur, annuler.
+    2. NOTIFICATIONS (cloche) — vérifié de bout en bout:
+       • nameToEmail résout bien tous les membres (test OK).
+       • Notif envoyée aux destinataires cochés + Valérie & Daniel, JAMAIS à
+         soi-même (normal de ne rien recevoir si on est seul expéditeur).
+       • Toast « 🔔 X personne(s) notifiée(s) » ajouté pour confirmer l'envoi.
+       ⚠️ Si rien n'arrive sur la cloche d'un collègue, vérifier que les règles
+         Firebase autorisent "jobNotifications" (moulageNotifications est déjà OK).
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1619 - DESTINATAIRES PAR DÉPARTEMENT (1 case par groupe)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1619:
+
+    1. Le sélecteur n'affiche plus chaque nom: une seule case par groupe —
+       le NOM de la représentante, puis « Atelier », « Couture », « CNC »,
+       « Inspection finale ». (Survol = liste des personnes du groupe.)
+       Cocher un groupe envoie à tout le monde dedans:
+       • Atelier → Daniel, Valérie, Pierre   • Couture → Stéphanie, Cassie
+       • CNC → Mario, Sina                   • Inspection finale → Michelle
+    2. Cochés par défaut: Représentante + Atelier.
+    3. Disposition horizontale très compacte.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1618 - DESTINATAIRES: COLONNE INSPECTION + DÉFAUTS COCHÉS + COMPACT
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1618:
+
+    1. Nouvelle colonne « Inspect. » (Inspection finale) avec Michelle Bouchard,
+       retirée de Couture (Couture = Cassie Valois, Stéphanie Roy).
+    2. Cases cochées par défaut (nouvelle conversation): la Représentante,
+       Valérie et Daniel. On peut décocher au besoin.
+    3. Sélecteur fortement compacté (police/espacement réduits, 5 colonnes,
+       hauteur ~108px) pour prendre le moins de place possible.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1617 - DESTINATAIRES DÉPLACÉS AU-DESSUS DES NOTES + ENTÊTE NETTOYÉE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1617:
+
+    1. Entête du chat nettoyée: « Destinataires: » et le bouton « + Ajouter »
+       retirés; le bouton fermer est maintenant un simple « ✕ ».
+    2. Le choix des destinataires (colonnes Représentante/Atelier/Couture/CNC)
+       apparaît maintenant DANS la fenêtre de composition, au-dessus de la zone
+       de notes, dès qu'on ouvre le chat (ou qu'on répond).
+    3. Les cases cochées au moment d'« Envoyer » déterminent les destinataires
+       (notifications) — sauvegardées sous la carte. Plus de popup séparé.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1616 - SÉLECTEUR DESTINATAIRES EN COLONNES PAR DÉPARTEMENT
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1616:
+
+    1. Noms retirés (en plus): Sonia Boulanger, Nadia Gagne, Jacynthe Gaumond,
+       Jonathan Perreault, Sylvain Carrier, Roxanne Valois, Mario Ouellette.
+       (Mario JACQUES reste — il est en CNC.)
+    2. Sélecteur en colonnes:
+       • Représentante: celle choisie sur la carte, sinon Marie-Soleil + Marie-Pier
+       • Atelier: Valérie, Pierre Caron, Daniel Charest
+       • Couture: Cassie Valois, Michelle Bouchard, Stéphanie Roy
+       • CNC: Mario Jacques, Sina Lotfollah
+       (colonne « Autre » seulement s'il reste des gens)
+    3. Les cases reflètent la sélection courante; « ✓ Appliquer » applique
+       exactement les cases cochées (décocher = retirer).
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1615 - NOTIFICATIONS (CLOCHE) + ÉPINGLÉ JAUNE + SÉLECTEUR EN GRILLE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1615:
+
+    1. À l'envoi d'un message, une notification (cloche) est créée pour chaque
+       destinataire choisi + TOUJOURS Valérie & Daniel (via createNotification
+       → moulageNotifications/jobNotifications). Les notifications continuent
+       de fonctionner normalement.
+    2. (Annulé v1614) Valérie/Daniel ne sont plus forcés dans le COURRIEL —
+       c'était bien des notifications qui étaient visées.
+    3. Bouton « 📌 Épinglé » en JAUNE dans l'entête.
+    4. Sélecteur de destinataires: noms en grille (colonnes), pas trop haut,
+       même largeur que la fenêtre de notes, avec un gros bouton vert
+       « ✓ Appliquer » bien visible.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1614 - COURRIEL: VALÉRIE ET DANIEL TOUJOURS EN COPIE (automatique)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1614:
+
+    1. Lors d'un envoi de courriel (icône ✉️ d'un message), Valérie et Daniel
+       sont TOUJOURS ajoutés aux destinataires, qu'ils soient sélectionnés ou
+       non (Valérie: videotron, Daniel: atelieratp), en plus des destinataires
+       choisis.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1613 - DESTINATAIRES: LISTE NETTOYÉE + MENU PLUS LARGE + VALÉRIE/DANIEL TOUJOURS
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1613:
+
+    1. Noms retirés en permanence du sélecteur: Patrick Bouchard, Éric Poirier,
+       Élyse/Élise Bolduc, Roxane Valois, Mario Ouellet/Jacques,
+       Fabrys/Fabrice Frechette, Sylvie Carrier, Stéphane Duchesneau,
+       Stéphane Delorme (filtrage insensible aux accents/variantes).
+    2. Le menu de sélection a maintenant la même largeur que la fenêtre de notes.
+    3. Valérie et Daniel restent toujours disponibles dans la liste (qu'ils
+       soient déjà sélectionnés ou non).
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1612 - BOUTON BAS: « OUVRIR LE CHAT » LA 1RE FOIS, « RÉPONDRE » ENSUITE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1612:
+
+    1. Bouton bleu du bas: « 💬 Ouvrir le chat » quand il n'y a aucun message;
+       « ↩️ Répondre » dès qu'il y a au moins un message.
+    2. Si la conversation se vide (tous les messages supprimés), le bouton
+       revient à « Ouvrir le chat » et le prochain « Envoyer » redemande à qui
+       inclure dans la conversation.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1611 - DESTINATAIRES: LISTE TEAM_MEMBERS + CHOIX AU 1ER ENVOI + SAUVEGARDE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1611:
+
+    1. La liste de destinataires = TEAM_MEMBERS (même liste que l'ancien chat).
+    2. Au PREMIER « Envoyer » d'une conversation, un sélecteur s'ouvre pour
+       choisir qui inclure (cases à cocher + ✓ Ajouter, ou laisser vide).
+       Ensuite ça reste pour toute la conversation (pas redemandé).
+    3. Destinataires choisis sauvegardés sous moulages/{cardId}/chatV2/extraDests
+       (mêmes permissions que la carte) → persistent au rechargement.
+    4. Pastilles destinataires avec ✕ pour enlever, « + Ajouter » pour en remettre.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1610 - FENÊTRE COMPOSE: NOM DE LA PERSONNE + ✕ SUR LA MÊME LIGNE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1610:
+
+    1. La fenêtre de composition (Démarrer/Répondre) affiche le NOM de la
+       personne au lieu de « CONVERSATION/RÉPONSE » (↩️ ou 📌 en préfixe).
+    2. Le ✕ de fermeture est sur la MÊME ligne que le nom; ligne du nom séparée
+       supprimée → entête plus court, plus de place pour écrire.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1609 - CHAT: 3 ACTIONS TOUJOURS VISIBLES + FENÊTRE COMPOSE COMPACTE/COLLÉE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1609:
+
+    1. Bulle: ✉️ courriel + ✏️ crayon + ✕ supprimer TOUJOURS visibles en haut
+       à droite (avant le crayon/✕ n'apparaissaient qu'au survol).
+    2. Bouton Démarrer/Répondre descendu, ~1mm seulement sous le bouton.
+    3. Fenêtre de composition collée juste au-dessus du bouton (marge réduite).
+    4. Hauteur de l'entête et de la base de la fenêtre de composition réduite
+       (la zone d'écriture garde sa taille).
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1608 - CHAT: ENVELOPPE EN HAUT À DROITE + BOUTON BAS PLUS BAS/PLUS COURT
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1608:
+
+    1. L'enveloppe ✉️ est déplacée en haut à droite de la bulle, à côté du
+       crayon, sans cadre (juste l'icône cliquable).
+    2. Bouton du bas (Démarrer/Répondre): hauteur réduite (padding 7px) et
+       16px d'espace sous le bouton; zone de composition alignée pareil (16px).
+    3. Entête et base resserrées (padding réduit) pour gagner de la hauteur.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1607 - BULLES CHAT: NOM + HEURE SUR UNE SEULE LIGNE + ENVELOPPE VISIBLE
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1607:
+
+    1. Le mot « Conversation » est retiré de la bulle; on affiche le NOM de la
+       personne + l'heure sur la même ligne (ligne du nom séparée supprimée →
+       gain d'espace). Réponse = ↩️ devant le nom, Épinglé = 📌 devant le nom.
+    2. Bouton courriel ✉️ ➤ rendu bien visible (pastille blanche, bordure bleue,
+       ombre) au lieu du bleu sur bleu peu lisible.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1606 - CHAT: ICÔNE COURRIEL PAR MESSAGE (au lieu du popup automatique)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1606:
+
+    1. Retrait du popup « Envoyer un courriel ? » après chaque envoi.
+    2. Ajout d'une petite icône ✉️➤ cliquable à côté de l'heure de chaque
+       message → ouvre un courriel (mailto) vers les destinataires avec le
+       contenu du message. On clique seulement si on veut l'envoyer.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1605 - FIX PERMISSIONS CHAT: STOCKAGE SOUS LA CARTE (mêmes règles Firebase)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1605:
+
+    1. LE CHAT N'UTILISE PLUS LE NŒUD "moulageChat" (non autorisé → permission refusée)
+       → Messages/annotations désormais sous moulages/{cardId}/chatV2/...
+       → Même emplacement/permissions que la carte (où l'ancien chat vivait déjà)
+       → Plus besoin de modifier les règles Firebase; "Démarrer conversation"
+         et "Envoyer" fonctionnent avec les permissions existantes de Moulage.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1604 - FICHE DU MILIEU: LARGEUR RÉDUITE D'ENVIRON 20% DE PLUS
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1604:
+
+    1. .fiche-info-zone max-width 470px → 375px (min-width 230 → 200)
+       → Fenêtre de la fiche encore ~20% plus étroite. Rien d'autre touché.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1603 - FICHE DU MILIEU: RÉDUCTION 30% RÉTABLIE + RANGÉES RESSERRÉES
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1603:
+
+    1. RETOUR À LA FICHE RÉDUITE (comme demandé) — pas la version large
+       → Texte des champs 11px, libellé 120px, bénéficiaire 15px, statut 9px
+       → Zone fiche max-width 470px (fenêtre ~30% plus étroite)
+       → Rangées resserrées (padding 1px 8px) pour rapprocher le tout
+       → Aucune autre zone touchée.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1602 - FIX: CSS DU CHAT NE DÉBORDE PLUS SUR LA FICHE DU MILIEU
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1602:
+
+    1. RETRAIT DES RÈGLES CSS PARASITES IMPORTÉES DE QUESTIONNEMENTS
+       → Le bloc CSS du chat (v1601) contenait des .fiche-* / .fiche-rappel-* /
+         .resolve-modal / .qlm qui écrasaient les styles de la FICHE du milieu
+         et la déformaient.
+       → Toutes ces règles non liées au chat ont été retirées du bloc injecté.
+       → La fiche du milieu redevient identique à v1600. Seule la zone
+         Notes & Chat reste modifiée.
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1601 - NOTES & CHAT RÉÉCRIT — SYSTÈME IDENTIQUE À QUESTIONNEMENTS (MChat)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1601:
+
+    1. CHAT MOULAGE REMPLACÉ PAR LE SYSTÈME DE QUESTIONNEMENTS (module MChat)
+       → Même apparence, bulles Conversation/Réponse, zoom + annotations photo
+       → UN seul gros bouton: "Démarrer conversation" puis "Répondre"
+       → Destinataires (+ Ajouter) + envoi courriel optionnel (mailto)
+       → Données: moulages/{cardId}/chatV2 (mêmes permissions que la carte)
+       → "Épinglé" déplacé dans l'entête (à côté de Fermer)
+       → Aucun lien PSM/jobs; flux notif/PhotoSender de Questionnements retirés
+       → Ancien chat (3 boutons) débranché; openFiche→MChat.loadForJob,
+         closeFiche→MChat.detach; renderMessages neutralisé (garde mobile sûr)
+       ⚠️ PREMIÈRE VERSION À TESTER — revenir à v1600 si problème.
+
+    ═══════════════════════════════════════════════════════════════════
+
     v1600 - GESTION DES RÉGIONS (⚙️) + FICHE TEXTE -30% + ENTÊTE BOUTONS RÉDUITS
     ═══════════════════════════════════════════════════════════════════
 
@@ -375,7 +824,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1600</title>
+  <title>PhysiPro Moulages v1629</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -425,6 +874,12 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; background: linear-gradient(135deg, #0a0f1a 0%, #1a1f2e 50%, #0d1420 100%); color: #e2e8f0; height: 100vh; overflow: hidden; }
+    /* Zoom 80% UNIQUEMENT sur desktop (jamais sur mobile, sinon login/app décalés) */
+    /* NB: la compensation de hauteur (.main-container/.fiche-container) est en FIN
+       de CSS pour gagner sur les règles de base par ordre source. */
+    @media (min-width: 769px) {
+      body { zoom: 0.8; height: 125vh; }
+    }
 
     @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
     @keyframes slideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
@@ -1181,8 +1636,8 @@
     /* ===== ZONE FICHE (milieu) ===== */
     .fiche-info-zone { 
       flex: 1;
-      min-width: 230px;
-      max-width: 470px;
+      min-width: 200px;
+      max-width: 375px;
       display: flex; 
       flex-direction: column; 
       background: #f8fafc;
@@ -1555,7 +2010,7 @@
 
     .fiche-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
     .fiche-fields-list { display: flex; flex-direction: column; }
-    .fiche-field-row { display: flex; align-items: center; padding: 2px 10px; border-bottom: 1px solid #e5e7eb; }
+    .fiche-field-row { display: flex; align-items: center; padding: 1px 8px; border-bottom: 1px solid #e5e7eb; }
     .fiche-field-row:hover { background: #f1f5f9; }
     .fiche-field-row:last-child { border-bottom: none; }
     .fiche-field-label { width: 120px; flex-shrink: 0; font-size: 11px; font-weight: 600; color: #374151; text-align: left; padding-left: 14px; }
@@ -2317,6 +2772,14 @@
       /* Pages fiche et chat - affichables via JS */
       .mobile-fiche-page, .mobile-chat-page { display: none !important; }
       .mobile-fiche-page.active, .mobile-chat-page.active, .mobile-photos-page.active { display: flex !important; }
+      /* Chat unifié (MChat) hébergé dans la page mobile */
+      #mobileChatMount { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+      #mobileChatMount #ficheChatZone { display:flex !important; flex:1; min-height:0; width:100%; border-radius:0; }
+      #mobileChatMount .qchat-scroll { flex:1; min-height:0; }
+      /* L'entête mobile gère le retour; on masque l'entête interne MChat sur mobile
+         mais on garde les actions utiles (Épinglé / Imprimer) accessibles */
+      #mobileChatMount .qchat-header-bar .chat-header-title,
+      #mobileChatMount .qchat-header-bar .fiche-close-btn { display:none !important; }
       
       /* ===== HEADER MOBILE ===== */
       .mobile-header { 
@@ -3564,6 +4027,189 @@
   @media(max-width:768px){.pchat-panel{width:calc(100% - 20px);left:10px;top:auto;bottom:10px;transform:none;height:min(70vh,calc(100vh - 80px));}.pchat-contact-modal{width:95%;max-width:none;}}
 
   /* ═══ LOGO NAVIGATION — géré par PhysiPro_Nav.js ═══ */
+
+/* ===== MCHAT — Notes & Chat (identique Questionnements) ===== */
+/* Resolve button — now in right panel qchat-actions */
+.qchat-resolve-btn {
+  padding: 2px 8px; border: none; border-radius: 4px;
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #fff; font-size: 9px; font-weight: 800;
+  cursor: pointer; white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(16,185,129,0.4);
+  transition: all 0.2s; letter-spacing: 0.3px;
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+}
+.qchat-resolve-btn:hover { filter: brightness(1.15); transform: scale(1.03); box-shadow: 0 3px 12px rgba(16,185,129,0.5); }
+/* Rich text toolbar */
+.qchat-compose-toolbar { display:flex; align-items:center; gap:2px; padding:4px 6px; background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2); border-radius:6px; flex-wrap:wrap; flex-shrink:0; margin-bottom:6px; }
+.qct-btn { width:26px; height:24px; border:1px solid rgba(59,130,246,0.25); border-radius:3px; background:rgba(255,255,255,0.7); cursor:pointer; font-size:11px; display:flex; align-items:center; justify-content:center; color:#334155; transition:all 0.12s; }
+.qct-btn:hover { background:rgba(59,130,246,0.15); border-color:#3b82f6; color:#1e40af; }
+.qct-btn.shape-active { background:rgba(59,130,246,0.3); border-color:#3b82f6; color:#1e40af; }
+.qct-sep { color:rgba(0,0,0,0.2); font-size:14px; margin:0 1px; }
+.qct-size { width:36px; height:24px; border:1px solid rgba(255,255,255,0.18); border-radius:3px; background:rgba(255,255,255,0.08); color:#cbd5e1; font-size:11px; text-align:center; outline:none; padding:0 2px; }
+.qct-size:focus { border-color:rgba(59,130,246,0.6); }
+.qct-color { width:24px; height:24px; border:1px solid rgba(255,255,255,0.25); border-radius:3px; padding:1px; cursor:pointer; background:none; }
+/* QuestChat container */
+.qchat-container { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; background:#ffffff; }
+/* QuestChat header bar */
+.qchat-header-bar { display:flex; align-items:center; justify-content:space-between; padding:1px 8px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); border-bottom:1px solid rgba(59,130,246,0.3); flex-shrink:0; }
+.qchat-dest-area { display:flex; align-items:center; gap:6px; }
+.qchat-dest-label { font-size:9px; color:#94a3b8; font-weight:600; }
+.qchat-dest-name { font-size:11px; font-weight:700; color:#fff; cursor:pointer; padding:2px 8px; border-radius:4px; background:rgba(59,130,246,0.2); border:1px solid rgba(59,130,246,0.4); }
+.qchat-dest-name:hover { background:rgba(59,130,246,0.3); }
+.qchat-dest-picker { display:none; position:absolute; top:30px; left:8px; right:8px; width:auto; z-index:50; background:#1e293b; border:1px solid #3b82f6; border-radius:8px; box-shadow:0 8px 30px rgba(0,0,0,0.5); padding:4px; max-height:300px; overflow-y:auto; }
+.qchat-dest-picker.active { display:block; }
+.qchat-dest-item { padding:6px 10px; border-radius:4px; font-size:11px; color:#e2e8f0; cursor:pointer; white-space:nowrap; }
+.qchat-dest-item:hover { background:rgba(59,130,246,0.2); }
+/* QuestChat action buttons */
+.qchat-actions { display:flex; gap:4px; }
+.qchat-action-btn { padding:1px 6px; border-radius:3px; border:1px solid rgba(255,255,255,0.2); background:transparent; color:#93c5fd; font-size:9px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.qchat-action-btn:hover { background:rgba(59,130,246,0.15); border-color:rgba(59,130,246,0.5); }
+/* Add dest pastille button */
+.qchat-add-dest-btn { display:none; }
+.qchat-add-dest-pill { display:inline-flex; align-items:center; gap:3px; padding:2px 8px; border-radius:10px; border:1.5px solid rgba(59,130,246,0.5); background:rgba(59,130,246,0.15); color:#60a5fa; font-size:9px; font-weight:700; cursor:pointer; margin-left:6px; transition:all 0.2s; white-space:nowrap; }
+.qchat-add-dest-pill:hover { background:rgba(59,130,246,0.3); border-color:#60a5fa; color:#fff; }
+/* Extra dest badges */
+.qchat-extra-dests { display:flex; gap:3px; flex-wrap:wrap; margin-left:6px; }
+.qchat-extra-dest-badge { display:flex; align-items:center; gap:3px; padding:1px 6px; border-radius:10px; background:rgba(59,130,246,0.2); border:1px solid rgba(59,130,246,0.3); font-size:9px; color:#93c5fd; font-weight:600; }
+.qchat-extra-dest-remove { background:none; border:none; color:#f87171; font-size:9px; cursor:pointer; padding:0 1px; }
+/* Annotation toolbar */
+.qchat-annot-bar { display:flex; align-items:center; gap:3px; padding:4px 8px; background:#f1f5f9; border-bottom:1px solid #e2e8f0; flex-shrink:0; flex-wrap:wrap; }
+.qchat-annot-section { display:flex; align-items:center; gap:2px; }
+.qchat-annot-sep { color:rgba(0,0,0,0.2); font-size:13px; margin:0 2px; }
+.qchat-annot-size { width:38px; height:22px; border:1px solid #cbd5e1; border-radius:3px; background:#fff; color:#334155; font-size:11px; text-align:center; outline:none; padding:0 2px; }
+.qchat-annot-btn { padding:3px 7px; border-radius:3px; border:1px solid transparent; background:transparent; color:#475569; font-size:11px; cursor:pointer; }
+.qchat-annot-btn:hover { background:rgba(59,130,246,0.1); color:#1e40af; }
+.qchat-annot-btn.active { background:rgba(59,130,246,0.2); color:#2563eb; border-color:rgba(59,130,246,0.4); }
+.qchat-annot-color { width:20px; height:20px; border-radius:50%; border:2px solid #cbd5e1; cursor:pointer; }
+.qchat-annot-color:hover { border-color:#3b82f6; }
+/* Messages area */
+.qchat-scroll { flex:1; overflow-y:auto; display:flex; flex-direction:column; min-height:0; }
+.qchat-messages { flex:1; padding:10px; display:flex; flex-direction:column; gap:8px; background:#ffffff; min-height:100px; align-items:center; }
+.qchat-messages > * { width:100%; max-width:800px; }
+.qchat-empty { text-align:center; color:#94a3b8; font-size:11px; padding:40px 20px; font-style:italic; }
+/* Message cards */
+.qchat-msg { padding:8px 10px; border-radius:6px; font-size:11px; line-height:1.4; position:relative; }
+.qchat-msg.question { background:#fef2f2; border:1px solid #fca5a5; }
+.qchat-msg.reply { margin-left:16px; border-left:3px solid #3b82f6; background:#eff6ff; border:1px solid #93c5fd; border-left:3px solid #3b82f6; }
+.qchat-msg.psm-origin { background:#eff6ff; border:1px solid #60a5fa; }
+.qchat-msg .qmsg-type { font-weight:700; font-size:9px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px; }
+.qchat-msg.question .qmsg-type { color:#dc2626; }
+.qchat-msg.reply .qmsg-type { color:#2563eb; }
+.qchat-msg.psm-origin .qmsg-type { color:#1e40af; }
+.qchat-msg .qmsg-time { font-weight:400!important; color:#94a3b8!important; font-size:8px; }
+.qchat-msg .qmsg-author { font-size:10px; font-weight:700; color:#1e293b; margin-bottom:2px; }
+.qchat-msg .qmsg-content { font-size:12px; color:#334155; white-space:pre-wrap; word-wrap:break-word; }
+.qchat-msg .qmsg-actions { position:absolute; top:4px; right:4px; display:flex; gap:2px; }
+.qchat-msg .qmsg-del { background:rgba(239,68,68,0.1); border:none; border-radius:50%; width:16px; height:16px; cursor:pointer; font-size:9px; color:#dc2626; display:flex; align-items:center; justify-content:center; }
+.qchat-msg .qmsg-edit { background:rgba(59,130,246,0.1); border:none; border-radius:50%; width:16px; height:16px; cursor:pointer; font-size:9px; color:#2563eb; display:flex; align-items:center; justify-content:center; }
+.qchat-msg:hover .qmsg-del, .qchat-msg:hover .qmsg-edit { display:flex; align-items:center; justify-content:center; }
+.qchat-reply-btn { background:none; border:none; color:#3b82f6; font-size:9px; font-weight:600; cursor:pointer; padding:2px 0; margin-top:4px; }
+.qchat-reply-btn:hover { color:#60a5fa; text-decoration:underline; }
+/* Message images */
+.qchat-msg-img-wrap { position:relative; display:block; margin:5px auto 0; max-width:95%; text-align:center; }
+.qchat-msg-img { width:100%; max-width:700px; max-height:550px; height:auto; object-fit:contain; border-radius:6px; cursor:pointer; user-select:none; -webkit-user-drag:none; display:block; margin:0 auto; }
+.qchat-msg-img.selected { outline:3px solid #3b82f6; outline-offset:2px; }
+.qchat-msg-img-wrap canvas.annot-canvas { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; border-radius:6px; z-index:2; }
+/* Multi-image layout: 55% images / 45% text */
+.qchat-msg-split { display:flex; gap:8px; margin-top:5px; }
+.qchat-msg-split .qchat-img-col { flex:0 0 55%; display:flex; flex-direction:column; gap:4px; }
+.qchat-msg-split .qchat-txt-col { flex:0 0 calc(45% - 8px); border-left:1px solid rgba(0,0,0,0.1); padding-left:8px; }
+/* Compose */
+.qchat-compose { display:none; padding:4px 12px; border-radius:8px; position:relative; margin:6px 8px 2px 8px; animation:slideDown 0.15s ease; }
+.qchat-compose.active { display:block; }
+.qchat-compose.conversation-type { background:#eff6ff; border:2px solid #93c5fd; }
+.qchat-compose.reply-type { background:#f5f3ff; border:2px solid #c4b5fd; }
+.qchat-compose-close { background:rgba(239,68,68,0.15); border:none; border-radius:50%; width:18px; height:18px; min-width:18px; cursor:pointer; font-size:11px; color:#dc2626; flex-shrink:0; }
+.qchat-compose-type { font-weight:700; font-size:11px; margin-bottom:0; line-height:1.3; }
+.qchat-compose.conversation-type .qchat-compose-type { color:#2563eb; }
+.qchat-compose.reply-type .qchat-compose-type { color:#7c3aed; }
+.qchat-compose-author { font-size:10px; font-weight:600; color:#1e293b; margin-bottom:2px; }
+.qchat-compose-wrapper { border:1px dashed rgba(0,0,0,0.2); border-radius:4px; background:rgba(255,255,255,0.8); overflow:hidden; }
+.qchat-compose-wrapper:focus-within { border-style:solid; border-color:#3b82f6; background:white; }
+.qchat-compose-textarea { width:100%; min-height:70px; padding:8px 10px; border:none; background:transparent; color:#1e293b; font-size:12px; font-family:inherit; outline:none; box-sizing:border-box; overflow-y:auto; }
+.qchat-compose-textarea:empty::before { content:attr(data-placeholder); color:rgba(0,0,0,0.3); pointer-events:none; }
+.qchat-compose-img-zone { display:none; padding:8px; border-top:1px dashed rgba(0,0,0,0.1); position:relative; }
+.qchat-compose-img-zone.has-image { display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
+.qchat-compose-img-zone img { max-height:60px; border-radius:4px; }
+.qchat-compose-file-pill { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:4px; background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.4); font-size:10px; font-weight:600; color:#f59e0b; max-width:150px; }
+.qchat-compose-file-pill span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.qchat-msg-file-link { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:5px; background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; font-size:11px; font-weight:700; text-decoration:none; margin-top:4px; cursor:pointer; border:1px solid rgba(0,0,0,0.2); }
+.qchat-msg-file-link:hover { filter:brightness(1.15); }
+.qchat-compose-img-remove { position:absolute; top:4px; right:4px; background:#ef4444; border:none; border-radius:50%; width:18px; height:18px; color:white; cursor:pointer; font-size:10px; display:flex; align-items:center; justify-content:center; }
+.qchat-compose-footer { display:flex; justify-content:space-between; align-items:center; margin-top:3px; gap:6px; }
+.qchat-compose-hint { font-size:9px; color:#94a3b8; }
+.qchat-camera-btn { background:rgba(59,130,246,0.08); border:1.5px solid rgba(59,130,246,0.5); border-radius:7px; color:#60a5fa; font-size:16px; cursor:pointer; padding:4px 10px; transition:all 0.2s; line-height:1; flex-shrink:0; }
+.qchat-camera-btn:hover { background:rgba(59,130,246,0.2); border-color:#3b82f6; transform:scale(1.05); }
+.qchat-camera-btn.waiting { border-color:#22c55e; color:#22c55e; background:rgba(34,197,94,0.15); animation:cameraPulse 1.2s ease-in-out infinite; }
+@keyframes cameraPulse { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.5);} 50%{box-shadow:0 0 0 8px rgba(34,197,94,0);} }
+.qchat-compose-send { padding:4px 14px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; border:none; background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; }
+.qchat-compose-send:hover { filter:brightness(1.1); }
+.qchat-compose-photo-btn { padding:3px 12px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; border:none; background:linear-gradient(135deg,#8b5cf6,#7c3aed); color:#fff; line-height:1; transition:all 0.2s; display:flex; align-items:center; gap:4px; }
+.qchat-compose-photo-btn:hover { filter:brightness(1.15); transform:scale(1.03); }
+.qchat-compose-photo-btn.waiting { background:linear-gradient(135deg,#22c55e,#16a34a); animation:cameraPulse 1.2s ease-in-out infinite; }
+.qchat-compose-file-btn { padding:3px 12px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; border:none; background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; line-height:1; transition:all 0.2s; display:flex; align-items:center; gap:4px; }
+.qchat-compose-file-btn:hover { filter:brightness(1.15); transform:scale(1.03); }
+/* Bottom buttons */
+.qchat-buttons-row { display:flex; padding:3px 14px 3px 14px; background:#ffffff; border-top:none; flex-shrink:0; }
+.qchat-add-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:7px 14px; border-radius:22px; cursor:pointer; border:none; font-weight:700; transition:all 0.2s; font-size:13px; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
+.qchat-add-btn.conversation { background: linear-gradient(135deg, #3b82f6, #2563eb); color:#fff; border:2px solid #000; box-shadow: 0 3px 10px rgba(0,0,0,0.25); }
+.qchat-add-btn.conversation:hover { background: linear-gradient(135deg, #60a5fa, #3b82f6); transform: translateY(-2px) scale(1.02); box-shadow: 0 6px 18px rgba(59,130,246,0.55), 0 0 0 3px rgba(59,130,246,0.25); }
+/* Zoom overlay */
+.qchat-zoom-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:100000; background:rgba(0,0,0,0.95); flex-direction:column; }
+.qchat-zoom-overlay.active { display:flex; }
+.qchat-zoom-header { display:flex; align-items:center; justify-content:space-between; padding:6px 12px; background:rgba(0,0,0,0.8); border-bottom:1px solid rgba(59,130,246,0.3); position:relative; }
+.qchat-zoom-tools { display:flex; gap:4px; flex-wrap:wrap; }
+.qchat-zoom-close { position:absolute; top:6px; right:8px; width:32px; height:32px; padding:0; background:rgba(239,68,68,0.85); border:2px solid rgba(255,255,255,0.3); border-radius:50%; color:#fff; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; z-index:10; }
+.qchat-zoom-close:hover { background:rgba(220,38,38,1); transform:scale(1.08); }
+.qchat-zoom-body { flex:1; display:flex; align-items:center; justify-content:center; overflow:auto; position:relative; padding:10px; }
+.qchat-zoom-img-wrap { position:relative; display:inline-block; }
+.qchat-zoom-img-wrap img { max-width:98vw; max-height:calc(95vh - 60px); user-select:none; -webkit-user-drag:none; display:block; }
+.qchat-zoom-img-wrap canvas { position:absolute; top:0; left:0; width:100%; height:100%; }
+/* PDF Email Form overlay */
+.qchat-pdf-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:100001; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; }
+.qchat-pdf-overlay.active { display:flex; }
+.qchat-pdf-page { width:816px; max-height:90vh; background:#fff; border-radius:8px; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.5); display:flex; flex-direction:column; }
+.qchat-pdf-content { flex:1; padding:40px 50px; display:flex; flex-direction:column; min-height:1056px; font-family:'Segoe UI',Arial,sans-serif; }
+.qchat-pdf-logo { text-align:center; margin-bottom:15px; }
+.qchat-pdf-logo img { height:50px; }
+.qchat-pdf-title { text-align:center; font-size:18px; font-weight:700; color:#1e3a5f; margin-bottom:20px; }
+.qchat-pdf-info { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:20px; font-size:12px; }
+.qchat-pdf-info-item { display:flex; gap:6px; }
+.qchat-pdf-info-label { font-weight:700; color:#475569; }
+.qchat-pdf-info-value { color:#1e293b; }
+.qchat-pdf-section { margin-bottom:15px; }
+.qchat-pdf-section-title { font-size:13px; font-weight:700; color:#1e40af; border-bottom:2px solid #dbeafe; padding-bottom:4px; margin-bottom:8px; }
+.qchat-pdf-msg { padding:8px; border-radius:4px; margin-bottom:6px; font-size:11px; }
+.qchat-pdf-msg.question { background:#fef2f2; border-left:3px solid #ef4444; }
+.qchat-pdf-msg.reply { background:#eff6ff; border-left:3px solid #3b82f6; margin-left:16px; }
+.qchat-pdf-response-zone { flex:1; border:2px dashed #cbd5e1; border-radius:6px; padding:12px; min-height:150px; font-size:11px; color:#94a3b8; }
+.qchat-pdf-signature { margin-top:20px; font-size:11px; color:#475569; line-height:1.5; }
+.qchat-pdf-footer { text-align:center; font-size:9px; color:#94a3b8; padding-top:10px; border-top:1px solid #e2e8f0; margin-top:auto; }
+.qchat-pdf-buttons { display:flex; gap:8px; padding:12px; background:#f1f5f9; border-radius:0 0 8px 8px; justify-content:center; }
+.qchat-pdf-btn { padding:8px 16px; border-radius:6px; border:none; font-size:12px; font-weight:600; cursor:pointer; }
+.qchat-pdf-btn.save { background:linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; }
+.qchat-pdf-btn.email { background:linear-gradient(135deg,#8b5cf6,#6d28d9); color:#fff; }
+.qchat-pdf-btn.copy { background:#e2e8f0; color:#334155; }
+.qchat-pdf-btn:hover { filter:brightness(1.1); }
+/* Edit mode */
+.edit-mode-badge { background: linear-gradient(to right, #04152c, #4a8ef5); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; color: #fff; display: inline-block; margin-left: 8px; vertical-align: middle; }
+.edit-mode-buttons { display: flex; gap: 6px; margin-top: 6px; }
+.edit-mode-buttons button { padding: 6px 12px; border: none; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.edit-mode-buttons .cancel-btn { background: #94a3b8; color: #fff; }
+.edit-mode-buttons .save-btn { background: #22c55e; color: #fff; }
+@keyframes slideDown { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:translateY(0); } }
+.qchat-msg.pinned{background:#fefce8;border:1px solid #fde047;}
+.qchat-msg.pinned .qmsg-type{color:#ca8a04;}
+.qchat-compose.pinned-type{background:#fefce8;border:2px solid #fde047;}
+.qchat-compose.pinned-type .qchat-compose-type{color:#ca8a04;}
+.qchat-dest-label{font-size:9px;color:#cbd5e1;font-weight:600;white-space:nowrap;}
+.fiche-chat-zone.qchat-container{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;background:#fff;position:relative;}
+/* === Compensation hauteur sous zoom desktop 0.8 (placée en fin pour priorité) === */
+@media (min-width: 769px) {
+  .main-container { height: calc(125vh - 75px) !important; }
+  .fiche-container { height: calc(125vh - 40px) !important; max-height: 1190px !important; }
+}
 </style>
 </head>
 <body>
@@ -3866,41 +4512,69 @@
       
       <!-- SPLITTER 2: entre Fiche et Chat -->
       <div class="fiche-splitter" id="splitter2" onmousedown="startDrag(event, 'splitter2')"></div>
+      <span id="ficheChatHomeAnchor"></span>
       
-      <!-- ZONE 3: CHAT (droite) -->
-      <div class="fiche-chat-zone" id="ficheChatZone">
-        <div class="chat-header">
-          <span class="chat-header-title">💬 Notes & Chat</span>
-          <div class="chat-header-logo">
-            <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro">
-          </div>
-          <button class="chat-close-btn" onclick="closeFiche(event)">✕ Fermer</button>
+      <!-- ZONE 3: CHAT (droite) — système identique à Questionnements (MChat) -->
+      <div class="fiche-chat-zone qchat-container" id="ficheChatZone">
+        <div class="qchat-header-bar" style="gap:8px;">
+          <span class="chat-header-title" style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;">💬 Notes &amp; Chat</span>
+          <span id="qchatDestName" style="display:none;"></span>
+          <div id="qchatExtraDests" style="display:none;"></div>
+          <div class="qchat-dest-picker" id="qchatDestPicker" style="display:none;"></div>
+          <span style="flex:1;"></span>
+          <button class="qchat-action-btn" onclick="MChat.openCompose('pinned')" title="Épingler un message" style="background:#facc15;color:#1f2937;border:1px solid #ca8a04;font-weight:700;">📌 Épinglé</button>
+          <button class="qchat-action-btn" onclick="MChat.printChat()" title="Imprimer">🖨️</button>
+          <button class="chat-close-btn fiche-close-btn" onclick="closeFiche(event)" title="Fermer">✕</button>
         </div>
-        <div class="chat-scroll-container" id="chatScrollContainer">
-          <div class="pinned-section" id="pinnedSection" style="display:none;">
-            <div class="pinned-section-header"><span class="pin-icon">📌</span> Messages épinglés</div>
-            <div id="pinnedMessagesList"></div>
-          </div>
-          <div class="questions-section" id="questionsSection" style="display:none;">
-            <div class="questions-section-header">❓ Questions</div>
-            <div id="questionsMessagesList"></div>
-          </div>
-          <div class="fiche-messages-list" id="ficheMessagesList"></div>
+        <div class="qchat-annot-bar" id="qchatAnnotBar">
+          <!-- Section formatage texte (active quand compose ouvert) -->
+          <span class="qchat-annot-section" id="qctTextSection" title="Formatage texte">
+            <button class="qchat-annot-btn qct-text-btn" onclick="document.execCommand('bold')" title="Gras"><b>G</b></button>
+            <button class="qchat-annot-btn qct-text-btn" onclick="document.execCommand('italic')" title="Italique"><i>I</i></button>
+            <button class="qchat-annot-btn qct-text-btn" onclick="document.execCommand('underline')" title="Souligné"><u>S</u></button>
+            <input type="number" class="qchat-annot-size" id="qctFontSize" value="14" min="8" max="72" title="Taille police" onchange="qctSetFontSize(this.value)" onkeydown="if(event.key==='Enter')qctSetFontSize(this.value)">
+          </span>
+          <span class="qchat-annot-sep">|</span>
+          <!-- Couleur partagée texte + formes -->
+          <input type="color" class="qchat-annot-color" id="qchatAnnotColor" value="#ef4444" title="Couleur (texte &amp; formes)">
+          <button class="qchat-annot-btn qct-text-btn" onclick="document.execCommand('foreColor',false,document.getElementById('qchatAnnotColor').value)" title="Appliquer couleur au texte"><b style="font-size:12px;">A</b></button>
+          <span class="qchat-annot-sep">|</span>
+          <!-- Section liste -->
+          <button class="qchat-annot-btn qct-text-btn" onclick="document.execCommand('insertUnorderedList')" title="Liste à puces">☰</button>
+          <span class="qchat-annot-sep">|</span>
+          <!-- Section formes (annotent les photos) -->
+          <button class="qchat-annot-btn" data-tool="arrow" onclick="MChat.setAnnotTool('arrow')" title="Flèche sur photo">↗</button>
+          <button class="qchat-annot-btn" data-tool="circle" onclick="MChat.setAnnotTool('circle')" title="Cercle sur photo">○</button>
+          <button class="qchat-annot-btn" data-tool="rect" onclick="MChat.setAnnotTool('rect')" title="Carré sur photo">▢</button>
+          <button class="qchat-annot-btn" onclick="MChat.annotUndo()" title="Annuler dernière forme">↩</button>
+          <span style="flex:1;"></span>
         </div>
-        <div class="chat-compose-zone" id="composeZone">
-          <button class="chat-compose-close" onclick="closeCompose()">✕</button>
-          <div class="chat-compose-type" id="composeType">❓ QUESTIONNEMENT</div>
-          <div class="chat-compose-author">Valérie</div>
-          <div class="chat-compose-content-wrapper">
-            <textarea class="chat-compose-textarea" id="composeTextarea" placeholder="Écrivez ici... (Ctrl+V pour image)" onpaste="handlePaste(event)"></textarea>
-            <div class="chat-compose-image-zone" id="composeImageZone"><div class="compose-images-row" id="composeImagesRow"></div><button class="chat-compose-image-remove" onclick="removeAllComposeImages()">✕</button></div>
-          </div>
-          <div class="chat-compose-footer"><span class="chat-compose-hint">Ctrl+V = image</span><button class="chat-compose-btn send" onclick="sendMessage()">➤ Envoyer</button></div>
+        <div class="qchat-scroll" id="qchatScroll">
+          <div class="qchat-messages" id="qchatMessages"><div class="qchat-empty">💬 Aucun message encore</div></div>
         </div>
-        <div class="chat-buttons-row">
-          <button class="chat-add-btn question" onclick="openCompose('problem')"><span class="icon">❓</span><span class="label">Question</span></button>
-          <button class="chat-add-btn discussion" onclick="openCompose('normal')"><span class="icon">💬</span><span class="label">Discussion</span></button>
-          <button class="chat-add-btn pinned" onclick="openCompose('pinned')"><span class="icon">📌</span><span class="label">Épinglé</span></button>
+        <div class="qchat-compose" id="qchatCompose">
+          <div class="qchat-compose-header" style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+            <div class="qchat-compose-type" id="qchatComposeType"></div>
+            <button class="qchat-compose-close" onclick="MChat.closeCompose()">✕</button>
+          </div>
+          <div class="qchat-compose-author" id="qchatComposeAuthor" style="display:none;"></div>
+          <div class="qchat-compose-dests" id="qchatComposeDests" style="margin-bottom:6px;"></div>
+          <div class="qchat-compose-wrapper">
+            <div class="qchat-compose-textarea" id="qchatComposeText" contenteditable="true" data-placeholder="Écrivez ici... (Ctrl+V pour image)" onpaste="MChat.handlePaste(event)" style="min-height:70px;outline:none;"></div>
+            <div class="qchat-compose-img-zone" id="qchatComposeImgZone"><div id="qchatComposeImgs"></div><button class="qchat-compose-img-remove" onclick="MChat.clearImages()">✕</button></div>
+          </div>
+          <div class="qchat-compose-footer">
+            <span class="qchat-compose-hint">Ctrl+V = image</span>
+            <input type="file" id="qchatCameraInput" accept="image/*" style="display:none;" onchange="MChat.handleFileInput(this)">
+            <button id="qchatCameraBtn" class="qchat-camera-btn" onclick="MChat.openCamera()" title="Joindre une photo depuis le téléphone" style="display:none;">📷</button>
+            <button class="qchat-compose-photo-btn" id="qchatPhotoBtnMain" onclick="MChat.openCamera()" title="Prendre une photo via PhotoSender">📷 Télécharger une photo</button>
+            <input type="file" id="qchatFileInput" accept=".pdf,.eml,.msg,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple style="display:none" onchange="MChat.handleFileAttach(this)">
+            <button class="qchat-compose-file-btn" onclick="document.getElementById('qchatFileInput').click()" title="Joindre un fichier (PDF, image, courriel...)">📎 Fichier</button>
+            <button class="qchat-compose-send" onclick="MChat.send()">➤ Envoyer</button>
+          </div>
+        </div>
+        <div class="qchat-buttons-row">
+          <button class="qchat-add-btn conversation" id="qchatOpenConvoBtn" onclick="MChat.openCompose('conversation')">💬 Démarrer discussion</button>
         </div>
       </div>
       
@@ -5884,8 +6558,24 @@
         updateSyncIndicator('offline', 'Hors-ligne');
         
         // Afficher un message explicatif
-        if (error.message && error.message.includes('permission')) {
+        if (error.message && error.message.toLowerCase().includes('permission')) {
           showToast('⚠️ Permission Firebase refusée', 'warning');
+          // Filet anti-écran-vide: expliquer clairement plutôt que laisser un écran noir
+          if (Object.keys(cardsData).length === 0) {
+            var ov = document.getElementById('accessDeniedOverlay');
+            if (!ov) {
+              ov = document.createElement('div');
+              ov.id = 'accessDeniedOverlay';
+              ov.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(4,21,44,0.97);display:flex;align-items:center;justify-content:center;padding:24px;';
+              ov.innerHTML = '<div style="max-width:520px;background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;padding:28px;color:#e2e8f0;text-align:center;">' +
+                '<div style="font-size:40px;margin-bottom:8px;">🔒</div>' +
+                '<div style="font-size:18px;font-weight:700;margin-bottom:10px;">Accès aux données refusé</div>' +
+                '<div style="font-size:13px;line-height:1.6;color:#cbd5e1;">Votre connexion a réussi, mais la base de données refuse la lecture pour ce compte (' + (currentUser && currentUser.email ? currentUser.email : '') + ').<br><br>C\'est un réglage des <b>règles Firebase</b> (Realtime Database → Rules). Le compte doit être autorisé en lecture sur « moulages ». Contactez Daniel pour faire ajuster les règles.</div>' +
+                '<button onclick="location.reload(true)" style="margin-top:16px;background:#3b82f6;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-weight:700;cursor:pointer;">🔄 Réessayer</button>' +
+                '</div>';
+              document.body.appendChild(ov);
+            }
+          }
         } else if (error.message && error.message.includes('offline')) {
           showToast('📴 Mode hors-ligne - Données locales utilisées', 'info');
         }
@@ -6165,9 +6855,7 @@
               renderMessages(cardId);
               scrollChatToBottom();
             }
-            if (mobileCurrentCardId === cardId) {
-              openMobileChat();
-            }
+            // Chat mobile unifié (MChat) gère son propre temps réel via chatV2 — rien à faire ici
           } else {
             cardsData[cardId] = mergedCard;
           }
@@ -8885,6 +9573,14 @@
       currentCardId = cardId;
       let d = cardsData[cardId];
       if (!d) return;
+      // S'assurer que la zone de chat unifiée est bien dans la fiche desktop
+      // (elle peut avoir été déplacée vers la page mobile)
+      var _cz = document.getElementById('ficheChatZone');
+      var _anchor = document.getElementById('ficheChatHomeAnchor');
+      if (_cz && _anchor && _cz.previousElementSibling !== _anchor) {
+        _anchor.parentNode.insertBefore(_cz, _anchor.nextSibling);
+        _cz.style.display = '';
+      }
       
       // Réinitialiser les photos de la sidebar
       if (typeof resetSidebarPhotos === 'function') {
@@ -8941,6 +9637,7 @@
       `;
       
       renderMessages(cardId);
+      if (typeof MChat !== 'undefined') MChat.loadForJob(cardId);
       document.getElementById('ficheOverlay').classList.remove('hidden');
       
       // Scroll vers le bas pour voir les derniers messages
@@ -8960,6 +9657,7 @@
     function renderMessages(cardId) {
       const card = cardsData[cardId];
       const mainList = document.getElementById('ficheMessagesList');
+      if (!mainList) return;
       const pinnedSection = document.getElementById('pinnedSection');
       const pinnedList = document.getElementById('pinnedMessagesList');
       const questionsSection = document.getElementById('questionsSection');
@@ -9325,6 +10023,7 @@
       
       if (isOverlay || isCloseBtn) {
         document.getElementById('ficheOverlay').classList.add('hidden');
+        if (typeof MChat !== 'undefined') MChat.detach();
         closeCompose();
         currentCardId = null;
         renderKanban();
@@ -9825,6 +10524,7 @@
     // ═══════════════════════════════════════════════════════════
     
     function closeCompose() { 
+      if (!document.getElementById('composeZone')) return;
       document.getElementById('composeZone').className = 'chat-compose-zone'; 
       document.getElementById('composeTextarea').value = ''; 
       document.getElementById('composeTextarea').placeholder = 'Écrivez ici... (Ctrl+V pour image)';
@@ -15032,14 +15732,37 @@
     // Navigation vers le chat mobile
     function goToMobileChat() {
       if (!mobileCurrentCardId) return;
-      openMobileChat();
-      document.getElementById('mobileChatPage').classList.add('active');
+      // UNIFIÉ: utiliser le MÊME système de chat que le desktop (MChat)
+      var zone = document.getElementById('ficheChatZone');
+      var host = document.getElementById('mobileChatMessages'); // hôte dans la page chat mobile
+      var page = document.getElementById('mobileChatPage');
+      if (zone && page) {
+        // Déplacer la zone de chat unifiée dans la page mobile (une seule fois / à chaque ouverture)
+        var mount = document.getElementById('mobileChatMount');
+        if (!mount) {
+          mount = document.createElement('div');
+          mount.id = 'mobileChatMount';
+          mount.style.cssText = 'flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;';
+          // insérer après le header de la page chat mobile
+          var hdr = page.querySelector('.mobile-chat-header');
+          if (hdr && hdr.nextSibling) page.insertBefore(mount, hdr.nextSibling);
+          else page.appendChild(mount);
+          // masquer les anciens conteneurs mobiles (remplacés par MChat)
+          var oldMsgs = document.getElementById('mobileChatMessages'); if (oldMsgs) oldMsgs.style.display = 'none';
+          var oldCompose = document.getElementById('mobileChatCompose'); if (oldCompose) oldCompose.style.display = 'none';
+        }
+        if (zone.parentElement !== mount) mount.appendChild(zone);
+        zone.style.display = 'flex';
+        if (typeof MChat !== 'undefined') MChat.loadForJob(mobileCurrentCardId);
+      }
+      page.classList.add('active');
       document.getElementById('mobilePhotosPage').classList.remove('active');
     }
     window.goToMobileChat = goToMobileChat;
     
     // Navigation retour vers la fiche depuis le chat
     function goToMobileFiche() {
+      if (typeof MChat !== 'undefined') MChat.detach();
       document.getElementById('mobileChatPage').classList.remove('active');
       document.getElementById('mobilePhotosPage').classList.remove('active');
     }
@@ -16673,6 +17396,1840 @@
       console.log('📱 PWA: Installation terminée');
     });
     
+
+    // ===== MCHAT — Notes & Chat porté de Questionnements (autonome Moulage) =====
+    var PHYSIPRO_NAME_MAP=(function(){var _m={};var _d=function(s){return atob(s);};_m[_d("YXRlbGllcmF0cEBwaHlzaXByby5jb20=")]="Daniel";_m[_d("dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==")]="Valérie";_m[_d("c2ltZHV0QHBoeXNpcHJvLmNvbQ==")]="Cassie";_m[_d("c3JveUBwaHlzaXByby5jb20=")]="Stéphanie";_m[_d("cGV0ZXJiYXNzNzZAZ21haWwuY29t")]="Pierre";_m[_d("Y25jYXRwQHBoeXNpcHJvLmNvbQ==")]="Sina";_m[_d("c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==")]="Sonia";_m[_d("c2VydmljZTNAcGh5c2lwcm8uY29t")]="Jacynthe";_m[_d("bmdhZ25lQHBoeXNpcHJvLmNvbQ==")]="Nadia";_m[_d("c2VydmljZTFAcGh5c2lwcm8uY29t")]="Jonathan";_m[_d("bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t")]="Michelle";_m[_d("ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=")]="Fabrys";_m[_d("bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t")]="Marie-Pier";_m[_d("bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==")]="Marie-Soleil";_m[_d("Y29udGFjdEBwaHlzaXByby5mcg==")]="France";return _m;})();
+    function nameToEmail(name) {
+      if (!name) return '';
+      var norm = function(s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); };
+      var target = norm(name);
+      for (var email in PHYSIPRO_NAME_MAP) {
+        var fullNorm = norm(PHYSIPRO_NAME_MAP[email]);
+        var firstNorm = norm(PHYSIPRO_NAME_MAP[email].split(' ')[0]);
+        if (fullNorm === target || firstNorm === target) {
+          return email;
+        }
+      }
+      // Try TEAM_CHAT_MEMBERS if available
+      if (typeof TEAM_CHAT_MEMBERS !== 'undefined') {
+        var m = TEAM_CHAT_MEMBERS.find(function(m) { return norm(m.name) === target || norm(m.name.split(' ')[0]) === target; });
+        if (m) return m.email;
+      }
+      // Try TEAM_MEMBERS
+      var tm = TEAM_MEMBERS.find(function(m) { return norm(m.name) === target || norm(m.name.split(' ')[0]) === target; });
+      if (tm) return tm.email;
+      return '';
+    }
+
+    // ===== QUEST CHAT MODULE (Firebase Realtime) =====
+    var MChat = (function() {
+      var _listener = null;
+      var _currentJobId = null;
+      var _messages = [];
+      var _composeType = 'conversation';
+      var _composeImages = [];
+      var _composeFiles = []; // {name, dataUrl, type}
+      var _replyToId = null;
+      var _selectedImgSrc = null;
+      var _annotTool = null;
+      var _annotColor = '#ef4444';
+      var _annotations = {}; // keyed by image src
+      var _zoomAnnotations = [];
+      var _destName = '';
+      var _extraDests = [];
+      var _destChosen = false;
+      var _sendAfterPicker = false;
+      
+      function _normName(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
+      var _DEST_REMOVE = ['patrick bouchard','eric poirier','elise bolduc','elyse bolduc','roxane valois','roxanne valois','mario ouellet','mario ouellette','fabrice frechette','fabrys frechette','sylvie carrier','sylvain carrier','stephane duchesneau','stephane delorme','sonia boulanger','nadia gagne','nadia gagner','jacynthe gaumond','jacinthe gaumond','jacinthe gourmond','jonathan perreault','jonathan perrault'];
+      function _membersByDept(depts) {
+        if (typeof TEAM_MEMBERS === 'undefined') return [];
+        return TEAM_MEMBERS.filter(function(m){
+          return depts.indexOf(m.dept) !== -1 && _DEST_REMOVE.indexOf(_normName(m.name)) === -1;
+        }).map(function(m){ return m.name; });
+      }
+      var DEST_LIST = ((typeof TEAM_MEMBERS !== 'undefined' && TEAM_MEMBERS.length)
+        ? TEAM_MEMBERS.map(function(m){ return m.name; })
+        : [
+        'Sonia Boulanger','Jacynthe Gaumond','Jonathan Perreault','Nadia Gagne',
+        'Daniel Charest','Valérie','Cassie Valois',
+        'Michelle Bouchard','Stephanie Roy'
+      ]).filter(function(n){ return _DEST_REMOVE.indexOf(_normName(n)) === -1; });
+      function _saveExtraDests() {
+        var database = getDb();
+        if (database && _currentJobId) database.ref('moulages/' + _currentJobId + '/chatV2/extraDests').set(_extraDests).catch(function(){});
+      }
+      
+      function getDb() { return (typeof firebaseDb !== 'undefined' && firebaseDb) ? firebaseDb : null; }
+      function esc(s) { if(!s) return ''; var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+      function fmtTime(ts) {
+        if (!ts) return '';
+        var d = new Date(ts);
+        var now = new Date();
+        var pad = function(n){ return n<10?'0'+n:n; };
+        var time = pad(d.getHours())+':'+pad(d.getMinutes());
+        if (d.toDateString()===now.toDateString()) return time;
+        return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+time;
+      }
+      function getMyEmail() { return currentUser && currentUser.email ? currentUser.email.toLowerCase() : ''; }
+      function getMyName() { return typeof getCurrentUserName==='function' ? getCurrentUserName() : getMyEmail().split('@')[0]; }
+      
+      // ---- Load / Detach ----
+      var _psmListener = null;
+      var _psmCardId = null;
+      var _psmMessages = [];
+      
+      // Convertit les anciens messages (card.messages) au format MChat, LECTURE SEULE.
+      // Ne réécrit jamais Firebase → aucun risque de doublon.
+      function _legacyMessages(jobId) {
+        var card = cardsData[jobId];
+        if (!card || !Array.isArray(card.messages) || card.messages.length === 0) return [];
+        return card.messages.map(function(m, i) {
+          var ts = 0;
+          if (m.timestamp) ts = m.timestamp;
+          else if (m.date) { var d = new Date(m.date); ts = isNaN(d.getTime()) ? (i+1) : d.getTime(); }
+          else ts = (i+1);
+          var type = (m.type === 'reply') ? 'reply' : (m.type === 'pinned' ? 'pinned' : 'normal');
+          var norm = {
+            content: m.content || '',
+            type: type,
+            authorEmail: m.authorEmail || '',
+            authorName: m.authorName || m.author || (m.authorEmail ? m.authorEmail.split('@')[0] : '?'),
+            timestamp: ts,
+            _legacy: true
+          };
+          if (m.image) norm.image = m.image;
+          if (m.images) norm.images = m.images;
+          var id = 'legacy_' + (m.id || (jobId + '_' + i));
+          return [id, norm];
+        });
+      }
+      
+      function loadForJob(jobId) {
+        detach();
+        _currentJobId = jobId;
+        _messages = [];
+        _annotations = {};
+        _pendingAnnotData = {};
+        _loadAnnotationsForJob(jobId);
+        _selectedImgSrc = null;
+        _replyToId = null;
+        _extraDests = [];
+        _psmMessages = [];
+        _psmCardId = null;
+        // Forcer l'état initial du bouton (aucune note tant que le listener n'a pas répondu)
+        _updateConvoBtn(false);
+        if (!jobId) return;
+        
+        // Pas de destinataire automatique: l'utilisateur choisit au 1er envoi
+        var job = cardsData[jobId];
+        var creator = '';
+        if (job) {
+          // Charger les destinataires sauvegardés (sous la carte)
+          if (job.chatV2 && job.chatV2.extraDests) _extraDests = job.chatV2.extraDests.slice();
+        }
+        _destChosen = (_extraDests.length > 0);
+        _sendAfterPicker = false;
+        _destName = creator;
+        var displayText = creator.split(' ')[0] || creator;
+        document.getElementById('qchatDestName').textContent = displayText;
+        renderExtraDests();
+        
+        var database = getDb();
+        if (!database) return;
+        
+        // Listen to questChat messages (normal questionnement chat)
+        _listener = database.ref('moulages/' + jobId + '/chatV2/messages').orderByChild('timestamp').on('value', function(snap) {
+          var data = snap.val() || {};
+          var v2 = Object.entries(data).sort(function(a,b){ return (a[1].timestamp||0)-(b[1].timestamp||0); });
+          // Fusionner les ANCIENS messages (card.messages) en lecture seule, sans rien réécrire
+          var legacy = _legacyMessages(jobId);
+          _messages = legacy.concat(v2).sort(function(a,b){ return (a[1].timestamp||0)-(b[1].timestamp||0); });
+          render();
+        });
+        
+        // If this job came from PSM, also listen to psmChat messages
+        if (job && job.fromPSM && job.psmCardId) {
+          _psmCardId = job.psmCardId;
+          _psmListener = database.ref('psmChat/' + job.psmCardId + '/messages').orderByChild('timestamp').on('value', function(snap) {
+            var data = snap.val() || {};
+            _psmMessages = Object.entries(data).sort(function(a,b){ return (a[1].timestamp||0)-(b[1].timestamp||0); });
+            render();
+          });
+        }
+      }
+      
+      function detach() {
+        var database = getDb();
+        if (_listener && _currentJobId && database) {
+          database.ref('moulages/' + _currentJobId + '/chatV2/messages').off('value', _listener);
+        }
+        if (_psmListener && _psmCardId && database) {
+          database.ref('psmChat/' + _psmCardId + '/messages').off('value', _psmListener);
+        }
+        _listener = null;
+        _psmListener = null;
+        if (typeof MChat !== 'undefined' && MChat.cancelPhotoRequest) MChat.cancelPhotoRequest(true);
+        _currentJobId = null;
+        _psmCardId = null;
+        _messages = [];
+        _psmMessages = [];
+        closeCompose();
+      }
+      
+      // ---- Render ----
+      function render() {
+        var container = document.getElementById('qchatMessages');
+        if (!container) return;
+        var myEmail = getMyEmail();
+        
+        var h = '';
+        
+        // Show PSM info banner at top of chat for PSM cards
+        var job = _currentJobId ? cardsData[_currentJobId] : null;
+        if (job && job.fromPSM) {
+          var infoParts = [];
+          if (job.psmType) infoParts.push('<strong>' + esc(job.psmType) + '</strong>');
+          if (job.psmDept) infoParts.push(esc(job.psmDept.charAt(0).toUpperCase() + job.psmDept.slice(1)));
+          if (job.psmTemps) infoParts.push('⏱️ ' + esc(job.psmTemps));
+          if (job.psmSentBy) infoParts.push('de ' + esc(job.psmSentBy));
+          if (infoParts.length > 0) {
+            var isPrix = (job.psmType || '').toLowerCase().indexOf('prix') >= 0;
+            h += '<div style="text-align:center;padding:6px 10px;margin:4px 0 6px;background:' + (isPrix ? 'linear-gradient(135deg,#92400e,#78350f)' : 'linear-gradient(135deg,#1e3a8a,#1e40af)') + ';border-radius:8px;font-size:10px;color:#fff;letter-spacing:0.3px;">' + infoParts.join(' • ') + '</div>';
+          }
+        }
+        
+        // Show PSM chat messages (from psmChat/{cardId}/messages) if any
+        if (job && job.fromPSM && _psmMessages.length > 0) {
+          h += '<div class="qchat-section-label" style="text-align:center;font-size:9px;font-weight:700;color:#60a5fa;padding:6px 0 4px;text-transform:uppercase;letter-spacing:0.5px;">── Conversation PSM ──</div>';
+          
+          // Show PSM notes images if present (from dept panel, not from chat)
+          if (job.psmImages && job.psmImages.length > 0) {
+            var noteImgs = job.psmImages.map(function(src) {
+              return '<div class="qchat-msg-img-wrap" data-src="'+src+'"><img class="qchat-msg-img" src="'+src+'" draggable="false" ondragstart="return false" onclick="MChat.clickImage(event,this)"><canvas class="annot-canvas"></canvas></div>';
+            }).join('');
+            h += '<div class="qchat-msg psm-origin">' +
+              '<div class="qmsg-type">📷 Images PSM <span class="qmsg-time">' + (job.createdAt ? new Date(job.createdAt).toLocaleString('fr-CA') : '') + '</span></div>' +
+              '<div class="qmsg-author">' + esc(job.psmSentBy || 'PSM') + '</div>' +
+              noteImgs +
+            '</div>';
+          }
+          
+          _psmMessages.forEach(function(e) {
+            var msg = e[1];
+            var imgs = '';
+            var imgArr = [];
+            if (msg.image) imgArr.push(msg.image);
+            if (msg.images) imgArr = imgArr.concat(msg.images);
+            if (imgArr.length > 0) {
+              imgs = imgArr.map(function(src) {
+                return '<div class="qchat-msg-img-wrap" data-src="'+src+'"><img class="qchat-msg-img" src="'+src+'" draggable="false" ondragstart="return false" onclick="MChat.clickImage(event,this)"><canvas class="annot-canvas"></canvas></div>';
+              }).join('');
+            }
+            // Parse HTML content if present
+            var content = '';
+            if (msg.contentHtml) {
+              content = msg.contentHtml;
+            } else {
+              content = esc(msg.content || msg.text || '').replace(/\n/g, '<br>');
+            }
+            h += '<div class="qchat-msg psm-origin">' +
+              '<div class="qmsg-type">📋 PSM <span class="qmsg-time">' + fmtTime(msg.timestamp || msg.createdAt) + '</span></div>' +
+              '<div class="qmsg-author">' + esc(msg.authorName || msg.author || 'PSM') + (msg.targetName ? ' → ' + esc(msg.targetName) : '') + '</div>' +
+              '<div class="qmsg-content">' + content + '</div>' +
+              imgs +
+            '</div>';
+          });
+          if (_messages.length > 0) {
+            h += '<div class="qchat-section-label" style="text-align:center;font-size:9px;font-weight:700;color:#f59e0b;padding:6px 0 4px;text-transform:uppercase;letter-spacing:0.5px;">── Questionnement ──</div>';
+          }
+        } else if (job && job.fromPSM && job.psmQuestText && _psmMessages.length === 0) {
+          // Fallback: show static psmQuestText if no live psmChat messages found
+          var psmDate = job.createdAt || job.dateRecue || '';
+          var psmAuthor = job.psmSentBy || 'PSM';
+          var psmDept = job.psmDept ? ' (' + job.psmDept + ')' : '';
+          var psmImgs = '';
+          if (job.psmImages && job.psmImages.length) {
+            psmImgs = job.psmImages.map(function(img){
+              return '<div class="qchat-msg-img-wrap" data-src="'+img+'"><img class="qchat-msg-img" src="'+img+'" draggable="false" ondragstart="return false" onclick="MChat.clickImage(event,this)"><canvas class="annot-canvas"></canvas></div>';
+            }).join('');
+          }
+          h += '<div class="qchat-msg psm-origin">' +
+            '<div class="qmsg-type">📋 Questionnement PSM <span class="qmsg-time">'+(psmDate?new Date(psmDate).toLocaleString('fr-CA'):'')+'</span></div>' +
+            '<div class="qmsg-author">' + esc(psmAuthor) + psmDept + '</div>' +
+            '<div class="qmsg-content">' + esc(job.psmQuestText) + '</div>' +
+            psmImgs +
+          '</div>';
+        }
+        
+        if (_messages.length === 0 && !h) {
+          container.innerHTML = '<div class="qchat-empty">💬 Posez votre première question...</div>';
+          return;
+        }
+        
+        // Build threads
+        var threads = {};
+        var roots = [];
+        _messages.forEach(function(e) {
+          var msg = e[1];
+          if (msg.replyTo && threads[msg.replyTo]) {
+            if (!threads[msg.replyTo].replies) threads[msg.replyTo].replies = [];
+            threads[msg.replyTo].replies.push(e);
+          } else {
+            threads[e[0]] = { msg: e, replies: [] };
+            roots.push(e[0]);
+          }
+        });
+        
+        roots.forEach(function(rootId) {
+          var t = threads[rootId];
+          if (!t) return;
+          h += renderCard(t.msg, myEmail, false);
+          (t.replies || []).forEach(function(re) {
+            h += renderCard(re, myEmail, true);
+          });
+        });
+        
+        // Espace blanc en bas pour permettre de scroller plus bas que la dernière bulle
+        if (h) h += '<div class="qchat-bottom-spacer" style="height:10px;flex-shrink:0;width:100%;"></div>';
+        
+        container.innerHTML = h || '<div class="qchat-empty">💬 Aucun message</div>';
+        
+        // Scroll
+        var scroll = document.getElementById('qchatScroll');
+        if (scroll) setTimeout(function(){ scroll.scrollTop = scroll.scrollHeight; }, 50);
+        
+        // Redraw annotation canvases + init drawing on all images
+        setTimeout(function(){ initAllCanvases(); _applyPendingAnnotations(); }, 150);
+        
+        // Mettre à jour le texte ET le comportement du bouton du bas
+        _updateConvoBtn(_messages && _messages.length > 0);
+      }
+      
+      function _updateConvoBtn(hasMessages) {
+        var btnConvo = document.getElementById('qchatOpenConvoBtn');
+        if (!btnConvo) return;
+        if (hasMessages) {
+          btnConvo.innerHTML = '↩️ Répondre';
+          btnConvo.onclick = function() { MChat.openCompose('reply'); };
+        } else {
+          btnConvo.innerHTML = '💬 Démarrer discussion';
+          btnConvo.onclick = function() { MChat.openCompose('conversation'); };
+          _destChosen = false; // aucune note → redemander les destinataires au prochain envoi
+        }
+      }
+      
+      function renderCard(e, myEmail, isReply) {
+        var id = e[0], msg = e[1];
+        var isMe = msg.authorEmail && msg.authorEmail.toLowerCase() === myEmail;
+        var isLegacy = !!msg._legacy;
+        // Messages anciens (legacy) = lecture seule: pas de suppression/édition (ils ne sont pas dans chatV2)
+        var delBtn = isLegacy ? '' : '<button class="qmsg-del" onclick="MChat.deleteMsg(\''+id+'\')">✕</button>';
+        var editBtn = (isMe && !isLegacy) ? '<button class="qmsg-edit" onclick="MChat.editMsg(\''+id+'\')">✏️</button>' : '';
+        var replyBtn = '';
+        var isPinned = (msg.type === 'pinned');
+        var cls = isPinned ? 'qchat-msg pinned' : (isReply ? 'qchat-msg reply' : 'qchat-msg question');
+        
+        var imgHtml = '';
+        var images = [];
+        if (msg.image) images.push(msg.image);
+        if (msg.images) images = images.concat(msg.images);
+        
+        if (images.length > 0) {
+          imgHtml = images.map(function(src, idx) {
+            return '<div class="qchat-msg-img-wrap" data-src="'+src+'">' +
+              '<img class="qchat-msg-img" src="'+src+'" draggable="false" ondragstart="return false" onclick="MChat.clickImage(event,this)">' +
+              '<button class="qchat-img-rotate-btn" onclick="event.stopPropagation();MChat.rotateMessageImage(\''+id+'\','+idx+',\'qchat\')" title="Pivoter cette photo de 90°" style="position:absolute;top:4px;right:38px;width:28px;height:28px;border-radius:50%;border:none;background:rgba(0,0,0,0.75);color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;z-index:5;">🔄</button>' +
+              '<button class="qchat-img-delete-btn" onclick="event.stopPropagation();MChat.deleteMessageImage(\''+id+'\','+idx+',\'qchat\')" title="Supprimer cette photo" style="position:absolute;top:4px;right:4px;width:28px;height:28px;border-radius:50%;border:none;background:rgba(220,38,38,0.9);color:#fff;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;z-index:5;">🗑️</button>' +
+              '<canvas class="annot-canvas"></canvas>' +
+            '</div>';
+          }).join('');
+        }
+        
+        var filesHtml = '';
+        if (msg.files && msg.files.length > 0) {
+          filesHtml = msg.files.map(function(f) {
+            var icon = (f.type === 'application/pdf') ? '📄 PDF' : '📎';
+            var fname = f.name || 'Fichier';
+            return '<a class="qchat-msg-file-link" href="'+f.dataUrl+'" download="'+esc(fname)+'" onclick="event.stopPropagation()">'+icon+' '+esc(fname)+'</a>';
+          }).join(' ');
+          filesHtml = '<div style="margin-top:4px;">' + filesHtml + '</div>';
+        }
+        
+        // Déterminer si l'auteur est un agent Service Client (Jacynthe, Nadia, Jonathan, Sonia)
+        var serviceAgents = (typeof TEAM_MEMBERS !== 'undefined') ? TEAM_MEMBERS.filter(function(m){ return m.dept==='Service'||m.dept==='Représentante'||m.dept==='France'; }).map(function(m){ return m.name.split(' ')[0].toLowerCase(); }) : ['jacynthe','nadia','jonathan','sonia'];
+        var authorLower = (msg.authorName || '').toLowerCase();
+        var authorEmailLower = (msg.authorEmail || '').toLowerCase();
+        var isFromServiceAgent = serviceAgents.some(function(a) {
+          return authorLower.indexOf(a) >= 0 || authorEmailLower.indexOf(a) >= 0;
+        });
+        // Petite icône courriel cliquable à côté de l'heure (envoi optionnel par mail)
+        var resendBtn = '<button class="qmsg-email-btn" onclick="MChat.emailMsg(\''+id+'\')" title="Envoyer ce message par courriel" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px;line-height:1;">✉️</button>';
+        
+        return '<div class="'+cls+'" data-msgid="'+id+'">' +
+          '<div class="qmsg-actions">'+resendBtn+editBtn+delBtn+'</div>' +
+          '<div class="qmsg-type" style="display:flex;align-items:center;gap:6px;">'+(isPinned?'📌 ':(isReply?'↩️ ':''))+'<span class="qmsg-author-inline" style="font-weight:700;color:inherit;">'+esc(msg.authorName||'?')+(isMe?' (moi)':'')+'</span> <span class="qmsg-time">'+fmtTime(msg.timestamp)+'</span></div>' +
+          '<div class="qmsg-content">'+(msg.contentHtml || esc(msg.content||'').replace(/\n/g,'<br>'))+'</div>' +
+          imgHtml +
+          filesHtml +
+          replyBtn +
+        '</div>';
+      }
+      
+      // ---- Destinataires affichés au-dessus des notes (dans la fenêtre compose) ----
+      function renderComposeDests() {
+        var host = document.getElementById('qchatComposeDests');
+        if (!host) return;
+        var card = cardsData[_currentJobId] || {};
+        var cardRep = card.representante && String(card.representante).trim();
+        var repNames = cardRep ? [cardRep] : (_membersByDept(['Représentante']).length ? _membersByDept(['Représentante']) : ['Marie-Soleil','Marie-Pier']);
+        var repLabel = cardRep ? cardRep.split(' ')[0] : 'Représentante';
+        var coutureAll = _membersByDept(['Laser/Couture','Couture']);
+        var couture = coutureAll.filter(function(n){ return _normName(n).indexOf('michelle') === -1; });
+        var inspection = coutureAll.filter(function(n){ return _normName(n).indexOf('michelle') !== -1; });
+        var groups = [
+          { label: repLabel, names: repNames, def: true },
+          { label: 'Atelier', names: _membersByDept(['Atelier']), def: true },
+          { label: 'Couture', names: couture, def: false },
+          { label: 'CNC', names: _membersByDept(['CNC']), def: false },
+          { label: 'Inspection finale', names: inspection, def: false }
+        ];
+        var hasSel = _extraDests.length > 0;
+        var html = '<div style="font-size:8px;font-weight:700;color:#64748b;margin-bottom:3px;">👥 Envoyer à :</div>';
+        html += '<div style="display:flex;flex-wrap:wrap;gap:5px 12px;border:1px solid #cbd5e1;border-radius:6px;padding:6px 8px;background:#f8fafc;">';
+        groups.forEach(function(g){
+          if (!g.names.length) return;
+          var checked = hasSel
+            ? g.names.every(function(n){ return _extraDests.some(function(x){ return _normName(x) === _normName(n); }); })
+            : g.def;
+          html += '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;font-weight:600;color:#1e293b;white-space:nowrap;" title="'+esc(g.names.join(', '))+'">' +
+            '<input type="checkbox" data-names="'+esc(g.names.join('|'))+'"'+(checked?' checked':'')+' style="accent-color:#2563eb;width:14px;height:14px;flex-shrink:0;margin:0;">' +
+            esc(g.label) + '</label>';
+        });
+        html += '</div>';
+        host.innerHTML = html;
+      }
+      
+      function _readComposeDests() {
+        var host = document.getElementById('qchatComposeDests');
+        if (!host) return;
+        var checks = host.querySelectorAll('input[type="checkbox"]:checked');
+        var chosen = [];
+        checks.forEach(function(cb){
+          (cb.getAttribute('data-names') || '').split('|').forEach(function(n){
+            n = n.trim();
+            if (n && chosen.indexOf(n) === -1) chosen.push(n);
+          });
+        });
+        _extraDests = chosen;
+        if (_currentJobId && cardsData[_currentJobId]) {
+          if (!cardsData[_currentJobId].chatV2) cardsData[_currentJobId].chatV2 = {};
+          cardsData[_currentJobId].chatV2.extraDests = _extraDests;
+        }
+        _saveExtraDests();
+      }
+      
+      // ---- Dest Picker (legacy header dropdown — conservé, non utilisé) ----
+      function toggleDestPicker() {
+        var picker = document.getElementById('qchatDestPicker');
+        if (picker.classList.contains('active')) { picker.classList.remove('active'); return; }
+        var card = cardsData[_currentJobId] || {};
+        var cols = [];
+        // Col 1 — Représentante: celle de la carte, sinon les deux choix
+        var cardRep = card.representante && String(card.representante).trim();
+        var repNames = cardRep ? [cardRep] : (_membersByDept(['Représentante']).length ? _membersByDept(['Représentante']) : ['Marie-Soleil','Marie-Pier']);
+        cols.push({ title:'Représentante', names: repNames });
+        cols.push({ title:'Atelier', names: _membersByDept(['Atelier']) });
+        cols.push({ title:'Couture', names: _membersByDept(['Laser/Couture','Couture']) });
+        cols.push({ title:'CNC', names: _membersByDept(['CNC']) });
+        // Autre — toute personne restante non retirée et pas déjà classée
+        var usedDepts = ['Représentante','Atelier','Laser/Couture','Couture','CNC'];
+        var autre = (typeof TEAM_MEMBERS !== 'undefined') ? TEAM_MEMBERS.filter(function(m){
+          return usedDepts.indexOf(m.dept) === -1 && _DEST_REMOVE.indexOf(_normName(m.name)) === -1;
+        }).map(function(m){ return m.name; }) : [];
+        if (autre.length) cols.push({ title:'Autre', names: autre });
+        
+        var html = '<div style="display:grid;grid-template-columns:repeat('+cols.length+',1fr);gap:6px;max-height:170px;overflow-y:auto;padding:4px;">';
+        cols.forEach(function(c){
+          html += '<div style="min-width:0;">';
+          html += '<div style="font-size:9px;font-weight:800;color:#93c5fd;text-transform:uppercase;letter-spacing:0.3px;padding:0 2px 4px;border-bottom:1px solid rgba(59,130,246,0.3);margin-bottom:3px;white-space:nowrap;">'+esc(c.title)+'</div>';
+          if (!c.names.length) html += '<div style="font-size:9px;color:#64748b;padding:2px;">—</div>';
+          c.names.forEach(function(name){
+            var checked = _extraDests.some(function(x){ return _normName(x) === _normName(name); }) ? ' checked' : '';
+            html += '<label class="qchat-dest-item" style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:3px 2px;font-size:10px;">' +
+              '<input type="checkbox" value="'+esc(name)+'"'+checked+' style="accent-color:#3b82f6;width:13px;height:13px;flex-shrink:0;">' +
+              '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(name.split(' ')[0])+'</span></label>';
+          });
+          html += '</div>';
+        });
+        html += '</div>';
+        html += '<div style="padding:6px 4px 2px 4px;border-top:1px solid rgba(59,130,246,0.3);margin-top:4px;"><button onclick="MChat.confirmDestPicker()" style="width:100%;padding:9px;background:linear-gradient(135deg,#22c55e,#16a34a);border:1px solid #15803d;border-radius:8px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.35);">✓ Appliquer</button></div>';
+        picker.innerHTML = html;
+        picker.classList.add('active');
+      }
+      
+      function confirmDestPicker() {
+        var picker = document.getElementById('qchatDestPicker');
+        var checks = picker.querySelectorAll('input[type="checkbox"]:checked');
+        var chosen = [];
+        checks.forEach(function(cb) { if (chosen.indexOf(cb.value) === -1) chosen.push(cb.value); });
+        _extraDests = chosen;
+        picker.classList.remove('active');
+        renderExtraDests();
+        _destChosen = true;
+        if (_currentJobId && cardsData[_currentJobId]) {
+          if (!cardsData[_currentJobId].chatV2) cardsData[_currentJobId].chatV2 = {};
+          cardsData[_currentJobId].chatV2.extraDests = _extraDests;
+        }
+        _saveExtraDests();
+        if (_sendAfterPicker) { _sendAfterPicker = false; send(); }
+      }
+      
+      function addExtraDest(name) {
+        if (_extraDests.indexOf(name) === -1) _extraDests.push(name);
+        document.getElementById('qchatDestPicker').classList.remove('active');
+        renderExtraDests();
+        _destChosen = true;
+        if (_currentJobId && cardsData[_currentJobId]) {
+          if (!cardsData[_currentJobId].chatV2) cardsData[_currentJobId].chatV2 = {};
+          cardsData[_currentJobId].chatV2.extraDests = _extraDests;
+        }
+        _saveExtraDests();
+      }
+      
+      function removeExtraDest(name) {
+        _extraDests = _extraDests.filter(function(n){ return n !== name; });
+        renderExtraDests();
+        if (_currentJobId && cardsData[_currentJobId]) {
+          if (!cardsData[_currentJobId].chatV2) cardsData[_currentJobId].chatV2 = {};
+          cardsData[_currentJobId].chatV2.extraDests = _extraDests;
+        }
+        _saveExtraDests();
+      }
+      
+      function renderExtraDests() {
+        var el = document.getElementById('qchatExtraDests');
+        if (!el) return;
+        if (_extraDests.length === 0) { el.innerHTML = ''; return; }
+        el.innerHTML = _extraDests.map(function(name) {
+          var short = name.split(' ')[0];
+          return '<span class="qchat-extra-dest-badge">'+esc(short)+'<button class="qchat-extra-dest-remove" onclick="MChat.removeExtraDest(\''+esc(name)+'\')">\u2715</button></span>';
+        }).join('');
+      }
+      
+      // ---- Compose ----
+      function openCompose(type) {
+        // Show camera button only for users with 'jobs' access (not moulage-only)
+        var myEmail = getMyEmail();
+        var access = (typeof getHubAccess === 'function') ? getHubAccess(myEmail) : [];
+        var camBtn = document.getElementById('qchatCameraBtn');
+        if (camBtn) camBtn.style.display = (access.indexOf('jobs') !== -1) ? '' : 'none';
+        _composeType = type || 'conversation';
+        _composeImages = [];
+        _composeFiles = [];
+        var zone = document.getElementById('qchatCompose');
+        var isReply = (type === 'reply');
+        var isPinned = (type === 'pinned');
+        zone.className = 'qchat-compose active ' + (isPinned ? 'pinned-type' : (isReply ? 'reply-type' : 'conversation-type'));
+        document.getElementById('qchatComposeType').textContent = (isPinned ? '📌 ' : (isReply ? '↩️ ' : '')) + getMyName();
+        document.getElementById('qchatComposeAuthor').textContent = getMyName();
+        renderComposeDests();
+        document.getElementById('qchatComposeImgZone').className = 'qchat-compose-img-zone';
+        document.getElementById('qchatComposeImgs').innerHTML = '';
+        var ta = document.getElementById('qchatComposeText');
+        if (ta.tagName === 'TEXTAREA') { ta.value = ''; ta.placeholder = isReply ? 'Répondre...' : 'Votre message...'; } else { ta.innerHTML = ''; ta.setAttribute('data-placeholder', isReply ? 'Répondre...' : 'Votre message...'); }
+        ta.focus();
+        var scroll = document.getElementById('qchatScroll');
+        setTimeout(function(){ scroll.scrollTop = scroll.scrollHeight; }, 100);
+      }
+      
+      function replyTo(msgId) {
+        _replyToId = msgId;
+        openCompose('reply');
+      }
+      
+      function closeCompose() {
+        var zone = document.getElementById('qchatCompose');
+        if (zone) zone.classList.remove('active');
+        var _ta = document.getElementById('qchatComposeText');
+        if (_ta) { if (_ta.tagName === 'TEXTAREA') _ta.value = ''; else _ta.innerHTML = ''; }
+        _replyToId = null;
+        _composeImages = [];
+      }
+      
+      function handlePaste(e) {
+        var items = e.clipboardData ? e.clipboardData.items : [];
+        for (var i=0; i<items.length; i++) {
+          if (items[i].type.indexOf('image') !== -1) {
+            e.preventDefault();
+            var reader = new FileReader();
+            reader.onload = function(ev) {
+              if (typeof compressImage === 'function') {
+                compressImage(ev.target.result).then(function(compressed) {
+                  _composeImages.push(compressed);
+                  updateComposeImagePreview();
+                });
+              } else {
+                _composeImages.push(ev.target.result);
+                updateComposeImagePreview();
+              }
+            };
+            reader.readAsDataURL(items[i].getAsFile());
+            break;
+          }
+        }
+      }
+      
+      function updateComposeImagePreview() {
+        var zone = document.getElementById('qchatComposeImgZone');
+        var imgs = document.getElementById('qchatComposeImgs');
+        var hasContent = _composeImages.length > 0 || _composeFiles.length > 0;
+        if (hasContent) {
+          zone.className = 'qchat-compose-img-zone has-image';
+          var html = _composeImages.map(function(src, i){
+            return '<span class="qchat-compose-img-wrap" style="position:relative;display:inline-block;margin:2px;">' +
+              '<img src="'+src+'">' +
+              '<button class="qchat-img-rotate-btn" onclick="event.stopPropagation();MChat.rotateComposeImage('+i+')" title="Pivoter cette photo de 90°" style="position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(0,0,0,0.75);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;z-index:5;">🔄</button>' +
+              '<button class="qchat-img-delete-btn" onclick="event.stopPropagation();MChat.removeComposeImage('+i+')" title="Supprimer cette photo" style="position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(220,38,38,0.9);color:#fff;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;z-index:5;">✕</button>' +
+              '</span>';
+          }).join('');
+          html += _composeFiles.map(function(f, i){
+            var icon = f.type === 'application/pdf' ? '📄' : (f.type.indexOf('image') === 0 ? '🖼️' : '📎');
+            return '<span class="qchat-compose-file-pill" style="position:relative;">' + icon + ' <span>' + esc(f.name) + '</span>' +
+              '<button onclick="event.stopPropagation();MChat.removeComposeFile('+i+')" title="Supprimer" style="margin-left:6px;border:none;background:rgba(220,38,38,0.85);color:#fff;width:18px;height:18px;border-radius:50%;font-size:12px;font-weight:700;cursor:pointer;line-height:1;padding:0;">✕</button>' +
+              '</span>';
+          }).join('');
+          imgs.innerHTML = html;
+        } else {
+          zone.className = 'qchat-compose-img-zone';
+          imgs.innerHTML = '';
+        }
+      }
+      
+      // Supprimer UNE image du compose
+      function removeComposeImage(index) {
+        if (index < 0 || index >= _composeImages.length) return;
+        _composeImages.splice(index, 1);
+        updateComposeImagePreview();
+      }
+      
+      // Supprimer UN fichier du compose
+      function removeComposeFile(index) {
+        if (index < 0 || index >= _composeFiles.length) return;
+        _composeFiles.splice(index, 1);
+        updateComposeImagePreview();
+      }
+      
+      // Fonction utilitaire: pivoter une image dataURL de 90° dans le sens horaire
+      function rotateImageDataUrl(dataUrl) {
+        return new Promise(function(resolve) {
+          var img = new Image();
+          img.onload = function() {
+            var canvas = document.createElement('canvas');
+            canvas.width = img.height;
+            canvas.height = img.width;
+            var ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.translate(canvas.width, 0);
+            ctx.rotate(0.5 * Math.PI);
+            ctx.drawImage(img, 0, 0);
+            // Même règle que compressImage : qualité 0.90, max 400 Ko
+            var quality = 0.90;
+            var result = canvas.toDataURL('image/jpeg', quality);
+            while (result.length > 400000 && quality > 0.55) {
+              quality -= 0.05;
+              result = canvas.toDataURL('image/jpeg', quality);
+            }
+            resolve(result);
+          };
+          img.src = dataUrl;
+        });
+      }
+      
+      // Faire pivoter une image dans le compose (avant envoi)
+      function rotateComposeImage(index) {
+        if (index < 0 || index >= _composeImages.length) return;
+        var current = _composeImages[index];
+        rotateImageDataUrl(current).then(function(rotated) {
+          _composeImages[index] = rotated;
+          updateComposeImagePreview();
+        });
+      }
+      
+      // Renvoyer le dernier message : ré-ouvre l'éditeur avec le contenu pré-rempli
+      function resendLastMessage() {
+        if (!_currentJobId) {
+          if (typeof showToast === 'function') showToast('Ouvrez d\'abord un questionnement', 'warning');
+          return;
+        }
+        if (_messages.length === 0) {
+          if (typeof showToast === 'function') showToast('Aucun message à renvoyer', 'warning');
+          return;
+        }
+        
+        // Trouver le dernier message de l'utilisateur courant
+        var myName = getMyName();
+        var lastMsg = null;
+        for (var i = _messages.length - 1; i >= 0; i--) {
+          var m = _messages[i][1];
+          if (m.authorName === myName) {
+            lastMsg = m;
+            break;
+          }
+        }
+        // Si aucun message de l'utilisateur, prendre tout simplement le dernier
+        if (!lastMsg) {
+          lastMsg = _messages[_messages.length - 1][1];
+        }
+        
+        // Extraire le contenu texte
+        var content = '';
+        if (lastMsg.contentHtml) {
+          var tmp = document.createElement('div');
+          tmp.innerHTML = lastMsg.contentHtml;
+          content = tmp.textContent || tmp.innerText || '';
+        } else {
+          content = lastMsg.content || lastMsg.text || '';
+        }
+        
+        // Récupérer les infos du job
+        var job = (typeof cardsData !== 'undefined' && cardsData[_currentJobId]) ? cardsData[_currentJobId] : {};
+        var orderNum = job.order || '';
+        var clientName = job.client || job.nom || '';
+        var assignee = job.assignee || '';
+        
+        // Appeler directement la fonction d'envoi courriel — ouvre mailto: prêt à envoyer
+        if (typeof sendJobNotifEmail === 'function') {
+          sendJobNotifEmail(assignee, orderNum, clientName, _currentJobId, content);
+        } else {
+          if (typeof showToast === 'function') showToast('Fonction d\'envoi non disponible', 'error');
+        }
+      }
+      
+      // Renvoyer un message spécifique par son ID. Si toATP=true, envoie à ATP (Daniel Charest), sinon à l'agent assigné
+      function resendMessageByID(msgId, toATP) {
+        if (!_currentJobId) {
+          if (typeof showToast === 'function') showToast('Ouvrez d\'abord un questionnement', 'warning');
+          return;
+        }
+        var targetMsg = null;
+        for (var i = 0; i < _messages.length; i++) {
+          if (_messages[i][0] === msgId) {
+            targetMsg = _messages[i][1];
+            break;
+          }
+        }
+        if (!targetMsg) {
+          if (typeof showToast === 'function') showToast('Message introuvable', 'error');
+          return;
+        }
+        
+        // Extraire le contenu texte
+        var content = '';
+        if (targetMsg.contentHtml) {
+          var tmp = document.createElement('div');
+          tmp.innerHTML = targetMsg.contentHtml;
+          content = tmp.textContent || tmp.innerText || '';
+        } else {
+          content = targetMsg.content || targetMsg.text || '';
+        }
+        
+        var job = (typeof cardsData !== 'undefined' && cardsData[_currentJobId]) ? cardsData[_currentJobId] : {};
+        var orderNum = job.order || '';
+        var clientName = job.client || job.nom || '';
+        
+        if (toATP) {
+          // Renvoyer à ATP (atelieratp@physipro.com)
+          var subject = encodeURIComponent('Réponse questionnement — #' + orderNum + (clientName ? ' ' + clientName : ''));
+          var body = encodeURIComponent(
+            'Bonjour Daniel,\n\n' +
+            (targetMsg.authorName || 'Service Client') + ' a répondu à votre questionnement.\n\n' +
+            '📋 Commande: #' + orderNum + '\n' +
+            (clientName ? '👤 Client: ' + clientName + '\n' : '') +
+            '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+            '💬 Réponse:\n\n' +
+            (content || '(Voir dans l\'application)') +
+            '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
+            'Veuillez consulter la page Service Client pour la suite.'
+          );
+          window.open('mailto:atelieratp@physipro.com?subject=' + subject + '&body=' + body);
+        } else {
+          // Renvoyer à l'agent assigné comme avant
+          var assignee = job.assignee || '';
+          if (typeof sendJobNotifEmail === 'function') {
+            sendJobNotifEmail(assignee, orderNum, clientName, _currentJobId, content);
+          }
+        }
+      }
+      
+      // Faire pivoter une image d'un message déjà envoyé (et sauvegarder dans Firebase)
+      function rotateMessageImage(msgId, imgIndex, source) {
+        // source = 'qchat' (questChat messages) ou 'psm' (psm messages)
+        var msg = null;
+        if (source === 'psm') {
+          // Trouver le message PSM par ID
+          for (var i = 0; i < _psmMessages.length; i++) {
+            if (_psmMessages[i][0] === msgId) {
+              msg = _psmMessages[i][1];
+              break;
+            }
+          }
+        } else {
+          for (var i = 0; i < _messages.length; i++) {
+            if (_messages[i][0] === msgId) {
+              msg = _messages[i][1];
+              break;
+            }
+          }
+        }
+        if (!msg) {
+          if (typeof showToast === 'function') showToast('Message introuvable', 'error');
+          return;
+        }
+        // Collecter le tableau d'images (peut être 'image' singulier ou 'images' tableau)
+        var imgArr = [];
+        if (msg.image) imgArr.push(msg.image);
+        if (msg.images) imgArr = imgArr.concat(msg.images);
+        if (imgIndex < 0 || imgIndex >= imgArr.length) return;
+        var current = imgArr[imgIndex];
+        
+        if (typeof showToast === 'function') showToast('🔄 Rotation en cours...', 'info');
+        
+        rotateImageDataUrl(current).then(function(rotated) {
+          imgArr[imgIndex] = rotated;
+          // Réécrire dans le message : tout dans 'images' pour simplifier
+          var updates = { images: imgArr };
+          if (msg.image) updates.image = null; // Supprimer le champ 'image' singulier
+          
+          var database = getDb();
+          if (!database || !_currentJobId) {
+            if (typeof showToast === 'function') showToast('Erreur DB', 'error');
+            return;
+          }
+          
+          var path;
+          if (source === 'psm') {
+            // Path PSM chat
+            var job = (typeof cardsData !== 'undefined' && cardsData[_currentJobId]) ? cardsData[_currentJobId] : null;
+            if (!job || !job.psmCardId) {
+              if (typeof showToast === 'function') showToast('Carte PSM introuvable', 'error');
+              return;
+            }
+            path = 'psmChat/' + job.psmCardId + '/messages/' + msgId;
+          } else {
+            path = 'moulages/' + _currentJobId + '/chatV2/messages/' + msgId;
+          }
+          
+          database.ref(path).update(updates).then(function() {
+            // Mettre à jour localement
+            msg.images = imgArr;
+            if (msg.image) delete msg.image;
+            // Re-render
+            if (typeof renderMessages === 'function') renderMessages();
+            if (typeof showToast === 'function') showToast('✓ Photo pivotée', 'success');
+          }).catch(function(err) {
+            console.error('rotateMessageImage error:', err);
+            if (typeof showToast === 'function') showToast('Erreur: ' + err.message, 'error');
+          });
+        });
+      }
+      
+      // Supprimer une image d'un message déjà envoyé (et sauvegarder dans Firebase)
+      function deleteMessageImage(msgId, imgIndex, source) {
+        if (!confirm('Supprimer cette photo du message ?')) return;
+        
+        var msg = null;
+        if (source === 'psm') {
+          for (var i = 0; i < _psmMessages.length; i++) {
+            if (_psmMessages[i][0] === msgId) {
+              msg = _psmMessages[i][1];
+              break;
+            }
+          }
+        } else {
+          for (var i = 0; i < _messages.length; i++) {
+            if (_messages[i][0] === msgId) {
+              msg = _messages[i][1];
+              break;
+            }
+          }
+        }
+        if (!msg) {
+          if (typeof showToast === 'function') showToast('Message introuvable', 'error');
+          return;
+        }
+        
+        // Collecter le tableau d'images (peut être 'image' singulier ou 'images' tableau)
+        var imgArr = [];
+        if (msg.image) imgArr.push(msg.image);
+        if (msg.images) imgArr = imgArr.concat(msg.images);
+        if (imgIndex < 0 || imgIndex >= imgArr.length) return;
+        
+        // Retirer l'image à l'index donné
+        imgArr.splice(imgIndex, 1);
+        
+        var database = getDb();
+        if (!database || !_currentJobId) {
+          if (typeof showToast === 'function') showToast('Erreur DB', 'error');
+          return;
+        }
+        
+        var path;
+        if (source === 'psm') {
+          var job = (typeof cardsData !== 'undefined' && cardsData[_currentJobId]) ? cardsData[_currentJobId] : null;
+          if (!job || !job.psmCardId) {
+            if (typeof showToast === 'function') showToast('Carte PSM introuvable', 'error');
+            return;
+          }
+          path = 'psmChat/' + job.psmCardId + '/messages/' + msgId;
+        } else {
+          path = 'moulages/' + _currentJobId + '/chatV2/messages/' + msgId;
+        }
+        
+        // Mettre à jour Firebase
+        var updates = { images: imgArr.length > 0 ? imgArr : null };
+        if (msg.image) updates.image = null; // Toujours nettoyer le champ singulier
+        
+        database.ref(path).update(updates).then(function() {
+          // Mettre à jour localement
+          if (imgArr.length > 0) {
+            msg.images = imgArr;
+          } else {
+            delete msg.images;
+          }
+          if (msg.image) delete msg.image;
+          // Re-render
+          if (typeof renderMessages === 'function') renderMessages();
+          if (typeof showToast === 'function') showToast('🗑️ Photo supprimée', 'success');
+        }).catch(function(err) {
+          console.error('deleteMessageImage error:', err);
+          if (typeof showToast === 'function') showToast('Erreur: ' + err.message, 'error');
+        });
+      }
+      
+      var _photoRequestRef = null;
+      var _photoRequestListener = null;
+    
+      function openCamera() {
+        // Moulage: ouvrir l'appareil photo / sélecteur de fichier local (pas de PhotoSender)
+        var zone = document.getElementById('qchatCompose');
+        if (!zone || !zone.classList.contains('active')) openCompose(_composeType || 'conversation');
+        var inp = document.getElementById('qchatCameraInput');
+        if (inp) inp.click();
+      }
+    
+      function requestMobilePhoto() { openCamera(); }
+    
+      function cancelPhotoRequest(silent) { _clearPhotoRequest(); }
+    
+      function _clearPhotoRequest() {
+        var btn = document.getElementById('qchatCameraBtn');
+        if (btn) { btn.classList.remove('waiting'); btn.innerHTML = '📷'; btn.title = 'Joindre une photo depuis le téléphone'; }
+        var mainBtn = document.getElementById('qchatPhotoBtnMain');
+        if (mainBtn) { mainBtn.classList.remove('waiting'); mainBtn.innerHTML = '📷 Télécharger une photo'; mainBtn.title = 'Prendre une photo via PhotoSender'; }
+      }
+    
+      function handleFileInput(input) {
+        if (!input.files || !input.files[0]) return;
+        var file = input.files[0];
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          if (typeof compressImage === 'function') {
+            compressImage(ev.target.result).then(function(compressed) {
+              _composeImages.push(compressed);
+              updateComposeImagePreview();
+            });
+          } else {
+            _composeImages.push(ev.target.result);
+            updateComposeImagePreview();
+          }
+        };
+        reader.readAsDataURL(file);
+        input.value = '';
+      }
+    
+      function handleFileAttach(input) {
+        if (!input.files || input.files.length === 0) return;
+        var maxSize = 4 * 1024 * 1024; // 4MB per file (Firebase limit)
+        Array.from(input.files).forEach(function(file) {
+          if (file.size > maxSize) {
+            if (typeof showToast === 'function') showToast('⚠️ ' + file.name + ' trop gros (max 4 Mo)', 'error');
+            return;
+          }
+          // Images go into _composeImages
+          if (file.type.indexOf('image') === 0) {
+            var reader = new FileReader();
+            reader.onload = function(ev) {
+              if (typeof compressImage === 'function') {
+                compressImage(ev.target.result).then(function(compressed) {
+                  _composeImages.push(compressed);
+                  updateComposeImagePreview();
+                });
+              } else {
+                _composeImages.push(ev.target.result);
+                updateComposeImagePreview();
+              }
+            };
+            reader.readAsDataURL(file);
+          } else {
+            // PDF, email, docs → _composeFiles as base64
+            var reader = new FileReader();
+            reader.onload = function(ev) {
+              _composeFiles.push({ name: file.name, dataUrl: ev.target.result, type: file.type || 'application/octet-stream' });
+              updateComposeImagePreview();
+            };
+            reader.readAsDataURL(file);
+          }
+        });
+        input.value = '';
+      }
+    
+      function clearImages() {
+        _composeImages = [];
+        _composeFiles = [];
+        updateComposeImagePreview();
+      }
+      
+      function send() {
+        var database = getDb();
+        if (!database || !_currentJobId) return;
+        
+        var _ce = document.getElementById('qchatComposeText');
+        var _rawText = _ce.tagName === 'TEXTAREA' ? _ce.value : (_ce.innerText || _ce.textContent || '');
+        var text = _rawText.trim();
+        // contenteditable may have <br> or &nbsp; when visually empty
+        if (text === '<br>' || text === '&nbsp;' || text === '<div><br></div>') text = '';
+        if (!text && _composeImages.length === 0 && _composeFiles.length === 0) return;
+        
+        // Lire les destinataires cochés (affichés au-dessus des notes)
+        _readComposeDests();
+        
+        var myEmail = getMyEmail();
+        var myName = getMyName();
+        
+        // Build content description
+        var contentDesc = text;
+        if (!contentDesc) {
+          var parts = [];
+          if (_composeImages.length > 0) parts.push('📷 ' + _composeImages.length + ' photo(s)');
+          if (_composeFiles.length > 0) parts.push('📎 ' + _composeFiles.map(function(f){ return f.name; }).join(', '));
+          contentDesc = parts.join(' + ');
+        }
+        
+        var msgData = {
+          content: contentDesc,
+          type: _composeType,
+          authorEmail: myEmail,
+          authorName: myName,
+          timestamp: Date.now(),
+          createdAt: firebase.database.ServerValue.TIMESTAMP,
+          dest: _destName,
+          jobId: _currentJobId
+        };
+        
+        if (_composeImages.length === 1) msgData.image = _composeImages[0];
+        if (_composeImages.length > 1) msgData.images = _composeImages;
+        if (_composeFiles.length > 0) msgData.files = _composeFiles.map(function(f){ return { name: f.name, dataUrl: f.dataUrl, type: f.type }; });
+        if (_replyToId) msgData.replyTo = _replyToId;
+        
+        // Capturer pour les notifications (closeCompose va vider _compose*)
+        var _notifContent = contentDesc;
+        var _notifType = (_composeType === 'reply') ? 'reply' : (_composeType === 'pinned' ? 'pinned' : 'normal');
+        var _notifHasImg = _composeImages.length > 0;
+        var _notifRecips = _extraDests.slice();
+        
+        database.ref('moulages/' + _currentJobId + '/chatV2/messages').push().set(msgData)
+          .then(function() {
+            closeCompose();
+            if (typeof showToast === 'function') showToast('\ud83d\udce4 Message envoyé', 'success');
+            // Notifications (cloche): destinataires choisis + TOUJOURS Valérie & Daniel
+            if (typeof createNotification === 'function') {
+              var card = cardsData[_currentJobId] || {};
+              var cardName = '#' + (card.order || '') + (card.name ? ' ' + card.name : '');
+              var recips = _notifRecips.slice();
+              ['Valérie','Daniel'].forEach(function(n){
+                var exists = recips.some(function(x){ return _normName(x) === _normName(n); });
+                if (!exists) recips.push(n);
+              });
+              var _notifSent = 0;
+              recips.forEach(function(n){
+                var em = (typeof nameToEmail==='function') ? nameToEmail(n) : '';
+                if (!em || em.toLowerCase() === myEmail) return; // pas de notif à soi-même
+                createNotification({
+                  to: em, toName: n.split(' ')[0],
+                  from: myEmail, fromName: myName,
+                  cardId: _currentJobId, cardName: cardName,
+                  messageType: _notifType,
+                  messageContent: _notifContent,
+                  hasImage: _notifHasImg,
+                  timestamp: Date.now()
+                });
+                _notifSent++;
+              });
+              if (_notifSent > 0 && typeof showToast === 'function') showToast('🔔 ' + _notifSent + ' personne(s) notifiée(s)', 'info');
+            }
+          })
+          .catch(function(e) { if (typeof showToast === 'function') showToast('\u274c Erreur: ' + e.message, 'error'); });
+      }
+      
+      // ---- Envoi d'un message précis par courriel (optionnel, via l'icône ✉️) ----
+      function emailMsg(id) {
+        var entry = _messages.find(function(e){ return e[0] === id; });
+        if (!entry) return;
+        var msg = entry[1];
+        var card = cardsData[_currentJobId] || {};
+        var orderNum = card.order || '---';
+        // Texte du message
+        var content = '';
+        if (msg.contentHtml) { var t = document.createElement('div'); t.innerHTML = msg.contentHtml; content = t.textContent || t.innerText || ''; }
+        else { content = msg.content || ''; }
+        if (!content) content = '\ud83d\udcf7 Photo / pièce jointe';
+        // Destinataires
+        var recipients = [];
+        if (_destName) recipients.push(_destName);
+        if (_extraDests && _extraDests.length > 0) _extraDests.forEach(function(n){ if (recipients.indexOf(n) === -1) recipients.push(n); });
+        var emails = recipients.map(function(n){ return (typeof nameToEmail==='function') ? nameToEmail(n) : ''; }).filter(function(e){ return !!e; });
+        var subject = encodeURIComponent('Moulage #' + orderNum + (card.name ? ' — ' + card.name : ''));
+        var body = encodeURIComponent(
+          'Bonjour,\n\n' + (msg.authorName || getMyName()) + ' (conversation moulage #' + orderNum + (card.name ? ' — ' + card.name : '') + ') :\n\n' +
+          content + '\n\nVeuillez consulter PhysiPro Moulage pour la suite.\n\nMerci.'
+        );
+        window.open('mailto:' + emails.join(',') + '?subject=' + subject + '&body=' + body);
+      }
+
+      // ---- Delete / Edit ----
+      function deleteMsg(id) {
+        var database = getDb();
+        if (!database || !_currentJobId) return;
+        if (!confirm('Supprimer ce message?')) return;
+        database.ref('moulages/' + _currentJobId + '/chatV2/messages/' + id).remove().catch(function(){});
+      }
+      
+      function editMsg(id) {
+        var el = document.querySelector('[data-msgid="'+id+'"] .qmsg-content');
+        if (!el) return;
+        var msg = _messages.find(function(e){ return e[0]===id; });
+        if (!msg) return;
+        var original = msg[1].content || '';
+        el.contentEditable = 'true';
+        el.focus();
+        el.style.outline = '2px solid #3b82f6';
+        el.style.borderRadius = '4px';
+        el.style.padding = '4px';
+        
+        var btns = document.createElement('div');
+        btns.className = 'edit-mode-buttons';
+        btns.innerHTML = '<button class="cancel-btn" onclick="MChat.cancelEdit(this)">Annuler</button><button class="save-btn" onclick="MChat.saveEdit(this,\''+id+'\')">Sauvegarder</button>';
+        el.parentNode.insertBefore(btns, el.nextSibling);
+        
+        el.dataset.original = original;
+      }
+      
+      function cancelEdit(btn) {
+        var container = btn.parentNode.parentNode;
+        var el = container.querySelector('.qmsg-content');
+        if (el) {
+          el.textContent = el.dataset.original || '';
+          el.contentEditable = 'false';
+          el.style.outline = '';
+          el.style.padding = '';
+        }
+        btn.parentNode.remove();
+      }
+      
+      function saveEdit(btn, id) {
+        var container = btn.parentNode.parentNode;
+        var el = container.querySelector('.qmsg-content');
+        if (!el) return;
+        var newText = el.innerText.trim();
+        if (!newText) return;
+        
+        var database = getDb();
+        if (database && _currentJobId) {
+          database.ref('moulages/' + _currentJobId + '/chatV2/messages/' + id + '/content').set(newText);
+          database.ref('moulages/' + _currentJobId + '/chatV2/messages/' + id + '/edited').set(true);
+          database.ref('moulages/' + _currentJobId + '/chatV2/messages/' + id + '/editedAt').set(new Date().toISOString());
+          if (typeof showToast === 'function') showToast('\u270f\ufe0f Modifié', 'success');
+        }
+        el.contentEditable = 'false';
+        el.style.outline = '';
+        el.style.padding = '';
+        btn.parentNode.remove();
+      }
+      
+      // ---- Image selection & annotations ----
+      function clickImage(e, img) {
+        // If a drawing tool is active, ignore the image click — let canvas handle it
+        if (_annotTool) { e.stopPropagation(); e.preventDefault(); return; }
+        e.stopPropagation();
+        document.querySelectorAll('.qchat-msg-img.selected').forEach(function(el){ el.classList.remove('selected'); });
+        img.classList.add('selected');
+        _selectedImgSrc = img.src;
+        // Open zoom WITH annotation toolbar (carrés, flèches, cercles)
+        zoomSelectedImage();
+      }
+      
+      function setAnnotTool(tool, isZoom) {
+        _annotTool = (_annotTool === tool) ? null : tool;
+        // Update button active state in both bars
+        ['qchatAnnotBar','qchatZoomTools'].forEach(function(barId) {
+          var bar = document.getElementById(barId);
+          if (bar) bar.querySelectorAll('.qchat-annot-btn[data-tool]').forEach(function(b){
+            b.classList.toggle('active', b.dataset.tool === _annotTool);
+          });
+        });
+        if (isZoom) {
+          var zc = document.getElementById('qchatZoomCanvas');
+          if (zc) { zc.style.pointerEvents = _annotTool ? 'auto' : 'none'; zc.style.cursor = _annotTool ? 'crosshair' : 'default'; }
+        } else {
+          // Update all inline canvases
+          document.querySelectorAll('.qchat-msg-img-wrap').forEach(function(wrap) {
+            var canvas = wrap.querySelector('.annot-canvas');
+            var img = wrap.querySelector('.qchat-msg-img');
+            if (!canvas && img) {
+              // Dynamically create missing canvas
+              canvas = document.createElement('canvas');
+              canvas.className = 'annot-canvas';
+              wrap.appendChild(canvas);
+            }
+            if (canvas && img) {
+              canvas.style.pointerEvents = _annotTool ? 'auto' : 'none';
+              canvas.style.cursor = _annotTool ? 'crosshair' : 'default';
+              // Block image clicks while tool is active so canvas gets all events
+              img.style.pointerEvents = _annotTool ? 'none' : 'auto';
+              // Sync canvas size only if dimensions changed (setting canvas.width clears it)
+              if (img.offsetWidth > 0 && (canvas.width !== img.offsetWidth || canvas.height !== img.offsetHeight)) {
+                canvas.width = img.offsetWidth;
+                canvas.height = img.offsetHeight;
+                redrawAllAnnotations();
+              }
+              if (!canvas._drawingSetup) {
+                canvas._drawingSetup = true;
+                _initInlineCanvas(canvas, img);
+              }
+            }
+          });
+        }
+      }
+      
+      function annotUndo(isZoom) {
+        if (isZoom) {
+          _zoomAnnotations.pop();
+          redrawZoomCanvas();
+        } else if (_selectedImgSrc && _annotations[_selectedImgSrc]) {
+          _annotations[_selectedImgSrc].pop();
+          redrawAllAnnotations();
+          // Save after undo
+          var selImg = document.querySelector('.qchat-msg-img.selected');
+          if (selImg) _saveAnnotationsForImg(selImg);
+        }
+      }
+      
+      function initAllCanvases() {
+        document.querySelectorAll('.qchat-msg-img-wrap').forEach(function(wrap) {
+          var img = wrap.querySelector('.qchat-msg-img');
+          var canvas = wrap.querySelector('.annot-canvas');
+          if (!img || !canvas || canvas._drawingSetup) return;
+          canvas._drawingSetup = true;
+          _initInlineCanvas(canvas, img);
+        });
+      }
+    
+      function redrawAllAnnotations() {
+        document.querySelectorAll('.qchat-msg-img-wrap').forEach(function(wrap) {
+          var img = wrap.querySelector('.qchat-msg-img');
+          var canvas = wrap.querySelector('.annot-canvas');
+          if (!img || !canvas) return;
+          if (!canvas._drawingSetup) { canvas._drawingSetup = true; _initInlineCanvas(canvas, img); }
+          canvas.width = img.offsetWidth;
+          canvas.height = img.offsetHeight;
+          var annots = _annotations[img.src] || [];
+          var ctx = canvas.getContext('2d');
+          ctx.clearRect(0,0,canvas.width,canvas.height);
+          annots.forEach(function(a){ drawAnnotation(ctx, a, canvas.width, canvas.height); });
+        });
+      }
+      
+      function redrawZoomCanvas() {
+        var canvas = document.getElementById('qchatZoomCanvas');
+        var img = document.getElementById('qchatZoomImg');
+        if (!canvas || !img) return;
+        canvas.width = img.offsetWidth;
+        canvas.height = img.offsetHeight;
+        var ctx = canvas.getContext('2d');
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        _zoomAnnotations.forEach(function(a){ drawAnnotation(ctx, a, canvas.width, canvas.height); });
+      }
+      
+      function drawAnnotation(ctx, a, w, h) {
+        ctx.strokeStyle = a.color || '#ef4444';
+        ctx.fillStyle = a.color || '#ef4444';
+        ctx.lineWidth = 2;
+        var x1=a.x1*w, y1=a.y1*h, x2=a.x2*w, y2=a.y2*h;
+        if (a.type === 'rect') {
+          ctx.strokeRect(x1, y1, x2-x1, y2-y1);
+        } else if (a.type === 'circle') {
+          var cx=(x1+x2)/2, cy=(y1+y2)/2, rx=Math.abs(x2-x1)/2, ry=Math.abs(y2-y1)/2;
+          ctx.beginPath(); ctx.ellipse(cx,cy,rx,ry,0,0,2*Math.PI); ctx.stroke();
+        } else if (a.type === 'arrow') {
+          ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+          var angle = Math.atan2(y2-y1,x2-x1);
+          ctx.beginPath();
+          ctx.moveTo(x2,y2);
+          ctx.lineTo(x2-12*Math.cos(angle-0.4), y2-12*Math.sin(angle-0.4));
+          ctx.moveTo(x2,y2);
+          ctx.lineTo(x2-12*Math.cos(angle+0.4), y2-12*Math.sin(angle+0.4));
+          ctx.stroke();
+        } else if (a.type === 'text') {
+          var fs = a.fontSize || 15;
+          ctx.font = '700 ' + fs + 'px sans-serif';
+          var tx = Math.min(x1,x2), ty = Math.min(y1,y2);
+          var boxW = Math.abs(x2-x1), boxH = Math.abs(y2-y1);
+          if (a.text) {
+            var pad = 4;
+            var tw = ctx.measureText(a.text).width;
+            // Fond clair + cadre couleur pour bien voir l'écriture
+            ctx.save();
+            ctx.fillStyle = 'rgba(255,255,255,0.85)';
+            ctx.fillRect(tx, ty, Math.max(boxW, tw + pad*2), Math.max(boxH, fs + pad*2));
+            ctx.strokeStyle = a.color || '#ef4444';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(tx, ty, Math.max(boxW, tw + pad*2), Math.max(boxH, fs + pad*2));
+            ctx.fillStyle = a.color || '#ef4444';
+            ctx.textBaseline = 'top';
+            ctx.fillText(a.text, tx + pad, ty + pad);
+            ctx.restore();
+          } else {
+            // Aperçu de la zone de texte pendant qu'on trace (avant de taper)
+            ctx.save();
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.fillRect(tx, ty, boxW, boxH);
+            ctx.strokeStyle = a.color || '#ef4444';
+            ctx.setLineDash([5,4]);
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(tx, ty, boxW, boxH);
+            ctx.restore();
+          }
+        }
+      }
+      
+      // ---- Zoom ----
+      function zoomSelectedImage() {
+        if (!_selectedImgSrc) {
+          if (typeof showToast === 'function') showToast('Cliquez sur une image d\'abord', 'info');
+          return;
+        }
+        var img = document.getElementById('qchatZoomImg');
+        img.src = _selectedImgSrc;
+        // Copy annotations from inline
+        _zoomAnnotations = (_annotations[_selectedImgSrc] || []).slice();
+        document.getElementById('qchatZoomOverlay').classList.add('active');
+        
+        img.onload = function() {
+          var canvas = document.getElementById('qchatZoomCanvas');
+          canvas.width = img.offsetWidth;
+          canvas.height = img.offsetHeight;
+          canvas.style.pointerEvents = _annotTool ? 'auto' : 'none';
+          redrawZoomCanvas();
+          setupCanvasDrawing(canvas, true);
+        };
+      }
+      
+      function closeZoom() {
+        document.getElementById('qchatZoomOverlay').classList.remove('active');
+        // Sync annotations back to inline + sauvegarder dans Firebase
+        if (_selectedImgSrc) {
+          _annotations[_selectedImgSrc] = _zoomAnnotations.slice();
+          redrawAllAnnotations();
+          // Retrouver l'image inline correspondante pour sauvegarder au bon msgId/index
+          var targetImg = null;
+          document.querySelectorAll('.qchat-msg-img').forEach(function(im){ if (im.src === _selectedImgSrc) targetImg = im; });
+          if (targetImg) _saveAnnotationsForImg(targetImg);
+        }
+        _annotTool = null;
+      }
+      
+      // ── Annotation persistence ──
+      var _pendingAnnotData = {}; // { msgId: { imgIndex: [annots] } }
+    
+      function _saveAnnotationsForImg(img) {
+        var database = getDb();
+        if (!database || !_currentJobId) return;
+        var msgDiv = img.closest('[data-msgid]');
+        if (!msgDiv) return;
+        var msgId = msgDiv.dataset.msgid;
+        var allImgs = Array.from(msgDiv.querySelectorAll('.qchat-msg-img'));
+        var imgIndex = allImgs.indexOf(img);
+        if (imgIndex === -1) imgIndex = 0;
+        var annots = _annotations[img.src] || [];
+        var path = 'moulages/' + _currentJobId + '/chatV2/annotations/' + msgId + '/' + imgIndex;
+        database.ref(path).set(annots.length > 0 ? annots : null).catch(function(e){ console.error('annot save err', e); });
+      }
+    
+      function _loadAnnotationsForJob(jobId) {
+        var database = getDb();
+        if (!database || !jobId) return;
+        database.ref('moulages/' + jobId + '/chatV2/annotations').once('value', function(snap) {
+          _pendingAnnotData = snap.val() || {};
+          _applyPendingAnnotations();
+        });
+      }
+    
+      function _applyPendingAnnotations() {
+        if (!_pendingAnnotData || Object.keys(_pendingAnnotData).length === 0) return;
+        document.querySelectorAll('[data-msgid]').forEach(function(msgDiv) {
+          var msgId = msgDiv.dataset.msgid;
+          var annotsByIndex = _pendingAnnotData[msgId];
+          if (!annotsByIndex) return;
+          var allImgs = msgDiv.querySelectorAll('.qchat-msg-img');
+          allImgs.forEach(function(img, idx) {
+            var annots = annotsByIndex[idx];
+            if (annots && annots.length > 0) {
+              _annotations[img.src] = annots;
+            }
+          });
+        });
+        redrawAllAnnotations();
+      }
+    
+      function _initInlineCanvas(canvas, img) {
+        // Sync canvas size to image
+        function syncSize() {
+          if (img.offsetWidth > 0) {
+            canvas.width = img.offsetWidth;
+            canvas.height = img.offsetHeight;
+            redrawAllAnnotations();
+          }
+        }
+        if (img.complete && img.offsetWidth > 0) { syncSize(); }
+        else if (img.complete && img.offsetWidth === 0) {
+          // Image loaded but not visible yet — retry after layout
+          setTimeout(syncSize, 100);
+          setTimeout(syncSize, 500);
+        }
+        else { img.addEventListener('load', function() { setTimeout(syncSize, 50); }); }
+        // Mouse events
+        var drawing = false, startX, startY;
+        canvas.addEventListener('mousedown', function(e) {
+          if (!_annotTool) return;
+          e.stopPropagation(); e.preventDefault();
+          // Track which image we're drawing on for undo
+          document.querySelectorAll('.qchat-msg-img.selected').forEach(function(el){ el.classList.remove('selected'); });
+          img.classList.add('selected');
+          _selectedImgSrc = img.src;
+          drawing = true;
+          var r = canvas.getBoundingClientRect();
+          startX = (e.clientX - r.left) / canvas.width;
+          startY = (e.clientY - r.top) / canvas.height;
+        });
+        canvas.addEventListener('mousemove', function(e) {
+          if (!drawing || !_annotTool) return;
+          e.stopPropagation();
+          var r = canvas.getBoundingClientRect();
+          var cx = (e.clientX - r.left) / canvas.width;
+          var cy = (e.clientY - r.top) / canvas.height;
+          var ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          var annots = _annotations[img.src] || [];
+          annots.forEach(function(a){ drawAnnotation(ctx, a, canvas.width, canvas.height); });
+          var color = document.getElementById('qchatAnnotColor') ? document.getElementById('qchatAnnotColor').value : '#ef4444';
+          drawAnnotation(ctx, {type:_annotTool, x1:startX, y1:startY, x2:cx, y2:cy, color:color}, canvas.width, canvas.height);
+        });
+        canvas.addEventListener('mouseup', function(e) {
+          if (!drawing || !_annotTool) return;
+          e.stopPropagation(); e.preventDefault();
+          drawing = false;
+          var r = canvas.getBoundingClientRect();
+          var ex = (e.clientX - r.left) / canvas.width;
+          var ey = (e.clientY - r.top) / canvas.height;
+          var color = document.getElementById('qchatAnnotColor') ? document.getElementById('qchatAnnotColor').value : '#ef4444';
+          if (!_annotations[img.src]) _annotations[img.src] = [];
+          _annotations[img.src].push({type:_annotTool, x1:startX, y1:startY, x2:ex, y2:ey, color:color});
+          redrawAllAnnotations();
+          _saveAnnotationsForImg(img);
+        });
+        // Touch support
+        canvas.addEventListener('touchstart', function(e) {
+          if (!_annotTool) return;
+          e.preventDefault(); e.stopPropagation();
+          document.querySelectorAll('.qchat-msg-img.selected').forEach(function(el){ el.classList.remove('selected'); });
+          img.classList.add('selected');
+          _selectedImgSrc = img.src;
+          var t = e.touches[0]; var r = canvas.getBoundingClientRect();
+          drawing = true;
+          startX = (t.clientX - r.left) / canvas.width;
+          startY = (t.clientY - r.top) / canvas.height;
+        }, {passive:false});
+        canvas.addEventListener('touchmove', function(e) {
+          if (!drawing || !_annotTool) return;
+          e.preventDefault();
+          var t = e.touches[0]; var r = canvas.getBoundingClientRect();
+          var cx = (t.clientX - r.left) / canvas.width;
+          var cy = (t.clientY - r.top) / canvas.height;
+          var ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          var annots = _annotations[img.src] || [];
+          annots.forEach(function(a){ drawAnnotation(ctx, a, canvas.width, canvas.height); });
+          var color = document.getElementById('qchatAnnotColor') ? document.getElementById('qchatAnnotColor').value : '#ef4444';
+          drawAnnotation(ctx, {type:_annotTool, x1:startX, y1:startY, x2:cx, y2:cy, color:color}, canvas.width, canvas.height);
+        }, {passive:false});
+        canvas.addEventListener('touchend', function(e) {
+          if (!drawing || !_annotTool) return;
+          e.preventDefault();
+          drawing = false;
+          var t = e.changedTouches[0]; var r = canvas.getBoundingClientRect();
+          var ex = (t.clientX - r.left) / canvas.width;
+          var ey = (t.clientY - r.top) / canvas.height;
+          var color = document.getElementById('qchatAnnotColor') ? document.getElementById('qchatAnnotColor').value : '#ef4444';
+          if (!_annotations[img.src]) _annotations[img.src] = [];
+          _annotations[img.src].push({type:_annotTool, x1:startX, y1:startY, x2:ex, y2:ey, color:color});
+          redrawAllAnnotations();
+          _saveAnnotationsForImg(img);
+        }, {passive:false});
+      }
+    
+      function setupCanvasDrawing(canvas, isZoom) {
+        var drawing = false;
+        var startX, startY;
+        function _pt(e){
+          var rect = canvas.getBoundingClientRect();
+          var src = (e.touches && e.touches[0]) ? e.touches[0] : ((e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : e);
+          return { x:(src.clientX - rect.left)/canvas.width, y:(src.clientY - rect.top)/canvas.height };
+        }
+        function _down(e){ if (!_annotTool) return; if(e.cancelable) e.preventDefault(); drawing = true; var p=_pt(e); startX=p.x; startY=p.y; }
+        function _move(e){
+          if (!drawing || !_annotTool) return;
+          if(e.cancelable) e.preventDefault();
+          var p=_pt(e);
+          var ctx = canvas.getContext('2d');
+          ctx.clearRect(0,0,canvas.width,canvas.height);
+          var annots = isZoom ? _zoomAnnotations : (_annotations[_selectedImgSrc]||[]);
+          annots.forEach(function(a){ drawAnnotation(ctx, a, canvas.width, canvas.height); });
+          var colorEl = isZoom ? document.getElementById('qchatZoomAnnotColor') : document.getElementById('qchatAnnotColor');
+          var preview = {type:_annotTool, x1:startX, y1:startY, x2:p.x, y2:p.y, color:colorEl?colorEl.value:'#ef4444'};
+          drawAnnotation(ctx, preview, canvas.width, canvas.height);
+        }
+        function _up(e){
+          if (!drawing || !_annotTool) return;
+          drawing = false;
+          var p=_pt(e);
+          var endX=p.x, endY=p.y;
+          var colorEl = isZoom ? document.getElementById('qchatZoomAnnotColor') : document.getElementById('qchatAnnotColor');
+          var color = colorEl ? colorEl.value : '#ef4444';
+          var annot;
+          if (_annotTool === 'text') {
+            var text = prompt('Texte:');
+            if (!text) { if(isZoom) redrawZoomCanvas(); else redrawAllAnnotations(); return; }
+            var boxHpx = Math.abs(endY - startY) * canvas.height;
+            var fontSize = boxHpx > 14 ? Math.round(boxHpx - 8) : 15;
+            if (fontSize > 60) fontSize = 60;
+            annot = {type:'text', x1:startX, y1:startY, x2:endX, y2:endY, color:color, text:text, fontSize:fontSize};
+          } else {
+            annot = {type:_annotTool, x1:startX, y1:startY, x2:endX, y2:endY, color:color};
+          }
+          if (isZoom) {
+            _zoomAnnotations.push(annot);
+            redrawZoomCanvas();
+          } else if (_selectedImgSrc) {
+            if (!_annotations[_selectedImgSrc]) _annotations[_selectedImgSrc] = [];
+            _annotations[_selectedImgSrc].push(annot);
+            redrawAllAnnotations();
+          }
+        }
+        canvas.onmousedown = _down;
+        canvas.onmousemove = _move;
+        canvas.onmouseup = _up;
+        canvas.ontouchstart = _down;
+        canvas.ontouchmove = _move;
+        canvas.ontouchend = _up;
+      }
+      
+      // ---- Print ----
+      function printChat() {
+        if (!_currentJobId || !_messages || _messages.length === 0) {
+          if (typeof showToast === 'function') showToast('Aucun message à imprimer', 'warning');
+          return;
+        }
+        
+        var job = cardsData[_currentJobId] || {};
+        var orderNum = esc(job.order || '?');
+        var clientName = esc(job.client || job.nom || '');
+        var titleText = 'Questionnement — Job #' + orderNum + (clientName ? ' — ' + clientName : '');
+        
+        // Construire HTML message par message
+        var body = '<h2>' + titleText + '</h2>';
+        
+        _messages.forEach(function(entry) {
+          var msg = entry[1];
+          var isReply = msg.type === 'reply' || !!msg.replyTo;
+          var typeLabel = isReply ? '↩️ Réponse' : '💬 Conversation';
+          var blockClass = isReply ? 'msg-block reply' : 'msg-block question';
+          var timeStr = esc(fmtTime(msg.timestamp));
+          var authorName = esc(msg.authorName || '?');
+          
+          // Extraire le contenu en texte brut (peu importe contentHtml ou content)
+          var rawText = '';
+          if (msg.contentHtml) {
+            var tmp = document.createElement('div');
+            tmp.innerHTML = msg.contentHtml;
+            rawText = tmp.textContent || tmp.innerText || '';
+          } else {
+            rawText = msg.content || msg.text || '';
+          }
+          // Échapper pour HTML (les espaces multiples seront préservés par white-space:pre-wrap)
+          var safeContent = esc(rawText);
+          
+          // Bloc texte du message
+          body += '<div class="' + blockClass + '">';
+          body += '<div class="msg-header">' + typeLabel + ' <span class="msg-time">' + timeStr + '</span></div>';
+          body += '<div class="msg-author">' + authorName + '</div>';
+          body += '<div class="msg-content">' + safeContent + '</div>';
+          body += '</div>';
+          
+          // Bloc images (séparé pour pouvoir être déplacé entre pages)
+          var imgs = [];
+          if (msg.image) imgs.push(msg.image);
+          if (msg.images && Array.isArray(msg.images)) imgs = imgs.concat(msg.images);
+          imgs.forEach(function(src) {
+            body += '<div class="msg-image-block"><img src="' + esc(src) + '"></div>';
+          });
+        });
+        
+        var css = ''
+          + '@page { size: letter; margin: 0.4in; }'
+          + 'body { font-family: Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 15px; line-height: 1.4; }'
+          + 'h2 { font-size: 18px; margin: 0 0 12px 0; }'
+          + '.msg-block { padding: 8px 10px; margin: 6px 0; border-radius: 4px; page-break-inside: auto; break-inside: auto; }'
+          + '.msg-block.question { background: #fef2f2; border-left: 3px solid #ef4444; }'
+          + '.msg-block.reply { background: #eff6ff; border-left: 3px solid #3b82f6; margin-left: 20px; }'
+          + '.msg-header { font-weight: 700; font-size: 13px; color: #1e293b; margin-bottom: 2px; }'
+          + '.msg-time { font-weight: 400; color: #666; font-size: 12px; margin-left: 6px; }'
+          + '.msg-author { font-size: 13px; color: #444; font-weight: 600; margin-bottom: 4px; }'
+          + '.msg-content { font-size: 15px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; }'
+          + '.msg-image-block { margin: 4px 0 10px 10px; page-break-inside: avoid; break-inside: avoid; }'
+          + '.msg-image-block img { max-width: 320px; max-height: 300px; display: block; border: 1px solid #ddd; }';
+        
+        var w = window.open('', '', 'width=800,height=600');
+        w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Questionnement #' + orderNum + '</title><style>' + css + '</style></head><body>' + body + '</body></html>');
+        w.document.close();
+        setTimeout(function() { w.print(); }, 250);
+      }
+      
+      // ---- PDF Email Form ----
+      function openEmailForm() {
+        if (!_currentJobId) return;
+        var job = cardsData[_currentJobId] || {};
+        
+        // Fill info
+        document.getElementById('qchatPdfInfo').innerHTML = 
+          '<div class="qchat-pdf-info-item"><span class="qchat-pdf-info-label">Patient/Client:</span><span class="qchat-pdf-info-value">'+esc(job.client||job.nom||'—')+'</span></div>' +
+          '<div class="qchat-pdf-info-item"><span class="qchat-pdf-info-label">N° Commande:</span><span class="qchat-pdf-info-value">#'+esc(job.order||'—')+'</span></div>' +
+          '<div class="qchat-pdf-info-item"><span class="qchat-pdf-info-label">Envoyé par:</span><span class="qchat-pdf-info-value">'+esc(getMyName())+'</span></div>' +
+          '<div class="qchat-pdf-info-item"><span class="qchat-pdf-info-label">Date:</span><span class="qchat-pdf-info-value">'+new Date().toLocaleDateString('fr-CA')+'</span></div>';
+        
+        // Fill messages
+        var msgsHtml = '';
+        _messages.forEach(function(e) {
+          var msg = e[1];
+          var isReply = msg.type === 'reply' || msg.replyTo;
+          var imgHtml = '';
+          var imgArr = [];
+          if (msg.image) imgArr.push(msg.image);
+          if (msg.images && Array.isArray(msg.images)) imgArr = imgArr.concat(msg.images);
+          if (msg.imageUrl) imgArr.push(msg.imageUrl);
+          if (msg.photoUrl) imgArr.push(msg.photoUrl);
+          if (imgArr.length > 0) {
+            imgHtml = '<div style="margin-top:6px;">';
+            imgArr.forEach(function(src) { imgHtml += '<img src="' + esc(src) + '" style="max-width:100%;max-height:250px;border-radius:6px;margin:2px 0;display:block;">'; });
+            imgHtml += '</div>';
+          }
+          msgsHtml += '<div class="qchat-pdf-msg '+(isReply?'reply':'question')+'">' +
+            '<strong>'+(isReply?'↩️ Réponse':'❓ Question')+' — '+esc(msg.authorName||'?')+' ('+fmtTime(msg.timestamp)+')</strong><br>' +
+            esc(msg.content||'') + imgHtml +
+            '</div>';
+        });
+        document.getElementById('qchatPdfMsgList').innerHTML = msgsHtml || '<em>Aucun message</em>';
+        
+        document.getElementById('qchatPdfOverlay').classList.add('active');
+      }
+      
+      function closePdfForm() {
+        document.getElementById('qchatPdfOverlay').classList.remove('active');
+      }
+      
+      function savePdf() {
+        // Use print-to-PDF as workaround
+        var content = document.getElementById('qchatPdfContent');
+        if (!content) return;
+        var w = window.open('','','width=816,height=1056');
+        w.document.write('<html><head><title>Formulaire Questionnement</title>');
+        w.document.write('<style>body{margin:0;font-family:"Segoe UI",Arial,sans-serif;} @page{size:letter;margin:0.5in;}</style>');
+        w.document.write('</head><body>');
+        w.document.write(content.innerHTML);
+        w.document.write('</body></html>');
+        w.document.close();
+        setTimeout(function(){ w.print(); }, 300);
+      }
+      
+      function openEmail() {
+        var job = cardsData[_currentJobId] || {};
+        var subject = encodeURIComponent('Questionnement — #' + (job.order||'') + ' ' + (job.client||''));
+        var body = encodeURIComponent('Bonjour,\n\nVeuillez trouver ci-joint le formulaire de questionnement pour la commande #' + (job.order||'') + '.\n\nCordialement,\nDaniel Charest\nCoordonnateur de production ATP\nPhysiPro Inc.');
+        window.open('mailto:?subject='+subject+'&body='+body);
+      }
+      
+      function copyPdfContent() {
+        var content = document.getElementById('qchatPdfContent');
+        if (!content) return;
+        var range = document.createRange();
+        range.selectNodeContents(content);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand('copy');
+        sel.removeAllRanges();
+        if (typeof showToast === 'function') showToast('\ud83d\udccb Copié!', 'success');
+      }
+      
+      // ---- Message count ----
+      function getCount() {
+        return _messages.length;
+      }
+      
+      // ---- Quick Photo shortcut (button in bottom bar) ----
+      function quickPhoto() {
+        if (!_currentJobId) {
+          if (typeof showToast === 'function') showToast('Ouvrez d\'abord un questionnement', 'warning');
+          return;
+        }
+        document.getElementById('qchatQuickPhotoInput').click();
+      }
+    
+      function handleQuickPhoto(input) {
+        if (!input.files || !input.files[0]) return;
+        var file = input.files[0];
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          var processPhoto = function(dataUrl) {
+            // Open compose if not already open
+            var zone = document.getElementById('qchatCompose');
+            if (!zone || !zone.classList.contains('active')) {
+              openCompose('conversation');
+            }
+            _composeImages.push(dataUrl);
+            updateComposeImagePreview();
+          };
+          if (typeof compressImage === 'function') {
+            compressImage(ev.target.result).then(processPhoto);
+          } else {
+            processPhoto(ev.target.result);
+          }
+        };
+        reader.readAsDataURL(file);
+        input.value = '';
+      }
+    
+      return {
+        loadForJob: loadForJob,
+        detach: detach,
+        toggleDestPicker: toggleDestPicker,
+        confirmDestPicker: confirmDestPicker,
+        addExtraDest: addExtraDest,
+        removeExtraDest: removeExtraDest,
+        openCompose: openCompose,
+        openCamera: openCamera,
+        requestMobilePhoto: requestMobilePhoto,
+        cancelPhotoRequest: cancelPhotoRequest,
+        handleFileInput: handleFileInput,
+        closeCompose: closeCompose,
+        replyTo: replyTo,
+        handlePaste: handlePaste,
+        clearImages: clearImages,
+        send: send,
+        getCurrentJobId: function() { return _currentJobId; },
+        deleteMsg: deleteMsg,
+        editMsg: editMsg,
+        cancelEdit: cancelEdit,
+        saveEdit: saveEdit,
+        clickImage: clickImage,
+        setAnnotTool: setAnnotTool,
+        annotUndo: annotUndo,
+        _getAnnotations: function(src) { return _annotations[src] || []; },
+        zoomSelectedImage: zoomSelectedImage,
+        closeZoom: closeZoom,
+        printChat: printChat,
+        openEmailForm: openEmailForm,
+        closePdfForm: closePdfForm,
+        savePdf: savePdf,
+        openEmail: openEmail,
+        copyPdfContent: copyPdfContent,
+        getCount: getCount,
+        quickPhoto: quickPhoto,
+        handleQuickPhoto: handleQuickPhoto,
+        handleFileAttach: handleFileAttach,
+        rotateComposeImage: rotateComposeImage,
+        rotateMessageImage: rotateMessageImage,
+        deleteMessageImage: deleteMessageImage,
+        resendLastMessage: resendLastMessage,
+        resendMessageByID: resendMessageByID,
+        _getMessages: function() { return _messages; },
+        removeComposeImage: removeComposeImage,
+        removeComposeFile: removeComposeFile,
+        emailMsg: emailMsg
+      };
+    })();
+    
+    // ---- Setup annotation canvas drawing on inline images ----
+    document.addEventListener('click', function(e) {
+      // Close dest picker on outside click
+      if (!e.target.closest('.qchat-dest-area')) {
+        var picker = document.getElementById('qchatDestPicker');
+        if (picker) picker.classList.remove('active');
+      }
+    });
+    
+    // ===== TOOLBAR HELPERS =====
+    function qctSetFontSize(val) {
+      var px = Math.max(8, Math.min(72, parseInt(val) || 14));
+      document.getElementById('qctFontSize').value = px;
+      var ta = document.getElementById('qchatComposeText');
+      if (!ta) return;
+      ta.focus();
+      document.execCommand('fontSize', false, '7');
+      ta.querySelectorAll('font[size="7"]').forEach(function(f) {
+        f.removeAttribute('size');
+        f.style.fontSize = px + 'px';
+      });
+    }
+    
+    function qctInsertShape(type) {
+      var colorPicker = document.getElementById('qctActiveColor');
+      var color = colorPicker ? colorPicker.value : '#ef4444';
+      var size = 48;
+      var svg = '';
+      if (type === 'arrow') {
+        svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 48 48">' +
+          '<line x1="6" y1="42" x2="42" y2="6" stroke="'+color+'" stroke-width="4" stroke-linecap="round"/>' +
+          '<polyline points="20,6 42,6 42,28" fill="none" stroke="'+color+'" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>' +
+          '</svg>';
+      } else if (type === 'circle') {
+        svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 48 48">' +
+          '<circle cx="24" cy="24" r="18" fill="none" stroke="'+color+'" stroke-width="4"/>' +
+          '</svg>';
+      } else {
+        svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 48 48">' +
+          '<rect x="6" y="6" width="36" height="36" fill="none" stroke="'+color+'" stroke-width="4" rx="3"/>' +
+          '</svg>';
+      }
+      var dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+      var ta = document.getElementById('qchatComposeText');
+      if (ta) {
+        ta.focus();
+        document.execCommand('insertImage', false, dataUrl);
+      }
+    }
+
   </script>
   
   <!-- GALERIE PHOTOS ONEDRIVE -->
@@ -17484,5 +20041,53 @@ var PChat = (function() {
   <img id="pchatLightboxImg" src="" alt="Image">
 </div>
 
+
+<!-- MCHAT overlays -->
+<div class="qchat-zoom-overlay" id="qchatZoomOverlay">
+  <div class="qchat-zoom-header" style="padding:8px 56px 8px 12px;">
+    <div class="qchat-zoom-tools" id="qchatZoomTools" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <span style="color:#93c5fd;font-size:11px;font-weight:700;text-transform:uppercase;margin-right:4px;">Annoter:</span>
+      <button class="qchat-annot-btn" data-tool="rect" onclick="MChat.setAnnotTool('rect',true)" title="Dessiner un carré" style="min-width:38px;height:34px;font-size:18px;font-weight:700;padding:0 8px;">▢</button>
+      <button class="qchat-annot-btn" data-tool="circle" onclick="MChat.setAnnotTool('circle',true)" title="Dessiner un cercle" style="min-width:38px;height:34px;font-size:18px;font-weight:700;padding:0 8px;">○</button>
+      <button class="qchat-annot-btn" data-tool="arrow" onclick="MChat.setAnnotTool('arrow',true)" title="Dessiner une flèche" style="min-width:38px;height:34px;font-size:18px;font-weight:700;padding:0 8px;">↗</button>
+      <button class="qchat-annot-btn" data-tool="text" onclick="MChat.setAnnotTool('text',true)" title="Ajouter texte" style="min-width:38px;height:34px;font-size:16px;font-weight:700;padding:0 8px;">A</button>
+      <input type="color" class="qchat-annot-color" id="qchatZoomAnnotColor" value="#ef4444" title="Couleur" style="width:38px;height:34px;border:1px solid rgba(255,255,255,0.3);border-radius:4px;cursor:pointer;padding:2px;">
+      <button class="qchat-annot-btn" onclick="MChat.annotUndo(true)" title="Annuler dernière annotation" style="min-width:38px;height:34px;font-size:18px;font-weight:700;padding:0 8px;">↩</button>
+    </div>
+    <button class="qchat-zoom-close" onclick="MChat.closeZoom()" title="Fermer">✕</button>
+  </div>
+  <div class="qchat-zoom-body" id="qchatZoomBody">
+    <div class="qchat-zoom-img-wrap" id="qchatZoomImgWrap">
+      <img id="qchatZoomImg" src="" draggable="false" ondragstart="return false">
+      <canvas id="qchatZoomCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- MChat PDF Email Form -->
+<div class="qchat-pdf-overlay" id="qchatPdfOverlay" onclick="if(event.target===this)MChat.closePdfForm()">
+  <div class="qchat-pdf-page">
+    <div class="qchat-pdf-content" id="qchatPdfContent">
+      <div class="qchat-pdf-logo"><img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" alt="PhysiPro"></div>
+      <div class="qchat-pdf-title">Formulaire de questionnement</div>
+      <div class="qchat-pdf-info" id="qchatPdfInfo"></div>
+      <div class="qchat-pdf-section" id="qchatPdfQuestions">
+        <div class="qchat-pdf-section-title">Questionnements</div>
+        <div id="qchatPdfMsgList"></div>
+      </div>
+      <div class="qchat-pdf-section" style="flex:1;display:flex;flex-direction:column;">
+        <div class="qchat-pdf-section-title">Réponse du destinataire</div>
+        <div class="qchat-pdf-response-zone" contenteditable="true">Écrire la réponse ici...</div>
+      </div>
+      <div class="qchat-pdf-signature">Cordialement,<br>Daniel Charest — Coordonnateur de production ATP</div>
+      <div class="qchat-pdf-footer">PhysiPro Inc. — Produits de positionnement et de physiothérapie</div>
+    </div>
+    <div class="qchat-pdf-buttons">
+      <button class="qchat-pdf-btn save" onclick="MChat.savePdf()">📄 Enregistrer en PDF</button>
+      <button class="qchat-pdf-btn email" onclick="MChat.openEmail()">✉️ Ouvrir courriel</button>
+      <button class="qchat-pdf-btn copy" onclick="MChat.copyPdfContent()">📋 Copier</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
