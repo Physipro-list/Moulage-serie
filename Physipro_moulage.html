@@ -8,6 +8,37 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
+    v1640 - CHECK-UP PERF: FICHE DESKTOP AUSSI NON-BLOQUANTE (chat/photos OK)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1640:
+
+    1. Vérification demandée (chat + photos):
+       • CHAT: ouvert via listeners Firebase (.on) non bloquants → OK, pas de
+         blocage réseau à l'ouverture.
+       • PHOTOS MOBILES: la page s'affiche tout de suite (spinner) + cache, puis
+         chargement en arrière-plan → OK.
+    2. Seul restait openFiche DESKTOP avec un await bloquant
+       (forceRefreshCardFromFirebase). Rendu non-bloquant comme la version
+       mobile: ouverture immédiate avec données locales + refresh en arrière-plan.
+       → Plus aucun blocage réseau à l'ouverture d'une fiche (mobile ou desktop).
+
+    ═══════════════════════════════════════════════════════════════════
+
+    v1639 - FICHE MOBILE: OUVERTURE IMMÉDIATE (refresh Firebase en arrière-plan)
+    ═══════════════════════════════════════════════════════════════════
+
+    🆕 MODIFICATIONS v1639:
+
+    1. Sur tablette/mobile, taper une carte « flashait » sans ouvrir, ou ouvrait
+       très lentement: openMobileFiche faisait un rafraîchissement Firebase
+       BLOQUANT (await) avant d'afficher la fiche.
+    2. Désormais la fiche s'ouvre IMMÉDIATEMENT avec les données locales; le
+       rafraîchissement Firebase se fait en arrière-plan et re-rend la fiche une
+       fois terminé (si encore ouverte). Plus de blocage réseau au tap.
+
+    ═══════════════════════════════════════════════════════════════════
+
     v1638 - ACCUSÉS DE LECTURE: UN SEUL NOM PAR PERSONNE PAR BULLE (anti-doublon)
     ═══════════════════════════════════════════════════════════════════
 
@@ -968,7 +999,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1638</title>
+  <title>PhysiPro Moulages v1640</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -10651,7 +10682,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     }
 
     // ===== SECTION 13: FICHE =====
-    async function openFiche(cardId) {
+    async function openFiche(cardId, _skipRefresh) {
       currentCardId = cardId;
       let d = cardsData[cardId];
       if (!d) return;
@@ -10685,10 +10716,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         if (photosCheckbox) photosCheckbox.checked = true;
       }
       
-      // SYNC FIX: Refresh automatique pour avoir les derniers données (attendre le résultat)
-      await forceRefreshCardFromFirebase(cardId);
+      // Ne PAS bloquer l'ouverture sur le réseau: rafraîchir en arrière-plan,
+      // puis re-rendre la fiche une fois les données à jour (si encore ouverte).
+      if (!_skipRefresh) {
+        forceRefreshCardFromFirebase(cardId).then(function() {
+          if (currentCardId === cardId) openFiche(cardId, true);
+        }).catch(function(){});
+      }
       
-      // Re-récupérer les données après le refresh
+      // Re-récupérer les données (locales pour l'instant)
       d = cardsData[cardId];
       if (!d) return;
       
@@ -16690,15 +16726,19 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     window.renderMobileCards = renderMobileCards;
     
     // Ouvrir la fiche mobile (IDENTIQUE AU DESKTOP)
-    async function openMobileFiche(cardId) {
+    async function openMobileFiche(cardId, _skipRefresh) {
       mobileCurrentCardId = cardId;
       let card = cardsData[cardId];
       if (!card) return;
       
-      // SYNC FIX: Refresh automatique pour avoir les dernières données (attendre le résultat)
-      await forceRefreshCardFromFirebase(cardId);
+      // Ouvrir TOUT DE SUITE avec les données locales (ne pas bloquer sur le réseau).
+      // Rafraîchir depuis Firebase en arrière-plan, puis re-rendre si la carte est encore ouverte.
+      if (!_skipRefresh) {
+        forceRefreshCardFromFirebase(cardId).then(function() {
+          if (mobileCurrentCardId === cardId) openMobileFiche(cardId, true);
+        }).catch(function(){});
+      }
       
-      // Re-récupérer les données après le refresh
       card = cardsData[cardId];
       if (!card) return;
       
