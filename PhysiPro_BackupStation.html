@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🛡️ Sauvegarde v12</title>
+<title>🛡️ Sauvegarde v13</title>
+<!-- v13 : PLUS de JSON pour Moulages (les fiches Fiche.html suffisent) — JSON conservés pour Inspection_Atelier / Production_Couture / Inspection_Finale -->
 <!-- v12 : modules directement dans le dossier choisi (plus de sous-dossier PhysiPro_Backups) -->
 <!-- v11 : clic photo = agrandissement dans la fiche (lightbox) -->
 <!-- v8 : vérification 1x/heure (au lieu de 5 min), sauvegarde seulement sur changement -->
@@ -186,7 +187,7 @@ async function runC(trig){
     var n=mk[i],mod=M[n],md={},pk=Object.keys(mod.p);mS[n]='run';renderM();
     for(var j=0;j<pk.length;j++){try{var s=await fbDb.ref(mod.p[pk[j]].r).once('value');var v=s.val();if(v!==null)md[pk[j]]=v;}catch(e){}}
     var h=sH(JSON.stringify(md));if(h===lastH[n]&&trig!=='Forcée'){mS[n]='ok';renderM();continue;}lastH[n]=h;
-    try{var mf=await root.getDirectoryHandle(n,{create:true});var fn=day+'_'+ts+'.json';var c=JSON.stringify({module:n,backup:{date:day,heure:ts,trigger:trig,user:fbUser?fbUser.email:'?'},data:md},null,2);var fh=await mf.getFileHandle(fn,{create:true});var w=await fh.createWritable();await w.write(new Blob([c],{type:'application/json'}));await w.close();if(n!=='Moulages'){try{await xlsWriteModule(mf,n,md);}catch(_x){console.error('xlsx '+n,_x);}}var mb=(c.length/(1024*1024)).toFixed(1);tf++;tb+=c.length;mS[n]='ok';mZ[n]=mb+'M';lg('  ✅ '+n+' '+mb+'M','ok');}catch(e){mS[n]='err';hasError=true;lg('  ❌ '+n,'err');}renderM();
+    try{if(n==='Moulages'){/* Pas de JSON pour Moulages: l'archive Fiche.html (archiveMoulages) fait le travail */mS[n]='ok';mZ[n]='fiches';lg('  ✅ Moulages → fiches seulement (pas de JSON)','ok');}else{var mf=await root.getDirectoryHandle(n,{create:true});var fn=day+'_'+ts+'.json';var c=JSON.stringify({module:n,backup:{date:day,heure:ts,trigger:trig,user:fbUser?fbUser.email:'?'},data:md},null,2);var fh=await mf.getFileHandle(fn,{create:true});var w=await fh.createWritable();await w.write(new Blob([c],{type:'application/json'}));await w.close();try{await xlsWriteModule(mf,n,md);}catch(_x){console.error('xlsx '+n,_x);}var mb=(c.length/(1024*1024)).toFixed(1);tf++;tb+=c.length;mS[n]='ok';mZ[n]=mb+'M';lg('  ✅ '+n+' '+mb+'M','ok');}}catch(e){mS[n]='err';hasError=true;lg('  ❌ '+n,'err');}renderM();
   }
   if(tf>0){localStorage.setItem('bk_last',new Date().toISOString());lg('✅ '+tf+' mod ('+(tb/(1024*1024)).toFixed(1)+'M)','ok');toast('✅ '+tf+' sauvegardés','ok');var tk='bk_td_'+day;var td=JSON.parse(localStorage.getItem(tk)||'[]');td.push(ts);localStorage.setItem(tk,JSON.stringify(td));}else{lg('— Aucun chang.','t');}
   try{await archiveMoulages(trig);}catch(e){lg('  ⚠️ Archive Moulage: '+e.message,'err');hasError=true;}
