@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PhysiPro 📋 Historique</title>
+<!-- Historique v1 : page téléphone — entrer le numéro de moulage, le nom se confirme
+     automatiquement, choisir une action (liste modifiable), note optionnelle, Confirmer.
+     Écrit dans moulages/<cardId>/historique. Pas de login qui clignote (écran Ouverture…). -->
+<meta name="theme-color" content="#04152c">
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #04152c; --bg2: #091e3a; --bg3: #0f2847;
+    --blue: #3b82f6; --blue-light: #60a5fa; --green: #22c55e; --red: #ef4444;
+    --amber: #f59e0b;
+    --text: #e2e8f0; --text-dim: #94a3b8; --border: rgba(59,130,246,0.25);
+    --safe-top: env(safe-area-inset-top, 0px); --safe-bot: env(safe-area-inset-bottom, 0px);
+  }
+  html, body { height:100%; width:100%; background:var(--bg); color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size:15px;
+    -webkit-tap-highlight-color:transparent; }
+  body { overflow-x:hidden; }
+
+  .screen { position:fixed; inset:0; display:flex; flex-direction:column; background:var(--bg);
+    padding-top:var(--safe-top); padding-bottom:var(--safe-bot); }
+  .screen.hidden { display:none; }
+
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:12px 14px;
+    background:linear-gradient(180deg,#04152c 0%,var(--bg2) 100%); border-bottom:1px solid var(--border); flex-shrink:0; }
+  .topbar-title { font-size:17px; font-weight:800; color:var(--blue-light); letter-spacing:-0.2px; }
+  .back-btn { background:rgba(59,130,246,0.12); border:1.5px solid rgba(59,130,246,0.4); border-radius:10px;
+    color:var(--blue-light); font-size:14px; font-weight:700; padding:8px 14px; text-decoration:none;
+    display:inline-flex; align-items:center; gap:5px; }
+  .back-btn:active { background:rgba(59,130,246,0.25); transform:scale(0.97); }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:var(--red); display:inline-block; }
+  .status-dot.connected { background:var(--green); }
+
+  .body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:16px 14px calc(20px + var(--safe-bot)); }
+
+  .label { font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.6px; margin:2px 2px 7px; }
+  .num-input { width:100%; padding:16px 16px; border:2px solid var(--border); border-radius:14px;
+    background:var(--bg3); color:var(--text); font-size:22px; font-weight:700; letter-spacing:1px; outline:none; text-align:center; }
+  .num-input:focus { border-color:var(--blue); }
+  .num-input::placeholder { color:var(--text-dim); font-weight:500; letter-spacing:0; }
+
+  .confirm-line { margin:10px 2px 0; min-height:24px; font-size:15px; font-weight:700; text-align:center; }
+  .confirm-line.ok { color:var(--green); }
+  .confirm-line.bad { color:var(--red); }
+  .confirm-line.dim { color:var(--text-dim); font-weight:500; }
+
+  .section { margin-top:22px; }
+  .section.locked { opacity:0.4; pointer-events:none; filter:grayscale(0.5); }
+
+  .big-btn { width:100%; min-height:88px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px; border:none; border-radius:18px; cursor:pointer; padding:16px;
+    background:linear-gradient(145deg,#3b82f6,#1d4ed8); color:#fff;
+    box-shadow:0 10px 26px rgba(59,130,246,0.4), inset 0 1px 0 rgba(255,255,255,0.25); transition:transform .12s, filter .12s; }
+  .big-btn:active { transform:scale(0.98); filter:brightness(0.95); }
+  .big-btn .ic { font-size:30px; line-height:1; }
+  .big-btn .tx { font-size:16px; font-weight:800; }
+
+  .chosen-action { width:100%; border:1.5px solid rgba(34,197,94,0.5); background:rgba(34,197,94,0.1);
+    border-radius:14px; padding:14px 16px; display:flex; align-items:flex-start; gap:10px; }
+  .chosen-action .ca-txt { flex:1; font-size:14.5px; font-weight:600; color:#fff; line-height:1.35; }
+  .chosen-action .ca-change { background:rgba(59,130,246,0.18); border:1px solid rgba(59,130,246,0.4); color:var(--blue-light);
+    border-radius:8px; font-size:11px; font-weight:700; padding:6px 10px; cursor:pointer; flex-shrink:0; white-space:nowrap; }
+
+  .note-area { width:100%; margin-top:14px; padding:12px 14px; border:1.5px solid var(--border); border-radius:12px;
+    background:var(--bg3); color:var(--text); font-size:15px; font-family:inherit; resize:none; outline:none; min-height:64px; }
+  .note-area:focus { border-color:var(--blue); }
+  .note-area::placeholder { color:var(--text-dim); }
+
+  .send-btn { width:100%; margin-top:18px; min-height:60px; border:none; border-radius:16px; cursor:pointer;
+    background:linear-gradient(145deg,#22c55e,#16a34a); color:#fff; font-size:18px; font-weight:800;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    box-shadow:0 10px 26px rgba(34,197,94,0.4), inset 0 1px 0 rgba(255,255,255,0.25); transition:transform .12s, filter .12s; }
+  .send-btn:active { transform:scale(0.98); filter:brightness(0.95); }
+  .send-btn:disabled { background:rgba(255,255,255,0.08); color:var(--text-dim); box-shadow:none; cursor:default; }
+
+  /* Historique récent */
+  .hist-title { font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.6px; margin:26px 2px 8px; }
+  .hist-item { background:var(--bg2); border:1px solid var(--border); border-left:3px solid var(--blue); border-radius:10px;
+    padding:10px 12px; margin-bottom:8px; }
+  .hist-item .hi-action { font-size:14px; font-weight:600; color:#fff; line-height:1.35; }
+  .hist-item .hi-note { font-size:13px; color:var(--text-dim); margin-top:3px; line-height:1.35; }
+  .hist-item .hi-meta { font-size:11px; color:var(--text-dim); margin-top:5px; }
+  .hist-item .hi-meta strong { color:var(--blue-light); }
+  .hist-empty { color:var(--text-dim); font-size:13px; text-align:center; padding:14px; }
+
+  /* Overlays */
+  .overlay { position:fixed; inset:0; z-index:1000; background:rgba(2,8,20,0.86); display:none;
+    flex-direction:column; padding:0; }
+  .overlay.active { display:flex; }
+  .ov-head { display:flex; align-items:center; justify-content:space-between; padding:16px 14px calc(16px); padding-top:calc(16px + var(--safe-top));
+    background:var(--bg2); border-bottom:1px solid var(--border); }
+  .ov-title { font-size:16px; font-weight:800; color:#fff; }
+  .ov-x { background:rgba(239,68,68,0.85); border:none; color:#fff; width:34px; height:34px; border-radius:50%; font-size:17px; font-weight:700; cursor:pointer; }
+  .ov-edit { background:rgba(245,158,11,0.18); border:1px solid rgba(245,158,11,0.5); color:var(--amber);
+    border-radius:8px; font-size:12px; font-weight:700; padding:7px 12px; cursor:pointer; }
+  .ov-body { flex:1; overflow-y:auto; padding:14px; -webkit-overflow-scrolling:touch; }
+
+  .action-choice { width:100%; text-align:left; border:1.5px solid var(--border); background:var(--bg3); color:#fff;
+    border-radius:14px; padding:16px; margin-bottom:10px; font-size:15px; font-weight:600; line-height:1.4; cursor:pointer; }
+  .action-choice:active { background:rgba(59,130,246,0.18); border-color:var(--blue); transform:scale(0.99); }
+
+  /* Edit actions */
+  .edit-row { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+  .edit-row input { flex:1; padding:11px 12px; border:1.5px solid var(--border); border-radius:10px; background:var(--bg3);
+    color:var(--text); font-size:14px; outline:none; font-family:inherit; }
+  .edit-row input:focus { border-color:var(--blue); }
+  .edit-del { background:rgba(239,68,68,0.85); border:none; color:#fff; width:38px; height:40px; border-radius:9px; font-size:15px; cursor:pointer; flex-shrink:0; }
+  .edit-add { width:100%; padding:12px; border:1.5px dashed rgba(59,130,246,0.5); background:rgba(59,130,246,0.08);
+    color:var(--blue-light); border-radius:12px; font-size:14px; font-weight:700; cursor:pointer; margin-top:4px; }
+  .edit-save { width:100%; margin-top:16px; padding:15px; border:none; border-radius:14px; background:linear-gradient(145deg,#22c55e,#16a34a);
+    color:#fff; font-size:16px; font-weight:800; cursor:pointer; }
+
+  /* Login + loading */
+  .center-body { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; gap:14px; text-align:center; }
+  .center-icon { font-size:60px; filter:drop-shadow(0 0 18px rgba(59,130,246,0.45)); }
+  .center-title { font-size:21px; font-weight:800; }
+  .center-sub { font-size:13px; color:var(--text-dim); max-width:280px; line-height:1.5; }
+  .login-field { width:100%; max-width:320px; text-align:left; }
+  .login-field label { font-size:10px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:5px; }
+  .login-field input { width:100%; padding:14px 16px; border:1.5px solid var(--border); border-radius:12px; background:var(--bg3); color:var(--text); font-size:15px; outline:none; }
+  .login-field input:focus { border-color:var(--blue); }
+  .login-btn { width:100%; max-width:320px; padding:16px; border-radius:12px; border:none; background:linear-gradient(135deg,var(--blue),#2563eb); color:#fff; font-size:16px; font-weight:700; cursor:pointer; }
+  .login-err { font-size:12px; color:var(--red); min-height:16px; }
+  .spinner { width:22px; height:22px; border-radius:50%; border:3px solid rgba(255,255,255,0.3); border-top-color:#fff; animation:spin 0.7s linear infinite; display:inline-block; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .toast { position:fixed; left:50%; bottom:calc(24px + var(--safe-bot)); transform:translateX(-50%) translateY(20px);
+    background:linear-gradient(135deg,#16a34a,#15803d); color:#fff; padding:13px 22px; border-radius:30px; font-size:15px; font-weight:700;
+    box-shadow:0 10px 30px rgba(0,0,0,0.5); opacity:0; transition:all .25s; z-index:2000; pointer-events:none; }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.err { background:linear-gradient(135deg,#dc2626,#991b1b); }
+</style>
+</head>
+<body>
+
+<!-- LOADING (défaut) -->
+<div class="screen" id="screenLoading">
+  <div class="center-body">
+    <div class="center-icon">📋</div>
+    <div class="center-title">Ouverture…</div>
+    <div class="spinner"></div>
+  </div>
+</div>
+
+<!-- LOGIN (repli si pas de session) -->
+<div class="screen hidden" id="screenLogin">
+  <div class="topbar"><div class="topbar-title">📋 Historique</div><span class="status-dot" id="loginDot"></span></div>
+  <div class="center-body">
+    <div class="center-icon">📋</div>
+    <div class="center-title">Connexion PhysiPro</div>
+    <div class="center-sub">Connectez-vous avec votre compte PhysiPro.</div>
+    <div class="login-field"><label>Courriel</label><input type="email" id="loginEmail" placeholder="votre@physipro.com" inputmode="email" autocomplete="username"></div>
+    <div class="login-field"><label>Mot de passe</label><input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="login-err" id="loginErr"></div>
+    <button class="login-btn" id="loginBtn" onclick="doLogin()">Se connecter</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="screen hidden" id="screenMain">
+  <div class="topbar">
+    <a href="index.html" class="back-btn">← Menu</a>
+    <div class="topbar-title">📋 Historique</div>
+    <span class="status-dot connected" id="mainDot"></span>
+  </div>
+  <div class="body">
+
+    <div class="label">Numéro du moulage</div>
+    <input class="num-input" id="numInput" placeholder="Entrez le numéro…" inputmode="numeric" autocomplete="off" oninput="onNumInput(this.value)">
+    <div class="confirm-line dim" id="confirmLine">Entrez un numéro pour trouver le moulage</div>
+
+    <div class="section locked" id="actionSection">
+      <div class="label">Action</div>
+      <button class="big-btn" id="pickActionBtn" onclick="openActionPicker()">
+        <span class="ic">➕</span><span class="tx">Quelle action voulez-vous ajouter ?</span>
+      </button>
+      <div id="chosenWrap" style="display:none;">
+        <div class="chosen-action">
+          <div class="ca-txt" id="chosenTxt"></div>
+          <button class="ca-change" onclick="openActionPicker()">Changer</button>
+        </div>
+      </div>
+
+      <textarea class="note-area" id="noteInput" placeholder="Note (optionnel)…" rows="2"></textarea>
+
+      <button class="send-btn" id="confirmBtn" onclick="submitEntry()" disabled>✓ Confirmer et envoyer</button>
+    </div>
+
+    <div id="recentWrap" style="display:none;">
+      <div class="hist-title">Historique de ce moulage</div>
+      <div id="recentList"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ACTION PICKER -->
+<div class="overlay" id="pickerOverlay">
+  <div class="ov-head">
+    <div class="ov-title">Quelle action ?</div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button class="ov-edit" onclick="openEditActions()">✏️ Modifier</button>
+      <button class="ov-x" onclick="closeActionPicker()">✕</button>
+    </div>
+  </div>
+  <div class="ov-body" id="pickerList"></div>
+</div>
+
+<!-- EDIT ACTIONS -->
+<div class="overlay" id="editOverlay">
+  <div class="ov-head">
+    <div class="ov-title">⭐ Modifier les actions</div>
+    <button class="ov-x" onclick="closeEditActions()">✕</button>
+  </div>
+  <div class="ov-body">
+    <div id="editList"></div>
+    <button class="edit-add" onclick="addEditRow('')">+ Ajouter une action</button>
+    <button class="edit-save" onclick="saveActions()">💾 Enregistrer</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══ FIREBASE ═══
+const _k = ['AIza','SyCk','7bqV','nx08','Kz1f','Vq1W','24Au','W854','KY9j','Pno'];
+const FIREBASE_CONFIG = {
+  apiKey: _k.join(''),
+  authDomain: "liste-des-moulages-physipro.firebaseapp.com",
+  databaseURL: "https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",
+  projectId: "liste-des-moulages-physipro",
+  storageBucket: "liste-des-moulages-physipro.firebasestorage.app",
+  messagingSenderId: "24566847562",
+  appId: "1:24566847562:web:db492bdd33116373e0eeb3"
+};
+
+const TEAM_NAMES = {
+  'atelieratp@physipro.com':'Daniel','valerie18@videotron.ca':'Valérie','simdut@physipro.com':'Cassie',
+  'sroy@physipro.com':'Stéphanie','service3@physipro.com':'Jacynthe','service1@physipro.com':'Jonathan',
+  'ngagne@physipro.com':'Nadia','orders@physipro.com':'Sonia','mplanguedoc@physipro.com':'Marie-Pier',
+  'mariesoleilr@physipro.com':'Marie-Soleil','fabrys.frechette@physipro.com':'Fabrys',
+  'marioouellette@physipro.com':'Mario','michelle.bouchard@physipro.com':'Michelle','rh@physipro.com':'Roxanne',
+  'pbouchard@physipro.com':'Pierre','peterbass76@gmail.com':'Pierre','cncatp@physipro.com':'Sina'
+};
+
+// Actions par défaut (modifiables ensuite, stockées dans Firebase)
+const DEFAULT_ACTIONS = [
+  "J'ai averti Marie qu'on avait un problème technique et j'attends sa réponse",
+  "Le moulage sera transféré en attente — en attente de réponse",
+  "Les mesures ne fonctionnent pas",
+  "Le moulage ne peut pas être encastré — pas assez d'espace",
+  "La mesure ne peut être respectée — pas assez de viande",
+  "Les thoraciques vont être posés à l'extérieur"
+];
+
+let db = null, currentUser = null, currentUserName = '';
+let _moulIndex = null, _moulLoading = false;     // map: numéro normalisé -> {cardId, name}
+let _actions = DEFAULT_ACTIONS.slice();
+let _selectedCardId = null, _selectedName = '', _selectedAction = null;
+let _recentRef = null;
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+
+auth.onAuthStateChanged(function(user) {
+  if (user) {
+    currentUser = user;
+    const email = (user.email||'').toLowerCase();
+    currentUserName = TEAM_NAMES[email] || email.split('@')[0];
+    db = firebase.database();
+    db.ref('.info/connected').on('value', s => setDots(!!s.val()));
+    loadActions();
+    loadMoulIndex();
+    showScreen('screenMain');
+    document.getElementById('numInput').focus();
+  } else {
+    currentUser = null;
+    showScreen('screenLogin');
+  }
+});
+
+function showScreen(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden')); var el=document.getElementById(id); if(el) el.classList.remove('hidden'); }
+function setDots(c){ document.querySelectorAll('.status-dot').forEach(d=>d.classList.toggle('connected', c)); }
+
+async function doLogin(){
+  var email=document.getElementById('loginEmail').value.trim(), pwd=document.getElementById('loginPassword').value;
+  var btn=document.getElementById('loginBtn'), err=document.getElementById('loginErr'); err.textContent='';
+  if(!email||!pwd){ err.textContent='Remplissez tous les champs.'; return; }
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+  try { await auth.signInWithEmailAndPassword(email,pwd); }
+  catch(e){ err.textContent='Courriel ou mot de passe incorrect.'; btn.disabled=false; btn.textContent='Se connecter'; }
+}
+
+// ═══ INDEX DES MOULAGES (numéro -> nom) ═══
+function loadMoulIndex(){
+  if(_moulLoading || _moulIndex) return;
+  _moulLoading = true;
+  // Chargé une fois par session ; on n'en garde que id/numéro/nom (léger).
+  db.ref('moulages').once('value').then(function(snap){
+    var all = snap.val() || {}, map = {};
+    Object.keys(all).forEach(function(cardId){
+      var c = all[cardId]; if(!c) return;
+      var key = normNum(c.order);
+      if(key) map[key] = { cardId: cardId, name: c.name || '(sans nom)', order: c.order };
+    });
+    _moulIndex = map; _moulLoading = false;
+    // Re-tester si un numéro est déjà entré
+    var v = document.getElementById('numInput').value;
+    if(v) onNumInput(v);
+  }).catch(function(){ _moulLoading=false; });
+}
+
+function normNum(x){ return (x===undefined||x===null) ? '' : String(x).trim().replace(/\s+/g,'').replace(/^0+/,''); }
+
+let _numTimer = null;
+function onNumInput(val){
+  if(_numTimer) clearTimeout(_numTimer);
+  var line = document.getElementById('confirmLine');
+  var key = normNum(val);
+  if(!key){ setMoulage(null); line.className='confirm-line dim'; line.textContent='Entrez un numéro pour trouver le moulage'; return; }
+  if(!_moulIndex){ line.className='confirm-line dim'; line.textContent='Recherche en cours…'; loadMoulIndex(); _numTimer=setTimeout(function(){onNumInput(val);},500); return; }
+  _numTimer = setTimeout(function(){
+    var hit = _moulIndex[key];
+    if(hit){ setMoulage(hit); line.className='confirm-line ok'; line.textContent='✓ ' + hit.name; }
+    else { setMoulage(null); line.className='confirm-line bad'; line.textContent='✗ Moulage introuvable'; }
+  }, 250);
+}
+
+function setMoulage(hit){
+  var sec = document.getElementById('actionSection');
+  var recentWrap = document.getElementById('recentWrap');
+  if(_recentRef){ _recentRef.off(); _recentRef = null; }
+  if(hit){
+    _selectedCardId = hit.cardId; _selectedName = hit.name;
+    sec.classList.remove('locked');
+    recentWrap.style.display = 'block';
+    listenRecent(hit.cardId);
+  } else {
+    _selectedCardId = null; _selectedName = '';
+    sec.classList.add('locked');
+    recentWrap.style.display = 'none';
+    document.getElementById('recentList').innerHTML = '';
+  }
+  refreshConfirmBtn();
+}
+
+// ═══ ACTIONS ═══
+function loadActions(){
+  db.ref('historiqueActions').on('value', function(snap){
+    var v = snap.val();
+    if(Array.isArray(v) && v.length){ _actions = v.slice(); }
+    else if(!v){ db.ref('historiqueActions').set(DEFAULT_ACTIONS).catch(function(){}); _actions = DEFAULT_ACTIONS.slice(); }
+    renderPicker();
+  });
+}
+
+function openActionPicker(){ renderPicker(); document.getElementById('pickerOverlay').classList.add('active'); }
+function closeActionPicker(){ document.getElementById('pickerOverlay').classList.remove('active'); }
+function renderPicker(){
+  var list = document.getElementById('pickerList');
+  list.innerHTML = _actions.map(function(a, i){
+    return '<button class="action-choice" onclick="chooseAction('+i+')">'+esc(a)+'</button>';
+  }).join('');
+}
+function chooseAction(i){
+  _selectedAction = _actions[i];
+  document.getElementById('chosenTxt').textContent = _selectedAction;
+  document.getElementById('chosenWrap').style.display = 'block';
+  document.getElementById('pickActionBtn').style.display = 'none';
+  closeActionPicker();
+  refreshConfirmBtn();
+}
+
+function refreshConfirmBtn(){
+  document.getElementById('confirmBtn').disabled = !(_selectedCardId && _selectedAction);
+}
+
+// ═══ MODIFIER LES ACTIONS ═══
+function openEditActions(){
+  var box = document.getElementById('editList'); box.innerHTML='';
+  _actions.forEach(function(a){ addEditRow(a); });
+  if(!_actions.length) addEditRow('');
+  document.getElementById('editOverlay').classList.add('active');
+}
+function closeEditActions(){ document.getElementById('editOverlay').classList.remove('active'); }
+function addEditRow(val){
+  var box = document.getElementById('editList');
+  var row = document.createElement('div'); row.className='edit-row';
+  row.innerHTML = '<input type="text" value="'+esc(val)+'" placeholder="Texte de l\'action…"><button class="edit-del" onclick="this.parentNode.remove()">🗑️</button>';
+  box.appendChild(row);
+}
+function saveActions(){
+  var inputs = document.querySelectorAll('#editList .edit-row input');
+  var arr = [];
+  inputs.forEach(function(inp){ var t=(inp.value||'').trim(); if(t) arr.push(t); });
+  if(!arr.length){ showToast('Ajoutez au moins une action', true); return; }
+  db.ref('historiqueActions').set(arr).then(function(){
+    _actions = arr.slice(); renderPicker(); closeEditActions(); showToast('Actions enregistrées');
+  }).catch(function(){ showToast('Erreur d\'enregistrement', true); });
+}
+
+// ═══ ENVOI ═══
+function submitEntry(){
+  if(!_selectedCardId || !_selectedAction || !db) return;
+  var btn = document.getElementById('confirmBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+  var note = (document.getElementById('noteInput').value||'').trim();
+  var entry = {
+    action: _selectedAction,
+    note: note || null,
+    parNom: currentUserName,
+    parEmail: (currentUser.email||'').toLowerCase(),
+    timestamp: Date.now(),
+    createdAt: firebase.database.ServerValue.TIMESTAMP
+  };
+  db.ref('moulages/'+_selectedCardId+'/historique').push().set(entry).then(function(){
+    // Réinitialiser pour une nouvelle entrée (on garde le numéro du moulage)
+    _selectedAction = null;
+    document.getElementById('chosenWrap').style.display='none';
+    document.getElementById('pickActionBtn').style.display='flex';
+    document.getElementById('noteInput').value='';
+    btn.innerHTML='✓ Confirmer et envoyer'; refreshConfirmBtn();
+    showToast('✓ Action ajoutée à l\'historique');
+  }).catch(function(e){
+    btn.disabled=false; btn.innerHTML='⚠️ Erreur — réessayer'; console.error(e);
+  });
+}
+
+// ═══ HISTORIQUE RÉCENT ═══
+function listenRecent(cardId){
+  _recentRef = db.ref('moulages/'+cardId+'/historique').orderByChild('timestamp').limitToLast(20);
+  _recentRef.on('value', function(snap){
+    var v = snap.val() || {};
+    var arr = Object.keys(v).map(function(k){ return v[k]; }).sort(function(a,b){ return (b.timestamp||0)-(a.timestamp||0); });
+    var list = document.getElementById('recentList');
+    if(!arr.length){ list.innerHTML = '<div class="hist-empty">Aucune action pour ce moulage encore.</div>'; return; }
+    list.innerHTML = arr.map(function(e){
+      return '<div class="hist-item"><div class="hi-action">'+esc(e.action||'')+'</div>'+
+        (e.note ? '<div class="hi-note">'+esc(e.note)+'</div>' : '')+
+        '<div class="hi-meta">Par <strong>'+esc(e.parNom||'?')+'</strong> · '+fmtTime(e.timestamp)+'</div></div>';
+    }).join('');
+  });
+}
+
+// ═══ UTILS ═══
+function esc(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtTime(ts){
+  if(!ts) return '';
+  var d = new Date(ts), now = new Date();
+  var hh = String(d.getHours()).padStart(2,'0'), mm = String(d.getMinutes()).padStart(2,'0');
+  var sameDay = d.toDateString()===now.toDateString();
+  if(sameDay) return "aujourd'hui " + hh+':'+mm;
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' '+hh+':'+mm;
+}
+let _toastTimer=null;
+function showToast(msg, isErr){
+  var t=document.getElementById('toast'); t.textContent=msg; t.className='toast show'+(isErr?' err':'');
+  if(_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(function(){ t.className='toast'+(isErr?' err':''); }, 2600);
+}
+</script>
+</body>
+</html>
