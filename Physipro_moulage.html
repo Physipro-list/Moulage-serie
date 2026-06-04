@@ -10,6 +10,17 @@
     
     ═══════════════════════════════════════════════════════════════════
     
+    ═══════════════════════════════════════════════════════════════════
+    
+    v1676 - UX : PLUS DE FLASH DE LOGIN
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1676: Ajout du masque pré-auth (comme l'accueil). Si l'utilisateur
+       était déjà connecté (flag localStorage 'physipro_user_email' posé par
+       index.html), l'écran de login est masqué instantanément au chargement
+       et ne clignote plus pendant que Firebase confirme la session.
+       onAuthStateChanged retire le style pré-auth ensuite (login ré-affiché
+       seulement s'il n'y a vraiment pas de session).
+
     v1675 - MÉNAGE : CODE PHOTO LEGACY RETIRÉ
     ═══════════════════════════════════════════════════════════════════
     🆕 v1675: Suppression du bloc mort "PHOTO BRIDGE" (requestMoulagePhoto,
@@ -1299,7 +1310,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1675</title>
+  <title>PhysiPro Moulages v1676</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -5543,6 +5554,18 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 </style>
 </head>
 <body>
+<!-- Pré-auth (v1676) : si on était déjà connecté (flag posé par l'accueil),
+     masquer instantanément le login pour éviter le flash d'1 seconde pendant
+     que Firebase confirme la session. onAuthStateChanged retire ce style ensuite. -->
+<script>
+(function(){
+  try {
+    if (localStorage.getItem('physipro_user_email')) {
+      document.write('<style id="preauth-hide-style">.login-overlay{display:none !important;}</style>');
+    }
+  } catch(e) {}
+})();
+</script>
 <script>
   // ===== Détection / bascule "Version téléphone" (tablettes Amazon Fire, etc.) =====
   (function(){
@@ -6533,7 +6556,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260604;
+    var APP_VERSION = 20260605;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -14245,6 +14268,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       
       // Observer l'état d'authentification
       auth.onAuthStateChanged(async (user) => {
+        // Retirer le masque pré-auth une fois que Firebase a tranché la session
+        var _ps = document.getElementById('preauth-hide-style');
+        if (_ps) _ps.remove();
         if (user) {
           // Utilisateur connecté
           console.log('✅ Utilisateur authentifié:', user.email);
