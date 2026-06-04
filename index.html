@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>PhysiPro — Accueil</title>
 
-<!-- ===== PWA CONFIGURATION (v_hub3) ===== -->
-<!-- v_hub3 : tuile PhotoSender retirée du mobile ; Moulage+Questionnement en 2 grands carrés pleine largeur ;
-     gros bouton "demande de photo" pleine largeur sur la ligne du haut, visible uniquement sur demande -->
+<!-- ===== PWA CONFIGURATION (v_hub4) ===== -->
+<!-- v_hub4 : mobile = Moulage seul pour tous (grosse pastille pleine largeur) ;
+     Questionnements sur tél. réservé aux 2 Marie (2e bouton pleine largeur) ;
+     gros bouton "demande de photo" en haut sur demande -->
 <meta name="theme-color" content="#04152c">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -464,26 +465,17 @@ auth.onAuthStateChanged(function(user){
   var _isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
   if (_isMobile) {
     var _emailLow = (user.email || '').toLowerCase();
-    // Emails qui ont accès complet aux 3 modules mobiles (Moulage + Service Client + PhotoSender)
-    var MOBILE_FULL_ACCESS = [
-      'atelieratp@physipro.com',       // Daniel
-      'sroy@physipro.com',             // Stéphanie
-      'eric.poirier@physipro.com',     // Éric
-      'service3@physipro.com',         // Jacynthe
-      'service1@physipro.com',         // Jonathan
-      'ngagne@physipro.com',           // Nadia
-      'sonia.boulanger@physipro.com',  // Sonia
-      'mplanguedoc@physipro.com',      // Marie-Pier
-      'mariesoleilr@physipro.com'      // Marie-Soleil
+    // ── RÈGLE MOBILE (v_hub4) ────────────────────────────────────────
+    // Questionnements ('jobs') sur téléphone = UNIQUEMENT les 2 Marie.
+    // Tout le monde d'autre : Moulage seulement (s'ils y ont accès).
+    var QUEST_MOBILE = [
+      'mplanguedoc@physipro.com',   // Marie-Pier
+      'mariesoleilr@physipro.com'   // Marie-Soleil
     ];
-    var MOBILE_MODULES = ['moulage', 'jobs'];
-    if (MOBILE_FULL_ACCESS.indexOf(_emailLow) !== -1) {
-      // Accès complet aux modules mobiles (PhotoSender retiré — accès via le gros bouton de demande)
-      access = ['moulage', 'jobs'];
-    } else {
-      // Utilisateurs normaux: intersection de leurs permissions avec les modules mobiles
-      access = access.filter(function(m){ return MOBILE_MODULES.indexOf(m) !== -1; });
-    }
+    var _mob = [];
+    if (access.indexOf('moulage') !== -1) _mob.push('moulage');
+    if (QUEST_MOBILE.indexOf(_emailLow) !== -1 && access.indexOf('jobs') !== -1) _mob.push('jobs');
+    access = _mob;
   }
   var displayName=formatUserName(user.email);
 
@@ -503,8 +495,9 @@ auth.onAuthStateChanged(function(user){
     document.getElementById('hubDenied').style.display='block';
     return;
   }
-  // Si 1 seule page → redirect direct (pas de menu)
-  if(access.length===1){
+  // Si 1 seule page → redirect direct (pas de menu) — SAUF sur mobile,
+  // où on veut afficher l'accueil avec la grosse pastille Moulage.
+  if(access.length===1 && !_isMobile){
     var mod=MODULES[access[0]];
     if(mod){document.getElementById('loadingScreen').classList.add('active');window.location.href=mod.file;}
     return;
@@ -575,26 +568,29 @@ auth.onAuthStateChanged(function(user){
     // Labels mobiles (plus courts)
     var MOBILE_LABELS = { photos: 'Photos', jobs: 'Questionnements' };
 
-    // Grille de tuiles — 2 grands carrés pleine largeur (Moulage + Questionnement)
-    var _nCols = (access.length === 3) ? 3 : 2;
-    var _gridMaxW = (access.length === 3) ? '420px' : '500px';
-    var _tileMinH = (access.length === 3) ? '130px' : '175px';
-    var _tilePad = (access.length === 3) ? '18px 8px 14px' : '24px 14px 20px';
-    var _iconSize = (access.length === 3) ? '60px' : '72px';
-    var _iconFont = (access.length === 3) ? '30px' : '36px';
-    var _labelFont = (access.length === 3) ? '13px' : '16px';
-    var _gap = (access.length === 3) ? '10px' : '16px';
-    
-    mContent += '<div id="ppMobileGrid" style="display:grid;grid-template-columns:repeat('+_nCols+',1fr);gap:'+_gap+';width:100%;max-width:'+_gridMaxW+';">';
-    access.forEach(function(key){
-      var m=MODULES[key];if(!m)return;
-      var icon = MOBILE_ICONS[key] || ('<span style="font-size:'+_iconFont+';">'+m.icon+'</span>');
-      var label = MOBILE_LABELS[key] || m.label;
-      mContent += '<a href="'+m.file+'" class="hub-tile '+m.cls+'" style="min-height:'+_tileMinH+';padding:'+_tilePad+';text-decoration:none;">';
-      mContent += '<div class="hub-tile-icon" style="width:'+_iconSize+';height:'+_iconSize+';font-size:'+_iconFont+';border-radius:14px;display:flex;align-items:center;justify-content:center;">'+icon+'</div>';
-      mContent += '<div class="hub-tile-label" style="font-size:'+_labelFont+';margin-top:4px;text-align:center;line-height:1.1;">'+label+'</div>';
-      mContent += '</a>';
-    });
+    // ── MISE EN PAGE MOBILE (v_hub4) : une seule colonne, boutons pleine largeur ──
+    mContent += '<div id="ppMobileGrid" style="display:grid;grid-template-columns:1fr;gap:14px;width:100%;max-width:460px;">';
+
+    // Grosse pastille MOULAGE (pleine largeur) — pour tout le monde qui a Moulage
+    if (access.indexOf('moulage') !== -1) {
+      var _moulageBigIco = MOBILE_ICONS.moulage.replace('width="48" height="48"', 'width="60" height="60"');
+      mContent += '<a href="'+MODULES.moulage.file+'" class="hub-tile" style="min-height:172px;padding:24px 16px;text-decoration:none;'
+        + 'background:linear-gradient(150deg,rgba(59,130,246,0.24),rgba(30,58,138,0.30));border:2px solid rgba(96,165,250,0.55);box-shadow:0 10px 32px rgba(59,130,246,0.28);">'
+        + '<div style="width:92px;height:92px;border-radius:22px;display:flex;align-items:center;justify-content:center;background:rgba(59,130,246,0.18);border:1px solid rgba(96,165,250,0.35);">'+_moulageBigIco+'</div>'
+        + '<div style="font-family:Outfit,sans-serif;font-size:32px;font-weight:800;letter-spacing:2px;color:#fff;margin-top:12px;text-shadow:0 2px 10px rgba(0,0,0,0.45);">MOULAGE</div>'
+        + '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:2px;letter-spacing:0.5px;">Gestion des moulages</div>'
+        + '</a>';
+    }
+
+    // 2e bouton QUESTIONNEMENTS (pleine largeur) — réservé aux 2 Marie
+    if (access.indexOf('jobs') !== -1) {
+      mContent += '<a href="'+MODULES.jobs.file+'" class="hub-tile" style="min-height:120px;padding:18px 16px;text-decoration:none;'
+        + 'background:linear-gradient(150deg,rgba(245,158,11,0.20),rgba(180,83,9,0.14));border:1.5px solid rgba(245,158,11,0.5);">'
+        + '<div style="width:58px;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:rgba(245,158,11,0.16);">'+MOBILE_ICONS.jobs+'</div>'
+        + '<div style="font-family:Outfit,sans-serif;font-size:20px;font-weight:700;color:#fff;margin-top:8px;">Questionnements</div>'
+        + '</a>';
+    }
+
     mContent += '</div>';
     mContent += '</div>';
     

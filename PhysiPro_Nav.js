@@ -44,23 +44,19 @@
     'moulage', 'psm', 'serviceClient', 'inspection', 'inspcouture', 'inspfinale'
   ];
 
-  // Modules autorisés sur mobile
-  var MOBILE_ALLOWED = ['moulage', 'serviceClient'];
-  var MOBILE_ALLOWED_ADMIN = ['moulage', 'serviceClient'];
-
-  // Emails qui voient TOUS leurs modules sur mobile (pas limités à MOBILE_ALLOWED)
-  // Daniel, Valérie, Michelle Bouchard, Stéphanie, Sylvain, Stéphane Delorme, Pierre
-  var MOBILE_FULL_ACCESS = [
-    'atelieratp@physipro.com',
-    'valerie18@videotron.ca',
-    'michelle.bouchard@physipro.com',
-    'sroy@physipro.com',
-    'magasinatp2@physipro.com',
-    'magasinatp3@physipro.com',
-    'peterbass76@gmail.com',
-    'contact@physipro.fr',
-    'guillaumepichon@physipro.fr'
+  // ── RÈGLE MOBILE (v_nav2) ──────────────────────────────
+  // Moulage pour tout le monde ; Questionnements (serviceClient)
+  // UNIQUEMENT pour les 2 Marie. Plus de bypass "full access" sur mobile.
+  var MOBILE_BASE = ['moulage'];
+  var MOBILE_QUEST_EMAILS = [
+    'mplanguedoc@physipro.com',   // Marie-Pier
+    'mariesoleilr@physipro.com'   // Marie-Soleil
   ];
+  function _mobileAllowed(emailLower) {
+    var list = MOBILE_BASE.slice();
+    if (MOBILE_QUEST_EMAILS.indexOf(emailLower) !== -1) list.push('serviceClient');
+    return list;
+  }
 
   // ══════════════════════════════════════
   //  ACCÈS PAR UTILISATEUR (emails en base64)
@@ -198,8 +194,7 @@
     var access = _getAccess(email);
     var mobile = _isMobile();
     var emailLower = (email || '').toLowerCase();
-    var hasFullMobile = MOBILE_FULL_ACCESS.indexOf(emailLower) !== -1;
-    var mobileList = (emailLower === 'atelieratp@physipro.com') ? MOBILE_ALLOWED_ADMIN : MOBILE_ALLOWED;
+    var mobileAllowedList = _mobileAllowed(emailLower);
 
     grid.innerHTML = '';
 
@@ -210,7 +205,7 @@
 
     function _buildItem(mod) {
       if (access.indexOf(mod) === -1) return null;
-      if (mobile && !hasFullMobile && mobileList.indexOf(mod) === -1) return null;
+      if (mobile && mobileAllowedList.indexOf(mod) === -1) return null;
       var m = NAV_MODULES[mod];
       if (!m) return null;
       var a = document.createElement('a');
