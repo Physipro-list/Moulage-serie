@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>PhysiPro — Accueil</title>
 
-<!-- ===== PWA CONFIGURATION (v_hub1) ===== -->
+<!-- ===== PWA CONFIGURATION (v_hub3) ===== -->
+<!-- v_hub3 : tuile PhotoSender retirée du mobile ; Moulage+Questionnement en 2 grands carrés pleine largeur ;
+     gros bouton "demande de photo" pleine largeur sur la ligne du haut, visible uniquement sur demande -->
 <meta name="theme-color" content="#04152c">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -474,10 +476,10 @@ auth.onAuthStateChanged(function(user){
       'mplanguedoc@physipro.com',      // Marie-Pier
       'mariesoleilr@physipro.com'      // Marie-Soleil
     ];
-    var MOBILE_MODULES = ['moulage', 'jobs', 'photos', ];
+    var MOBILE_MODULES = ['moulage', 'jobs'];
     if (MOBILE_FULL_ACCESS.indexOf(_emailLow) !== -1) {
-      // Accès complet aux modules mobiles
-      access = ['moulage', 'jobs',  'photos'];
+      // Accès complet aux modules mobiles (PhotoSender retiré — accès via le gros bouton de demande)
+      access = ['moulage', 'jobs'];
     } else {
       // Utilisateurs normaux: intersection de leurs permissions avec les modules mobiles
       access = access.filter(function(m){ return MOBILE_MODULES.indexOf(m) !== -1; });
@@ -528,7 +530,7 @@ auth.onAuthStateChanged(function(user){
     mBar += '</div>';
     
     // Contenu: tuiles centrées
-    var mContent = '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;">';
+    var mContent = '<div id="ppMobileContent" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;">';
     mContent += '<div style="text-align:center;margin-bottom:24px;">';
     mContent += '<div style="font-family:Outfit,sans-serif;font-size:20px;font-weight:300;color:rgba(255,255,255,0.85);letter-spacing:0.5px;">Bienvenue, <strong style="font-weight:600;color:#fff;">'+displayName+'</strong></div>';
     mContent += '<div style="font-size:12px;color:rgba(255,255,255,0.35);margin-top:4px;">Sélectionnez un module</div>';
@@ -573,18 +575,17 @@ auth.onAuthStateChanged(function(user){
     // Labels mobiles (plus courts)
     var MOBILE_LABELS = { photos: 'Photos', jobs: 'Questionnements' };
 
-    // Grille de tuiles — GROSSES pastilles centrées
-    // Si 3 modules → 3 colonnes (côte à côte), sinon 2 colonnes
+    // Grille de tuiles — 2 grands carrés pleine largeur (Moulage + Questionnement)
     var _nCols = (access.length === 3) ? 3 : 2;
-    var _gridMaxW = (access.length === 3) ? '420px' : '320px';
-    var _tileMinH = (access.length === 3) ? '130px' : '155px';
+    var _gridMaxW = (access.length === 3) ? '420px' : '500px';
+    var _tileMinH = (access.length === 3) ? '130px' : '175px';
     var _tilePad = (access.length === 3) ? '18px 8px 14px' : '24px 14px 20px';
     var _iconSize = (access.length === 3) ? '60px' : '72px';
     var _iconFont = (access.length === 3) ? '30px' : '36px';
     var _labelFont = (access.length === 3) ? '13px' : '16px';
-    var _gap = (access.length === 3) ? '10px' : '18px';
+    var _gap = (access.length === 3) ? '10px' : '16px';
     
-    mContent += '<div style="display:grid;grid-template-columns:repeat('+_nCols+',1fr);gap:'+_gap+';width:100%;max-width:'+_gridMaxW+';">';
+    mContent += '<div id="ppMobileGrid" style="display:grid;grid-template-columns:repeat('+_nCols+',1fr);gap:'+_gap+';width:100%;max-width:'+_gridMaxW+';">';
     access.forEach(function(key){
       var m=MODULES[key];if(!m)return;
       var icon = MOBILE_ICONS[key] || ('<span style="font-size:'+_iconFont+';">'+m.icon+'</span>');
@@ -602,6 +603,7 @@ auth.onAuthStateChanged(function(user){
     
     mobileHub.innerHTML = mHead + mBar + mContent;
     document.body.appendChild(mobileHub);
+    startPhotoReqWatch();
     return;
   }
 
@@ -657,7 +659,118 @@ auth.onAuthStateChanged(function(user){
   ROW_TOP.forEach(function(key, i) { makeTile(key, 2, i); });
   // Ligne 2 : 3 tuiles × span 2 = 6 colonnes
   ROW_BOTTOM.forEach(function(key, i) { makeTile(key, 2, ROW_TOP.length + i); });
+  startPhotoReqWatch();
 });
+
+// ═══════════════════════════════════════════════════════════
+// PASTILLE "DEMANDE DE PHOTO" — affichée sur l'accueil, ciblée
+// par requestedByEmail. Une demande créée depuis Questionnements
+// (ou Moulage) avec status "waiting"/"answering" fait clignoter
+// la pastille SEULEMENT sur l'appareil de la personne qui l'a
+// demandée. Un clic ouvre le PhotoSender.
+// ═══════════════════════════════════════════════════════════
+var _ppReqWatching = false;
+function startPhotoReqWatch() {
+  if (_ppReqWatching) return;
+  if (typeof db === 'undefined' || !db || !currentUser) return;
+  _ppReqWatching = true;
+
+  if (!document.getElementById('ppReqStyle')) {
+    var st = document.createElement('style');
+    st.id = 'ppReqStyle';
+    st.textContent =
+      '@keyframes ppReqPulse{0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,.45);border-color:rgba(249,115,22,.65);}50%{box-shadow:0 0 22px 5px rgba(249,115,22,.5);border-color:rgba(249,115,22,1);}}'
+      + '.ppReqBanner{display:flex;align-items:center;gap:12px;width:100%;max-width:440px;margin:0 auto 16px;padding:14px 16px;border-radius:16px;cursor:pointer;text-decoration:none;box-sizing:border-box;background:linear-gradient(135deg,rgba(249,115,22,.28),rgba(234,88,12,.16));border:1.6px solid rgba(249,115,22,.65);animation:ppReqPulse 1.3s ease-in-out infinite;-webkit-tap-highlight-color:transparent;}'
+      + '.ppReqBanner:active{filter:brightness(.92);}'
+      + '.ppReqBanner .ppReqIco{font-size:30px;flex-shrink:0;line-height:1;}'
+      + '.ppReqBanner .ppReqTitle{font-family:Outfit,sans-serif;font-size:14.5px;font-weight:700;color:#fff;line-height:1.25;}'
+      + '.ppReqBanner .ppReqSub{font-size:11.5px;color:rgba(255,255,255,.72);margin-top:1px;}'
+      + '.ppReqBanner .ppReqArrow{margin-left:auto;font-size:20px;color:#fdba74;flex-shrink:0;}'
+      // Gros bouton pleine largeur (mobile) — même hauteur qu'une tuile, occupe les 2 colonnes
+      + '@keyframes ppReqTilePulse{0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,.5);border-color:rgba(249,115,22,.7);}50%{box-shadow:0 0 30px 8px rgba(249,115,22,.55);border-color:rgba(249,115,22,1);}}'
+      + '.ppReqTile{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:18px;cursor:pointer;text-decoration:none;box-sizing:border-box;padding:18px 16px;text-align:center;background:linear-gradient(150deg,rgba(249,115,22,.32),rgba(234,88,12,.18));border:2px solid rgba(249,115,22,.7);animation:ppReqTilePulse 1.2s ease-in-out infinite;-webkit-tap-highlight-color:transparent;}'
+      + '.ppReqTile:active{filter:brightness(.93);}'
+      + '.ppReqTile .ppReqTileIco{font-size:42px;line-height:1;}'
+      + '.ppReqTile .ppReqTileTitle{font-family:Outfit,sans-serif;font-size:18px;font-weight:800;color:#fff;line-height:1.2;}'
+      + '.ppReqTile .ppReqTileSub{font-size:12.5px;color:rgba(255,255,255,.8);line-height:1.3;}';
+    document.head.appendChild(st);
+  }
+
+  var myEmail = (currentUser.email || '').toLowerCase();
+  db.ref('photoRequests').on('value', function(snap) {
+    var all = snap.val() || {};
+    var mine = [];
+    Object.keys(all).forEach(function(jid) {
+      var r = all[jid];
+      if (!r) return;
+      if ((r.status === 'waiting' || r.status === 'answering')
+          && (r.requestedByEmail || '').toLowerCase() === myEmail) {
+        mine.push(r);
+      }
+    });
+    renderPhotoReqBadge(mine);
+  });
+}
+
+function _ppEsc(s) {
+  return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+}
+
+function renderPhotoReqBadge(reqs) {
+  var hasReq = reqs && reqs.length > 0;
+  var n = hasReq ? reqs.length : 0;
+
+  // Textes
+  var titleTxt, sub;
+  if (n === 1) {
+    titleTxt = 'Vous avez une demande de photo';
+    var o = reqs[0].order || '';
+    sub = o ? ('Commande #' + o + ' — touchez pour prendre la photo') : 'Touchez pour prendre la photo';
+  } else if (n > 1) {
+    titleTxt = 'Vous avez ' + n + ' demandes de photo';
+    sub = 'Touchez pour répondre aux ' + n + ' demandes';
+  }
+
+  // ─── MOBILE : gros bouton pleine largeur en haut de la grille ───
+  var grid = document.getElementById('ppMobileGrid');
+  if (grid) {
+    var tile = document.getElementById('ppReqTile');
+    if (!hasReq) { if (tile) tile.remove(); return; }
+    if (!tile) {
+      tile = document.createElement('a');
+      tile.id = 'ppReqTile';
+      tile.className = 'ppReqTile';
+      tile.href = 'PhysiPro_PhotoSender.html';
+      grid.insertBefore(tile, grid.firstChild);
+    }
+    // Même hauteur qu'une tuile voisine
+    var sibling = grid.querySelector('.hub-tile');
+    if (sibling && sibling.style.minHeight) tile.style.minHeight = sibling.style.minHeight;
+    tile.innerHTML =
+      '<span class="ppReqTileIco">📷</span>'
+      + '<div class="ppReqTileTitle">' + titleTxt + '</div>'
+      + '<div class="ppReqTileSub">' + _ppEsc(sub) + '</div>';
+    return;
+  }
+
+  // ─── BUREAU : bannière au-dessus de la grille ───
+  var existing = document.getElementById('ppReqBanner');
+  if (!hasReq) { if (existing) existing.remove(); return; }
+  var dgrid = document.getElementById('hubGrid');
+  if (!dgrid || !dgrid.parentNode) { setTimeout(function(){ renderPhotoReqBadge(reqs); }, 400); return; }
+  if (!existing) {
+    existing = document.createElement('a');
+    existing.id = 'ppReqBanner';
+    existing.className = 'ppReqBanner';
+    existing.href = 'PhysiPro_PhotoSender.html';
+    dgrid.parentNode.insertBefore(existing, dgrid);
+  }
+  existing.innerHTML =
+    '<span class="ppReqIco">📷</span>'
+    + '<div><div class="ppReqTitle">📸 ' + titleTxt + '</div>'
+    + '<div class="ppReqSub">' + _ppEsc(sub) + '</div></div>'
+    + '<span class="ppReqArrow">→</span>';
+}
 </script>
 <!-- ===== PCHAT SYSTEM ===== -->
 <style>
