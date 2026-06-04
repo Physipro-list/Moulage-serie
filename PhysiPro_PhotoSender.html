@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>PhysiPro 📷 Photos</title>
+<!-- PhotoSender v2 : ouverture directe sur la caméra (pas de login qui clignote),
+     UI simplifiée (juste retour + gros bouton Prendre une photo), envoi automatique. -->
 <link rel="manifest" id="pwaManifest">
 <meta name="theme-color" content="#04152c">
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%2304152c'/><rect x='56' y='140' width='400' height='270' rx='40' fill='%234a8ef5'/><circle cx='256' cy='275' r='88' fill='%23fff' opacity='.25'/><circle cx='256' cy='275' r='60' fill='%23fff'/><circle cx='256' cy='275' r='28' fill='%234a8ef5'/><rect x='156' y='80' width='120' height='66' rx='18' fill='%234a8ef5'/><circle cx='390' cy='172' r='24' fill='%2322c55e'/></svg>">
@@ -354,12 +356,53 @@
   .jobs-list::-webkit-scrollbar { width: 4px; }
   .jobs-list::-webkit-scrollbar-track { background: transparent; }
   .jobs-list::-webkit-scrollbar-thumb { background: rgba(59,130,246,0.3); border-radius: 2px; }
+  /* ── ÉCRAN PHOTO SIMPLIFIÉ (v2) ── */
+  .simple-topbar { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; flex-shrink:0; }
+  .back-btn { background:rgba(59,130,246,0.12); border:1.5px solid rgba(59,130,246,0.4); border-radius:10px; color:var(--blue-light); font-size:15px; font-weight:700; padding:10px 18px; text-decoration:none; display:inline-flex; align-items:center; gap:6px; transition:all .15s; -webkit-tap-highlight-color:transparent; }
+  .back-btn:active { background:rgba(59,130,246,0.25); transform:scale(0.97); }
+  .cam-area { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:16px; }
+  .cam-thumbs { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; width:100%; max-width:360px; }
+  .cam-thumbs .photo-thumb-wrap { width:calc(33.33% - 6px); max-width:110px; }
+  .cam-status { font-size:14px; font-weight:600; color:var(--text-dim); text-align:center; min-height:20px; line-height:1.4; padding:0 12px; }
+  .cam-status.ok { color:var(--green); }
+  .cam-actions { padding:16px 16px calc(20px + var(--safe-bot)); flex-shrink:0; }
+  .big-cam-btn { width:100%; max-width:480px; margin:0 auto; min-height:124px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; border:none; border-radius:26px; cursor:pointer; background:linear-gradient(145deg,#3b82f6 0%,#1d4ed8 100%); color:#fff; box-shadow:0 14px 36px rgba(59,130,246,0.45), inset 0 1px 0 rgba(255,255,255,0.28); transition:transform .12s ease, filter .12s ease; -webkit-tap-highlight-color:transparent; }
+  .big-cam-btn:active { transform:scale(0.97); filter:brightness(0.94); }
+  .big-cam-btn:disabled { filter:grayscale(0.35) brightness(0.8); cursor:default; }
+  .big-cam-ico { font-size:48px; line-height:1; }
+  .big-cam-label { font-size:23px; font-weight:800; letter-spacing:0.5px; }
+
 </style>
 </head>
 <body>
 
+<!-- ══════════════════════════════════════ LOADING SCREEN (défaut) ══ -->
+<div class="screen" id="screenLoading">
+  <div class="login-body">
+    <div class="login-icon">📷</div>
+    <div class="login-title">Ouverture…</div>
+    <div class="spinner" style="margin-top:10px;"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ NO REQUEST SCREEN ══ -->
+<div class="screen hidden" id="screenNoReq">
+  <div class="simple-topbar">
+    <a href="index.html" class="back-btn">← Menu</a>
+    <span class="status-dot connected" id="noReqDot"></span>
+  </div>
+  <div class="login-body">
+    <div class="login-icon" style="opacity:.55;">📭</div>
+    <div class="login-title">Aucune demande de photo</div>
+    <div class="login-sub">Reviens ici quand une demande de photo apparaît sur l'accueil.</div>
+    <a href="index.html" class="big-cam-btn" style="text-decoration:none;margin-top:14px;min-height:64px;">
+      <span class="big-cam-label">← Retour à l'accueil</span>
+    </a>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════ LOGIN SCREEN ══ -->
-<div class="screen" id="screenLogin">
+<div class="screen hidden" id="screenLogin">
   <div class="topbar">
     <div class="topbar-logo">
       <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -459,53 +502,20 @@
 
 <!-- ══════════════════════════════════════ PHOTO SCREEN ══ -->
 <div class="screen hidden" id="screenPhoto">
-  <div class="topbar">
-    <div class="topbar-logo">
-      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <rect x="5" y="25" width="90" height="60" rx="10" fill="#4a8ef5"/>
-        <circle cx="50" cy="55" r="18" fill="#fff" opacity=".25"/>
-        <circle cx="50" cy="55" r="12" fill="#fff"/>
-        <circle cx="50" cy="55" r="6" fill="#4a8ef5"/>
-        <rect x="30" y="15" width="26" height="14" rx="4" fill="#4a8ef5"/>
-        <circle cx="78" cy="36" r="5" fill="#22c55e"/>
-      </svg>
-      <div>
-        <div class="topbar-title">📷 Envoyer photo</div>
-      </div>
-    </div>
+  <div class="simple-topbar">
+    <a href="index.html" class="back-btn">← Menu</a>
     <span class="status-dot connected" id="photoDot"></span>
   </div>
 
-  <div class="photo-job-bar">
-    <a href="index.html" class="photo-job-back" style="text-decoration:none;display:inline-flex;align-items:center;">← Menu</a>
-    <div class="photo-job-info">
-      <div class="photo-job-order" id="photoJobOrder">—</div>
-      <div class="photo-job-client" id="photoJobClient">—</div>
-    </div>
+  <div class="cam-area">
+    <div class="cam-thumbs" id="photoPreviews"></div>
+    <div class="cam-status" id="camStatus">Touchez le bouton pour prendre une photo</div>
   </div>
 
-  <div class="photo-preview-area" id="photoPreviewArea">
-    <div class="photo-placeholder" id="photoPlaceholder">
-      <div class="photo-placeholder-icon">📷</div>
-      <div class="photo-placeholder-text">Prends une photo ou choisis depuis la galerie.<br>Elle sera envoyée directement dans la conversation.</div>
-    </div>
-    <div class="photo-previews" id="photoPreviews"></div>
-  </div>
-
-  <div class="photo-actions">
-    <div class="photo-btns-row">
-      <button class="btn-camera" onclick="document.getElementById('cameraInput').click()">
-        <span class="btn-camera-icon">📷</span>
-        <span>Prendre une photo</span>
-      </button>
-      <button class="btn-gallery" onclick="document.getElementById('galleryInput').click()" title="Galerie">🖼️</button>
-    </div>
-    <div class="msg-field">
-      <textarea class="msg-input" id="photoMsg" placeholder="Message (optionnel)..." rows="1"
-                oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,90)+'px'"></textarea>
-    </div>
-    <button class="btn-send" id="btnSend" onclick="sendPhotos()" disabled>
-      <span id="btnSendLabel">📤 Envoyer</span>
+  <div class="cam-actions">
+    <button class="big-cam-btn" id="bigCamBtn" onclick="openCamera()">
+      <span class="big-cam-ico">📷</span>
+      <span class="big-cam-label">Prendre une photo</span>
     </button>
   </div>
 </div>
@@ -607,24 +617,15 @@ const auth = firebase.auth();
 auth.onAuthStateChanged(function(user) {
   if (user) {
     const email = (user.email || '').toLowerCase();
-    const access = getAccess(email);
-    // Block moulage-only
-    if (!access.includes('jobs')) {
-      showErr('Accès refusé — cette application nécessite un accès Service Client.');
-      auth.signOut();
-      return;
-    }
     currentUser = user;
     currentUserName = TEAM_NAMES[email] || email.split('@')[0];
     db = firebase.database();
     db.ref('.info/connected').on('value', s => setDots(s.val()));
     loadJobs();
     listenForRequests();
-    // Afficher l'écran des demandes en attente par défaut
-    // (listenForRequests redirigera automatiquement si 1 seule demande)
-    showScreen('screenPending');
-    renderPendingList();
-    document.getElementById('jobsUserLabel').innerHTML = '<strong>' + esc(currentUserName) + '</strong>' + esc(email);
+    // Pas d'écran de login : on reste sur "Ouverture…" jusqu'à ce que
+    // listenForRequests trouve la demande de l'utilisateur (→ caméra),
+    // ou affiche "aucune demande".
   } else {
     currentUser = null;
     showScreen('screenLogin');
@@ -693,47 +694,38 @@ var _activePendingRequests = []; // Toutes les demandes actives
 
 function listenForRequests() {
   if (!db) return;
-  if (_requestRef) { db.ref('photoRequests').off('value'); }
+  if (_requestRef) { _requestRef.off(); }
   _requestRef = db.ref('photoRequests');
+  var myEmail = (currentUser.email || '').toLowerCase();
   _requestRef.on('value', function(snap) {
     var all = snap.val() || {};
-    var pendings = [];
-    // Collecter TOUTES les demandes actives
+    var mine = [];
+    // Seulement MES demandes (ciblées par requestedByEmail)
     Object.entries(all).forEach(function([jobId, req]) {
-      if (req.status === 'waiting' || req.status === 'answering') {
-        pendings.push(Object.assign({ jobId: jobId }, req));
+      if (!req) return;
+      if ((req.status === 'waiting' || req.status === 'answering')
+          && (req.requestedByEmail || '').toLowerCase() === myEmail) {
+        mine.push(Object.assign({ jobId: jobId }, req));
       }
     });
-    // Trier par date (plus ancienne d'abord)
-    pendings.sort(function(a, b) { return (a.timestamp || 0) - (b.timestamp || 0); });
-    _activePendingRequests = pendings;
-    
-    // Mettre à jour l'affichage des pastilles si on est sur l'écran pending
-    if (!document.getElementById('screenPending').classList.contains('hidden')) {
-      renderPendingList();
-    }
-    
-    if (pendings.length === 0) {
-      // Aucune demande active
+    // Plus récente d'abord
+    mine.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
+    _activePendingRequests = mine;
+
+    var onPhoto = !document.getElementById('screenPhoto').classList.contains('hidden');
+
+    if (mine.length === 0) {
       _pendingRequest = null;
-      document.getElementById('requestBanner').classList.remove('active');
-    } else if (pendings.length === 1) {
-      // Une seule demande : aller directement à l'écran photo
-      var found = pendings[0];
+      // Ne pas déranger si on est déjà sur la caméra (ex. juste après un envoi)
+      if (!onPhoto) showScreen('screenNoReq');
+    } else {
+      var found = mine[0];
       var reqKey = found.jobId + '_' + found.timestamp;
-      if (reqKey !== _lastHandledRequestId) {
+      if (reqKey !== _lastHandledRequestId || !onPhoto) {
         _lastHandledRequestId = reqKey;
         _pendingRequest = found;
         db.ref('photoRequests/' + found.jobId).update({ status: 'answering' }).catch(function(){});
         selectJob(found.jobId);
-      }
-    } else {
-      // 2+ demandes : afficher l'écran de sélection (pastilles)
-      _pendingRequest = null;
-      // Ne pas auto-naviguer si on est déjà sur photo screen
-      if (document.getElementById('screenPhoto').classList.contains('hidden')) {
-        showScreen('screenPending');
-        renderPendingList();
       }
     }
   });
@@ -835,31 +827,9 @@ function selectJob(id) {
 function _doSelectJob(id) {
   selectedJob = Object.assign({ id: id }, jobsData[id] || {});
   pendingPhotos = [];
-  document.getElementById('photoJobOrder').textContent = '#' + (selectedJob.order || '---');
-  document.getElementById('photoJobClient').textContent = selectedJob.client || 'Client non spécifié';
-  document.getElementById('photoPreviews').innerHTML = '';
-  document.getElementById('photoPlaceholder').style.display = 'flex';
-  document.getElementById('photoMsg').value = '';
-  document.getElementById('btnSend').disabled = true;
-  document.getElementById('btnSendLabel').textContent = '📤 Envoyer';
-
-  // Show green "demande active" indicator if triggered by request
-  var reqIndicator = document.getElementById('reqIndicator');
-  if (_pendingRequest && _pendingRequest.jobId === id) {
-    if (!reqIndicator) {
-      var bar = document.getElementById('photoJobBar') || document.querySelector('.photo-job-bar');
-      if (bar) {
-        var ind = document.createElement('div');
-        ind.id = 'reqIndicator';
-        ind.style.cssText = 'font-size:10px;font-weight:700;color:#22c55e;letter-spacing:.3px;margin-top:1px;';
-        ind.textContent = '🟢 Demande active — ' + (_pendingRequest.requestedBy || 'Bureau');
-        bar.querySelector('.photo-job-info').appendChild(ind);
-      }
-    }
-  } else {
-    if (reqIndicator) reqIndicator.remove();
-  }
-
+  var pv = document.getElementById('photoPreviews'); if (pv) pv.innerHTML = '';
+  setCamStatus('Touchez le bouton pour prendre une photo');
+  setBigBtnSending(false);
   showScreen('screenPhoto');
 }
 
@@ -947,14 +917,47 @@ function _drawWithOrientation(img, orientation, maxSize) {
   return canvas;
 }
 
+// ═══ HELPERS UI ═══
+function setCamStatus(txt, ok) {
+  var el = document.getElementById('camStatus');
+  if (!el) return;
+  el.textContent = txt || '';
+  el.classList.toggle('ok', !!ok);
+}
+function setBigBtnSending(on) {
+  var btn = document.getElementById('bigCamBtn');
+  if (!btn) return;
+  btn.disabled = !!on;
+  btn.querySelector('.big-cam-ico').innerHTML = on ? '<span class="spinner"></span>' : '📷';
+  btn.querySelector('.big-cam-label').textContent = on ? 'Envoi…' : 'Prendre une photo';
+}
+
+// ═══ ENVOI AUTOMATIQUE (pas de bouton Envoyer) ═══
+var _autoSendTimer = null;
+function openCamera() {
+  // Annuler un envoi auto en attente : on s'apprête à ajouter une autre photo
+  if (_autoSendTimer) { clearTimeout(_autoSendTimer); _autoSendTimer = null; }
+  if (pendingPhotos.length) setCamStatus('📷 Ajout d’une autre photo…');
+  document.getElementById('cameraInput').click();
+}
+function scheduleAutoSend() {
+  if (!pendingPhotos.length) return;
+  if (_autoSendTimer) clearTimeout(_autoSendTimer);
+  var n = pendingPhotos.length;
+  setCamStatus('📤 Envoi automatique de ' + n + ' photo' + (n>1?'s':'') + '… (prends-en une autre pour l’ajouter)');
+  _autoSendTimer = setTimeout(function() { _autoSendTimer = null; sendPhotos(); }, 1600);
+}
+
 async function handleFiles(files) {
   if (!files || !files.length) return;
+  setCamStatus('⏳ Traitement…');
   for (const file of Array.from(files)) {
     if (!file.type.startsWith('image/')) continue;
     const dataUrl = await readAndCompress(file);
     pendingPhotos.push({ dataUrl, name: file.name || ('photo_' + Date.now() + '.jpg') });
   }
   renderPreviews();
+  scheduleAutoSend();
 }
 
 function readAndCompress(file) {
@@ -984,27 +987,10 @@ function readAndCompress(file) {
 
 function renderPreviews() {
   const area = document.getElementById('photoPreviews');
-  const placeholder = document.getElementById('photoPlaceholder');
-  const btn = document.getElementById('btnSend');
-
-  if (!pendingPhotos.length) {
-    area.innerHTML = '';
-    placeholder.style.display = 'flex';
-    btn.disabled = true;
-    return;
-  }
-
-  placeholder.style.display = 'none';
+  if (!area) return;
   area.innerHTML = pendingPhotos.map((p, i) =>
-    `<div class="photo-thumb-wrap">
-      <img src="${p.dataUrl}" alt="photo ${i+1}">
-      <button class="photo-thumb-remove" onclick="removePhoto(${i})">✕</button>
-    </div>`
+    `<div class="photo-thumb-wrap"><img src="${p.dataUrl}" alt="photo ${i+1}"></div>`
   ).join('');
-
-  btn.disabled = false;
-  const n = pendingPhotos.length;
-  document.getElementById('btnSendLabel').textContent = `📤 Envoyer ${n} photo${n>1?'s':''}`;
 }
 
 function removePhoto(idx) {
@@ -1015,80 +1001,55 @@ function removePhoto(idx) {
 // ═══ SEND ═══
 async function sendPhotos() {
   if (!selectedJob || !pendingPhotos.length || !db) return;
-  const btn = document.getElementById('btnSend');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Envoi...';
+  if (_autoSendTimer) { clearTimeout(_autoSendTimer); _autoSendTimer = null; }
+  setBigBtnSending(true);
+  setCamStatus('📤 Envoi…');
 
-  const msg = (document.getElementById('photoMsg').value || '').trim();
   const myEmail = (currentUser.email || '').toLowerCase();
   const myName = currentUserName || myEmail;
+  const photos = pendingPhotos.map(p => p.dataUrl);
+  const n = photos.length;
 
-  // Build payload — write photo INTO the photoRequest so ServiceClient injects it into compose
-  const photoPayload = {
-    status: 'done',
-    sentBy: myName,
-    sentByEmail: myEmail,
-    timestamp: Date.now()
-  };
+  const photoPayload = { status: 'done', sentBy: myName, sentByEmail: myEmail, timestamp: Date.now() };
+  if (n === 1) photoPayload.photo = photos[0]; else photoPayload.photos = photos;
 
-  if (pendingPhotos.length === 1) {
-    photoPayload.photo = pendingPhotos[0].dataUrl;
-  } else {
-    photoPayload.photos = pendingPhotos.map(p => p.dataUrl);
-  }
-
-  // If there's a pending request, update it with the photo → ServiceClient injects into compose
-  // If no pending request (manual job select), send directly as a message
   const targetJobId = selectedJob.id;
   const hasPendingRequest = _pendingRequest && _pendingRequest.jobId === targetJobId;
 
   try {
     if (hasPendingRequest) {
-      // Inject into compose area via photoRequests
+      // Injecte dans la zone de rédaction côté bureau via photoRequests
       await db.ref('photoRequests/' + targetJobId).update(photoPayload);
+      _pendingRequest = null;
     } else {
-      // No pending request — send as direct message
+      // Plus de demande active — envoie comme message direct dans la conversation
       const msgData = {
-        content: msg || ('📷 ' + pendingPhotos.length + ' photo' + (pendingPhotos.length > 1 ? 's' : '') + ' envoyée' + (pendingPhotos.length > 1 ? 's' : '') + ' depuis mobile'),
-        type: 'conversation',
-        authorEmail: myEmail,
-        authorName: myName,
-        timestamp: Date.now(),
-        createdAt: firebase.database.ServerValue.TIMESTAMP,
-        dest: selectedJob.assignee || '',
-        jobId: targetJobId,
-        sentFromMobile: true
+        content: '📷 ' + n + ' photo' + (n>1?'s':'') + ' envoyée' + (n>1?'s':'') + ' depuis mobile',
+        type: 'conversation', authorEmail: myEmail, authorName: myName,
+        timestamp: Date.now(), createdAt: firebase.database.ServerValue.TIMESTAMP,
+        dest: selectedJob.assignee || '', jobId: targetJobId, sentFromMobile: true
       };
-      if (pendingPhotos.length === 1) msgData.image = pendingPhotos[0].dataUrl;
-      else msgData.images = pendingPhotos.map(p => p.dataUrl);
-      if (msg) msgData.content = msg;
+      if (n === 1) msgData.image = photos[0]; else msgData.images = photos;
       await db.ref('questChat/' + targetJobId + '/messages').push().set(msgData);
     }
 
-    // Show success
-    const n = pendingPhotos.length;
-    document.getElementById('successMsg').innerHTML =
-      `<span class="success-dest">${n} photo${n>1?'s':''}</span> ` +
-      (hasPendingRequest ? 'ajoutée dans la zone de rédaction' : 'envoyée dans la conversation') +
-      ` — commande <strong>#${esc(selectedJob.order||'---')}</strong>`;
-    if (_pendingRequest && _pendingRequest.jobId === targetJobId) {
-      _pendingRequest = null;
-    }
-    showScreen('screenSuccess');
     pendingPhotos = [];
-
+    renderPreviews();
+    setBigBtnSending(false);
+    setCamStatus('✅ ' + n + ' photo' + (n>1?'s':'') + ' envoyée' + (n>1?'s':'') + ' ! Touche le bouton pour en prendre une autre.', true);
   } catch(e) {
-    btn.disabled = false;
-    document.getElementById('btnSendLabel').textContent = '⚠️ Erreur — réessayer';
     console.error(e);
+    setBigBtnSending(false);
+    setCamStatus('⚠️ Erreur — touche le bouton pour réessayer');
   }
 }
 
 function sendAnother() {
-  showScreen('screenPhoto');
   pendingPhotos = [];
   renderPreviews();
-  document.getElementById('photoMsg').value = '';
+  setCamStatus('Touchez le bouton pour prendre une photo');
+  setBigBtnSending(false);
+  showScreen('screenPhoto');
 }
 
 // ═══ UTILS ═══
