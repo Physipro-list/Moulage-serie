@@ -12,6 +12,17 @@
     
     ═══════════════════════════════════════════════════════════════════
     
+    ═══════════════════════════════════════════════════════════════════
+    
+    v1677 - PHOTOS NOTES : VISIONNEUSE SIMPLE AVEC ZOOM
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1677: Cliquer une photo dans les notes (MChat) ouvre désormais une
+       visionneuse plein écran SANS barre d'outils : pincer (2 doigts),
+       double-taper ou molette pour zoomer, glisser pour déplacer, ✕/Échap/
+       fond pour fermer. Remplace l'ancienne visionneuse d'annotation
+       (qchatZoomTools) qui ne permettait pas de zoomer. Le code d'annotation
+       reste présent mais n'est plus ouvert au clic.
+
     v1676 - UX : PLUS DE FLASH DE LOGIN
     ═══════════════════════════════════════════════════════════════════
     🆕 v1676: Ajout du masque pré-auth (comme l'accueil). Si l'utilisateur
@@ -1310,7 +1321,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1676</title>
+  <title>PhysiPro Moulages v1677</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -2963,6 +2974,13 @@
     .lightbox-btn:hover { background: rgba(255,255,255,0.3); transform: scale(1.1); }
     .lightbox-btn.close { background: rgba(220,38,38,0.8); }
     .lightbox-btn.close:hover { background: #dc2626; }
+
+    /* ── Visionneuse photo simple (notes Moulage) : pincer pour zoomer, sans barre d'outils ── */
+    .mpv-overlay { position:fixed; inset:0; z-index:100001; background:rgba(0,0,0,0.96); display:none; align-items:center; justify-content:center; overflow:hidden; touch-action:none; }
+    .mpv-overlay.active { display:flex; }
+    .mpv-img { max-width:100vw; max-height:100vh; object-fit:contain; transform-origin:center center; will-change:transform; user-select:none; -webkit-user-drag:none; }
+    .mpv-close { position:fixed; top:calc(env(safe-area-inset-top,0px) + 10px); right:12px; width:44px; height:44px; border-radius:50%; background:rgba(220,38,38,0.92); border:2px solid rgba(255,255,255,0.3); color:#fff; font-size:20px; font-weight:700; cursor:pointer; z-index:100002; display:flex; align-items:center; justify-content:center; line-height:1; }
+    .mpv-hint { position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 14px); left:50%; transform:translateX(-50%); color:rgba(255,255,255,0.55); font-size:12px; background:rgba(0,0,0,0.5); padding:6px 14px; border-radius:20px; pointer-events:none; }
     
     /* ===== BOUTON PHOTOS ONEDRIVE ===== */
     /* v1655 : règle résiduelle (.fiche-photos-zone padding) supprimée — causait l'espace gauche/droite */
@@ -6556,7 +6574,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260605;
+    var APP_VERSION = 20260606;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -20100,14 +20118,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       
       // ---- Image selection & annotations ----
       function clickImage(e, img) {
-        // If a drawing tool is active, ignore the image click — let canvas handle it
-        if (_annotTool) { e.stopPropagation(); e.preventDefault(); return; }
         e.stopPropagation();
-        document.querySelectorAll('.qchat-msg-img.selected').forEach(function(el){ el.classList.remove('selected'); });
-        img.classList.add('selected');
-        _selectedImgSrc = img.src;
-        // Open zoom WITH annotation toolbar (carrés, flèches, cercles)
-        zoomSelectedImage();
+        // Visionneuse simple : voir la photo + pincer/double-tap pour zoomer, sans barre d'outils
+        if (typeof window.openPhotoViewer === 'function') openPhotoViewer(img.src);
       }
       
       function setAnnotTool(tool, isZoom) {
@@ -20849,5 +20862,55 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     </div>
   </div>
 </div>
+
+<!-- ── Visionneuse photo simple (notes Moulage) ── -->
+<div class="mpv-overlay" id="mpvOverlay" onclick="if(event.target===this)closePhotoViewer()">
+  <button class="mpv-close" onclick="closePhotoViewer()">✕</button>
+  <img class="mpv-img" id="mpvImg" src="" alt="" draggable="false" ondragstart="return false">
+  <div class="mpv-hint">Pincez ou double-tapez pour zoomer</div>
+</div>
+<script>
+(function(){
+  var inited=false, scale=1, tx=0, ty=0, startDist=0, startScale=1, startX=0, startY=0, mode=null, lastTap=0;
+  function apply(){ var img=document.getElementById('mpvImg'); if(img) img.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')'; }
+  function reset(){ scale=1; tx=0; ty=0; apply(); }
+  function d2(t){ return Math.hypot(t[0].clientX-t[1].clientX, t[0].clientY-t[1].clientY); }
+  function setup(){
+    if(inited) return;
+    var img=document.getElementById('mpvImg'), ov=document.getElementById('mpvOverlay');
+    if(!img||!ov) return;
+    inited=true;
+    img.addEventListener('touchstart', function(e){
+      if(e.touches.length===2){ mode='pinch'; startDist=d2(e.touches); startScale=scale; }
+      else if(e.touches.length===1){
+        mode='pan'; startX=e.touches[0].clientX-tx; startY=e.touches[0].clientY-ty;
+        var now=Date.now();
+        if(now-lastTap<300){ if(scale>1){ reset(); } else { scale=2.5; apply(); } }
+        lastTap=now;
+      }
+    }, {passive:false});
+    img.addEventListener('touchmove', function(e){
+      e.preventDefault();
+      if(mode==='pinch' && e.touches.length===2){
+        var d=d2(e.touches); scale=Math.max(1, Math.min(6, startScale*(d/startDist))); if(scale<=1){tx=0;ty=0;} apply();
+      } else if(mode==='pan' && e.touches.length===1 && scale>1){
+        tx=e.touches[0].clientX-startX; ty=e.touches[0].clientY-startY; apply();
+      }
+    }, {passive:false});
+    img.addEventListener('touchend', function(e){ if(e.touches.length===0) mode=null; });
+    ov.addEventListener('wheel', function(e){ e.preventDefault(); scale=Math.max(1, Math.min(6, scale*(e.deltaY<0?1.15:0.87))); if(scale<=1){tx=0;ty=0;} apply(); }, {passive:false});
+  }
+  window.openPhotoViewer = function(src){
+    var ov=document.getElementById('mpvOverlay'), img=document.getElementById('mpvImg');
+    if(!ov||!img) return;
+    setup(); img.src=src; reset(); ov.classList.add('active');
+  };
+  window.closePhotoViewer = function(){
+    var ov=document.getElementById('mpvOverlay'), img=document.getElementById('mpvImg');
+    if(ov) ov.classList.remove('active'); if(img) img.src='';
+  };
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') window.closePhotoViewer(); });
+})();
+</script>
 </body>
 </html>
