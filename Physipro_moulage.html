@@ -8,6 +8,21 @@
     La version actuelle est définie ligne ~3741: const APP_VERSION = 'XXXX';
     ═══════════════════════════════════════════════════════════════════
     
+    ═══════════════════════════════════════════════════════════════════
+    
+    v1675 - MÉNAGE : CODE PHOTO LEGACY RETIRÉ
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1675: Suppression du bloc mort "PHOTO BRIDGE" (requestMoulagePhoto,
+       listenMoulagePhotoResponse, cancelMoulagePhotoRequest,
+       cleanupMoulagePhotoRequest + vars moulagePhoto*). Ancien schéma
+       push()/'pending'/photoResponses, sans aucun appelant (boutons
+       moulageComposePhotoBtn / .inline-photo-request-btn inexistants).
+       Flux actif conservé: MChat.openCamera → requestMobilePhoto, qui écrit
+       photoRequests/<jobId> (status 'waiting' + requestedByEmail) et reçoit
+       la réponse du téléphone (status 'done') dans le même nœud.
+       Récepteur bureau (startPhotoRequestsListener, status 'pending') CONSERVÉ
+       — il ne réagit pas au 'waiting', donc aucun conflit.
+
     v1641 - PERMISSIONS: MICHELLE BOUCHARD PEUT MAINTENANT DÉPLACER LES CARTES
     ═══════════════════════════════════════════════════════════════════
 
@@ -1284,7 +1299,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1674</title>
+  <title>PhysiPro Moulages v1675</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -6518,7 +6533,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260603;
+    var APP_VERSION = 20260604;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -11714,153 +11729,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     }
     window.openCompose = openCompose;
     
-    // ═══════════════════════════════════════════════════════════
-    // PHOTO BRIDGE — DEMANDE PHOTO AU MOBILE
-    // ═══════════════════════════════════════════════════════════
-    let moulagePhotoRequestId = null;
-    let moulagePhotoTarget = null;
-    let moulagePhotoInlineIdx = null;
-    let moulagePhotoListener = null;
-    
-    function requestMoulagePhoto(target, inlineIdx) {
-      console.log('📷 requestMoulagePhoto called:', target, inlineIdx);
-      console.log('📷 currentCardId:', currentCardId, 'currentUser:', currentUser?.email);
-      
-      if (!currentCardId || !currentUser) { 
-        console.log('📷 BLOCKED: no card or no user');
-        showToast('⚠️ Ouvrez une fiche d\'abord', 'error'); 
-        return; 
-      }
-      if (moulagePhotoRequestId) { 
-        console.log('📷 Cancelling existing request');
-        cancelMoulagePhotoRequest(); 
-        return; 
-      }
-      
-      const card = cardsData[currentCardId];
-      if (!card) { console.log('📷 BLOCKED: card not found'); return; }
-      
-      const userName = getUserDisplayName(currentUser.email);
-      console.log('📷 userName:', userName);
-      const msgType = currentComposeType === 'problem' ? '❓ Question' :
-                      currentComposeType === 'normal' ? '💬 Discussion' :
-                      currentComposeType === 'pinned' ? '📌 Épinglé' : '💬 Message';
-      
-      moulagePhotoTarget = target;
-      moulagePhotoInlineIdx = inlineIdx;
-      
-      const requestData = {
-        jobId: currentCardId,
-        jobOrder: card.order || '',
-        jobName: card.name || card.order || '',
-        module: 'moulage',
-        messageType: target === 'inline' ? '💬 Réponse thread' : msgType,
-        target: target,
-        inlineIdx: inlineIdx || null,
-        requestedBy: userName,
-        requestedByEmail: currentUser.email || '',
-        timestamp: Date.now(),
-        status: 'pending'
-      };
-      
-      const reqRef = firebaseDb.ref('photoRequests').push();
-      moulagePhotoRequestId = reqRef.key;
-      console.log('📷 Writing to Firebase photoRequests/', reqRef.key, requestData);
-      
-      reqRef.set(requestData).then(() => {
-        console.log('📷 ✅ Firebase write SUCCESS');
-        showToast('📷 Demande envoyée au mobile!', 'info');
-        if (target === 'compose') {
-          const btn = document.getElementById('moulageComposePhotoBtn');
-          if (btn) { btn.classList.add('waiting'); btn.innerHTML = '⏳ Annuler demande'; }
-        } else {
-          const btn = document.getElementById('moulageInlinePhotoBtn_' + inlineIdx);
-          if (btn) { btn.classList.add('waiting'); btn.innerHTML = '⏳'; }
-        }
-        listenMoulagePhotoResponse(moulagePhotoRequestId, currentCardId);
-        setTimeout(() => { if (moulagePhotoRequestId === reqRef.key) cancelMoulagePhotoRequest(); }, 300000);
-      }).catch(err => {
-        showToast('❌ Erreur: ' + err.message, 'error');
-        moulagePhotoRequestId = null;
-      });
-    }
-    window.requestMoulagePhoto = requestMoulagePhoto;
-    
-    function listenMoulagePhotoResponse(requestId, capturedCardId) {
-      if (moulagePhotoListener) moulagePhotoListener();
-      let moulagePhotoReceivedCount = 0;
-      const targetCardId = capturedCardId;
-      const targetType = moulagePhotoTarget; // 'compose' or 'inline'
-      const targetInlineIdx = moulagePhotoInlineIdx;
-      console.log('📷 Listener started for request:', requestId, 'card:', targetCardId, 'target:', targetType);
-      
-      const ref = firebaseDb.ref('photoResponses/' + requestId);
-      const handler = ref.on('child_added', (snap) => {
-        const response = snap.val();
-        if (!response || !response.data) return;
-        moulagePhotoReceivedCount++;
-        console.log('📷 Photo', moulagePhotoReceivedCount, 'received, target:', targetType);
-        
-        if (targetType === 'compose') {
-          // Ajouter dans la zone de compose (pas créer de message séparé)
-          currentComposeImages.push(response.data);
-          renderComposeImagePreviews();
-        } else if (targetType === 'inline' && targetInlineIdx != null) {
-          // Ajouter dans la zone inline du thread
-          if (!inlineComposeImages[targetInlineIdx]) inlineComposeImages[targetInlineIdx] = [];
-          inlineComposeImages[targetInlineIdx].push(response.data);
-          renderInlineImagePreviews(targetInlineIdx);
-        }
-        
-        showToast('📸 Photo ' + moulagePhotoReceivedCount + ' reçue du mobile!', 'success');
-      });
-      
-      // Écouter quand la demande est marquée "fulfilled" (mobile a cliqué Terminé)
-      const reqRef = firebaseDb.ref('photoRequests/' + requestId);
-      const statusHandler = reqRef.on('value', (snap) => {
-        const req = snap.val();
-        if (!req || req.status === 'fulfilled') {
-          if (moulagePhotoReceivedCount > 0) {
-            showToast('✅ ' + moulagePhotoReceivedCount + ' photo(s) prête(s) à envoyer', 'success');
-          }
-          reqRef.off('value', statusHandler);
-          cleanupMoulagePhotoRequest();
-        }
-      });
-      
-      moulagePhotoListener = () => { 
-        ref.off('child_added', handler); 
-        reqRef.off('value', statusHandler); 
-      };
-    }
-    
-    function cancelMoulagePhotoRequest() {
-      if (moulagePhotoRequestId) {
-        firebaseDb.ref('photoRequests/' + moulagePhotoRequestId).remove();
-        showToast('📷 Demande annulée', 'info');
-      }
-      cleanupMoulagePhotoRequest();
-    }
-    window.cancelMoulagePhotoRequest = cancelMoulagePhotoRequest;
-    
-    function cleanupMoulagePhotoRequest() {
-      if (moulagePhotoRequestId) {
-        const oldId = moulagePhotoRequestId;
-        // Attendre 2 minutes avant de supprimer (multi-photos peut prendre du temps)
-        setTimeout(() => {
-          firebaseDb.ref('photoRequests/' + oldId).remove();
-          firebaseDb.ref('photoResponses/' + oldId).remove();
-        }, 120000);
-      }
-      const compBtn = document.getElementById('moulageComposePhotoBtn');
-      if (compBtn) { compBtn.classList.remove('waiting'); compBtn.innerHTML = '📱 Application Photo'; }
-      document.querySelectorAll('.inline-photo-request-btn').forEach(btn => {
-        btn.classList.remove('waiting'); btn.innerHTML = '📱 Application Photo';
-      });
-      if (moulagePhotoListener) { moulagePhotoListener(); moulagePhotoListener = null; }
-      moulagePhotoRequestId = null; moulagePhotoTarget = null; moulagePhotoInlineIdx = null;
-    }
-    // ═══════════════════════════════════════════════════════════
+    // [v1675] Bloc photo legacy retire (requestMoulagePhoto / push+pending / photoResponses) — code mort sans appelant. Flux actif: MChat.requestMobilePhoto (photoRequests/<jobId>, status waiting).
     
     function closeCompose() { 
       if (!document.getElementById('composeZone')) return;
