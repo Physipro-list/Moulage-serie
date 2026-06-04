@@ -7,9 +7,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>PhysiPro 📷 Photos</title>
-<!-- PhotoSender v3 : caméra intégrée (aperçu direct, capture sans confirmation),
+<!-- PhotoSender v3 : caméra intégrée (aperçu direct grand, capture sans confirmation),
      accumulation des photos côte à côte, bouton "Envoyer les photos" qui n'apparaît
-     que lorsqu'au moins une photo a été prise. Repli sur la caméra système si besoin. -->
+     que lorsqu'au moins une photo a été prise. Qualité d'image: 1300px / plafond ~200 Ko
+     (compromis netteté/poids pour un zoom correct sans surcharger). Repli caméra système si besoin. -->
 <link rel="manifest" id="pwaManifest">
 <meta name="theme-color" content="#04152c">
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%2304152c'/><rect x='56' y='140' width='400' height='270' rx='40' fill='%234a8ef5'/><circle cx='256' cy='275' r='88' fill='%23fff' opacity='.25'/><circle cx='256' cy='275' r='60' fill='%23fff'/><circle cx='256' cy='275' r='28' fill='%234a8ef5'/><rect x='156' y='80' width='120' height='66' rx='18' fill='%234a8ef5'/><circle cx='390' cy='172' r='24' fill='%2322c55e'/></svg>">
@@ -994,7 +995,7 @@ async function takePhoto() {
 function captureFrame() {
   var v = document.getElementById('camVideo');
   if (!v || !v.videoWidth) { setCamStatus('⏳ Caméra pas prête…'); return; }
-  var maxSize = 700, w = v.videoWidth, h = v.videoHeight;
+  var maxSize = 1300, w = v.videoWidth, h = v.videoHeight;
   if (w > maxSize || h > maxSize) {
     if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
     else       { w = Math.round(w * maxSize / h); h = maxSize; }
@@ -1002,8 +1003,8 @@ function captureFrame() {
   var canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   canvas.getContext('2d').drawImage(v, 0, 0, w, h);
-  var quality = 0.6, result = canvas.toDataURL('image/jpeg', quality);
-  while (result.length > 60000 && quality > 0.1) { quality -= 0.1; result = canvas.toDataURL('image/jpeg', quality); }
+  var quality = 0.85, result = canvas.toDataURL('image/jpeg', quality);
+  while (result.length > 200000 && quality > 0.4) { quality -= 0.07; result = canvas.toDataURL('image/jpeg', quality); }
   pendingPhotos.push({ dataUrl: result, name: 'photo_' + Date.now() + '.jpg' });
   renderPreviews();
   updateSendBtn();
@@ -1053,11 +1054,11 @@ function readAndCompress(file) {
       reader.onload = function(e) {
         var img = new Image();
         img.onload = function() {
-          var canvas = _drawWithOrientation(img, orientation, 700);
-          var quality = 0.5;
+          var canvas = _drawWithOrientation(img, orientation, 1300);
+          var quality = 0.85;
           var result = canvas.toDataURL('image/jpeg', quality);
-          while (result.length > 60000 && quality > 0.1) {
-            quality -= 0.1;
+          while (result.length > 200000 && quality > 0.4) {
+            quality -= 0.07;
             result = canvas.toDataURL('image/jpeg', quality);
           }
           resolve(result);
