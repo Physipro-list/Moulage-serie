@@ -20,6 +20,30 @@
     
     ═══════════════════════════════════════════════════════════════════
     
+    ═══════════════════════════════════════════════════════════════════
+    
+    ═══════════════════════════════════════════════════════════════════
+    
+    v1682 - HISTORIQUE : STOCKAGE FIABLE + DROPDOWN + FICHE MOBILE
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1682: (1) La liste d'actions est maintenant stockée dans
+       appSettings/historiqueActions (chemin déjà autorisé en écriture) au lieu
+       d'un nœud racine — corrige le cas où les actions ajoutées ne se
+       sauvegardaient pas. (2) Fiche PC: les champs Item + dates + Fab-moulage
+       sont repliés sous « ▾ Plus de détails » (par défaut fermé) → la barre
+       Historique remonte beaucoup plus haut. (3) Fiche MOBILE: l'historique
+       s'affiche maintenant en bas de la fiche (lecture seule, l'ajout passe
+       par « Historique rapide » sur l'accueil).
+
+    v1681 - FIX : ACTIONS PERSONNALISÉES DE L'HISTORIQUE
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1681: Correction — quand on ajoutait une action dans la liste de
+       l'historique, elle ne réapparaissait pas dans les choix (et la liste
+       retombait sur les valeurs par défaut au rechargement). Cause: Firebase
+       renvoie parfois la liste sous forme d'OBJET et non de tableau ; le code
+       ne gérait que le tableau. La lecture normalise maintenant tableau OU
+       objet (même correction côté téléphone, page Historique v1.1).
+
     v1680 - FICHE PC : COMPACTAGE + HISTORIQUE PLUS GRAND
     ═══════════════════════════════════════════════════════════════════
     🆕 v1680: Champs de la fiche compactés (police et hauteur de ligne réduites)
@@ -1357,7 +1381,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1680</title>
+  <title>PhysiPro Moulages v1682</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -2612,6 +2636,24 @@
     .fiche-field-value { font-size: 10.5px !important; min-height: 13px !important; }
     .fiche-field-value select, .fiche-field-value input { font-size: 11px; padding: 1px 4px; height: 21px; line-height: 19px; }
     .fiche-field-value.date-field { padding-top: 2px; padding-bottom: 2px; }
+
+    /* v1681 : menu déroulant "Plus de détails" (remonte l'historique) */
+    .fiche-more-toggle { display:flex; align-items:center; gap:6px; padding:5px 14px; font-size:11px; font-weight:700; color:#3b82f6; cursor:pointer; border-bottom:1px solid #e5e7eb; user-select:none; background:#f8fafc; }
+    .fiche-more-toggle:hover { background:#eef2f7; }
+    .fiche-more-toggle #ficheMoreArrow { font-size:12px; }
+    .fiche-more { display:none; }
+    .fiche-more.open { display:block; }
+
+    /* v1681 : historique en bas de la fiche MOBILE */
+    .mobile-fiche-history { background:#fff; border-top:8px solid #f1f5f9; padding:10px 12px 18px; }
+    .mfh-head { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:12px; background:linear-gradient(135deg,#14b8a6,#0d9488); color:#fff; font-size:13px; font-weight:800; margin-bottom:10px; }
+    .mfh-list { display:flex; flex-direction:column; gap:8px; }
+    .mfh-item { background:#f8fafc; border:1px solid #e2e8f0; border-left:3px solid #14b8a6; border-radius:8px; padding:9px 11px; }
+    .mfh-action { font-size:14px; font-weight:600; color:#1e293b; line-height:1.35; }
+    .mfh-note { font-size:13px; color:#64748b; margin-top:3px; line-height:1.35; }
+    .mfh-meta { font-size:11px; color:#94a3b8; margin-top:5px; }
+    .mfh-meta strong { color:#0d9488; }
+    .mfh-empty { color:#94a3b8; font-size:13px; text-align:center; padding:14px; }
     
     /* Conteneur scrollable pour tout le chat */
     .chat-scroll-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-height: 0; background: transparent; }
@@ -6676,7 +6718,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260609;
+    var APP_VERSION = 20260611;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -11133,10 +11175,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         <div class="fiche-field-row"><div class="fiche-field-label">🔢 N° Commande</div><div class="fiche-field-value"><input value="${escapeHtml(d.order)}" onchange="updateField('${cardId}','order',this.value)"></div></div>
         <div class="fiche-field-row"><div class="fiche-field-label">📄 N° Soumission</div><div class="fiche-field-value"><input value="${escapeHtml(getLast8Digits(d.soumission))}" onchange="updateField('${cardId}','soumission',this.value)" title="Valeur complète: ${escapeHtml(d.soumission || '')}"></div></div>
         <div class="fiche-field-row"><div class="fiche-field-label">🧾 N° PO</div><div class="fiche-field-value"><input value="${escapeHtml(d.po)}" onchange="updateField('${cardId}','po',this.value)"></div></div>
+        <div class="fiche-more-toggle" id="ficheMoreToggle" onclick="toggleFicheMore()"><span id="ficheMoreArrow">▾</span> Plus de détails (item, dates)</div>
+        <div class="fiche-more" id="ficheMore">
         <div class="fiche-field-row"><div class="fiche-field-label">📦 Item</div><div class="fiche-field-value fiche-field-with-btn"><select onchange="updateField('${cardId}','item',this.value)"><option value=""></option>${ITEMS.map(i=>`<option ${i===d.item?'selected':''}>${i}</option>`).join('')}</select><button class="fiche-field-manage-btn" onclick="openListManager('ITEMS')" title="Gérer">⚙️</button></div></div>
         <div class="fiche-field-row"><div class="fiche-field-label">📥 Date Reçue</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateRecue')">${formatDateDisplay(d.dateRecue)||'Sélectionner...'}</div></div>
         <div class="fiche-field-row"><div class="fiche-field-label">📦 Date Livraison</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateLivraison')">${formatDateDisplay(d.dateLivraison)||'Sélectionner...'}</div></div>
         <div class="fiche-field-row"><div class="fiche-field-label">🔧 Fab-moulage</div><div class="fiche-field-value date-field" onclick="openCalendar(this,'dateEssayage')">${formatDateDisplay(d.dateEssayage)||'Sélectionner...'}</div></div>
+        </div>
       `;
       
       renderMessages(cardId);
@@ -11880,10 +11925,16 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     let _ficheHistRef = null;
     let _fhistSelected = null;
 
-    firebaseDb.ref('historiqueActions').on('value', function(snap){
+    function toHistActionArray(v){
+      if (Array.isArray(v)) return v.filter(function(x){ return typeof x==='string' && x.trim(); });
+      if (v && typeof v==='object') return Object.keys(v).sort(function(a,b){ return (parseInt(a,10)||0)-(parseInt(b,10)||0); }).map(function(k){ return v[k]; }).filter(function(x){ return typeof x==='string' && x.trim(); });
+      return [];
+    }
+    firebaseDb.ref('appSettings/historiqueActions').on('value', function(snap){
       var v = snap.val();
-      if (Array.isArray(v) && v.length) _histActions = v.slice();
-      else if (!v) { firebaseDb.ref('historiqueActions').set(HIST_DEFAULT_ACTIONS).catch(function(){}); _histActions = HIST_DEFAULT_ACTIONS.slice(); }
+      var arr = toHistActionArray(v);
+      if (arr.length) _histActions = arr;
+      else if (v == null) { firebaseDb.ref('appSettings/historiqueActions').set(HIST_DEFAULT_ACTIONS).catch(function(){}); _histActions = HIST_DEFAULT_ACTIONS.slice(); }
     });
 
     function listenFicheHistory(cardId) {
@@ -11942,6 +11993,14 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     window.closeFicheHistAdd = closeFicheHistAdd;
     window.chooseFicheHist = chooseFicheHist;
     window.submitFicheHist = submitFicheHist;
+
+    function toggleFicheMore() {
+      var m = document.getElementById('ficheMore'), a = document.getElementById('ficheMoreArrow');
+      if (!m) return;
+      var open = m.classList.toggle('open');
+      if (a) a.textContent = open ? '▴' : '▾';
+    }
+    window.toggleFicheMore = toggleFicheMore;
     window.closeConfirmDelete = closeConfirmDelete;
     window.confirmDeleteCard = confirmDeleteCard;
 
@@ -17185,11 +17244,37 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             <span class="mobile-fiche-value date-field" onclick="openCalendar(this,'dateEssayage','${cardId}')">${formatDateDisplay(d.dateEssayage) || 'Sélectionner...'}</span>
           </div>
         </div>
+
+        <!-- HISTORIQUE (affichage seulement — l'ajout se fait via "Historique rapide") -->
+        <div class="mobile-fiche-history">
+          <div class="mfh-head">📋 Historique</div>
+          <div class="mfh-list" id="mobileFicheHistoryList"><div class="mfh-empty">Aucune action encore.</div></div>
+        </div>
       `;
-      
+
+      listenMobileFicheHistory(cardId);
       document.getElementById('mobileFichePage').classList.add('active');
     }
     window.openMobileFiche = openMobileFiche;
+
+    let _mobileHistRef = null;
+    function listenMobileFicheHistory(cardId) {
+      if (_mobileHistRef) { _mobileHistRef.off(); _mobileHistRef = null; }
+      _mobileHistRef = firebaseDb.ref('moulages/' + cardId + '/historique').orderByChild('timestamp').limitToLast(50);
+      _mobileHistRef.on('value', function(snap){
+        var listEl = document.getElementById('mobileFicheHistoryList');
+        if (!listEl) return;
+        var v = snap.val() || {};
+        var arr = Object.keys(v).map(function(k){ return v[k]; }).sort(function(a,b){ return (b.timestamp||0)-(a.timestamp||0); });
+        if (!arr.length) { listEl.innerHTML = '<div class="mfh-empty">Aucune action encore.</div>'; return; }
+        listEl.innerHTML = arr.map(function(e){
+          return '<div class="mfh-item"><div class="mfh-action">'+escapeHtml(e.action||'')+'</div>'+
+            (e.note ? '<div class="mfh-note">'+escapeHtml(e.note)+'</div>' : '')+
+            '<div class="mfh-meta">Par <strong>'+escapeHtml(e.parNom||'?')+'</strong> · '+getTimeAgo(e.timestamp)+'</div></div>';
+        }).join('');
+      });
+    }
+    window.listenMobileFicheHistory = listenMobileFicheHistory;
     
     // Mettre à jour un champ
     function updateMobileField(cardId, field, value) {

@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>PhysiPro 📋 Historique</title>
-<!-- Historique v1 : page téléphone — entrer le numéro de moulage, le nom se confirme
+<!-- Historique v1.1 (fix: actions personnalisées lues correctement, tableau OU objet) : page téléphone — entrer le numéro de moulage, le nom se confirme
      automatiquement, choisir une action (liste modifiable), note optionnelle, Confirmer.
      Écrit dans moulages/<cardId>/historique. Pas de login qui clignote (écran Ouverture…). -->
 <meta name="theme-color" content="#04152c">
@@ -358,11 +358,17 @@ function setMoulage(hit){
 }
 
 // ═══ ACTIONS ═══
+function toActionArray(v){
+  if (Array.isArray(v)) return v.filter(function(x){ return typeof x==='string' && x.trim(); });
+  if (v && typeof v==='object') return Object.keys(v).sort(function(a,b){ return (parseInt(a,10)||0)-(parseInt(b,10)||0); }).map(function(k){ return v[k]; }).filter(function(x){ return typeof x==='string' && x.trim(); });
+  return [];
+}
 function loadActions(){
-  db.ref('historiqueActions').on('value', function(snap){
+  db.ref('appSettings/historiqueActions').on('value', function(snap){
     var v = snap.val();
-    if(Array.isArray(v) && v.length){ _actions = v.slice(); }
-    else if(!v){ db.ref('historiqueActions').set(DEFAULT_ACTIONS).catch(function(){}); _actions = DEFAULT_ACTIONS.slice(); }
+    var arr = toActionArray(v);
+    if(arr.length){ _actions = arr; }
+    else if(v == null){ db.ref('appSettings/historiqueActions').set(DEFAULT_ACTIONS).catch(function(){}); _actions = DEFAULT_ACTIONS.slice(); }
     renderPicker();
   });
 }
@@ -407,7 +413,7 @@ function saveActions(){
   var arr = [];
   inputs.forEach(function(inp){ var t=(inp.value||'').trim(); if(t) arr.push(t); });
   if(!arr.length){ showToast('Ajoutez au moins une action', true); return; }
-  db.ref('historiqueActions').set(arr).then(function(){
+  db.ref('appSettings/historiqueActions').set(arr).then(function(){
     _actions = arr.slice(); renderPicker(); closeEditActions(); showToast('Actions enregistrées');
   }).catch(function(){ showToast('Erreur d\'enregistrement', true); });
 }
