@@ -147,6 +147,12 @@
   .photo-preview { margin-top:12px; position:relative; display:inline-block; }
   .photo-preview img { max-width:100%; max-height:220px; border-radius:12px; border:1.5px solid var(--border); display:block; }
   .photo-remove { position:absolute; top:8px; right:8px; width:34px; height:34px; border-radius:50%; background:rgba(220,38,38,0.92); color:#fff; border:2px solid rgba(255,255,255,0.3); font-size:16px; font-weight:700; cursor:pointer; }
+  .hist-row { display:flex; align-items:flex-start; gap:8px; justify-content:space-between; }
+  .hist-row .hi-action { flex:1; }
+  .hist-thumb { width:80px; height:80px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:zoom-in; flex-shrink:0; }
+  .hist-lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:3000; align-items:center; justify-content:center; cursor:zoom-out; padding:16px; }
+  .hist-lightbox.show { display:flex; }
+  .hist-lightbox img { max-width:96vw; max-height:96vh; border-radius:8px; }
 </style>
 </head>
 <body>
@@ -197,6 +203,13 @@
           <div class="ca-txt" id="chosenTxt"></div>
           <button class="ca-change" onclick="openActionPicker()">Changer</button>
         </div>
+      </div>
+
+      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onchange="onPhotoPicked(this.files)">
+      <button class="photo-btn" id="photoBtn" onclick="document.getElementById('photoInput').click()">📷 Ajouter une photo</button>
+      <div id="photoPreview" class="photo-preview" style="display:none;">
+        <img id="photoPreviewImg" src="" alt="photo">
+        <button class="photo-remove" onclick="removeQuickPhoto()">✕</button>
       </div>
 
       <textarea class="note-area" id="noteInput" placeholder="Note (optionnel)…" rows="2"></textarea>
@@ -425,6 +438,37 @@ function saveActions(){
 }
 
 // ═══ PHOTO (optionnelle) ═══
+function onPhotoPicked(files){
+  if(!files || !files.length) return;
+  var file = files[0];
+  if(!file.type || file.type.indexOf('image/')!==0) return;
+  showToast('⏳ Traitement de la photo…');
+  var reader = new FileReader();
+  reader.onload = function(){
+    var img = new Image();
+    img.onload = function(){
+      var maxSize=1300, w=img.width, h=img.height;
+      if(w>maxSize||h>maxSize){ if(w>h){h=Math.round(h*maxSize/w);w=maxSize;} else {w=Math.round(w*maxSize/h);h=maxSize;} }
+      var c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      var q=0.82, out=c.toDataURL('image/jpeg',q);
+      while(out.length>220000 && q>0.4){ q-=0.07; out=c.toDataURL('image/jpeg',q); }
+      _quickPhoto = out;
+      document.getElementById('photoPreviewImg').src = out;
+      document.getElementById('photoPreview').style.display='inline-block';
+      document.getElementById('photoBtn').textContent='📷 Changer la photo';
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+function removeQuickPhoto(){
+  _quickPhoto = null;
+  var p=document.getElementById('photoPreview'); if(p) p.style.display='none';
+  var pi=document.getElementById('photoInput'); if(pi) pi.value='';
+  var b=document.getElementById('photoBtn'); if(b) b.textContent='📷 Ajouter une photo';
+}
+
 // ═══ ENVOI (historique) ═══
 function submitEntry(){
   if(!_selectedCardId || !_selectedAction || !db) return;
@@ -438,12 +482,14 @@ function submitEntry(){
     timestamp: Date.now(),
     createdAt: firebase.database.ServerValue.TIMESTAMP
   };
+  if(_quickPhoto) entry.photo = _quickPhoto;
   db.ref('moulages/'+_selectedCardId+'/historique').push().set(entry).then(function(){
     // Réinitialiser pour une nouvelle entrée (on garde le numéro du moulage)
     _selectedAction = null;
     document.getElementById('chosenWrap').style.display='none';
     document.getElementById('pickActionBtn').style.display='flex';
     document.getElementById('noteInput').value='';
+    removeQuickPhoto();
     btn.innerHTML='✓ Confirmer et envoyer'; refreshConfirmBtn();
     showToast('✓ Action ajoutée à l\'historique');
   }).catch(function(e){
@@ -460,12 +506,16 @@ function listenRecent(cardId){
     var list = document.getElementById('recentList');
     if(!arr.length){ list.innerHTML = '<div class="hist-empty">Aucune action pour ce moulage encore.</div>'; return; }
     list.innerHTML = arr.map(function(e){
-      return '<div class="hist-item"><div class="hi-action">'+esc(e.action||'')+'</div>'+
+      var thumb = e.photo ? '<img class="hist-thumb" src="'+e.photo+'" onclick="openHistPhoto(this.src)">' : '';
+      return '<div class="hist-item"><div class="hist-row"><div class="hi-action">'+esc(e.action||'')+'</div>'+thumb+'</div>'+
         (e.note ? '<div class="hi-note">'+esc(e.note)+'</div>' : '')+
         '<div class="hi-meta">Par <strong>'+esc(e.parNom||'?')+'</strong> · '+fmtTime(e.timestamp)+'</div></div>';
     }).join('');
   });
 }
+function openHistPhoto(src){ var o=document.getElementById('histLightbox'); document.getElementById('histLightboxImg').src=src; o.classList.add('show'); }
+function closeHistPhoto(){ var o=document.getElementById('histLightbox'); o.classList.remove('show'); document.getElementById('histLightboxImg').src=''; }
+window.openHistPhoto=openHistPhoto; window.closeHistPhoto=closeHistPhoto;
 
 // ═══ UTILS ═══
 function esc(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -484,5 +534,6 @@ function showToast(msg, isErr){
   _toastTimer=setTimeout(function(){ t.className='toast'+(isErr?' err':''); }, 2600);
 }
 </script>
+<div class="hist-lightbox" id="histLightbox" onclick="closeHistPhoto()"><img id="histLightboxImg" src="" alt=""></div>
 </body>
 </html>
