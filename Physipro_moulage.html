@@ -30,6 +30,25 @@
     
     ═══════════════════════════════════════════════════════════════════
     
+    ═══════════════════════════════════════════════════════════════════
+    
+    ═══════════════════════════════════════════════════════════════════
+    
+    v1694 - HISTORIQUE → CHAT : "AJOUT RAPIDE"
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1694: Changement de direction. Plus d'historique séparé : le bouton
+       d'accueil « Ajout rapide » poste maintenant directement dans le chat du
+       moulage (chatV2) un message reconnaissable « ⚡ [action] » avec le nom de
+       l'expéditeur + photo optionnelle, sans avoir à ouvrir la carte. Les
+       sections Historique des fiches (PC + mobile) sont retirées (le chat tient
+       le registre). (Données historique de test = orphelines, non affichées.)
+
+    v1693 - FICHE MOBILE : AJOUT D'HISTORIQUE DIRECT
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1693: La section Historique de la fiche mobile/tablette a un bouton
+       « ➕ Ajouter ». Le sélecteur d'actions (openFicheHistAdd) prend désormais
+       l'ID de carte en paramètre → réutilisable depuis la fiche PC ET mobile.
+
     v1691 - MARQUE "ARCHIVÉ ONEDRIVE" SUR LES CARTES EXPÉDITION
     ═══════════════════════════════════════════════════════════════════
     🆕 v1691: Dans la colonne Expédition (bureau ET mobile), chaque carte affiche
@@ -1413,7 +1432,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1692</title>
+  <title>PhysiPro Moulages v1695</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -2686,6 +2705,10 @@
     .mfh-meta { font-size:11px; color:#94a3b8; margin-top:5px; }
     .mfh-meta strong { color:#0d9488; }
     .mfh-empty { color:#94a3b8; font-size:13px; text-align:center; padding:14px; }
+    .mfh-headrow { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+    .mfh-headrow .mfh-head { margin-bottom:0 !important; }
+    .mfh-add-btn { background:#14b8a6; color:#fff; border:none; border-radius:10px; padding:7px 14px; font-size:13px; font-weight:800; cursor:pointer; flex-shrink:0; }
+    .mfh-add-btn:active { background:#0d9488; transform:scale(0.97); }
 
     /* ── v1691 : badges d'archivage OneDrive (Expédition) ── */
     .mcard-od-badge, #mobileCardsList .mobile-od-badge { margin:5px 6px 0; padding:3px 8px; border-radius:8px; font-size:10px; font-weight:800; text-align:center; letter-spacing:0.2px; line-height:1.25; }
@@ -6780,7 +6803,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260621;
+    var APP_VERSION = 20260624;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -11263,6 +11286,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       renderMessages(cardId);
       if (typeof MChat !== 'undefined') MChat.loadForJob(cardId);
       listenFicheHistory(cardId);
+    
       document.getElementById('ficheOverlay').classList.remove('hidden');
       
       // Scroll vers le bas pour voir les derniers messages
@@ -12000,6 +12024,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     let _histActions = HIST_DEFAULT_ACTIONS.slice();
     let _ficheHistRef = null;
     let _fhistSelected = null;
+    let _fhistCardId = null;
 
     function toHistActionArray(v){
       if (Array.isArray(v)) return v.filter(function(x){ return typeof x==='string' && x.trim(); });
@@ -12031,8 +12056,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     }
     window.listenFicheHistory = listenFicheHistory;
 
-    function openFicheHistAdd() {
-      if (!currentCardId) return;
+    function openFicheHistAdd(cid) {
+      _fhistCardId = cid || currentCardId || mobileCurrentCardId;
+      if (!_fhistCardId) return;
       _fhistSelected = null;
       var note = document.getElementById('fhistNote'); if (note) note.value = '';
       var send = document.getElementById('fhistSendBtn'); if (send) { send.disabled = true; send.textContent = '✓ Confirmer'; }
@@ -12049,7 +12075,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       var send = document.getElementById('fhistSendBtn'); if (send) send.disabled = false;
     }
     function submitFicheHist() {
-      if (!currentCardId || !_fhistSelected) return;
+      if (!_fhistCardId || !_fhistSelected) return;
       var btn = document.getElementById('fhistSendBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Envoi…'; }
       var note = (document.getElementById('fhistNote').value || '').trim();
       var entry = {
@@ -12060,7 +12086,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         timestamp: Date.now(),
         createdAt: firebase.database.ServerValue.TIMESTAMP
       };
-      firebaseDb.ref('moulages/' + currentCardId + '/historique').push().set(entry).then(function(){
+      firebaseDb.ref('moulages/' + _fhistCardId + '/historique').push().set(entry).then(function(){
         closeFicheHistAdd();
         if (typeof showToast === 'function') showToast('✓ Action ajoutée à l\'historique', 'success');
       }).catch(function(e){ if (btn) { btn.disabled = false; btn.textContent = '⚠️ Erreur'; } console.error(e); });
@@ -17360,9 +17386,12 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           </div>
         </div>
 
-        <!-- HISTORIQUE (affichage seulement — l'ajout se fait via "Historique rapide") -->
+        <!-- HISTORIQUE (affichage + ajout direct depuis la fiche) -->
         <div class="mobile-fiche-history">
-          <div class="mfh-head">📋 Historique</div>
+          <div class="mfh-headrow">
+            <span class="mfh-head">📋 Historique</span>
+            <button class="mfh-add-btn" onclick="openFicheHistAdd('${cardId}')">➕ Ajouter</button>
+          </div>
           <div class="mfh-list" id="mobileFicheHistoryList"><div class="mfh-empty">Aucune action encore.</div></div>
         </div>
       `;

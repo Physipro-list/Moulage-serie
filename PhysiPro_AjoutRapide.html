@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>PhysiPro ⚡ Ajout rapide</title>
-<!-- Ajout rapide v3 (fichier renomme PhysiPro_AjoutRapide.html ; poste dans le chat chatV2 + photo) — fix: actions personnalisées lues correctement, tableau OU objet) : page téléphone — entrer le numéro de moulage, le nom se confirme
+<!-- Ajout rapide v4 (retour : ecrit dans moulages/<id>/historique + affiche historique recent ; pas de chat ni photo) — fix: actions personnalisées lues correctement, tableau OU objet) : page téléphone — entrer le numéro de moulage, le nom se confirme
      automatiquement, choisir une action (liste modifiable), note optionnelle, Confirmer.
      Écrit dans moulages/<cardId>/historique. Pas de login qui clignote (écran Ouverture…). -->
 <meta name="theme-color" content="#04152c">
@@ -199,16 +199,14 @@
         </div>
       </div>
 
-      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onchange="onPhotoPicked(this.files)">
-      <button class="photo-btn" id="photoBtn" onclick="document.getElementById('photoInput').click()">📷 Ajouter une photo</button>
-      <div id="photoPreview" class="photo-preview" style="display:none;">
-        <img id="photoPreviewImg" src="" alt="photo">
-        <button class="photo-remove" onclick="removeQuickPhoto()">✕</button>
-      </div>
-
       <textarea class="note-area" id="noteInput" placeholder="Note (optionnel)…" rows="2"></textarea>
 
-      <button class="send-btn" id="confirmBtn" onclick="submitEntry()" disabled>✓ Envoyer dans le chat</button>
+      <button class="send-btn" id="confirmBtn" onclick="submitEntry()" disabled>✓ Confirmer et envoyer</button>
+    </div>
+
+    <div id="recentWrap" style="display:none;">
+      <div class="hist-title">Historique de ce moulage</div>
+      <div id="recentList"></div>
     </div>
 
   </div>
@@ -349,12 +347,18 @@ function onNumInput(val){
 
 function setMoulage(hit){
   var sec = document.getElementById('actionSection');
+  var recentWrap = document.getElementById('recentWrap');
+  if(_recentRef){ _recentRef.off(); _recentRef = null; }
   if(hit){
     _selectedCardId = hit.cardId; _selectedName = hit.name;
     sec.classList.remove('locked');
+    recentWrap.style.display = 'block';
+    listenRecent(hit.cardId);
   } else {
     _selectedCardId = null; _selectedName = '';
     sec.classList.add('locked');
+    recentWrap.style.display = 'none';
+    document.getElementById('recentList').innerHTML = '';
   }
   refreshConfirmBtn();
 }
@@ -421,65 +425,45 @@ function saveActions(){
 }
 
 // ═══ PHOTO (optionnelle) ═══
-function onPhotoPicked(files){
-  if(!files || !files.length) return;
-  var file = files[0];
-  if(!file.type || file.type.indexOf('image/')!==0) return;
-  showToast('⏳ Traitement de la photo…');
-  var reader = new FileReader();
-  reader.onload = function(){
-    var img = new Image();
-    img.onload = function(){
-      var maxSize=1300, w=img.width, h=img.height;
-      if(w>maxSize||h>maxSize){ if(w>h){h=Math.round(h*maxSize/w);w=maxSize;} else {w=Math.round(w*maxSize/h);h=maxSize;} }
-      var c=document.createElement('canvas'); c.width=w; c.height=h;
-      c.getContext('2d').drawImage(img,0,0,w,h);
-      var q=0.82, out=c.toDataURL('image/jpeg',q);
-      while(out.length>220000 && q>0.4){ q-=0.07; out=c.toDataURL('image/jpeg',q); }
-      _quickPhoto = out;
-      document.getElementById('photoPreviewImg').src = out;
-      document.getElementById('photoPreview').style.display='inline-block';
-      document.getElementById('photoBtn').textContent='📷 Changer la photo';
-    };
-    img.src = reader.result;
-  };
-  reader.readAsDataURL(file);
-}
-function removeQuickPhoto(){
-  _quickPhoto = null;
-  var p=document.getElementById('photoPreview'); if(p) p.style.display='none';
-  var pi=document.getElementById('photoInput'); if(pi) pi.value='';
-  var b=document.getElementById('photoBtn'); if(b) b.textContent='📷 Ajouter une photo';
-}
-
-// ═══ ENVOI DANS LE CHAT (chatV2) ═══
+// ═══ ENVOI (historique) ═══
 function submitEntry(){
   if(!_selectedCardId || !_selectedAction || !db) return;
   var btn = document.getElementById('confirmBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
   var note = (document.getElementById('noteInput').value||'').trim();
-  var msg = {
-    content: '⚡ ' + _selectedAction + (note ? ('\n' + note) : ''),
-    type: 'conversation',
-    authorEmail: (currentUser.email||'').toLowerCase(),
-    authorName: currentUserName,
+  var entry = {
+    action: _selectedAction,
+    note: note || null,
+    parNom: currentUserName,
+    parEmail: (currentUser.email||'').toLowerCase(),
     timestamp: Date.now(),
-    createdAt: firebase.database.ServerValue.TIMESTAMP,
-    dest: '',
-    jobId: _selectedCardId,
-    quickAdd: true
+    createdAt: firebase.database.ServerValue.TIMESTAMP
   };
-  if(_quickPhoto) msg.image = _quickPhoto;
-  db.ref('moulages/'+_selectedCardId+'/chatV2/messages').push().set(msg).then(function(){
-    // Réinitialiser pour un nouvel ajout (on garde le numéro du moulage)
+  db.ref('moulages/'+_selectedCardId+'/historique').push().set(entry).then(function(){
+    // Réinitialiser pour une nouvelle entrée (on garde le numéro du moulage)
     _selectedAction = null;
     document.getElementById('chosenWrap').style.display='none';
     document.getElementById('pickActionBtn').style.display='flex';
     document.getElementById('noteInput').value='';
-    removeQuickPhoto();
-    btn.innerHTML='✓ Envoyer dans le chat'; refreshConfirmBtn();
-    showToast('✓ Ajouté au chat du moulage');
+    btn.innerHTML='✓ Confirmer et envoyer'; refreshConfirmBtn();
+    showToast('✓ Action ajoutée à l\'historique');
   }).catch(function(e){
     btn.disabled=false; btn.innerHTML='⚠️ Erreur — réessayer'; console.error(e);
+  });
+}
+
+// ═══ HISTORIQUE RÉCENT ═══
+function listenRecent(cardId){
+  _recentRef = db.ref('moulages/'+cardId+'/historique').orderByChild('timestamp').limitToLast(20);
+  _recentRef.on('value', function(snap){
+    var v = snap.val() || {};
+    var arr = Object.keys(v).map(function(k){ return v[k]; }).sort(function(a,b){ return (b.timestamp||0)-(a.timestamp||0); });
+    var list = document.getElementById('recentList');
+    if(!arr.length){ list.innerHTML = '<div class="hist-empty">Aucune action pour ce moulage encore.</div>'; return; }
+    list.innerHTML = arr.map(function(e){
+      return '<div class="hist-item"><div class="hi-action">'+esc(e.action||'')+'</div>'+
+        (e.note ? '<div class="hi-note">'+esc(e.note)+'</div>' : '')+
+        '<div class="hi-meta">Par <strong>'+esc(e.parNom||'?')+'</strong> · '+fmtTime(e.timestamp)+'</div></div>';
+    }).join('');
   });
 }
 
