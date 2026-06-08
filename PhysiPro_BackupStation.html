@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>🛡️ Sauvegarde v13</title>
+<!-- v14 : pose un drapeau vérifié moulages/<id>/oneDrive {archived,complete,nbPhotos,date} après chaque archivage réussi → marque "archivé OneDrive" côté Moulage (Expédition). Signature passée à v12 pour ré-archiver+marquer tout une fois. -->
 <!-- v13 : PLUS de JSON pour Moulages (les fiches Fiche.html suffisent) — JSON conservés pour Inspection_Atelier / Production_Couture / Inspection_Finale -->
 <!-- v12 : modules directement dans le dossier choisi (plus de sous-dossier PhysiPro_Backups) -->
 <!-- v11 : clic photo = agrandissement dans la fiche (lightbox) -->
@@ -337,7 +338,7 @@ async function archiveMoulages(trig){
       }
 
       // ── Signature : ne régénère que si quelque chose a changé ──
-      var sig='v11|'+sH(JSON.stringify(card))+'|'+sbNames.slice().sort().join(',')+'|c'+ci+'|a'+ai;
+      var sig='v12|'+sH(JSON.stringify(card))+'|'+sbNames.slice().sort().join(',')+'|c'+ci+'|a'+ai;
       var hk='mlg_h_'+cid;
       if(localStorage.getItem(hk)===sig&&trig!=='Forcée')continue;
 
@@ -365,6 +366,20 @@ async function archiveMoulages(trig){
 
       // ── Nettoyage : retirer l'ancien sous-dossier Photos (photos désormais dans la fiche) ──
       try{await mf.removeEntry('Photos',{recursive:true});}catch(_e){}
+
+      // ── Drapeau de confirmation dans Firebase → marque "archivé" côté Moulage (Expédition) ──
+      // complete = toutes les photos sidebar intégrées (sbFail===0) → archive permanente fiable.
+      try{
+        await fbDb.ref('moulages/'+cid+'/oneDrive').set({
+          archived:true,
+          complete:(sbFail===0),
+          nbPhotos:gallery.length,
+          nbManquantes:sbFail,
+          folder:folder,
+          date:new Date().toISOString().substring(0,10),
+          at:Date.now()
+        });
+      }catch(e){lg('  ⚠️ Drapeau OneDrive '+(card.order||cid)+': '+e.message,'warn');}
 
       localStorage.setItem(hk,sig);done++;
     }catch(e){lg('  ⚠️ '+(card.order||cid)+': '+e.message,'err');}
