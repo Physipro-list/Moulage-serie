@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>🛡️ Sauvegarde v13</title>
 <!-- v18 : la section Historique de la fiche archivee affiche aussi la photo de chaque action (vignette cliquable = agrandir). Signature v16 pour regenerer. -->
+<!-- v15 : archivage Questionnements → OneDrive (Questionnements_Historique/<agent>/<fiche>.html + _TOUS_les_questionnements.html + _questHistory_complet.json). Non destructif. -->
 <!-- v14 : pose un drapeau vérifié moulages/<id>/oneDrive {archived,complete,nbPhotos,date} après chaque archivage réussi → marque "archivé OneDrive" côté Moulage (Expédition). Signature passée à v12 pour ré-archiver+marquer tout une fois. -->
 <!-- v13 : PLUS de JSON pour Moulages (les fiches Fiche.html suffisent) — JSON conservés pour Inspection_Atelier / Production_Couture / Inspection_Finale -->
 <!-- v12 : modules directement dans le dossier choisi (plus de sous-dossier PhysiPro_Backups) -->
@@ -193,6 +194,7 @@ async function runC(trig){
   }
   if(tf>0){localStorage.setItem('bk_last',new Date().toISOString());lg('✅ '+tf+' mod ('+(tb/(1024*1024)).toFixed(1)+'M)','ok');toast('✅ '+tf+' sauvegardés','ok');var tk='bk_td_'+day;var td=JSON.parse(localStorage.getItem(tk)||'[]');td.push(ts);localStorage.setItem(tk,JSON.stringify(td));}else{lg('— Aucun chang.','t');}
   try{await archiveMoulages(trig);}catch(e){lg('  ⚠️ Archive Moulage: '+e.message,'err');hasError=true;}
+  try{await archiveQuestionnements(trig);}catch(e){lg('  ⚠️ Archive Questionnements: '+e.message,'err');hasError=true;}
   upUI();upS();
 }
 function sH(s){var h=0;for(var i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}return h.toString(36);}
@@ -399,6 +401,140 @@ async function archiveMoulages(trig){
   }
   if(done>0)lg('  🏭 '+done+' moulage(s) → OneDrive','ok');
   if(mlgCorsHint)lg('  ℹ️ Certaines photos sidebar via lien (déblocage Firebase requis)','warn');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ARCHIVAGE QUESTIONNEMENTS → ONEDRIVE  (v15)
+   Lit questHistory/<agent>/<id> (conversation + photos déjà intégrées par
+   le module Questionnements) et écrit dans le dossier OneDrive :
+     Questionnements_Historique/
+       _TOUS_les_questionnements.html   ← tableau global (tout voir d'un coup)
+       _questHistory_complet.json       ← sauvegarde brute (restauration)
+       <Agent>/<commande - client>.html ← une fiche par questionnement
+   NON destructif : n'efface jamais rien dans Firebase.
+   ═══════════════════════════════════════════════════════════════════ */
+function qhEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function qhSan(s){return (String(s==null?'':s).replace(/[\\\/:*?"<>|#]/g,'-').replace(/\s+/g,' ').trim().substring(0,120))||'sans-nom';}
+function qhArr(x){if(!x)return [];if(Array.isArray(x))return x;return Object.keys(x).map(function(k){return x[k];});}
+function qhStatusLabel(s){return s==='resolved'?'✅ Réglé':(s==='purged'?'📦 Archivé':(s==='deleted'?'🗑️ Supprimé':'—'));}
+function qhFicheCss(){
+  return '*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:20px;line-height:1.5}'
+    +'.wrap{max-width:900px;margin:0 auto}h1{font-size:22px;color:#fff;margin-bottom:4px}.sub{color:#94a3b8;font-size:13px;margin-bottom:18px}'
+    +'h2{font-size:15px;color:#fbbf24;margin:22px 0 8px;border-bottom:1px solid #1e293b;padding-bottom:4px}'
+    +'table.info{width:100%;border-collapse:collapse;background:#1e293b;border-radius:8px;overflow:hidden}'
+    +'table.info th{text-align:left;width:180px;padding:7px 12px;color:#93c5fd;font-size:12px;font-weight:600;vertical-align:top;border-bottom:1px solid #0f172a}'
+    +'table.info td{padding:7px 12px;font-size:13px;border-bottom:1px solid #0f172a;word-break:break-word}'
+    +'.msg{background:#1e293b;border-left:3px solid #475569;border-radius:6px;padding:9px 12px;margin-bottom:8px}'
+    +'.msg.q{border-left-color:#f59e0b}.msg.s{border-left-color:#22c55e}.msg.p{border-left-color:#3b82f6}'
+    +'.mh{display:flex;gap:10px;align-items:center;font-size:11px;margin-bottom:4px;flex-wrap:wrap}'
+    +'.ty{font-weight:700}.wh{color:#93c5fd}.dt{color:#64748b;margin-left:auto}.bd{font-size:13px}'
+    +'.ph{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.ph img{height:120px;border-radius:4px;border:1px solid #334155;object-fit:contain;background:#0b1220}'
+    +'.gal{display:flex;flex-wrap:wrap;gap:8px}.gal img{height:150px;border-radius:6px;border:1px solid #334155;object-fit:contain;background:#0b1220}'
+    +'.z{cursor:zoom-in}'
+    +'.lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;cursor:zoom-out;align-items:center;justify-content:center;padding:16px}'
+    +'.lb.show{display:flex}.lb img{max-width:96vw;max-height:96vh;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.6)}'
+    +'.empty{color:#64748b;font-style:italic;font-size:13px;padding:6px 0}'
+    +'.foot{margin-top:24px;color:#475569;font-size:11px;text-align:center}';
+}
+function qhLbScript(){
+  return '<scr'+'ipt>document.addEventListener("click",function(e){var t=e.target,lb=document.getElementById("lb");if(t&&t.classList&&t.classList.contains("z")){document.getElementById("lbi").src=t.src;lb.classList.add("show");return;}if(lb&&lb.classList.contains("show"))lb.classList.remove("show");});document.addEventListener("keydown",function(e){if(e.key==="Escape"){var lb=document.getElementById("lb");if(lb)lb.classList.remove("show");}});</scr'+'ipt>';
+}
+
+function qhBuildFiche(rec){
+  var esc=qhEsc;
+  var infos=[['N° Commande',rec.order],['Destinataire (agent)',rec.assignee],['Client',rec.client],['PO',rec.numeroPO],['Soumission',rec.soumission],['Représentant',rec.representant],['Date reçue',(rec.dateRecue||'').split('T')[0]],['Date livraison',(rec.dateLivraison||'').split('T')[0]],['Créé par',rec.createdByName],['Réglé par',rec.resolvedBy],['Réglé le',(rec.resolvedAt||'').split('T')[0]],['Statut',qhStatusLabel(rec.status)],['Archivé le',(rec.archivedAt||'').split('T')[0]]];
+  var rows=infos.filter(function(r){return r[1]!==undefined&&r[1]!==null&&r[1]!=='';}).map(function(r){return '<tr><th>'+esc(r[0])+'</th><td>'+esc(r[1])+'</td></tr>';}).join('');
+  var msgs=qhArr(rec.messages);
+  var TL={problem:'❓ Question',reply:'✅ Réponse',pinned:'📌 Épinglé','quest-resolved':'✅ Réglé',conversation:'💬 Discussion'};
+  var TC={problem:'q',reply:'s','quest-resolved':'s',pinned:'p',conversation:'n'};
+  var disc=msgs.length?msgs.map(function(m){
+    var t=m.type||'conversation';
+    var imgs=qhArr(m.images).map(function(src){return '<img class="z" src="'+src+'" loading="lazy">';}).join('');
+    var who=(m.author||'')+(m.target?' → '+m.target:'');
+    var when=m.timestamp?new Date(m.timestamp).toLocaleString('fr-CA'):'';
+    var body=m.contentHtml?m.contentHtml:esc(m.content||'').replace(/\n/g,'<br>');
+    return '<div class="msg '+(TC[t]||'n')+'"><div class="mh"><span class="ty">'+(TL[t]||'💬')+'</span><span class="wh">'+esc(who)+'</span><span class="dt">'+esc(when)+'</span></div>'+(body?'<div class="bd">'+body+'</div>':'')+(imgs?'<div class="ph">'+imgs+'</div>':'')+'</div>';
+  }).join(''):'<div class="empty">Aucune discussion</div>';
+  var photos=qhArr(rec.photos);
+  var gal=photos.length?'<div class="gal">'+photos.map(function(src){return '<img class="z" src="'+src+'" loading="lazy">';}).join('')+'</div>':'<div class="empty">Aucune photo</div>';
+  var title=esc('#'+(rec.order||'')+(rec.client?' — '+rec.client:''));
+  return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+'</title><style>'+qhFicheCss()+'</style></head><body><div class="wrap">'
+    +'<h1>'+title+'</h1><div class="sub">Archive PhysiPro — Questionnement · '+esc(rec.assignee||'')+(rec.archivedAt?' · archivé le '+esc(String(rec.archivedAt).substring(0,10)):'')+'</div>'
+    +'<h2>Informations</h2><table class="info">'+rows+'</table>'
+    +'<h2>Conversation ('+msgs.length+')</h2>'+disc
+    +'<h2>Photos ('+photos.length+')</h2>'+gal
+    +'<div class="foot">Généré par PhysiPro BackupStation — '+new Date().toLocaleString('fr-CA')+'</div>'
+    +'</div><div class="lb" id="lb"><img id="lbi" alt=""></div>'+qhLbScript()+'</body></html>';
+}
+
+function qhBuildIndex(rows){
+  var esc=qhEsc;
+  rows.sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+  var trs=rows.map(function(r){
+    return '<tr onclick="location.href=\''+r.href+'\'">'
+      +'<td class="num">#'+esc(r.order||'---')+'</td>'
+      +'<td>'+esc(r.agent||'')+'</td>'
+      +'<td>'+esc(r.client||'')+'</td>'
+      +'<td>'+esc(r.po||'')+'</td>'
+      +'<td>'+esc(qhStatusLabel(r.status))+'</td>'
+      +'<td>'+esc(r.date||'')+'</td>'
+      +'<td class="op">↗</td></tr>';
+  }).join('');
+  return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Questionnements — Historique complet</title><style>'
+    +'*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:20px;line-height:1.5}'
+    +'.wrap{max-width:1100px;margin:0 auto}h1{font-size:22px;color:#fff;margin-bottom:2px}.sub{color:#94a3b8;font-size:13px;margin-bottom:14px}'
+    +'#q{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#e2e8f0;font-size:14px;margin-bottom:12px}'
+    +'table{width:100%;border-collapse:collapse;background:#1e293b;border-radius:10px;overflow:hidden}'
+    +'thead th{background:#0b1220;color:#93c5fd;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:9px 10px;text-align:left}'
+    +'tbody tr{cursor:pointer;border-top:1px solid #0f172a}tbody tr:hover{background:#243049}'
+    +'td{padding:8px 10px;font-size:13px}td.num{font-weight:700;color:#fff}td.op{text-align:center;color:#60a5fa}'
+    +'.foot{margin-top:16px;color:#475569;font-size:11px;text-align:center}'
+    +'</style></head><body><div class="wrap">'
+    +'<h1>🎧 Questionnements — Historique complet</h1><div class="sub">'+rows.length+' questionnement(s) · cliquer une ligne pour ouvrir la fiche · généré le '+new Date().toLocaleString('fr-CA')+'</div>'
+    +'<input id="q" type="text" placeholder="🔍 Rechercher (commande, agent, client, PO…)" oninput="var v=this.value.toLowerCase();document.querySelectorAll(\'tbody tr\').forEach(function(tr){tr.style.display=tr.textContent.toLowerCase().indexOf(v)>-1?\'\':\'none\';});">'
+    +'<table><thead><tr><th>N° Commande</th><th>Destinataire</th><th>Client</th><th>PO</th><th>Statut</th><th>Date</th><th></th></tr></thead><tbody>'+trs+'</tbody></table>'
+    +'<div class="foot">Généré par PhysiPro BackupStation</div>'
+    +'</div></body></html>';
+}
+
+async function archiveQuestionnements(trig){
+  if(!dirH)return;
+  var qh={};
+  try{qh=(await fbDb.ref('questHistory').once('value')).val()||{};}catch(e){lg('  ⚠️ Lecture questHistory: '+e.message,'warn');return;}
+  var agents=Object.keys(qh);
+  if(agents.length===0){lg('  🎧 Questionnements : aucun historique','t');return;}
+  var root;
+  try{root=await dirH.getDirectoryHandle('Questionnements_Historique',{create:true});}catch(e){lg('  ⚠️ Dossier Questionnements_Historique: '+e.message,'err');return;}
+  var allRows=[],done=0;
+  for(var ai=0;ai<agents.length;ai++){
+    var agent=agents[ai];
+    var recs=qh[agent]||{};
+    var ids=Object.keys(recs);
+    if(ids.length===0)continue;
+    var af;
+    try{af=await root.getDirectoryHandle(qhSan(agent),{create:true});}catch(e){lg('  ⚠️ '+agent+': '+e.message,'warn');continue;}
+    for(var ri=0;ri<ids.length;ri++){
+      var id=ids[ri],rec=recs[id];if(!rec)continue;
+      var fileName=qhSan((rec.order||'SANS')+' - '+(rec.client||'')).substring(0,110)+'.html';
+      allRows.push({agent:agent,order:rec.order||'',client:rec.client||'',po:rec.numeroPO||'',status:rec.status||'',date:(rec.archivedAt||rec.resolvedAt||rec.createdAt||'').split('T')[0],href:encodeURIComponent(qhSan(agent))+'/'+encodeURIComponent(fileName)});
+      var sig='qh1|'+sH(JSON.stringify(rec));
+      var hk='qh_h_'+agent+'_'+id;
+      if(localStorage.getItem(hk)===sig&&trig!=='Forcée')continue;
+      try{
+        var html=qhBuildFiche(rec);
+        var fh=await af.getFileHandle(fileName,{create:true});var w=await fh.createWritable();await w.write(new Blob([html],{type:'text/html'}));await w.close();
+        localStorage.setItem(hk,sig);done++;
+      }catch(e){lg('  ⚠️ Fiche '+(rec.order||id)+': '+e.message,'warn');}
+    }
+  }
+  try{
+    var fhI=await root.getFileHandle('_TOUS_les_questionnements.html',{create:true});var wI=await fhI.createWritable();await wI.write(new Blob([qhBuildIndex(allRows)],{type:'text/html'}));await wI.close();
+  }catch(e){lg('  ⚠️ Index questionnements: '+e.message,'warn');}
+  try{
+    var fhJ=await root.getFileHandle('_questHistory_complet.json',{create:true});var wJ=await fhJ.createWritable();await wJ.write(new Blob([JSON.stringify(qh)],{type:'application/json'}));await wJ.close();
+  }catch(e){}
+  if(done>0)lg('  🎧 '+done+' questionnement(s) → OneDrive','ok');
+  else lg('  🎧 Questionnements à jour','t');
 }
 
 /* ═══ EXPORT EXCEL (.xlsx) — Insp.Atelier / Prod.Couture / Insp.Finale ═══
