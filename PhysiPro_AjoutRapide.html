@@ -7,12 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>PhysiPro ⚡ Ajout rapide</title>
-<!-- Ajout rapide v21 : page téléphone. Champ numéro élargi (6 chiffres), mini-carte moulage identique aux vraies cartes (couleur région), recherche intelligente, action + photo, écrit dans moulages/<id>/historique. -->
+<!-- Ajout rapide v23 : photo d'historique téléversée dans Firebase Storage (URL + miniature 300px, repli base64 si échec) → plus de base64 dans le nœud moulages synchronisé en direct. Photos compressées max 1200px / qualité 60% / ~90 Ko. -->
 <meta name="theme-color" content="#04152c">
 
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -606,12 +607,12 @@ function onPhotoPicked(files){
   reader.onload = function(){
     var img = new Image();
     img.onload = function(){
-      var maxSize=1300, w=img.width, h=img.height;
+      var maxSize=1200, w=img.width, h=img.height;
       if(w>maxSize||h>maxSize){ if(w>h){h=Math.round(h*maxSize/w);w=maxSize;} else {w=Math.round(w*maxSize/h);h=maxSize;} }
       var c=document.createElement('canvas'); c.width=w; c.height=h;
       c.getContext('2d').drawImage(img,0,0,w,h);
-      var q=0.82, out=c.toDataURL('image/jpeg',q);
-      while(out.length>220000 && q>0.4){ q-=0.07; out=c.toDataURL('image/jpeg',q); }
+      var q=0.60, out=c.toDataURL('image/jpeg',q);
+      while(out.length>120000 && q>0.45){ q-=0.05; out=c.toDataURL('image/jpeg',q); }
       _quickPhoto = out;
       document.getElementById('photoPreviewImg').src = out;
       document.getElementById('photoPreview').style.display='block';
@@ -629,7 +630,30 @@ function removeQuickPhoto(){
 }
 
 // ═══ ENVOI (historique) ═══
-function submitEntry(){
+// Génère une miniature (~300px) à partir d'un dataURL
+function _makeThumb(dataUrl, maxSize){
+  return new Promise(function(resolve){
+    try{
+      var img=new Image();
+      img.onload=function(){
+        var w=img.width,h=img.height,M=maxSize||300;
+        if(w>M||h>M){ if(w>h){h=Math.round(h*M/w);w=M;} else {w=Math.round(w*M/h);h=M;} }
+        var c=document.createElement('canvas');c.width=w;c.height=h;
+        c.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(c.toDataURL('image/jpeg',0.6));
+      };
+      img.onerror=function(){resolve(null);};
+      img.src=dataUrl;
+    }catch(e){resolve(null);}
+  });
+}
+// Téléverse un dataURL JPEG vers Firebase Storage et retourne l'URL
+function _uploadDataUrl(dataUrl, path){
+  var ref=firebase.storage().ref(path);
+  return ref.putString(dataUrl,'data_url',{contentType:'image/jpeg'}).then(function(){ return ref.getDownloadURL(); });
+}
+
+async function submitEntry(){
   if(!_selectedCardId || !_selectedAction || !db) return;
   var btn = document.getElementById('confirmBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
   var note = (document.getElementById('noteInput').value||'').trim();
@@ -641,7 +665,19 @@ function submitEntry(){
     timestamp: Date.now(),
     createdAt: firebase.database.ServerValue.TIMESTAMP
   };
-  if(_quickPhoto) entry.photo = _quickPhoto;
+  // Photo : téléversée dans Storage (URL + miniature). Repli base64 si l'upload échoue → la photo ne disparaît jamais.
+  if(_quickPhoto){
+    try{
+      var base='photos/moulages/'+_selectedCardId+'/hist_'+entry.timestamp;
+      var fullUrl=await _uploadDataUrl(_quickPhoto, base+'.jpg');
+      var tb=await _makeThumb(_quickPhoto,300);
+      var thumbUrl=tb?await _uploadDataUrl(tb, base+'_thumb.jpg'):fullUrl;
+      entry.photo=fullUrl; entry.photoThumb=thumbUrl;
+    }catch(e){
+      console.error('Upload photo historique → repli base64', e);
+      entry.photo=_quickPhoto;
+    }
+  }
   db.ref('moulages/'+_selectedCardId+'/historique').push().set(entry).then(function(){
     // Réinitialiser pour une nouvelle entrée (on garde le numéro du moulage)
     _selectedAction = null;

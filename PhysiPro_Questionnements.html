@@ -3795,7 +3795,7 @@ function _diagPermissions() {
 }
 
 // ===== VERSION PROTECTION =====
-var APP_VERSION = 20260587;
+var APP_VERSION = 20260588;
 var APP_MODULE = 'questionnement';
 var _versionOK = true;
 var _versionBanner = null;
@@ -4102,10 +4102,10 @@ function compressImage(dataUrl) {
         var swap = (orientation >= 5 && orientation <= 8);
         var sw = swap ? ih : iw;
         var sh = swap ? iw : ih;
-        // === QUALITÉ HAUTE : Max 2000×1500, qualité 90%, ~400 Ko ===
+        // === COMPRESSION ÉCONOMIE : Max 1200px, qualité 60%, ~90 Ko ===
         let w = sw, h = sh;
-        if (w > 2000) { h = (h * 2000) / w; w = 2000; }
-        if (h > 1500) { w = (w * 1500) / h; h = 1500; }
+        if (w > 1200) { h = (h * 1200) / w; w = 1200; }
+        if (h > 1200) { w = (w * 1200) / h; h = 1200; }
         canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext('2d');
         // Activer le smoothing haute qualité pour le scaling
@@ -4127,10 +4127,10 @@ function compressImage(dataUrl) {
         } else {
           ctx.drawImage(img, 0, 0, w, h);
         }
-        // Qualité élevée : 0.90, descente progressive si nécessaire, max 400 Ko
-        let quality = 0.90;
+        // Qualité 0.60, descente progressive si nécessaire, max ~90 Ko
+        let quality = 0.60;
         let result = canvas.toDataURL('image/jpeg', quality);
-        while (result.length > 400000 && quality > 0.55) {
+        while (result.length > 120000 && quality > 0.45) {
           quality -= 0.05;
           result = canvas.toDataURL('image/jpeg', quality);
         }
@@ -4148,7 +4148,7 @@ function compressMobileImage(file, callback) {
     img.onload = () => {
       const canvas = document.createElement('canvas');
       let w = img.width, h = img.height;
-      // Max 1200x1200 pour mobile, qualité réduite (économie stockage Firebase)
+      // Max 1200px, qualité 60% + plafond ~90 Ko (économie Firebase)
       if (w > 1200) { h = (h * 1200) / w; w = 1200; }
       if (h > 1200) { w = (w * 1200) / h; h = 1200; }
       canvas.width = w; canvas.height = h;
@@ -4156,8 +4156,10 @@ function compressMobileImage(file, callback) {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, w, h);
-      // Qualité 70% — bonne visibilité, ~150 Ko au lieu de ~400 Ko
-      callback(canvas.toDataURL('image/jpeg', 0.70));
+      // Qualité 60% avec plafond ~90 Ko
+      var mq = 0.60, mres = canvas.toDataURL('image/jpeg', mq);
+      while (mres.length > 120000 && mq > 0.45) { mq -= 0.05; mres = canvas.toDataURL('image/jpeg', mq); }
+      callback(mres);
     };
     img.src = e.target.result;
   };
