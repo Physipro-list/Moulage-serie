@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>🛡️ Sauvegarde v13</title>
+<!-- v24 : PLUS de dossier Photos à côté des fiches (retiré + nettoyage des anciens). Photos uniquement intégrées en base64 dans la fiche. Transfert UNIQUE via cache invisible IndexedDB (jamais de re-téléchargement). Gère aussi les photos de chat en URL. Signature v24 pour régénérer une fois. -->
+<!-- v23 : grosse alerte rouge plein écran si des photos n'ont PAS pu être sauvegardées (pour ne rien manquer). -->
+<!-- v22 : fiches Moulage 100% AUTONOMES — photos intégrées en base64 UNIQUEMENT (transférées une seule fois depuis Firebase, puis relues localement). AUCUN lien Firebase dans la fiche. Une photo non transférable est omise (avertissement au journal) plutôt que liée. Clic = agrandir. Signature v22 pour régénérer une fois. -->
+<!-- v21 : fiches Moulage AUTONOMES et VISIBLES PARTOUT (web OneDrive + local). Photos intégrées en base64 (lues depuis les fichiers locaux déjà téléchargés, sans re-télécharger Firebase) ; lien Firebase en secours si une photo n'a pu être obtenue. Corrige les fiches vides dans l'aperçu web OneDrive. Signature v21 pour régénérer une fois. -->
 <!-- v20 : les photos d'historique (désormais des URLs Storage via AjoutRapide v23) sont aussi téléchargées localement dans Photos/ → la fiche reste autonome. Signature v20 pour régénérer une fois. -->
 <!-- v19 : photos Moulage = VRAIS fichiers dans Moulages/<commande>/Photos/ (téléchargées une seule fois, manifeste par carte). Fiche.html en liens relatifs → autonome, plus aucun lien Firebase une fois transféré. Signature v19 pour tout régénérer une fois. -->
 <!-- v18 : la section Historique de la fiche archivee affiche aussi la photo de chaque action (vignette cliquable = agrandir). Signature v16 pour regenerer. -->
@@ -171,6 +175,16 @@ fbAuth.onAuthStateChanged(function(u){fbUser=u;if(u){document.getElementById('lo
 function renderM(){var h='';Object.keys(M).forEach(function(n){var m=M[n],st=mS[n]||'wait',sz=mZ[n]||'';var s=st==='ok'?'<span class="ms ok">OK</span>':st==='run'?'<span class="ms run">⏳</span>':st==='err'?'<span class="ms err">ERR</span>':'<span class="ms wait">—</span>';h+='<div class="mr"><span class="mi">'+m.i+'</span><span class="mn" style="color:'+m.c+'">'+n+'</span>'+s+'<span class="mz">'+sz+'</span></div>';});document.getElementById('mL').innerHTML=h;}
 
 function lg(msg,type){var t=new Date().toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',second:'2-digit'});logs.unshift({t:t,m:msg,c:type||'info'});if(logs.length>60)logs.length=60;document.getElementById('logBox').innerHTML=logs.map(function(l){return '<div class="l-'+l.c+'">['+l.t+'] '+l.m+'</div>';}).join('');}
+// Grosse alerte rouge plein écran si des photos n'ont pas pu être sauvegardées
+function showBigError(count,corsHint){
+  var el=document.getElementById('bigErr');
+  if(!el){el=document.createElement('div');el.id='bigErr';el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;background:#b91c1c;color:#fff;padding:20px 22px;text-align:center;box-shadow:0 6px 28px rgba(0,0,0,.6);font-family:-apple-system,Segoe UI,Arial,sans-serif;border-bottom:4px solid #fff;animation:bigErrPulse 1.2s ease-in-out infinite;';document.body.appendChild(el);var st=document.createElement('style');st.textContent='@keyframes bigErrPulse{0%,100%{background:#b91c1c}50%{background:#dc2626}}';document.head.appendChild(st);}
+  el.innerHTML='<div style="font-size:22px;font-weight:900;">⛔ ATTENTION — '+count+' PHOTO(S) NON SAUVEGARDÉE(S)</div>'
+    +'<div style="font-size:14px;font-weight:600;margin-top:8px;">'+(corsHint?'Cause probable : accès Firebase Storage bloqué (CORS). ':'')+'Les fiches concernées dans OneDrive sont <b>INCOMPLÈTES</b>. Relance « 🔄 Forcer » après correction.</div>'
+    +'<div style="margin-top:10px;"><button onclick="document.getElementById(\'bigErr\').style.display=\'none\'" style="background:#fff;color:#b91c1c;border:none;padding:7px 18px;border-radius:7px;font-weight:800;cursor:pointer;font-size:13px;">J\'ai compris — fermer</button></div>';
+  el.style.display='block';
+}
+function hideBigError(){var el=document.getElementById('bigErr');if(el)el.style.display='none';}
 function toast(msg,type){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show '+(type||'info');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2500);}
 
 async function pickFolder(){if(!window.showDirectoryPicker){toast('Chrome/Edge requis','err');return false;}try{dirH=await window.showDirectoryPicker({id:'physipro-bkp',mode:'readwrite'});await sDir(dirH);upUI();lg('📂 '+dirH.name,'ok');return true;}catch(e){if(e.name!=='AbortError')lg('❌ '+e.message,'err');return false;}}
@@ -234,6 +248,13 @@ function mlgSanFolder(s){return (String(s==null?'':s).replace(/[\\\/:*?"<>|]/g,'
 function mlgSanFile(s){return (String(s==null?'':s).replace(/[^a-zA-Z0-9._-]/g,'_').substring(0,80))||'photo.jpg';}
 function mlgColName(id){var c={colRobot:'⚙️ Robot',colDegauchage:'🪚 Dégauchage',colEssayage:'👔 Essayage',colAtelier:'🔧 Atelier',colCouture:'🧵 Couture',colPeinture:'🎨 Peinture',colExpedition:'📦 Expédition',colAttente:'⏳ En attente'};return c[id]||id||'—';}
 function mlgB64ToBlob(d){try{var p=String(d).split(',');var m=(p[0].match(/data:([^;]+)/)||[])[1]||'image/jpeg';var bin=atob(p[1]);var u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new Blob([u],{type:m});}catch(e){return null;}}
+function _bkBlobToB64(blob){return new Promise(function(res){try{var r=new FileReader();r.onload=function(){res(r.result);};r.onerror=function(){res(null);};r.readAsDataURL(blob);}catch(e){res(null);}});}
+async function _bkFileToB64(pf,fn){try{var fh=await pf.getFileHandle(fn);var f=await fh.getFile();return await _bkBlobToB64(f);}catch(e){return null;}}
+// Cache local invisible (IndexedDB) : une photo transférée n'est JAMAIS re-téléchargée. Aucun dossier à côté des fiches.
+var _idb=null;
+function _idbOpen(){return new Promise(function(res){if(_idb)return res(_idb);try{var rq=indexedDB.open('bkPhotoCache',1);rq.onupgradeneeded=function(){try{rq.result.createObjectStore('ph');}catch(_e){}};rq.onsuccess=function(){_idb=rq.result;res(_idb);};rq.onerror=function(){res(null);};}catch(e){res(null);}});}
+function _idbGet(key){return new Promise(function(res){_idbOpen().then(function(d){if(!d)return res(null);try{var tx=d.transaction('ph','readonly');var r=tx.objectStore('ph').get(key);r.onsuccess=function(){res(r.result||null);};r.onerror=function(){res(null);};}catch(e){res(null);}});});}
+function _idbSet(key,val){return new Promise(function(res){_idbOpen().then(function(d){if(!d)return res();try{var tx=d.transaction('ph','readwrite');tx.objectStore('ph').put(val,key);tx.oncomplete=function(){res();};tx.onerror=function(){res();};}catch(e){res();}});});}
 function mlgBlobToDataURL(blob){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result);};r.onerror=function(){rej(new Error('read'));};r.readAsDataURL(blob);});}
 function mlgPad(n){return (n<10?'00':n<100?'0':'')+n;}
 
@@ -263,16 +284,16 @@ function mlgBuildFiche(card,gallery,photoMap){
     if(hEntries.length){
       hist='<h2>Historique des actions ('+hEntries.length+')</h2><div class="hist">'+hEntries.map(function(e){
         var when=e.timestamp?new Date(e.timestamp).toLocaleString('fr-CA'):'';
-        return '<div class="hi"><div class="ha">'+esc(e.action||'')+'</div>'+(e.note?'<div class="hn">'+esc(String(e.note)).replace(/\n/g,'<br>')+'</div>':'')+(e.photo?'<img class="z hi-photo" src="'+(photoMap[e.photo]||e.photo)+'" loading="lazy">':'')+'<div class="hm">'+esc(e.parNom||'')+(when?' · '+esc(when):'')+'</div></div>';
+        return '<div class="hi"><div class="ha">'+esc(e.action||'')+'</div>'+(e.note?'<div class="hn">'+esc(String(e.note)).replace(/\n/g,'<br>')+'</div>':'')+(e.photo&&photoMap[e.photo]?'<img class="z hi-photo" src="'+photoMap[e.photo]+'" loading="lazy">':'')+'<div class="hm">'+esc(e.parNom||'')+(when?' · '+esc(when):'')+'</div></div>';
       }).join('')+'</div>';
     }
   }
   var msgs=card.messages||[];
   var TL={problem:'❓ Questionnement',solution:'✅ Réponse',pinned:'📌 Épinglé',normal:'💬 Discussion'};
   var TC={problem:'q',solution:'s',pinned:'p',normal:'n'};
-  var disc=msgs.length?msgs.map(function(m){var t=m.type||'normal';var ph=(m.__photos||[]).map(function(src){return '<img class="z" src="'+(photoMap[src]||src)+'" loading="lazy">';}).join('');var who=m.author||m.nom||'';var when=m.date||m.timestamp||'';return '<div class="msg '+(TC[t]||'n')+'"><div class="mh"><span class="ty">'+(TL[t]||'💬')+'</span><span class="wh">'+esc(who)+'</span><span class="dt">'+esc(when)+'</span></div>'+(m.content?'<div class="bd">'+esc(m.content).replace(/\n/g,'<br>')+'</div>':'')+(ph?'<div class="ph">'+ph+'</div>':'')+'</div>';}).join(''):'<div class="empty">Aucune discussion</div>';
+  var disc=msgs.length?msgs.map(function(m){var t=m.type||'normal';var ph=(m.__photos||[]).filter(function(src){return photoMap[src];}).map(function(src){return '<img class="z" src="'+photoMap[src]+'" loading="lazy">';}).join('');var who=m.author||m.nom||'';var when=m.date||m.timestamp||'';return '<div class="msg '+(TC[t]||'n')+'"><div class="mh"><span class="ty">'+(TL[t]||'💬')+'</span><span class="wh">'+esc(who)+'</span><span class="dt">'+esc(when)+'</span></div>'+(m.content?'<div class="bd">'+esc(m.content).replace(/\n/g,'<br>')+'</div>':'')+(ph?'<div class="ph">'+ph+'</div>':'')+'</div>';}).join(''):'<div class="empty">Aucune discussion</div>';
   var seen={},uniq=[];(gallery||[]).forEach(function(f){var n=(f&&f.n)?f.n:f;if(!seen[n]){seen[n]=1;uniq.push(f);}});
-  var gal=uniq.length?'<div class="gal">'+uniq.map(function(f){var src=(f&&f.file)?f.file:((f&&f.src)?f.src:f);return '<img class="z" src="'+src+'" loading="lazy">';}).join('')+'</div>':'<div class="empty">Aucune photo</div>';
+  var gal=uniq.length?'<div class="gal">'+uniq.map(function(f){var src=(f&&f.src)?f.src:((f&&f.file)?f.file:f);return '<img class="z" src="'+src+'" loading="lazy">';}).join('')+'</div>':'<div class="empty">Aucune photo</div>';
   var title=esc((card.order||'')+(card.name?' — '+card.name:''));
   return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+'</title><style>'
     +'*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:20px;line-height:1.5}'
@@ -313,6 +334,8 @@ function mlgBuildFiche(card,gallery,photoMap){
 async function archiveMoulages(trig){
   if(!dirH)return;
   var mlgCorsHint=false;
+  var mlgPhotoFailTotal=0;
+  hideBigError();
   var moulages={},pArch={};
   try{moulages=(await fbDb.ref('moulages').once('value')).val()||{};}catch(e){return;}
   try{pArch=(await fbDb.ref('photoArchives').once('value')).val()||{};}catch(e){}
@@ -331,89 +354,74 @@ async function archiveMoulages(trig){
       var mf=await aroot.getDirectoryHandle(folder,{create:true});
 
       var order=card.order||'';
-      // Sous-dossier Photos/ : VRAIS fichiers, autonomes (aucun lien Firebase une fois transféré)
-      var pf=await mf.getDirectoryHandle('Photos',{create:true});
-      // Manifeste des photos déjà enregistrées pour cette carte (id -> nom de fichier)
-      var manKey='bk_ph_'+cid, man={};
-      try{man=JSON.parse(localStorage.getItem(manKey)||'{}');}catch(_m){man={};}
+      // AUCUN dossier Photos à côté : photos intégrées en base64 dans la fiche.
+      // Nettoyage : retirer un ancien dossier Photos s'il existe (versions précédentes).
+      try{ await mf.removeEntry('Photos',{recursive:true}); }catch(_rp){}
 
-      // ── Recensement (léger, AUCUN téléchargement) ──
-      // sidebar (Firebase Storage)
-      var sbItems=[],sbList=[];
+      var photoMap={},seenK={},sbList=[],urlList=[],chatGal=[],archGal=[];
+      function regB64(srcd){ if(typeof srcd==='string'&&srcd.indexOf('data:')===0){ photoMap[srcd]=srcd; return true; } return false; }
+      function regUrl(u){ if(typeof u!=='string'||!/^https?:/i.test(u))return false; var id='url:'+sH(u); if(!seenK[id]){seenK[id]=1;urlList.push({id:id,url:u,key:u});} return true; }
+
+      // sidebar (Firebase Storage) — à transférer une fois
+      var sbItems=[];
       if(order){
         try{var res=await fbStorage.ref('photos/moulages/'+order).listAll();sbItems=res.items;}catch(e){lg('  ⚠️ Liste photos '+order+': '+e.message,'warn');}
-        sbItems.forEach(function(it){var fn=mlgSanFile(it.name);if(!/\.(jpg|jpeg|png|webp|gif|heic)$/i.test(fn))fn+='.jpg';sbList.push({id:'sb:'+it.name,file:fn,it:it});});
+        sbItems.forEach(function(it){var id='sb:'+it.name; if(!seenK[id]){seenK[id]=1;sbList.push({id:id,it:it});}});
       }
-      // base64 (chat, archive mobile, historique) → fichiers locaux + table de correspondance pour la fiche
-      var b64List=[],photoMap={},seenB64={},urlList=[];
-      function addB64(srcd,prefix){
-        if(typeof srcd!=='string'||srcd.indexOf('data:')!==0)return null;
-        var id='b64:'+sH(srcd);var fn=prefix+'_'+sH(srcd)+'.jpg';
-        photoMap[srcd]='Photos/'+fn;
-        if(!seenB64[id]){seenB64[id]=1;b64List.push({id:id,file:fn,data:srcd});}
-        return fn;
-      }
-      // photo distante (URL Storage) → téléchargée localement une seule fois
-      function addUrl(u,prefix){
-        if(typeof u!=='string'||!/^https?:/i.test(u))return null;
-        var id='url:'+sH(u);var fn=prefix+'_'+sH(u)+'.jpg';
-        photoMap[u]='Photos/'+fn;
-        if(!seenB64[id]){seenB64[id]=1;urlList.push({id:id,file:fn,url:u});}
-        return fn;
-      }
-      var msgs=card.messages||[],chatGal=[];
+      // chat : base64 OU url (les photos de chat migrées sont des URLs)
+      var msgs=card.messages||[];
       for(var m=0;m<msgs.length;m++){
-        var msg=msgs[m],imgs=[];
-        if(msg.image)imgs.push(msg.image);
-        if(msg.images&&msg.images.length)imgs=imgs.concat(msg.images);
+        var msg=msgs[m],imgs=[]; if(msg.image)imgs.push(msg.image); if(msg.images&&msg.images.length)imgs=imgs.concat(msg.images);
         msg.__photos=[];
-        for(var x=0;x<imgs.length;x++){var fn=addB64(imgs[x],'chat');if(fn){msg.__photos.push(imgs[x]);chatGal.push({n:fn,file:'Photos/'+fn});}}
+        for(var x=0;x<imgs.length;x++){ var im=imgs[x]; if(regB64(im)){ msg.__photos.push(im); chatGal.push(im); } else if(regUrl(im)){ msg.__photos.push(im); chatGal.push(im); } }
       }
-      var arr=archByCard[cid]||[],archGal=[];
-      for(var a=0;a<arr.length;a++){var fn2=addB64(arr[a],'archive');if(fn2)archGal.push({n:fn2,file:'Photos/'+fn2});}
-      if(card.historique&&typeof card.historique==='object'){Object.keys(card.historique).forEach(function(k){var e=card.historique[k];if(!e||!e.photo)return;if(typeof e.photo==='string'&&e.photo.indexOf('data:')===0)addB64(e.photo,'hist');else addUrl(e.photo,'hist');});}
+      // archive mobile (base64)
+      var arr=archByCard[cid]||[];
+      for(var a=0;a<arr.length;a++){ if(regB64(arr[a]))archGal.push(arr[a]); }
+      // historique : base64 OU url
+      if(card.historique&&typeof card.historique==='object'){Object.keys(card.historique).forEach(function(k){var e=card.historique[k];if(!e||!e.photo)return;if(!regB64(e.photo))regUrl(e.photo);});}
 
       // ── Signature : régénère seulement si quelque chose a changé ──
       var sbIds=sbList.map(function(p){return p.id;}).sort().join(',');
-      var b64Ids=b64List.map(function(p){return p.id;}).sort().join(',');
       var urlIds=urlList.map(function(p){return p.id;}).sort().join(',');
-      var sig='v20|'+sH(JSON.stringify(card))+'|'+sbIds+'|'+b64Ids+'|'+urlIds;
+      var b64Ids=Object.keys(photoMap).map(function(k){return sH(k);}).sort().join(',');
+      var sig='v24|'+sH(JSON.stringify(card))+'|'+sbIds+'|'+b64Ids+'|'+urlIds;
       var hk='mlg_h_'+cid;
       if(localStorage.getItem(hk)===sig&&trig!=='Forcée')continue;
 
-      // ── Écriture des photos : UNIQUEMENT les nouvelles (téléchargée/écrite une seule fois) ──
+      // ── Transfert UNIQUE des photos distantes → cache IndexedDB → base64 dans la fiche ──
       var sbFail=0;
       for(var s=0;s<sbList.length;s++){
         var p=sbList[s];
-        if(man[p.id])continue; // déjà enregistrée → AUCUN téléchargement Firebase
+        var cached=await _idbGet(p.id);
+        if(cached){ p.b64=cached; continue; }
         try{
           var bl=null;
           if(p.it.getBlob){try{bl=await p.it.getBlob();}catch(_g){bl=null;}}
-          if(!bl){var url=await p.it.getDownloadURL();var rp=await fetch(url);if(!rp.ok)throw new Error('HTTP '+rp.status);bl=await rp.blob();}
-          var ph=await pf.getFileHandle(p.file,{create:true});var pw=await ph.createWritable();await pw.write(bl);await pw.close();
-          man[p.id]=p.file;
-        }catch(e){sbFail++;mlgCorsHint=mlgCorsHint||/cors|failed to fetch|network/i.test(e.message);}
+          if(!bl){ var url=await p.it.getDownloadURL(); var rp=await fetch(url); if(!rp.ok)throw new Error('HTTP '+rp.status); bl=await rp.blob(); }
+          p.b64=await _bkBlobToB64(bl);
+          if(p.b64)await _idbSet(p.id,p.b64);
+        }catch(e){ sbFail++; mlgPhotoFailTotal++; mlgCorsHint=mlgCorsHint||/cors|failed to fetch|network/i.test(e.message); }
       }
-      for(var b=0;b<b64List.length;b++){
-        var pb=b64List[b];
-        if(man[pb.id])continue;
-        try{var blob=mlgB64ToBlob(pb.data);if(!blob)continue;var ph2=await pf.getFileHandle(pb.file,{create:true});var pw2=await ph2.createWritable();await pw2.write(blob);await pw2.close();man[pb.id]=pb.file;}catch(e){}
-      }
-      // photos distantes (URL Storage, ex. historique) → téléchargées localement une seule fois
       for(var u=0;u<urlList.length;u++){
         var pu=urlList[u];
-        if(man[pu.id])continue;
-        try{var rpu=await fetch(pu.url);if(!rpu.ok)throw new Error('HTTP '+rpu.status);var blu=await rpu.blob();var ph3=await pf.getFileHandle(pu.file,{create:true});var pw3=await ph3.createWritable();await pw3.write(blu);await pw3.close();man[pu.id]=pu.file;}catch(e){photoMap[pu.url]=pu.url;mlgCorsHint=mlgCorsHint||/cors|failed to fetch|network/i.test(e.message);}
+        var c2=await _idbGet(pu.id);
+        if(c2){ photoMap[pu.key]=c2; continue; }
+        try{
+          var rpu=await fetch(pu.url); if(!rpu.ok)throw new Error('HTTP '+rpu.status); var blu=await rpu.blob();
+          var nb=await _bkBlobToB64(blu);
+          if(nb){ photoMap[pu.key]=nb; await _idbSet(pu.id,nb); }
+        }catch(e){ mlgPhotoFailTotal++; mlgCorsHint=mlgCorsHint||/cors|failed to fetch|network/i.test(e.message); }
       }
-      try{localStorage.setItem(manKey,JSON.stringify(man));}catch(_s){}
-      if(sbFail>0)lg('  ⚠️ '+order+': '+sbFail+' photo(s) sidebar non récupérée(s)','warn');
+      if(sbFail>0)lg('  \u26d4 '+order+': '+sbFail+' photo(s) sidebar NON sauvegardee(s)','err');
 
-      // ── Galerie = fichiers LOCAUX (sidebar enregistrées + chat + archive) ──
+      // ── Galerie : base64 uniquement (resolu via photoMap) ──
       var gallery=[];
-      sbList.forEach(function(p){if(man[p.id])gallery.push({n:p.file,file:'Photos/'+p.file});});
-      gallery=gallery.concat(chatGal).concat(archGal);
+      sbList.forEach(function(p){if(p.b64)gallery.push({n:p.id,src:p.b64});});
+      chatGal.forEach(function(k){if(photoMap[k])gallery.push({n:k,src:photoMap[k]});});
+      archGal.forEach(function(k){if(photoMap[k])gallery.push({n:k,src:photoMap[k]});});
 
-      // ── Fiche.html : liens RELATIFS vers Photos/ → autonome, plus aucun lien Firebase ──
+      // ── Fiche.html : photos intégrées en base64 → autonome, aucun lien Firebase ──
       var html=mlgBuildFiche(card,gallery,photoMap);
       var fhF=await mf.getFileHandle('Fiche.html',{create:true});var wF=await fhF.createWritable();await wF.write(new Blob([html],{type:'text/html'}));await wF.close();
 
@@ -436,7 +444,10 @@ async function archiveMoulages(trig){
     }catch(e){lg('  ⚠️ '+(card.order||cid)+': '+e.message,'err');}
   }
   if(done>0)lg('  🏭 '+done+' moulage(s) → OneDrive','ok');
-  if(mlgCorsHint)lg('  ℹ️ Certaines photos sidebar via lien (déblocage Firebase requis)','warn');
+  if(mlgPhotoFailTotal>0){
+    lg('  ⛔ '+mlgPhotoFailTotal+' photo(s) NON sauvegardée(s)'+(mlgCorsHint?' — accès Firebase bloqué (CORS)':''),'err');
+    showBigError(mlgPhotoFailTotal,mlgCorsHint);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
