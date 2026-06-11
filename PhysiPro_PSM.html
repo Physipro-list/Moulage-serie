@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1005-fix-nav-menu]</title>
+<title>PhysiPro — Liste des matériaux [v1006-photos-compress]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -5830,7 +5830,10 @@ function _rotateImageGeneric(getSrc, setSrc) {
     ctx.translate(h, 0);
     ctx.rotate(Math.PI / 2);
     ctx.drawImage(img, 0, 0);
-    setSrc(canvas.toDataURL('image/jpeg', 0.78));
+    // Compression économie Firebase (standard Moulage/AjoutRapide)
+    var q = 0.60, rotated = canvas.toDataURL('image/jpeg', q);
+    while (rotated.length > 120000 && q > 0.45) { q -= 0.05; rotated = canvas.toDataURL('image/jpeg', q); }
+    setSrc(rotated);
     showToast('🔄 Image pivotée', 'success');
   };
   img.onerror = function() { showToast('Erreur lors de la rotation', 'warning'); };
@@ -5887,7 +5890,11 @@ function _compressItemImg(dataUrl, cb) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, 0, 0, w, h);
-    cb(c.toDataURL('image/jpeg', 0.78));
+    // Compression économie Firebase (standard Moulage/AjoutRapide) :
+    // max 1200px / qualité 0.60 / plafond ~120 Ko (baisse la qualité jusqu'à 0.45)
+    var q = 0.60, out = c.toDataURL('image/jpeg', q);
+    while (out.length > 120000 && q > 0.45) { q -= 0.05; out = c.toDataURL('image/jpeg', q); }
+    cb(out);
   };
   img.onerror = function() { cb(dataUrl); };
   img.src = dataUrl;
@@ -5996,7 +6003,9 @@ function _handleGlobalFile(files) {
         var img = new Image();
         img.onload = function() {
           var canvas = _drawWithOrientation(img, orientation, 1200);
-          var corrected = canvas.toDataURL('image/jpeg', 0.78);
+          // Compression économie Firebase (standard Moulage/AjoutRapide)
+          var q = 0.60, corrected = canvas.toDataURL('image/jpeg', q);
+          while (corrected.length > 120000 && q > 0.45) { q -= 0.05; corrected = canvas.toDataURL('image/jpeg', q); }
           var t = fichiersGlobaux[currentFileTabIdx];
           if (!t) { t = fichiersGlobaux[currentFileTabIdx] = _newFileTab('Fichier'); }
           t.data = corrected;
