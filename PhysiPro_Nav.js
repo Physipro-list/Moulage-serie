@@ -31,7 +31,7 @@
   var NAV_MODULES = {
     moulage:     { icon: '🏭', label: 'Moulage',          sub: 'Gestion des moulages',      file: 'Physipro_moulage.html',                color: '#3b82f6' },
     serie:       { icon: '📋', label: 'Série+',            sub: 'Commandes de série',         file: 'PhysiPro_Serie_.html',                  color: '#f97316' },
-    psm:         { icon: '📐', label: 'PSM',               sub: 'Liste des matériaux',        file: 'PhysiPro_PSM.html',                     color: '#60a5fa' },
+    modmoulage:  { icon: '✏️', label: 'Modification moulage', sub: 'Demandes de modification',  file: 'PhysiPro_Modification_Moulage.html',   color: '#60a5fa' },
     inspection:  { icon: '☑️', label: 'Insp. Atelier',     sub: 'Inspection Atelier',         file: 'PhysiPro_Inspection_Atelier.html',      color: '#22c55e' },
     inspcouture: { icon: '🧵', label: 'Prod. Couture',     sub: 'Production Couture',         file: 'PhysiPro_Production_Couture.html',      color: '#a855f7' },
     serviceClient:        { icon: '🎧', label: 'Questionnements',  sub: 'Questionnements',            file: 'PhysiPro_Questionnements.html',           color: '#f59e0b' },
@@ -41,7 +41,7 @@
 
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
-    'moulage', 'psm', 'serviceClient', 'inspection', 'inspcouture', 'inspfinale'
+    'moulage', 'modmoulage', 'serviceClient', 'inspection', 'inspcouture', 'inspfinale'
   ];
 
   // ── RÈGLE MOBILE (v_nav2) ──────────────────────────────
@@ -62,7 +62,7 @@
   //  ACCÈS PAR UTILISATEUR (emails en base64)
   // ══════════════════════════════════════
   var HUB_ACCESS = {
-    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','psm','inspection','inspcouture','inspfinale','serviceClient'], // atelieratp (Daniel) — PSM réservé à Daniel
+    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','modmoulage','inspection','inspcouture','inspfinale','serviceClient'], // atelieratp (Daniel) — Modification moulage
     'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient'],   // valerie18 (Valérie)
     'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','serviceClient'],                              // simdut (Cassie)
     'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient'],                // michelle.bouchard
@@ -198,8 +198,8 @@
 
     grid.innerHTML = '';
 
-    // Rangée 1 : Moulage + PSM + Questionnements (3 colonnes)
-    var ROW1 = ['moulage', 'psm', 'serviceClient'];
+    // Rangée 1 : Moulage + Modification moulage + Questionnements (3 colonnes)
+    var ROW1 = ['moulage', 'modmoulage', 'serviceClient'];
     // Rangée 2 : Insp. Atelier + Prod. Couture + Insp. Finale (3 colonnes)
     var ROW2 = ['inspection', 'inspcouture', 'inspfinale'];
 
