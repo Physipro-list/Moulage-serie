@@ -1438,7 +1438,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1747</title>
+  <title>PhysiPro Moulages v1749</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -6416,7 +6416,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   </div>
 
   <!-- ===== CALENDRIER DES DÉPARTS (v1731) ===== -->
-  <div class="departcal-overlay" id="departCalOverlay" onclick="if(event.target===this)closeDepartCalendar()">
+  <div class="departcal-overlay" id="departCalOverlay" onclick="departCalBackdrop(event)">
     <div class="departcal-popup">
       <div class="departcal-header">
         <span class="departcal-title">📅 <span class="dt-label">Calendrier des départs</span></span>
@@ -7050,7 +7050,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260670;
+    var APP_VERSION = 20260672;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -13249,14 +13249,24 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // Affiche, par mois, chaque jour avec les moulages qui doivent être partis (datePinneeImportante).
     let departCalDate = new Date();
 
+    var _departCalOpenedAt = 0; // v1749 — anti-fermeture accidentelle au toucher juste après l'ouverture
     function openDepartCalendar() {
       departCalDate = new Date();
       renderDepartCalendar();
       document.getElementById('departCalOverlay').classList.add('active');
+      _departCalOpenedAt = Date.now();
       requestAnimationFrame(squareDepartCells); // v1737 — carrés une fois le calendrier visible
       setTimeout(squareDepartCells, 260); // v1741 — recalcul après l'animation d'ouverture
     }
     window.openDepartCalendar = openDepartCalendar;
+
+    // v1749 — clic sur le fond : ne ferme QUE si l'overlay est ouvert depuis > 1000 ms (évite la fermeture
+    //   immédiate par le doigt encore posé quand le calendrier s'ouvre depuis le bouton du hub sur mobile)
+    function departCalBackdrop(e) {
+      var ov = document.getElementById('departCalOverlay');
+      if (e.target === ov && (Date.now() - _departCalOpenedAt) > 1000) closeDepartCalendar();
+    }
+    window.departCalBackdrop = departCalBackdrop;
 
     function closeDepartCalendar() {
       document.getElementById('departCalOverlay').classList.remove('active');
@@ -15525,19 +15535,26 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           checkAppVersion();
           await initializeApp();
 
-          // v1747 : ouverture auto du Calendrier des départs si on arrive depuis le hub (?vue=calendrier)
+          // v1748 : ouverture auto du Calendrier des départs si on arrive depuis le hub (?vue=calendrier) — robuste mobile
+          // v1749 : déclenché plus tôt (dès auth + données prêtes), sans attendre toute l'init.
           try {
             if (new URLSearchParams(location.search).get('vue') === 'calendrier') {
+              console.log('📅 vue=calendrier détecté — ouverture auto du calendrier');
               var _calTries = 0;
               var _autoOpenCal = function(){
                 _calTries++;
-                if (typeof openDepartCalendar === 'function' && (Object.keys(cardsData||{}).length > 0 || _calTries > 20)) {
+                var ready = (typeof openDepartCalendar === 'function') && isAuthenticated;
+                var hasData = ready && Object.keys(cardsData||{}).length > 0;
+                if (ready && (hasData || _calTries > 60)) {
+                  var hs = document.getElementById('mobileHomeScreen');
+                  if (hs) hs.classList.remove('active');
                   openDepartCalendar();
+                  console.log('📅 Calendrier ouvert (essai ' + _calTries + ', data=' + hasData + ')');
                 } else {
-                  setTimeout(_autoOpenCal, 250);
+                  setTimeout(_autoOpenCal, 150);
                 }
               };
-              setTimeout(_autoOpenCal, 400);
+              setTimeout(_autoOpenCal, 150);
             }
           } catch(e) { console.warn('vue=calendrier:', e.message); }
           
