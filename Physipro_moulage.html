@@ -1438,7 +1438,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1726</title>
+  <title>PhysiPro Moulages v1727</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -1609,6 +1609,24 @@
     .settings-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 2000; }
     .settings-modal.active { display: flex; }
     .settings-box { background: #fff; border-radius: 12px; padding: 0; max-width: 420px; width: 90%; max-height: 85vh; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+    /* v1727 — Moulages expédiés (gestion + modèle « déjà expédié ») */
+    .exp-info { font-size: 12px; color: #475569; padding: 4px 0 10px; line-height: 1.5; }
+    .exp-empty { font-size: 13px; color: #64748b; text-align: center; padding: 24px 0; }
+    .exp-list { max-height: 50vh; overflow-y: auto; }
+    .exp-row { padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; border: 1px solid #e2e8f0; }
+    .exp-row.kept { background: #f0fdf4; border-color: #bbf7d0; }
+    .exp-row.old { background: #fff7ed; border-color: #fed7aa; }
+    .exp-row-main { font-size: 13px; color: #1e293b; }
+    .exp-row-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .exp-row-tag { font-size: 11px; font-weight: 600; margin-top: 3px; }
+    .exp-row.kept .exp-row-tag { color: #16a34a; }
+    .exp-row.old .exp-row-tag { color: #ea580c; }
+    .de-box { background: #fff; border-radius: 14px; padding: 22px; max-width: 420px; width: 90%; box-shadow: 0 12px 48px rgba(0,0,0,0.35); text-align: center; }
+    .de-num { font-size: 20px; font-weight: 700; color: #04152c; }
+    .de-name { font-size: 14px; color: #475569; margin: 2px 0 12px; }
+    .de-line { font-size: 13px; color: #1e293b; margin: 5px 0; }
+    .de-sub { font-size: 11px; color: #94a3b8; margin-top: 10px; }
+    .de-close { margin-top: 16px; width: 100%; padding: 10px; border: none; border-radius: 8px; background: #04152c; color: #fff; font-family: inherit; font-weight: 600; font-size: 13px; cursor: pointer; }
     .settings-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(to bottom, #04152c 0%, #4a8ef5 100%); }
     .settings-title { font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
     .settings-close { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.2); border: none; color: #fff; font-size: 16px; cursor: pointer; }
@@ -6400,6 +6418,26 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   </div>
 
   <!-- ===== MODAL SETTINGS ===== -->
+  <!-- v1727 — Modèle « déjà expédié » (apparaît quand on cherche un numéro déjà expédié) -->
+  <div class="settings-modal" id="dejaExpedieModal" onclick="closeDejaExpedieModal(event)">
+    <div class="de-box" onclick="event.stopPropagation()">
+      <div id="dejaExpedieBody"></div>
+      <button class="de-close" onclick="closeDejaExpedieModal(null,true)">Fermer</button>
+    </div>
+  </div>
+  <!-- v1727 — Gestion des moulages expédiés (triés par date, garder les 10 derniers) -->
+  <div class="settings-modal" id="expediesModal" onclick="closeExpediesModal(event)">
+    <div class="settings-box" onclick="event.stopPropagation()">
+      <div class="settings-header">
+        <span class="settings-title">📦 Moulages expédiés</span>
+        <button class="settings-close" onclick="closeExpediesModal(null,true)">✕</button>
+      </div>
+      <div class="settings-body">
+        <div class="exp-list" id="expediesList"></div>
+        <button class="settings-btn" id="expPurgeBtn" onclick="purgeExpediesKeep10()" style="width:100%;margin-top:10px;background:#ea580c;color:#fff;display:none;"></button>
+      </div>
+    </div>
+  </div>
   <div class="settings-modal" id="settingsModal" onclick="closeSettingsModal(event)">
     <div class="settings-box" onclick="event.stopPropagation()">
       <div class="settings-header">
@@ -6463,6 +6501,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           <div id="lightenInfo" style="font-size:10px;color:#64748b;margin-top:6px;text-align:center;"></div>
         </div>
         
+        <!-- SECTION : Moulages expédiés (v1727) -->
+        <div class="settings-section">
+          <div class="settings-section-title">📦 Moulages expédiés</div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:8px;line-height:1.4;">Voir les moulages expédiés ET archivés, triés par date d'expédition. Garder les 10 plus récents et effacer les plus vieux (une fiche-trace numéro/nom/dates reste pour la recherche).</div>
+          <button class="settings-btn" onclick="openExpediesModal()" style="width:100%;">📦 Gérer les expédiés</button>
+        </div>
+
         <!-- SECTION 3: Import/Export -->
         <div class="settings-section">
           <div class="settings-section-title">📁 Sauvegarde & Restauration</div>
@@ -11126,7 +11171,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         const _n = document.getElementById('archivedSearchNotice');
         if (_n) { _n.style.display = 'none'; _n.innerHTML = ''; }
       } else {
-        ensureGhostsLoaded(function(){ renderArchivedSearchNotice(q); });
+        ensureGhostsLoaded(function(){ renderArchivedSearchNotice(q); _checkDejaExpedie(q); });
       }
     }
     window.applyGlobalSearchFilter = applyGlobalSearchFilter;
@@ -11167,6 +11212,126 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       });
       box.innerHTML = html;
       box.style.display = 'block';
+    }
+
+    // ═══════════ MOULAGES EXPÉDIÉS — gestion / rétention (v1727) ═══════════
+    // Éligible à l'effacement = expédié ('Envoyé au shipping') ET archivé OneDrive. Les DEUX.
+    function _isExpedieArchive(c){ return !!(c && c.expedie && c.oneDrive && c.oneDrive.archived); }
+    function _parseExpDate(c){
+      var s = (c && c.expedie) || '';
+      if (s === true || s === 'true') return 0;
+      var t = Date.parse(String(s).replace(' ', 'T'));
+      return isNaN(t) ? 0 : t;
+    }
+    function _expediesList(){
+      // tous les éligibles, triés par date d'expédition : plus VIEUX en premier
+      return Object.keys(cardsData)
+        .filter(function(id){ return _isExpedieArchive(cardsData[id]); })
+        .map(function(id){ return { id: id, c: cardsData[id], t: _parseExpDate(cardsData[id]) }; })
+        .sort(function(a,b){ return a.t - b.t; });
+    }
+    var EXP_KEEP = 10;
+    function openExpediesModal(){
+      if (typeof closeSettingsModal === 'function') closeSettingsModal(null, true);
+      var list = _expediesList();
+      var nOld = Math.max(0, list.length - EXP_KEEP);
+      var protectedFrom = list.length - EXP_KEEP; // index >= protectedFrom = gardé
+      var html = '';
+      if (list.length === 0){
+        html = '<div class="exp-empty">Aucun moulage expédié ET archivé pour le moment.</div>';
+      } else {
+        html += '<div class="exp-info">' + list.length + ' moulage(s) expédié(s) + archivé(s). Les <strong>'
+          + Math.min(EXP_KEEP, list.length) + ' plus récents</strong> sont gardés au complet 🔒. '
+          + (nOld ? ('Les <strong>' + nOld + ' plus vieux</strong> peuvent être effacés (une fiche-trace reste pour la recherche).') : 'Rien à effacer pour l\'instant.') + '</div>';
+        list.forEach(function(o, idx){
+          var c = o.c;
+          var kept = idx >= protectedFrom;
+          var od = (c.oneDrive && c.oneDrive.date) || '';
+          html += '<div class="exp-row ' + (kept ? 'kept' : 'old') + '">'
+            + '<div class="exp-row-main"><strong>#' + escapeHtml(c.order || '?') + '</strong> — ' + escapeHtml(c.name || '') + '</div>'
+            + '<div class="exp-row-sub">🚚 ' + escapeHtml(String(c.expedie || '')) + (od ? (' · 💾 ' + escapeHtml(od)) : '') + '</div>'
+            + '<div class="exp-row-tag">' + (kept ? '🔒 gardé' : '🗑️ effaçable') + '</div>'
+            + '</div>';
+        });
+      }
+      document.getElementById('expediesList').innerHTML = html;
+      var btn = document.getElementById('expPurgeBtn');
+      if (btn){
+        if (nOld > 0){ btn.style.display = ''; btn.textContent = '🗑️ Garder les ' + EXP_KEEP + ' derniers (effacer les ' + nOld + ' plus vieux)'; }
+        else { btn.style.display = 'none'; }
+      }
+      document.getElementById('expediesModal').classList.add('active');
+    }
+    window.openExpediesModal = openExpediesModal;
+    function closeExpediesModal(e, force){ if (force || !e || e.target.id === 'expediesModal'){ document.getElementById('expediesModal').classList.remove('active'); } }
+    window.closeExpediesModal = closeExpediesModal;
+
+    function _makeGhost(c){
+      var od = (c && c.oneDrive) || {};
+      return {
+        order: c.order || '', name: c.name || '', soumission: c.soumission || '', po: c.po || '',
+        client: c.client || '', region: c.region || '', item: c.item || '',
+        representante: c.representante || '', intervenant: c.intervenant || '',
+        dateExpedition: c.dateExpedition || (typeof c.expedie === 'string' ? c.expedie : '') || '',
+        expedie: !!c.expedie, odArchived: !!od.archived, odComplete: !!od.complete,
+        odDate: od.date || '', nbPhotos: od.nbPhotos || 0,
+        deletedAt: new Date().toISOString(), deletedBy: currentUser ? currentUser.email : 'inconnu', autoPurge: true
+      };
+    }
+    async function purgeExpediesKeep10(){
+      var list = _expediesList();
+      var toDelete = list.slice(0, Math.max(0, list.length - EXP_KEEP)); // les plus vieux
+      if (toDelete.length === 0){ showToast('Rien à effacer — 10 expédiés ou moins.', 'info'); return; }
+      if (!confirm('Effacer ' + toDelete.length + ' moulage(s) parmi les plus vieux expédiés ?\n\n'
+        + '• Les ' + EXP_KEEP + ' plus récents sont gardés au complet.\n'
+        + '• Une fiche-trace (numéro, nom, dates) reste pour la recherche.\n\n'
+        + 'Cette action est définitive.')) return;
+      var done = 0, fail = 0;
+      for (var i = 0; i < toDelete.length; i++){
+        var o = toDelete[i];
+        try {
+          var ghost = _makeGhost(o.c);
+          if (firebaseDb){ await firebaseDb.ref('moulagesExpediees/' + o.id).set(ghost); if (archivedGhosts) archivedGhosts[o.id] = ghost; }
+          await deleteCardFromFirebase(o.id);
+          delete cardsData[o.id];
+          done++;
+        } catch(e){ fail++; console.error('purge expédié', o.id, e); }
+      }
+      document.getElementById('expediesModal').classList.remove('active');
+      if (typeof renderKanban === 'function') renderKanban();
+      showToast('✅ ' + done + ' moulage(s) effacé(s)' + (fail ? (' · ' + fail + ' échec(s)') : ''), fail ? 'warning' : 'success');
+    }
+    window.purgeExpediesKeep10 = purgeExpediesKeep10;
+
+    // Modèle centré « déjà expédié » — quand on cherche le numéro exact d'un moulage déjà expédié
+    var _lastDejaShown = '';
+    function showDejaExpedieModal(g){
+      if (!g) return;
+      var b = document.getElementById('dejaExpedieBody');
+      if (!b) return;
+      b.innerHTML = '<div class="de-num">📦 Moulage #' + escapeHtml(g.order || '?') + '</div>'
+        + '<div class="de-name">' + escapeHtml(g.name || '') + (g.client ? (' · ' + escapeHtml(g.client)) : '') + '</div>'
+        + '<div class="de-line"><strong>Ce moulage a déjà été expédié.</strong></div>'
+        + (g.dateExpedition ? ('<div class="de-line">🚚 Expédié le <strong>' + escapeHtml(g.dateExpedition) + '</strong></div>') : '')
+        + (g.odArchived ? ('<div class="de-line">💾 Archivé dans OneDrive' + (g.odDate ? (' le <strong>' + escapeHtml(g.odDate) + '</strong>') : '') + '</div>') : '')
+        + (g.nbPhotos ? ('<div class="de-line">🖼️ ' + g.nbPhotos + ' photo(s) archivée(s)</div>') : '')
+        + (g.soumission ? ('<div class="de-line">📄 Soumission ' + escapeHtml(g.soumission) + '</div>') : '')
+        + (g.deletedAt ? ('<div class="de-sub">Retiré du tableau le ' + escapeHtml(String(g.deletedAt).slice(0,10)) + '</div>') : '');
+      document.getElementById('dejaExpedieModal').classList.add('active');
+    }
+    window.showDejaExpedieModal = showDejaExpedieModal;
+    function closeDejaExpedieModal(e, force){ if (force || !e || e.target.id === 'dejaExpedieModal'){ document.getElementById('dejaExpedieModal').classList.remove('active'); _lastDejaShown = ''; } }
+    window.closeDejaExpedieModal = closeDejaExpedieModal;
+    function _checkDejaExpedie(q){
+      if (!q || !archivedGhosts) return;
+      var nq = String(q).trim().toLowerCase();
+      if (nq.length < 3) return; // pas de pop sur 1-2 caractères
+      var hit = null;
+      Object.keys(archivedGhosts).forEach(function(id){
+        var g = archivedGhosts[id]; if (!g) return;
+        if (String(g.order || '').trim().toLowerCase() === nq) hit = g;
+      });
+      if (hit && _lastDejaShown !== nq){ _lastDejaShown = nq; showDejaExpedieModal(hit); }
     }
 
     // ===== SECTION 9: VUE ROBOT =====
