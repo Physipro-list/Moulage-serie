@@ -1438,7 +1438,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1749</title>
+  <title>PhysiPro Moulages v1750</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -3075,6 +3075,35 @@
       .departcal-monthyear { font-size: 16px; min-width: 130px; }
       .departcal-title span.dt-label { display: none; }
     }
+
+    /* v1750 — CALENDRIER MOBILE : plein écran + défilement vertical (slider) pour voir toutes les dates.
+       On désactive la squarification JS sur mobile, donc ces règles dictent la mise en page. */
+    @media (max-width: 768px) {
+      .departcal-overlay { padding: 0; align-items: stretch; }
+      .departcal-popup { width: 100vw !important; max-width: none !important; height: 100vh; height: 100dvh; border-radius: 0; }
+      .departcal-header { flex-wrap: wrap; gap: 6px 8px; padding: 8px 10px; }
+      .departcal-monthyear { min-width: 0; flex: 1 1 auto; }
+      .departcal-weekdays { grid-template-columns: repeat(7, 1fr) !important; padding: 4px 6px 0; gap: 3px; }
+      .departcal-grid {
+        grid-template-columns: repeat(7, 1fr) !important;
+        grid-auto-rows: 72px !important;
+        gap: 3px; padding: 4px 6px 28px;
+        overflow-y: auto !important; overflow-x: hidden;
+        -webkit-overflow-scrolling: touch; flex: 1;
+      }
+      .departcal-cell { min-height: 72px; border-radius: 8px; }
+      .departcal-daynum { font-size: 13px; }
+      .departcal-item { font-size: 10px; white-space: normal; padding: 2px 4px; line-height: 1.2; }
+      .departcal-item .di-order { display: block; margin-left: 0; opacity: 0.85; }
+    }
+    /* Même mise en page quand la « version téléphone » est forcée sur un grand écran */
+    html.force-mobile .departcal-overlay { padding: 0; align-items: stretch; }
+    html.force-mobile .departcal-popup { width: 100vw !important; max-width: none !important; height: 100vh; height: 100dvh; border-radius: 0; }
+    html.force-mobile .departcal-header { flex-wrap: wrap; gap: 6px 8px; padding: 8px 10px; }
+    html.force-mobile .departcal-weekdays { grid-template-columns: repeat(7, 1fr) !important; padding: 4px 6px 0; gap: 3px; }
+    html.force-mobile .departcal-grid { grid-template-columns: repeat(7, 1fr) !important; grid-auto-rows: 72px !important; gap: 3px; padding: 4px 6px 28px; overflow-y: auto !important; overflow-x: hidden; -webkit-overflow-scrolling: touch; flex: 1; }
+    html.force-mobile .departcal-cell { min-height: 72px; border-radius: 8px; }
+    html.force-mobile .departcal-item { white-space: normal; }
 
     /* ===== SECTION 7: MODAL CRÉATION ===== */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1500; }
@@ -7050,7 +7079,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260672;
+    var APP_VERSION = 20260673;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -13255,8 +13284,10 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       renderDepartCalendar();
       document.getElementById('departCalOverlay').classList.add('active');
       _departCalOpenedAt = Date.now();
-      requestAnimationFrame(squareDepartCells); // v1737 — carrés une fois le calendrier visible
-      setTimeout(squareDepartCells, 260); // v1741 — recalcul après l'animation d'ouverture
+      if (!isMobileView()) { // v1750 — sur mobile : calendrier plein écran défilable (CSS), pas de squarification
+        requestAnimationFrame(squareDepartCells); // v1737 — carrés une fois le calendrier visible
+        setTimeout(squareDepartCells, 260); // v1741 — recalcul après l'animation d'ouverture
+      }
     }
     window.openDepartCalendar = openDepartCalendar;
 
@@ -13267,6 +13298,31 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       if (e.target === ov && (Date.now() - _departCalOpenedAt) > 1000) closeDepartCalendar();
     }
     window.departCalBackdrop = departCalBackdrop;
+
+    // v1750 — ouverture auto du calendrier quand on arrive du hub (?vue=calendrier), indépendante de l'init :
+    //   démarre tôt et ouvre dès que l'utilisateur est connecté ET que les cartes sont chargées.
+    var _calAutoStarted = false;
+    function maybeAutoOpenCalendar() {
+      if (_calAutoStarted) return;
+      try { if (new URLSearchParams(location.search).get('vue') !== 'calendrier') return; } catch(e) { return; }
+      _calAutoStarted = true;
+      console.log('📅 vue=calendrier détecté — attente connexion + données');
+      var tries = 0;
+      (function poll(){
+        tries++;
+        var authed = false, hasData = false;
+        try { authed = !!isAuthenticated; } catch(e) {}
+        try { hasData = cardsData && Object.keys(cardsData).length > 0; } catch(e) {}
+        if (typeof openDepartCalendar === 'function' && authed && (hasData || tries > 60)) {
+          var hs = document.getElementById('mobileHomeScreen'); if (hs) hs.classList.remove('active');
+          try { openDepartCalendar(); console.log('📅 Calendrier auto-ouvert (essai ' + tries + ', data=' + hasData + ')'); }
+          catch(e) { console.warn('openDepartCalendar:', e.message); }
+        } else {
+          setTimeout(poll, 120);
+        }
+      })();
+    }
+    window.maybeAutoOpenCalendar = maybeAutoOpenCalendar;
 
     function closeDepartCalendar() {
       document.getElementById('departCalOverlay').classList.remove('active');
@@ -13337,6 +13393,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     //   Ici on calcule la plus grande case CARRÉE qui rentre EXACTEMENT (aucune barre de défilement),
     //   puis on rétrécit la fenêtre à la largeur exacte des 7 cellules.
     function squareDepartCells() {
+      if (isMobileView()) return; // v1750 — mobile : calendrier défilable géré par CSS, pas de squarification
       const overlay = document.getElementById('departCalOverlay');
       const popup = overlay && overlay.querySelector('.departcal-popup');
       const grid = document.getElementById('departCalGrid');
@@ -13379,7 +13436,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
     function openFicheFromDepartCal(cardId) {
       closeDepartCalendar();
-      if (typeof openFiche === 'function') openFiche(cardId);
+      if (isMobileView() && typeof openMobileFiche === 'function') openMobileFiche(cardId); // v1750 — fiche mobile sur téléphone
+      else if (typeof openFiche === 'function') openFiche(cardId);
     }
     window.openFicheFromDepartCal = openFicheFromDepartCal;
 
@@ -15478,6 +15536,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ===== INITIALISATION =====
     document.addEventListener('DOMContentLoaded', async () => {
       console.log('🚀 PhysiPro Moulage v1527 - Firebase Realtime DB');
+
+      // v1750 : démarrer tôt le poller d'ouverture auto du calendrier (?vue=calendrier) — il attend connexion + données
+      try { maybeAutoOpenCalendar(); } catch(e) {}
       
       // Afficher le bouton retour menu sur mobile
       var _isMob = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isMobileView();
@@ -15535,28 +15596,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           checkAppVersion();
           await initializeApp();
 
-          // v1748 : ouverture auto du Calendrier des départs si on arrive depuis le hub (?vue=calendrier) — robuste mobile
-          // v1749 : déclenché plus tôt (dès auth + données prêtes), sans attendre toute l'init.
-          try {
-            if (new URLSearchParams(location.search).get('vue') === 'calendrier') {
-              console.log('📅 vue=calendrier détecté — ouverture auto du calendrier');
-              var _calTries = 0;
-              var _autoOpenCal = function(){
-                _calTries++;
-                var ready = (typeof openDepartCalendar === 'function') && isAuthenticated;
-                var hasData = ready && Object.keys(cardsData||{}).length > 0;
-                if (ready && (hasData || _calTries > 60)) {
-                  var hs = document.getElementById('mobileHomeScreen');
-                  if (hs) hs.classList.remove('active');
-                  openDepartCalendar();
-                  console.log('📅 Calendrier ouvert (essai ' + _calTries + ', data=' + hasData + ')');
-                } else {
-                  setTimeout(_autoOpenCal, 150);
-                }
-              };
-              setTimeout(_autoOpenCal, 150);
-            }
-          } catch(e) { console.warn('vue=calendrier:', e.message); }
+          // v1750 : ouverture auto du Calendrier (si ?vue=calendrier) — gérée par le poller indépendant
+          try { maybeAutoOpenCalendar(); } catch(e) { console.warn('maybeAutoOpenCalendar:', e.message); }
           
           // v1588: Appel unique et centralisé pour mobile après initializeApp
           if (isMobileView()) {
