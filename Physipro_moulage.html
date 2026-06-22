@@ -1438,7 +1438,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1727</title>
+  <title>PhysiPro Moulages v1728</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -6496,9 +6496,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
         <div class="settings-section">
           <div class="settings-section-title">⚡ Performance — Alléger le tableau</div>
-          <div style="font-size:10px;color:#94a3b8;margin-bottom:8px;line-height:1.4;">Déplace les conversations hors des cartes (vers le nœud « chats ») pour que le tableau charge beaucoup moins de données. Les données sont COPIÉES et VÉRIFIÉES avant tout retrait — aucune perte possible. À faire une seule fois, après avoir vérifié que le chat fonctionne.</div>
-          <button class="settings-btn optimize" onclick="lightenBoardChats()" style="width:100%;">⚡ Alléger le tableau (déplacer le chat)</button>
-          <div id="lightenInfo" style="font-size:10px;color:#64748b;margin-top:6px;text-align:center;"></div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:8px;line-height:1.4;">✅ Déjà fait — les conversations sont dans le nœud « chats », le tableau est déjà allégé. Rien à refaire.</div>
         </div>
         
         <!-- SECTION : Moulages expédiés (v1727) -->
@@ -8838,24 +8836,21 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     
     async function cleanOldBackups() {
       try {
-        const snapshot = await firebaseDb.ref(DB_PATHS.backups).once('value');
-        if (!snapshot.exists()) return;
-        
-        const backups = [];
-        snapshot.forEach(child => {
-          backups.push({ id: child.key, timestamp: child.val().timestamp || 0 });
-        });
-        
-        // Trier par timestamp décroissant
-        backups.sort((a, b) => b.timestamp - a.timestamp);
-        
-        // Supprimer les backups au-delà de 40
-        if (backups.length > 40) {
-          const toDelete = backups.slice(40);
-          for (const backup of toDelete) {
-            await firebaseDb.ref(DB_PATHS.backups + '/' + backup.id).remove();
-          }
-          console.log(`🧹 ${toDelete.length} vieux backups supprimés`);
+        const KEEP = 40;
+        // v1728 — Lecture SHALLOW (noms de clés seulement, ~0 téléchargement) au lieu de lire
+        // tout le nœud (~19 Mo). Évitait un GROS téléchargement à chaque backup (auto aux 30 min).
+        // Les clés sont 'backup_<timestamp>' → un tri texte = tri chronologique.
+        const token = await firebase.auth().currentUser.getIdToken();
+        const url = firebase.app().options.databaseURL + '/' + DB_PATHS.backups + '.json?shallow=true&auth=' + token;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const obj = await res.json();
+        if (!obj) return;
+        const keys = Object.keys(obj).sort(); // ancien → récent
+        if (keys.length > KEEP) {
+          const toDelete = keys.slice(0, keys.length - KEEP);
+          for (const k of toDelete) { await firebaseDb.ref(DB_PATHS.backups + '/' + k).remove(); }
+          console.log('🧹 ' + toDelete.length + ' vieux backups supprimés (shallow, sans téléchargement lourd)');
         }
       } catch (error) {
         console.error('Erreur nettoyage backups:', error);
@@ -9045,29 +9040,12 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // Fonction pour actualiser manuellement le stockage
     function refreshStorageStatus() {
       showToast('🔄 Actualisation...', 'info');
-      
-      // Mettre à jour l'indicateur principal
+      // Mettre à jour les indicateurs (local + cloud) — calculs locaux, aucun téléchargement
       updateStorageIndicator();
-      
-      // Mettre à jour les infos dans Settings
       updateSettingsInfo();
-      
-      // Forcer la relecture de Firebase
-      if (isOnline && firebaseDb) {
-        firebaseDb.ref(DB_PATHS.moulages).once('value').then(snapshot => {
-          const data = snapshot.val();
-          if (data) {
-            cardsData = data;
-            renderKanban();
-          }
-          showToast('✅ Stockage actualisé', 'success');
-        }).catch(err => {
-          console.error('Erreur refresh:', err);
-          showToast('⚠️ Erreur de synchronisation', 'error');
-        });
-      } else {
-        showToast('✅ Stockage local actualisé', 'success');
-      }
+      // v1728 — On NE re-télécharge PLUS tout l'arbre moulages : le tableau est déjà synchronisé
+      // en direct (listener .on), donc cardsData est à jour. Évite un téléchargement inutile à chaque clic.
+      showToast('✅ Indicateurs actualisés', 'success');
     }
     window.refreshStorageStatus = refreshStorageStatus;
     
