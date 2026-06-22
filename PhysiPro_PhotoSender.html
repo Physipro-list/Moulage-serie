@@ -639,7 +639,6 @@ auth.onAuthStateChanged(function(user) {
     currentUserName = TEAM_NAMES[email] || email.split('@')[0];
     db = firebase.database();
     db.ref('.info/connected').on('value', s => setDots(s.val()));
-    loadJobs();
     listenForRequests();
     // Pas d'écran de login : on reste sur "Ouverture…" jusqu'à ce que
     // listenForRequests trouve la demande de l'utilisateur (→ caméra),
@@ -690,6 +689,12 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
   const el = document.getElementById(id);
   if (el) { el.classList.remove('hidden'); }
+  // P6 — la liste complète des jobs n'est écoutée QUE sur l'écran de navigation,
+  // et relâchée en quittant (évite de re-télécharger tout 'jobs' en continu).
+  try {
+    if (id === 'screenJobs') { loadJobs(); }
+    else if (jobsListener) { db.ref('jobs').off('value', jobsListener); jobsListener = null; }
+  } catch(e) {}
 }
 
 // ═══ JOBS ═══
@@ -729,6 +734,7 @@ function listenForRequests() {
     // Plus récente d'abord
     mine.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
     _activePendingRequests = mine;
+    _prefetchPendingJobs(mine);
 
     var onPhoto = !document.getElementById('screenPhoto').classList.contains('hidden');
 
@@ -746,6 +752,19 @@ function listenForRequests() {
         selectJob(found.jobId);
       }
     }
+  });
+}
+
+// P6 — Charge à la pièce le détail des jobs des demandes actives (1-3 lectures),
+// au lieu d'écouter tout 'jobs'. Re-rend la liste quand un détail arrive.
+function _prefetchPendingJobs(reqs) {
+  (reqs || []).forEach(function(req) {
+    var id = req && req.jobId;
+    if (!id || jobsData[id]) return;
+    db.ref('jobs/' + id).once('value').then(function(snap) {
+      var v = snap.val();
+      if (v) { jobsData[id] = v; if (typeof renderPendingList === 'function') renderPendingList(); }
+    }).catch(function(){});
   });
 }
 

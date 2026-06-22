@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Modification moulage [v67]</title>
+<title>PhysiPro — Modification moulage [v71]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -4689,11 +4689,19 @@ function _commitNewSoumissionWithName(name, commande, extra) {
     return db.ref('psm_annot/current_soumission_id').set(newId);
   }).then(function(){
     // 4. Pousser les données aux chemins courants pour que les listeners actualisent l'UI
+    _heavyCache = (fichiersGlobaux || []).map(_tabHeavy);
+    _heavyLoaded = true;
+    _lastHeavySig = _heavySig(fichiersGlobaux);
+    _itemsHeavyCache = _itemsHeavyFrom(itemsParDept);
+    _itemsHeavyLoaded = true;
+    _lastItemsSig = _itemsSig(itemsParDept);
     return Promise.all([
-      db.ref('psm_annot/items').set(itemsParDept),
+      db.ref('psm_annot/items').set(_itemsLightFrom(itemsParDept)),
+      db.ref('psm_annot/items_img').set(_itemsHeavyCache),
       db.ref('psm_annot/current_item_idx').set(currentItemIdxParDept),
       db.ref('psm_annot/soumission_courante').set(soumissionMats),
-      db.ref('psm_annot/image_globale').set(fichiersGlobaux)
+      db.ref('psm_annot/image_globale').set((fichiersGlobaux || []).map(_tabLight)),
+      db.ref('psm_annot/image_globale_img').set(_heavyCache)
     ]);
   }).then(function(){
     closeSoumModal();
@@ -4734,11 +4742,20 @@ function loadSoumission(id) {
       }
     }
     // Pousser vers les chemins courants → les listeners on('value') vont actualiser l'UI
+    _heavyCache = (fichiersToLoad || []).map(_tabHeavy);
+    _heavyLoaded = true;
+    _lastHeavySig = _heavySig(fichiersToLoad);
+    var itemsToLoad = data.items || { atelier:[_newItem('Item 1')] };
+    _itemsHeavyCache = _itemsHeavyFrom(itemsToLoad);
+    _itemsHeavyLoaded = true;
+    _lastItemsSig = _itemsSig(itemsToLoad);
     return Promise.all([
-      db.ref('psm_annot/items').set(data.items || { atelier:[_newItem('Item 1')] }),
+      db.ref('psm_annot/items').set(_itemsLightFrom(itemsToLoad)),
+      db.ref('psm_annot/items_img').set(_itemsHeavyCache),
       db.ref('psm_annot/current_item_idx').set(data.currentItemIdx || { atelier:0 }),
       db.ref('psm_annot/soumission_courante').set(data.soumissionMats || { atelier:[] }),
-      db.ref('psm_annot/image_globale').set(fichiersToLoad),
+      db.ref('psm_annot/image_globale').set((fichiersToLoad || []).map(_tabLight)),
+      db.ref('psm_annot/image_globale_img').set(_heavyCache),
       db.ref('psm_annot/current_soumission_id').set(id)
     ]);
   }).then(function(){
@@ -4969,6 +4986,76 @@ function showToast(msg, kind) {
 }
 
 // ---------- Chargement Firebase ----------
+// ============================================================
+// v71 — SÉPARATION PHOTOS PAR ITEM (même principe que les images globales)
+//   psm_annot/items      (écouté .on)  = items SANS photo : {name,note,date,temps}
+//   psm_annot/items_img  (lu .once)     = { atelier:[photoBase64, ...] }
+// → éditer une note / changer d'item ne re-télécharge plus les photos.
+// ============================================================
+var _itemsHeavyCache = null;     // { atelier:[img,...] } chargé une seule fois
+var _itemsHeavyLoaded = false;
+var _lastItemsSig = null;
+
+function _itemLight(it){
+  it = it || {};
+  var out = {
+    name: (typeof it.name === 'string') ? it.name : '',
+    note: (typeof it.note === 'string') ? it.note : '',
+    date: (typeof it.date === 'string') ? it.date : ''
+  };
+  if (it.temps != null) { var t = parseFloat(it.temps); if (!isNaN(t) && t > 0) out.temps = t; }
+  return out;
+}
+function _itemsLightFrom(byDept){
+  var out = {}; byDept = byDept || {};
+  Object.keys(byDept).forEach(function(d){ out[d] = (Array.isArray(byDept[d]) ? byDept[d] : []).map(_itemLight); });
+  return out;
+}
+function _itemsHeavyFrom(byDept){
+  var out = {}; byDept = byDept || {};
+  Object.keys(byDept).forEach(function(d){ out[d] = (Array.isArray(byDept[d]) ? byDept[d] : []).map(function(it){ return (it && typeof it.image === 'string') ? it.image : ''; }); });
+  return out;
+}
+function _imgSampleSig(str){ str = (typeof str === 'string') ? str : ''; return str.length + '~' + str.slice(0,16) + str.slice(-16); }
+// Signature des photos depuis itemsParDept (lit it.image)
+function _itemsSig(byDept){
+  byDept = byDept || {};
+  return Object.keys(byDept).sort().map(function(d){
+    var arr = Array.isArray(byDept[d]) ? byDept[d] : [];
+    return d + ':' + arr.map(function(it){ return _imgSampleSig(it && it.image); }).join(',');
+  }).join('|');
+}
+// Même signature mais depuis le cache lourd { dept:[img,...] } — doit matcher _itemsSig
+function _itemsSigFromHeavy(cache){
+  cache = cache || {};
+  return Object.keys(cache).sort().map(function(d){
+    var arr = Array.isArray(cache[d]) ? cache[d] : [];
+    return d + ':' + arr.map(_imgSampleSig).join(',');
+  }).join('|');
+}
+// Réinjecte les photos (cache) dans itemsParDept en mémoire
+function _applyItemsHeavy(){
+  if (!_itemsHeavyCache) return;
+  Object.keys(itemsParDept).forEach(function(d){
+    var imgs = _itemsHeavyCache[d], arr = itemsParDept[d];
+    if (!Array.isArray(imgs) || !Array.isArray(arr)) return;
+    for (var i = 0; i < arr.length; i++){ if (arr[i] && typeof imgs[i] === 'string') arr[i].image = imgs[i]; }
+  });
+}
+function _loadItemsHeavyOnce(cb){
+  db.ref('psm_annot/items_img').once('value').then(function(snap){
+    var hv = snap.val();
+    _itemsHeavyCache = (hv && typeof hv === 'object') ? hv : {};
+    _itemsHeavyLoaded = true;
+    _lastItemsSig = _itemsSigFromHeavy(_itemsHeavyCache);
+    if (typeof cb === 'function') cb();
+  }).catch(function(err){
+    console.error('Erreur chargement photos items (lourd) :', err);
+    _itemsHeavyCache = {}; _itemsHeavyLoaded = true;
+    if (typeof cb === 'function') cb();
+  });
+}
+
 db.ref('psm_annot/items').on('value', function(snap) {
   var v = snap.val() || {};
   ['atelier'].forEach(function(d){
@@ -4976,10 +5063,11 @@ db.ref('psm_annot/items').on('value', function(snap) {
     if (!arr || !arr.length) {
       itemsParDept[d] = [_newItem('Item 1')];
     } else {
+      var imgs = (_itemsHeavyCache && Array.isArray(_itemsHeavyCache[d])) ? _itemsHeavyCache[d] : null;
       itemsParDept[d] = arr.slice(0, MAX_ITEMS).map(function(it, i){
         var newItem = {
           name: (it && typeof it.name === 'string') ? it.name : ('Item ' + (i+1)),
-          image: (it && typeof it.image === 'string') ? it.image : '',
+          image: (imgs && typeof imgs[i] === 'string') ? imgs[i] : ((it && typeof it.image === 'string') ? it.image : ''),
           note: (it && typeof it.note === 'string') ? it.note : '',
           date: (it && typeof it.date === 'string') ? it.date : ''
         };
@@ -4996,6 +5084,13 @@ db.ref('psm_annot/items').on('value', function(snap) {
   refreshItemSelector();
   _refreshMidUI();
   _midFirebaseLoading = false;
+  // Photos (lourd) pas encore chargées → charger une fois, réinjecter, rafraîchir
+  if (!_itemsHeavyLoaded) {
+    _loadItemsHeavyOnce(function(){
+      _applyItemsHeavy();
+      _midFirebaseLoading = true; refreshItemSelector(); _refreshMidUI(); _midFirebaseLoading = false;
+    });
+  }
 });
 
 db.ref('psm_annot/current_item_idx').on('value', function(snap) {
@@ -5011,6 +5106,71 @@ db.ref('psm_annot/current_item_idx').on('value', function(snap) {
   _midFirebaseLoading = false;
 });
 
+// ============================================================
+// v68 — SÉPARATION IMAGES LOURDES (réduction coût téléchargement)
+//   psm_annot/image_globale      (écouté .on)  = {name,type,filename,stamps,annotations,pageIdx}
+//   psm_annot/image_globale_img  (lu .once)     = {data,pages,dataPdfOriginal}
+// → bouger une étampe n'écrit/re-télécharge plus les photos/PDF.
+// ============================================================
+var _heavyCache = null;     // [{data,pages,dataPdfOriginal}, ...] chargé une seule fois
+var _heavyLoaded = false;
+var _lastHeavySig = null;   // signature du lourd déjà écrit (évite réécritures inutiles)
+
+function _tabLight(it){
+  it = it || {};
+  return {
+    name: (typeof it.name === 'string') ? it.name : '',
+    type: (typeof it.type === 'string') ? it.type : '',
+    filename: (typeof it.filename === 'string') ? it.filename : '',
+    stamps: Array.isArray(it.stamps) ? it.stamps : [],
+    annotations: Array.isArray(it.annotations) ? it.annotations : [],
+    pageIdx: (typeof it.pageIdx === 'number') ? it.pageIdx : 0
+  };
+}
+function _tabHeavy(it){
+  it = it || {};
+  return {
+    data: (typeof it.data === 'string') ? it.data : '',
+    pages: Array.isArray(it.pages) ? it.pages : null,
+    dataPdfOriginal: (typeof it.dataPdfOriginal === 'string') ? it.dataPdfOriginal : ''
+  };
+}
+// Signature O(1) par onglet (longueur + échantillon) — détecte tout vrai changement d'image
+function _heavySig(arr){
+  function s(str){ str = (typeof str === 'string') ? str : ''; return str.length + '~' + str.slice(0,16) + str.slice(-16); }
+  return (arr || []).map(function(it){
+    it = it || {};
+    var pg = Array.isArray(it.pages) ? it.pages.map(s).join(',') : '0';
+    return s(it.data) + '#' + pg + '#' + s(it.dataPdfOriginal);
+  }).join('|');
+}
+// Réinjecte le lourd (cache) dans fichiersGlobaux en mémoire
+function _applyHeavyToFichiers(){
+  if (!Array.isArray(_heavyCache)) return;
+  for (var i = 0; i < fichiersGlobaux.length; i++){
+    var h = _heavyCache[i];
+    if (h){
+      fichiersGlobaux[i].data = (typeof h.data === 'string') ? h.data : '';
+      fichiersGlobaux[i].pages = Array.isArray(h.pages) ? h.pages : null;
+      fichiersGlobaux[i].dataPdfOriginal = (typeof h.dataPdfOriginal === 'string') ? h.dataPdfOriginal : '';
+    }
+  }
+}
+// Charge le nœud lourd une seule fois
+function _loadHeavyOnce(cb){
+  db.ref('psm_annot/image_globale_img').once('value').then(function(snap){
+    var hv = snap.val();
+    _heavyCache = Array.isArray(hv) ? hv : [];
+    _heavyLoaded = true;
+    _lastHeavySig = _heavySig(_heavyCache);
+    if (typeof cb === 'function') cb();
+  }).catch(function(err){
+    console.error('Erreur chargement images (lourd) :', err);
+    _heavyCache = []; _heavyLoaded = true;
+    if (typeof cb === 'function') cb();
+  });
+}
+
 db.ref('psm_annot/image_globale').on('value', function(snap) {
   var v = snap.val();
   if (Array.isArray(v) && v.length > 0) {
@@ -5025,16 +5185,17 @@ db.ref('psm_annot/image_globale').on('value', function(snap) {
       } else {
         nameOut = oldName;
       }
+      var h = (Array.isArray(_heavyCache) && _heavyCache[i]) ? _heavyCache[i] : null;
       return {
         name: nameOut,
-        data: (it && typeof it.data === 'string') ? it.data : '',
+        data: (h && typeof h.data === 'string') ? h.data : ((it && typeof it.data === 'string') ? it.data : ''),
         type: (it && typeof it.type === 'string') ? it.type : '',
         filename: (it && typeof it.filename === 'string') ? it.filename : '',
         stamps: (it && Array.isArray(it.stamps)) ? it.stamps : [],
         annotations: (it && Array.isArray(it.annotations)) ? it.annotations : [],
-        pages: (it && Array.isArray(it.pages)) ? it.pages : null,
+        pages: (h && Array.isArray(h.pages)) ? h.pages : ((it && Array.isArray(it.pages)) ? it.pages : null),
         pageIdx: (it && typeof it.pageIdx === 'number') ? it.pageIdx : 0,
-        dataPdfOriginal: (it && typeof it.dataPdfOriginal === 'string') ? it.dataPdfOriginal : ''
+        dataPdfOriginal: (h && typeof h.dataPdfOriginal === 'string') ? h.dataPdfOriginal : ((it && typeof it.dataPdfOriginal === 'string') ? it.dataPdfOriginal : '')
       };
     });
   } else if (typeof v === 'string' && v) {
@@ -5050,6 +5211,10 @@ db.ref('psm_annot/image_globale').on('value', function(snap) {
   if (currentFileTabIdx >= fichiersGlobaux.length) currentFileTabIdx = 0;
   _refreshFileTabsLeft();
   _renderGlobalImage();
+  // Lourd pas encore chargé → le charger une fois, réinjecter, re-render
+  if (!_heavyLoaded) {
+    _loadHeavyOnce(function(){ _applyHeavyToFichiers(); _refreshFileTabsLeft(); _renderGlobalImage(); });
+  }
   // Si une vue avait été supprimée par l'ancien « X », on persiste sa réapparition
   if (_tabsFixed && !_midFirebaseLoading && typeof _saveGlobalImage === 'function') _saveGlobalImage();
 });
@@ -5058,8 +5223,21 @@ db.ref('psm_annot/image_globale').on('value', function(snap) {
 function _saveItems() {
   if (_itemsSaveTimer) clearTimeout(_itemsSaveTimer);
   _itemsSaveTimer = setTimeout(function(){
-    db.ref('psm_annot/items').set(itemsParDept)
-      .catch(function(err){ console.error('Erreur sauvegarde items :', err); });
+    // 1) Capturer les photos AVANT toute écriture (le listener léger peut se redéclencher synchrone)
+    var sig = _itemsSig(itemsParDept);
+    var imgChanged = (sig !== _lastItemsSig);
+    if (imgChanged) {
+      _lastItemsSig = sig;
+      _itemsHeavyCache = _itemsHeavyFrom(itemsParDept);
+    }
+    // 2) Léger : items sans photo (noms, notes, dates, temps) — nœud écouté en direct
+    db.ref('psm_annot/items').set(_itemsLightFrom(itemsParDept))
+      .catch(function(err){ console.error('Erreur sauvegarde items (léger) :', err); });
+    // 3) Lourd : réécrit SEULEMENT si une photo a vraiment changé
+    if (imgChanged) {
+      db.ref('psm_annot/items_img').set(_itemsHeavyCache)
+        .catch(function(err){ console.error('Erreur sauvegarde photos items (lourd) :', err); });
+    }
   }, 400);
   if (typeof _saveSnapshotToSoumission === 'function') _saveSnapshotToSoumission();
 }
@@ -5074,8 +5252,23 @@ function _saveCurrentIdx() {
 function _saveGlobalImage() {
   if (_globalImgSaveTimer) clearTimeout(_globalImgSaveTimer);
   _globalImgSaveTimer = setTimeout(function(){
-    db.ref('psm_annot/image_globale').set(fichiersGlobaux)
-      .catch(function(err){ console.error('Erreur sauvegarde fichiers globaux :', err); });
+    // 1) Capturer le lourd AVANT toute écriture. Le .set du nœud léger peut redéclencher
+    //    le listener de façon SYNCHRONE, qui reconstruit fichiersGlobaux depuis _heavyCache.
+    //    Si le cache n'est pas à jour AVANT, l'image qu'on vient d'ajouter serait effacée.
+    var sig = _heavySig(fichiersGlobaux);
+    var heavyChanged = (sig !== _lastHeavySig);
+    if (heavyChanged) {
+      _lastHeavySig = sig;
+      _heavyCache = (fichiersGlobaux || []).map(_tabHeavy);
+    }
+    // 2) Léger : toujours écrit (étampes, annotations, noms…) — nœud écouté en direct
+    db.ref('psm_annot/image_globale').set((fichiersGlobaux || []).map(_tabLight))
+      .catch(function(err){ console.error('Erreur sauvegarde fichiers globaux (léger) :', err); });
+    // 3) Lourd : réécrit SEULEMENT si une image a vraiment changé
+    if (heavyChanged) {
+      db.ref('psm_annot/image_globale_img').set(_heavyCache)
+        .catch(function(err){ console.error('Erreur sauvegarde images (lourd) :', err); });
+    }
   }, 300);
   if (typeof _saveSnapshotToSoumission === 'function') _saveSnapshotToSoumission();
 }

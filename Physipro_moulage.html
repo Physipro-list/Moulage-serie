@@ -1438,7 +1438,7 @@
     ═══════════════════════════════════════════════════════════════════
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1723</title>
+  <title>PhysiPro Moulages v1726</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -9266,7 +9266,34 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     }
     
     // Render complet (utilisé uniquement quand nécessaire)
+    // v1724 — Index léger { cardId:{name,order,item,region} } pour AjoutRapide,
+    // qui n'a plus besoin de télécharger tout l'arbre 'moulages'. Best-effort, jamais bloquant.
+    function _writeMoulagesIndex() {
+      try {
+        if (typeof cardsData !== 'object' || !cardsData) return;
+        var idx = {};
+        Object.keys(cardsData).forEach(function(cardId){
+          var c = cardsData[cardId];
+          if (!c || typeof c !== 'object') return;
+          if (c.order === undefined || c.order === null || c.order === '') return;
+          idx[cardId] = {
+            name: (typeof c.name === 'string') ? c.name : '',
+            order: c.order,
+            item: (typeof c.item === 'string') ? c.item : '',
+            region: (typeof c.region === 'string') ? c.region : ''
+          };
+        });
+        var sig = JSON.stringify(idx);
+        if (sig === _writeMoulagesIndex._sig) return;   // rien changé → pas de réécriture
+        _writeMoulagesIndex._sig = sig;
+        if (typeof firebaseDb !== 'undefined' && firebaseDb) {
+          firebaseDb.ref('moulagesIndex').set(idx).catch(function(){});
+        }
+      } catch (e) { /* best-effort : ne jamais bloquer le rendu */ }
+    }
+
     function renderKanban() {
+      try { _writeMoulagesIndex(); } catch(e) {}
       try {
         const container = document.getElementById('kanbanView');
         if (!container) {
@@ -15072,14 +15099,24 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         }
         
         console.log(`📷 ${result.items.length} photos trouvées pour ${orderNumber}`);
-        
+
+        // v1726 — Lister une fois les miniatures (sous-dossier thumbs). Vide pour les
+        // vieilles photos → on garde la pleine taille (rétrocompatible).
+        let thumbUrlByName = {};
+        try {
+          const thumbsRes = await storage.ref(`photos/moulages/${orderNumber}/thumbs`).listAll();
+          await Promise.all(thumbsRes.items.map(async (ti) => {
+            try { thumbUrlByName[ti.name] = await ti.getDownloadURL(); } catch (e) {}
+          }));
+        } catch (e) { /* pas de dossier thumbs → vieilles photos */ }
+
         // Récupérer les URLs de téléchargement
         const photos = await Promise.all(result.items.map(async (item) => {
           const url = await item.getDownloadURL();
           return {
             name: item.name,
             downloadUrl: url,
-            thumbnailUrl: url, // Firebase n'a pas de miniatures, on utilise la même URL
+            thumbnailUrl: thumbUrlByName[item.name] || url, // miniature si dispo, sinon pleine taille
             fullPath: item.fullPath
           };
         }));
@@ -15113,6 +15150,24 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         };
         reader.readAsDataURL(file);
       });
+    }
+
+    // v1726 — Upload d'une photo PLEINE TAILLE + génération d'une vraie MINIATURE.
+    // La grille affiche la miniature (légère) ; la pleine taille n'est chargée qu'au zoom.
+    // Si la miniature échoue, on retombe sur la pleine taille (jamais bloquant).
+    async function _uploadPhotoWithThumb(file, orderNumber, fileName) {
+      const compressed = await compressPhotoFile(file);            // pleine taille (~1200px)
+      const ref = storage.ref(`photos/moulages/${orderNumber}/${fileName}`);
+      await ref.put(compressed, { contentType: 'image/jpeg' });
+      const downloadUrl = await ref.getDownloadURL();
+      let thumbnailUrl = downloadUrl;
+      try {
+        const thumb = await compressPhotoFile(file, 400, 0.5);     // miniature (~400px)
+        const tref = storage.ref(`photos/moulages/${orderNumber}/thumbs/${fileName}`);
+        await tref.put(thumb, { contentType: 'image/jpeg' });
+        thumbnailUrl = await tref.getDownloadURL();
+      } catch (e) { console.warn('Miniature non générée, pleine taille utilisée:', e && e.message); }
+      return { downloadUrl, thumbnailUrl, fullPath: `photos/moulages/${orderNumber}/${fileName}` };
     }
     
     // ═══ Upload de photos depuis la sidebar ═══
@@ -15179,26 +15234,20 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         // Créer un URL local pour affichage instantané
         const localUrl = URL.createObjectURL(file);
         
-        // Compresser
-        const compressed = await compressPhotoFile(file);
-        
         // Nom du fichier: timestamp + "moulage_photo"
         const timestamp = Date.now();
         const fileName = `${timestamp}_moulage_photo.jpg`;
         
-        // Upload vers Firebase Storage
-        const ref = storage.ref(`photos/moulages/${orderNumber}/${fileName}`);
-        await ref.put(compressed, { contentType: 'image/jpeg' });
-        
-        // Récupérer l'URL Firebase
-        const downloadUrl = await ref.getDownloadURL();
+        // Upload pleine taille + miniature (v1726)
+        const _up = await _uploadPhotoWithThumb(file, orderNumber, fileName);
+        const downloadUrl = _up.downloadUrl;
         
         // ═══ OPTIMISTIC UI: Ajouter la photo immédiatement dans la grille ═══
         const newPhoto = {
           name: fileName,
-          downloadUrl: downloadUrl,
-          thumbnailUrl: downloadUrl,
-          fullPath: `photos/moulages/${orderNumber}/${fileName}`
+          downloadUrl: _up.downloadUrl,
+          thumbnailUrl: _up.thumbnailUrl,
+          fullPath: _up.fullPath
         };
         
         // Ajouter au cache local
@@ -15277,23 +15326,20 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             continue;
           }
           
-          const compressed = await compressPhotoFile(file);
-          
           const timestamp = Date.now();
           const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
           const fileName = `${timestamp}_${safeName}`;
           
-          const ref = storage.ref(`photos/moulages/${orderNumber}/${fileName}`);
-          await ref.put(compressed, { contentType: 'image/jpeg' });
-          
-          const downloadUrl = await ref.getDownloadURL();
+          // Upload pleine taille + miniature (v1726)
+          const _up = await _uploadPhotoWithThumb(file, orderNumber, fileName);
+          const downloadUrl = _up.downloadUrl;
           
           // Ajouter au cache
           const newPhoto = {
             name: fileName,
-            downloadUrl: downloadUrl,
-            thumbnailUrl: downloadUrl,
-            fullPath: `photos/moulages/${orderNumber}/${fileName}`
+            downloadUrl: _up.downloadUrl,
+            thumbnailUrl: _up.thumbnailUrl,
+            fullPath: _up.fullPath
           };
           sidebarPhotos.push(newPhoto);
           galleryPhotos = sidebarPhotos;
@@ -17804,26 +17850,20 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           return;
         }
         
-        // Compresser
-        const compressed = await compressPhotoFile(file);
-        
         // Nom du fichier
         const timestamp = Date.now();
         const fileName = `${timestamp}_moulage_photo.jpg`;
         
-        // Upload vers Firebase Storage
-        const ref = storage.ref(`photos/moulages/${orderNumber}/${fileName}`);
-        await ref.put(compressed, { contentType: 'image/jpeg' });
-        
-        // Récupérer l'URL Firebase
-        const downloadUrl = await ref.getDownloadURL();
+        // Upload pleine taille + miniature (v1726)
+        const _up = await _uploadPhotoWithThumb(file, orderNumber, fileName);
+        const downloadUrl = _up.downloadUrl;
         
         // ═══ OPTIMISTIC UI: Injecter la photo immédiatement ═══
         const newPhoto = {
           name: fileName,
-          downloadUrl: downloadUrl,
-          thumbnailUrl: downloadUrl,
-          fullPath: `photos/moulages/${orderNumber}/${fileName}`
+          downloadUrl: _up.downloadUrl,
+          thumbnailUrl: _up.thumbnailUrl,
+          fullPath: _up.fullPath
         };
         
         // Mettre à jour les caches
@@ -19234,10 +19274,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           const photo = photos[i];
           statusEl.textContent = `⏳ Envoi photo ${i + 1}/${totalPhotos}...`;
           
-          // Créer une entrée SÉPARÉE pour chaque photo
+          // P4 — uploader la photo dans Storage et ne garder qu'une URL dans photoArchives
+          // (au lieu du base64 qui s'accumulait dans le RTDB et était re-téléchargé par BackupStation)
+          const photoName = `photo_${timestamp}_${i + 1}.jpg`;
+          const archStRef = storage.ref(`photos/archives/${photoArchiveCardId}/${photoName}`);
+          await archStRef.putString(photo, 'data_url');
+          const photoUrl = await archStRef.getDownloadURL();
           const photoData = {
-            name: `photo_${timestamp}_${i + 1}.jpg`,
-            data: photo
+            name: photoName,
+            url: photoUrl
           };
           
           const archiveRef = firebaseDb.ref('photoArchives').push();

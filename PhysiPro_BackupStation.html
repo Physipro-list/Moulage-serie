@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🛡️ Sauvegarde v13</title>
+<title>🛡️ Sauvegarde v28</title>
+<!-- v27 : horaires des passes ajustés → Ouverture + 12h00 + 15h25 (au lieu de 11h/14h/16h). 15h25 visé à la minute près (fenêtre m 25-26). -->
+<!-- v26 : FIX COÛT FIREBASE (P2) — suppression de la boucle HORAIRE (ckT) qui re-téléchargeait tout chaque heure. Cadence ramenée aux passes ciblées : Ouverture + 11h + 14h + 16h (fin de journée ajoutée). ~4 passes légères/jour au lieu de ~10. -->
+<!-- v25 : FIX COÛT FIREBASE (P1) — suppression de la DOUBLE lecture de 'moulages' et 'photoArchives'. runC les charge déjà (boucle modules) ; archiveMoulages réutilise ces données au lieu de les relire. Économie : 2 lectures complètes (photos comprises) par cycle. -->
 <!-- v24 : PLUS de dossier Photos à côté des fiches (retiré + nettoyage des anciens). Photos uniquement intégrées en base64 dans la fiche. Transfert UNIQUE via cache invisible IndexedDB (jamais de re-téléchargement). Gère aussi les photos de chat en URL. Signature v24 pour régénérer une fois. -->
 <!-- v23 : grosse alerte rouge plein écran si des photos n'ont PAS pu être sauvegardées (pour ne rien manquer). -->
 <!-- v22 : fiches Moulage 100% AUTONOMES — photos intégrées en base64 UNIQUEMENT (transférées une seule fois depuis Firebase, puis relues localement). AUCUN lien Firebase dans la fiche. Une photo non transférable est omise (avertissement au journal) plutôt que liée. Clic = agrandir. Signature v22 pour régénérer une fois. -->
@@ -112,8 +115,8 @@ body{font-family:-apple-system,sans-serif;background:#0a1628;color:#e2e8f0;overf
   <div class="details" id="details">
     <div class="sched">
       <div class="si"><span class="sd wait" id="sdO"></span> Ouv.</div>
-      <div class="si"><span class="sd wait" id="sd11"></span> 11h</div>
-      <div class="si"><span class="sd wait" id="sd14"></span> 14h</div>
+      <div class="si"><span class="sd wait" id="sd12"></span> 12h</div>
+      <div class="si"><span class="sd wait" id="sd1525"></span> 15h25</div>
       <span class="sep"></span>
       <span class="last">📅 <b id="slD">Jamais</b></span>
     </div>
@@ -192,7 +195,7 @@ async function vP(){if(!dirH)return false;try{var q=await dirH.queryPermission({
 
 async function toggleBkp(){if(isOn){stopB();}else{if(!dirH){if(!await pickFolder())return;}if(!await vP()){if(!await pickFolder())return;}await startB();}}
 async function tryAuto(){try{var s=await lDir();if(s)dirH=s;}catch(e){}if(localStorage.getItem('bk')==='1'&&dirH){try{if(await vP()){await startB();return;}}catch(e){}lg('⚠️ Permission expirée','warn');}upUI();}
-async function startB(){isOn=true;hasError=false;localStorage.setItem('bk','1');document.getElementById('bF').disabled=false;lg('🛡️ ON','ok');toast('🛡️ ON','ok');setTimeout(function(){runC('Ouverture');},800);if(ckT)clearInterval(ckT);ckT=setInterval(function(){if(isOn)runC('Auto');},60*60*1000);if(scT)clearInterval(scT);scT=setInterval(function(){if(!isOn)return;var n=new Date(),h=n.getHours(),m=n.getMinutes(),d=n.toISOString().substring(0,10);if((h===11||h===14)&&m<2){var k='bk_'+d+'_'+h;if(!localStorage.getItem(k)){localStorage.setItem(k,'1');runC(h+'h');}}},60*1000);upUI();upS();}
+async function startB(){isOn=true;hasError=false;localStorage.setItem('bk','1');document.getElementById('bF').disabled=false;lg('🛡️ ON','ok');toast('🛡️ ON','ok');setTimeout(function(){runC('Ouverture');},800);if(ckT){clearInterval(ckT);ckT=null;}/* v26: plus de boucle horaire — passes ciblées seulement */if(scT)clearInterval(scT);scT=setInterval(function(){if(!isOn)return;var n=new Date(),h=n.getHours(),m=n.getMinutes(),d=n.toISOString().substring(0,10);if((h===12&&m<2)||(h===15&&m>=25&&m<27)){var k='bk_'+d+'_'+h;if(!localStorage.getItem(k)){localStorage.setItem(k,'1');runC(h===15?'15h25':'12h');}}},60*1000);upUI();upS();}
 function stopB(){isOn=false;localStorage.setItem('bk','0');if(ckT){clearInterval(ckT);ckT=null;}if(scT){clearInterval(scT);scT=null;}document.getElementById('bF').disabled=true;lg('⏸️ OFF','warn');upUI();}
 function forceBackup(){if(!isOn)return;lastH={};lg('🔄 Forcée','info');runC('Forcée');}
 
@@ -202,14 +205,16 @@ async function runC(trig){
   lg('═ ['+trig+'] ═','info');hasError=false;
   var root=dirH; // les modules vont directement dans le dossier choisi (ex: "Back up logiciel")
   var tf=0,tb=0,mk=Object.keys(M);
+  var _mlgCache=null,_pArchCache=null; // v25: données déjà chargées ici → évite la 2e lecture complète dans archiveMoulages
   for(var i=0;i<mk.length;i++){
     var n=mk[i],mod=M[n],md={},pk=Object.keys(mod.p);mS[n]='run';renderM();
     for(var j=0;j<pk.length;j++){try{var s=await fbDb.ref(mod.p[pk[j]].r).once('value');var v=s.val();if(v!==null)md[pk[j]]=v;}catch(e){}}
+    if(n==='Moulages'){_mlgCache=md.a||null;_pArchCache=md.g||null;} // v25: réutilisé par archiveMoulages (pas de re-lecture)
     var h=sH(JSON.stringify(md));if(h===lastH[n]&&trig!=='Forcée'){mS[n]='ok';renderM();continue;}lastH[n]=h;
     try{if(n==='Moulages'){/* Pas de JSON pour Moulages: l'archive Fiche.html (archiveMoulages) fait le travail */mS[n]='ok';mZ[n]='fiches';lg('  ✅ Moulages → fiches seulement (pas de JSON)','ok');}else{var mf=await root.getDirectoryHandle(n,{create:true});var fn=day+'_'+ts+'.json';var c=JSON.stringify({module:n,backup:{date:day,heure:ts,trigger:trig,user:fbUser?fbUser.email:'?'},data:md},null,2);var fh=await mf.getFileHandle(fn,{create:true});var w=await fh.createWritable();await w.write(new Blob([c],{type:'application/json'}));await w.close();try{await xlsWriteModule(mf,n,md);}catch(_x){console.error('xlsx '+n,_x);}var mb=(c.length/(1024*1024)).toFixed(1);tf++;tb+=c.length;mS[n]='ok';mZ[n]=mb+'M';lg('  ✅ '+n+' '+mb+'M','ok');}}catch(e){mS[n]='err';hasError=true;lg('  ❌ '+n,'err');}renderM();
   }
   if(tf>0){localStorage.setItem('bk_last',new Date().toISOString());lg('✅ '+tf+' mod ('+(tb/(1024*1024)).toFixed(1)+'M)','ok');toast('✅ '+tf+' sauvegardés','ok');var tk='bk_td_'+day;var td=JSON.parse(localStorage.getItem(tk)||'[]');td.push(ts);localStorage.setItem(tk,JSON.stringify(td));}else{lg('— Aucun chang.','t');}
-  try{await archiveMoulages(trig);}catch(e){lg('  ⚠️ Archive Moulage: '+e.message,'err');hasError=true;}
+  try{await archiveMoulages(trig,_mlgCache,_pArchCache);}catch(e){lg('  ⚠️ Archive Moulage: '+e.message,'err');hasError=true;}
   try{await archiveQuestionnements(trig);}catch(e){lg('  ⚠️ Archive Questionnements: '+e.message,'err');hasError=true;}
   upUI();upS();
 }
@@ -227,7 +232,7 @@ function upUI(){
   var last=localStorage.getItem('bk_last'),sl=document.getElementById('slD');
   if(last){var d=new Date(last);sl.textContent=d.toLocaleDateString('fr-CA')+' '+d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});}else{sl.textContent='Jamais';}
 }
-function upS(){var day=new Date().toISOString().substring(0,10),done=JSON.parse(localStorage.getItem('bk_td_'+day)||'[]'),h=new Date().getHours();document.getElementById('sdO').className='sd '+(done.length>0?'done':(isOn?'next':'wait'));document.getElementById('sd11').className='sd '+(done.some(function(t){return t.startsWith('11');})?'done':(isOn&&h<11?'next':'wait'));document.getElementById('sd14').className='sd '+(done.some(function(t){return t.startsWith('14');})?'done':(isOn&&h<14?'next':'wait'));}
+function upS(){var day=new Date().toISOString().substring(0,10),done=JSON.parse(localStorage.getItem('bk_td_'+day)||'[]'),h=new Date().getHours();document.getElementById('sdO').className='sd '+(done.length>0?'done':(isOn?'next':'wait'));document.getElementById('sd12').className='sd '+(done.some(function(t){return t.startsWith('12');})?'done':(isOn&&h<12?'next':'wait'));document.getElementById('sd1525').className='sd '+(done.some(function(t){return t.startsWith('15');})?'done':(isOn&&h<15?'next':'wait'));}
 window.addEventListener('online',function(){document.getElementById('offBar').style.display='none';});
 window.addEventListener('offline',function(){document.getElementById('offBar').style.display='block';});
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeNav();});
@@ -331,17 +336,20 @@ function mlgBuildFiche(card,gallery,photoMap){
     +'</body></html>';
 }
 
-async function archiveMoulages(trig){
+async function archiveMoulages(trig,preMlg,prePArch){
   if(!dirH)return;
   var mlgCorsHint=false;
   var mlgPhotoFailTotal=0;
   hideBigError();
   var moulages={},pArch={};
-  try{moulages=(await fbDb.ref('moulages').once('value')).val()||{};}catch(e){return;}
-  try{pArch=(await fbDb.ref('photoArchives').once('value')).val()||{};}catch(e){}
+  // v25: réutilise les données déjà chargées par runC (évite la 2e lecture complète, photos comprises). Repli sur lecture directe seulement si absentes (ex: appel manuel hors runC).
+  if(preMlg&&typeof preMlg==='object'){moulages=preMlg;}
+  else{try{moulages=(await fbDb.ref('moulages').once('value')).val()||{};}catch(e){return;}}
+  if(prePArch&&typeof prePArch==='object'){pArch=prePArch;}
+  else{try{pArch=(await fbDb.ref('photoArchives').once('value')).val()||{};}catch(e){}}
   // Regrouper les photos d'archive mobile par cardId
   var archByCard={};
-  Object.keys(pArch).forEach(function(k){var d=pArch[k];if(!d||!d.cardId)return;(d.photos||[]).forEach(function(p){if(p&&p.data){(archByCard[d.cardId]=archByCard[d.cardId]||[]).push(p.data);}});});
+  Object.keys(pArch).forEach(function(k){var d=pArch[k];if(!d||!d.cardId)return;(d.photos||[]).forEach(function(p){if(!p)return;var v=p.url||p.data;if(v){(archByCard[d.cardId]=archByCard[d.cardId]||[]).push(v);}});});
   var aroot;
   try{aroot=await dirH.getDirectoryHandle('Moulages',{create:true});}catch(e){lg('  ⚠️ Dossier Moulages: '+e.message,'err');return;}
   var ids=Object.keys(moulages),done=0;
@@ -377,7 +385,7 @@ async function archiveMoulages(trig){
       }
       // archive mobile (base64)
       var arr=archByCard[cid]||[];
-      for(var a=0;a<arr.length;a++){ if(regB64(arr[a]))archGal.push(arr[a]); }
+      for(var a=0;a<arr.length;a++){ if(regB64(arr[a]))archGal.push(arr[a]); else if(regUrl(arr[a]))archGal.push(arr[a]); }
       // historique : base64 OU url
       if(card.historique&&typeof card.historique==='object'){Object.keys(card.historique).forEach(function(k){var e=card.historique[k];if(!e||!e.photo)return;if(!regB64(e.photo))regUrl(e.photo);});}
 

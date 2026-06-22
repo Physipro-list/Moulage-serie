@@ -433,7 +433,27 @@ async function doLogin(){
 function loadMoulIndex(){
   if(_moulLoading || _moulIndex) return;
   _moulLoading = true;
-  // Chargé une fois par session ; on n'en garde que id/numéro/nom (léger).
+  // Léger : on lit d'abord l'index dédié 'moulagesIndex' (maintenu par la page moulage).
+  // Repli sur la lecture complète de 'moulages' s'il n'existe pas encore.
+  db.ref('moulagesIndex').once('value').then(function(snap){
+    var all = snap.val();
+    if(all && typeof all === 'object' && Object.keys(all).length){
+      var map = {};
+      Object.keys(all).forEach(function(cardId){
+        var c = all[cardId]; if(!c) return;
+        var key = normNum(c.order);
+        if(key) map[key] = { cardId: cardId, name: c.name || '(sans nom)', order: c.order, item: c.item || '', region: c.region || '' };
+      });
+      _moulIndex = map; _moulLoading = false;
+      var v = document.getElementById('numInput').value;
+      if(v) onNumInput(v);
+    } else {
+      _loadMoulIndexFull();   // index pas encore présent → repli
+    }
+  }).catch(function(){ _loadMoulIndexFull(); });
+}
+function _loadMoulIndexFull(){
+  // Repli : lecture complète de l'arbre moulages (comportement d'origine)
   db.ref('moulages').once('value').then(function(snap){
     var all = snap.val() || {}, map = {};
     Object.keys(all).forEach(function(cardId){
