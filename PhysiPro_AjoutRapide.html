@@ -391,7 +391,7 @@ const DEFAULT_ACTIONS = [
 ];
 
 let db = null, currentUser = null, currentUserName = '';
-let _moulIndex = null, _moulLoading = false;     // map: numéro normalisé -> {cardId, name}
+let _moulIndex = null, _moulLoading = false, _moulIndexFailed = false;     // map: numéro normalisé -> {cardId, name}
 let _actions = DEFAULT_ACTIONS.slice();
 let _selectedCardId = null, _selectedName = '', _selectedAction = null;
 let _quickPhoto = null;
@@ -431,10 +431,11 @@ async function doLogin(){
 
 // ═══ INDEX DES MOULAGES (numéro -> nom) ═══
 function loadMoulIndex(){
-  if(_moulLoading || _moulIndex) return;
+  if(_moulLoading || _moulIndex || _moulIndexFailed) return;
   _moulLoading = true;
-  // Léger : on lit d'abord l'index dédié 'moulagesIndex' (maintenu par la page moulage).
-  // Repli sur la lecture complète de 'moulages' s'il n'existe pas encore.
+  // LÉGER UNIQUEMENT : on lit seulement l'index dédié 'moulagesIndex' (maintenu par la page Moulage).
+  // AUCUN repli sur la lecture complète de 'moulages' (ça coûterait des frais à chaque fois).
+  // Si l'index manque, on AVERTIT clairement au lieu de re-télécharger.
   db.ref('moulagesIndex').once('value').then(function(snap){
     var all = snap.val();
     if(all && typeof all === 'object' && Object.keys(all).length){
@@ -448,24 +449,23 @@ function loadMoulIndex(){
       var v = document.getElementById('numInput').value;
       if(v) onNumInput(v);
     } else {
-      _loadMoulIndexFull();   // index pas encore présent → repli
+      _moulLoading = false;
+      _moulIndexFail('index vide ou absent');
     }
-  }).catch(function(){ _loadMoulIndexFull(); });
+  }).catch(function(e){
+    _moulLoading = false;
+    _moulIndexFail((e && e.message) || 'lecture refusée');
+  });
 }
-function _loadMoulIndexFull(){
-  // Repli : lecture complète de l'arbre moulages (comportement d'origine)
-  db.ref('moulages').once('value').then(function(snap){
-    var all = snap.val() || {}, map = {};
-    Object.keys(all).forEach(function(cardId){
-      var c = all[cardId]; if(!c) return;
-      var key = normNum(c.order);
-      if(key) map[key] = { cardId: cardId, name: c.name || '(sans nom)', order: c.order, item: c.item || '', region: c.region || '' };
-    });
-    _moulIndex = map; _moulLoading = false;
-    // Re-tester si un numéro est déjà entré
-    var v = document.getElementById('numInput').value;
-    if(v) onNumInput(v);
-  }).catch(function(){ _moulLoading=false; });
+// Aucune lecture lourde : on signale le problème, c'est tout.
+function _moulIndexFail(why){
+  _moulIndexFailed = true;
+  console.error('⚠️ [AjoutRapide] moulagesIndex indisponible (' + why + '). AUCUNE lecture complète faite (économie de frais). '
+    + 'Ouvre la page Moulage une fois pour régénérer l\'index, puis recharge AjoutRapide.');
+  var line = document.getElementById('confirmLine');
+  if(line){ line.style.display=''; line.className='ar-confirm bad';
+    line.textContent='⚠️ Index moulages indisponible — ouvre la page Moulage une fois, puis recharge.'; }
+  if(typeof showToast === 'function') showToast('⚠️ Index moulages indisponible (voir console). Aucun téléchargement lourd fait.', true);
 }
 
 function normNum(x){ return (x===undefined||x===null) ? '' : String(x).trim().replace(/\s+/g,'').replace(/^0+/,''); }
@@ -476,7 +476,10 @@ function onNumInput(val){
   var line = document.getElementById('confirmLine');
   var key = normNum(val);
   if(!key){ setMoulage(null); line.style.display='none'; hideDropdown(); return; }
-  if(!_moulIndex){ setMoulage(null); line.style.display=''; line.className='ar-confirm dim'; line.textContent='Recherche en cours…'; loadMoulIndex(); _numTimer=setTimeout(function(){onNumInput(val);},500); return; }
+  if(!_moulIndex){
+    if(_moulIndexFailed){ setMoulage(null); line.style.display=''; line.className='ar-confirm bad'; line.textContent='⚠️ Index indisponible — ouvre la page Moulage une fois, puis recharge.'; return; }
+    setMoulage(null); line.style.display=''; line.className='ar-confirm dim'; line.textContent='Recherche en cours…'; loadMoulIndex(); _numTimer=setTimeout(function(){onNumInput(val);},500); return;
+  }
   _numTimer = setTimeout(function(){
     var exact = _moulIndex[key];
     // Recherche par préfixe (la liste se raccourcit à mesure qu'on tape)
