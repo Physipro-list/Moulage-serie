@@ -31,7 +31,6 @@
   var NAV_MODULES = {
     moulage:     { icon: '🏭', label: 'Moulage',          sub: 'Gestion des moulages',      file: 'Physipro_moulage.html',                color: '#3b82f6' },
     serie:       { icon: '📋', label: 'Série+',            sub: 'Commandes de série',         file: 'PhysiPro_Serie_.html',                  color: '#f97316' },
-    modmoulage:  { icon: '✏️', label: 'Modification moulage', sub: 'Demandes de modification',  file: 'PhysiPro_Modification_Moulage.html',   color: '#60a5fa' },
     inspection:  { icon: '☑️', label: 'Insp. Atelier',     sub: 'Inspection Atelier',         file: 'PhysiPro_Inspection_Atelier.html',      color: '#22c55e' },
     inspcouture: { icon: '🧵', label: 'Prod. Couture',     sub: 'Production Couture',         file: 'PhysiPro_Production_Couture.html',      color: '#a855f7' },
     serviceClient:        { icon: '🎧', label: 'Questionnements',  sub: 'Questionnements',            file: 'PhysiPro_Questionnements.html',           color: '#f59e0b' },
@@ -41,10 +40,12 @@
 
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
-    'moulage', 'modmoulage', 'serviceClient', 'inspection', 'inspcouture', 'inspfinale'
+    'moulage', 'serviceClient', 'inspection', 'inspcouture', 'inspfinale'
   ];
 
-  // ── RÈGLE MOBILE (v_nav2) ──────────────────────────────
+  // ── RÈGLE MOBILE (v_nav3) ──────────────────────────────
+  // v_nav3 : module « Modification moulage » (modmoulage) retiré partout ;
+  //          rangée 1 du menu = Moulage + Questionnements (2 colonnes).
   // Moulage pour tout le monde ; Questionnements (serviceClient)
   // UNIQUEMENT pour les 2 Marie. Plus de bypass "full access" sur mobile.
   var MOBILE_BASE = ['moulage'];
@@ -62,7 +63,7 @@
   //  ACCÈS PAR UTILISATEUR (emails en base64)
   // ══════════════════════════════════════
   var HUB_ACCESS = {
-    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','modmoulage','inspection','inspcouture','inspfinale','serviceClient'], // atelieratp (Daniel) — Modification moulage
+    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient'], // atelieratp (Daniel)
     'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient'],   // valerie18 (Valérie)
     'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','serviceClient'],                              // simdut (Cassie)
     'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient'],                // michelle.bouchard
@@ -99,7 +100,7 @@
 .ppnav-subtitle{font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;}\
 .ppnav-grid{display:flex;flex-direction:column;gap:10px;}\
 .ppnav-row{display:grid;gap:10px;}\
-.ppnav-row.row1{grid-template-columns:1fr 1fr 1fr;}\
+.ppnav-row.row1{grid-template-columns:1fr 1fr;}\
 .ppnav-row.row2{grid-template-columns:1fr 1fr 1fr;}\
 .ppnav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 6px 10px;border-radius:12px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.03);cursor:pointer;text-decoration:none;transition:all .2s;position:relative;}\
 .ppnav-item:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.3);}\
@@ -198,8 +199,8 @@
 
     grid.innerHTML = '';
 
-    // Rangée 1 : Moulage + Modification moulage + Questionnements (3 colonnes)
-    var ROW1 = ['moulage', 'modmoulage', 'serviceClient'];
+    // Rangée 1 : Moulage + Questionnements (2 colonnes, pleine largeur)
+    var ROW1 = ['moulage', 'serviceClient'];
     // Rangée 2 : Insp. Atelier + Prod. Couture + Insp. Finale (3 colonnes)
     var ROW2 = ['inspection', 'inspcouture', 'inspfinale'];
 
