@@ -8987,16 +8987,18 @@ function _annotCreatePDFInner(opts){
         doc.text('Demande de modification moulage \u00B7 '+today, W-M, H-15, {align:'right'});
       }
       // Un bloc-face : photo \u00e0 gauche, demandes \u00e0 droite (texte r\u00e9duit, num\u00e9ro sur la m\u00eame ligne)
-      function drawFace(face, yTop, blockH){
+      function drawFace(face, yTop, blockH, solo){
         doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(ink[0],ink[1],ink[2]);
         doc.text((face.name||'Vue').toUpperCase(), M, yTop+9);
         var bodyTop=yTop+20, bodyH=blockH-20;
-        // v52 : séparation au milieu de la feuille — photo dans la moitié gauche, demandes dès la moitié
-        var midX=W/2;
-        var LW=(midX-M)-14, RX=midX+6, RW=W-M-RX;
-        doc.setDrawColor(line[0],line[1],line[2]); doc.setLineWidth(0.8); doc.line(midX, bodyTop, midX, yTop+blockH);
+        // Photo à gauche, demandes à droite. En mode « solo » (une seule photo sur la page),
+        // on élargit la colonne photo pour remplir la page et rendre la photo plus imposante.
+        var midX=W/2, LW, divX, RX, RW;
+        if(solo){ LW=Math.round((W-2*M)*0.56); divX=M+LW+8; RX=M+LW+16; RW=W-M-RX; }
+        else    { LW=(midX-M)-14;             divX=midX;    RX=midX+6;   RW=W-M-RX; }
+        doc.setDrawColor(line[0],line[1],line[2]); doc.setLineWidth(0.8); doc.line(divX, bodyTop, divX, yTop+blockH);
         if(face.dataUrl && face.iw && face.ih){
-          var maxH=Math.min(bodyH, 250);   // v61 : plafond de hauteur des photos
+          var maxH=Math.min(bodyH, solo?430:250);   // seule photo sur la page → plus grande
           var w=LW, h=LW*face.ih/face.iw;
           if(h>maxH){ h=maxH; w=h*face.iw/face.ih; }
           try{ doc.addImage(face.dataUrl,'JPEG', M, bodyTop, w, h); }catch(e){}
@@ -9028,21 +9030,47 @@ function _annotCreatePDFInner(opts){
         }
         if(n===0){ doc.setFont('helvetica','italic'); doc.setFontSize(8.5); doc.setTextColor(150,150,150); doc.text('Aucune demande pour cette vue.', RX, bodyTop+16); }
       }
+      // Une page à 2 faces (haut/bas) ou 1 face seule (pleine hauteur, plus grande).
+      function drawPage(faces, p){
+        var hb=pageHeader(), ib=infoStrip(hb);
+        var gap=14, midY=H/2, topY=ib+8;
+        if(p+1>=faces.length){                       // une seule face sur la page
+          drawFace(faces[p], topY, (H-30)-topY, true);
+        } else {
+          drawFace(faces[p], topY, (midY-gap/2)-topY, false);
+          doc.setDrawColor(20,28,42); doc.setLineWidth(1.6); doc.line(M, midY, W-M, midY);
+          drawFace(faces[p+1], midY+gap/2, (H-30)-(midY+gap/2), false);
+        }
+        footer();
+      }
       function render(){
-        for(var p=0;p<composed.length;p+=2){
-          if(p>0) doc.addPage();
-          var hb=pageHeader();
-          var ib=infoStrip(hb);
-          var gap=14, midY=H/2;
-          var topY=ib+8;
-          var blockH0=(midY-gap/2)-topY;            // vue du haut : du bandeau jusqu'au centre
-          var blockH1=(H-30)-(midY+gap/2);          // vue du bas : du centre jusqu'au pied
-          drawFace(composed[p], topY, blockH0);
-          // Séparateur horizontal exactement au centre vertical de la page
-          doc.setDrawColor(20,28,42); doc.setLineWidth(1.6);
-          doc.line(M, midY, W-M, midY);
-          if(composed[p+1]) drawFace(composed[p+1], midY+gap/2, blockH1);
-          footer();
+        if(composed.length && composed[0].group!=null){
+          // ---- Mode téléphone : on REGROUPE les faces par item (siège / dossier).
+          // Les photos d'un même item se suivent dans un bloc ; un nouvel item démarre
+          // sur une nouvelle page. Une face seule occupe toute la hauteur (photo plus grande).
+          var groups=[], gk=null, arr=null;
+          for(var i=0;i<composed.length;i++){ var f=composed[i]; if(f.group!==gk){ gk=f.group; arr=[]; groups.push(arr); } arr.push(f); }
+          var firstPage=true;
+          for(var g=0; g<groups.length; g++){
+            var faces=groups[g];
+            for(var p=0;p<faces.length;p+=2){
+              if(!firstPage) doc.addPage();
+              firstPage=false;
+              drawPage(faces, p);
+            }
+          }
+        } else {
+          // ---- Mode PC d'origine (inchangé) : 2 faces par page en continu ----
+          for(var p=0;p<composed.length;p+=2){
+            if(p>0) doc.addPage();
+            var hb=pageHeader(); var ib=infoStrip(hb);
+            var gap=14, midY=H/2; var topY=ib+8;
+            var blockH0=(midY-gap/2)-topY; var blockH1=(H-30)-(midY+gap/2);
+            drawFace(composed[p], topY, blockH0, false);
+            doc.setDrawColor(20,28,42); doc.setLineWidth(1.6); doc.line(M, midY, W-M, midY);
+            if(composed[p+1]) drawFace(composed[p+1], midY+gap/2, blockH1, false);
+            footer();
+          }
         }
         var moulageFolder=_odSanFolder((soumCmd||'SANS-NUM')+' - '+(soum||'Sans nom'));
         var fn='Demande_modification_moulage.pdf';
@@ -9057,10 +9085,12 @@ function _annotCreatePDFInner(opts){
       var composed=[];
       (function compose(i){
         if(i>=tabs.length){ render(); return; }
-        _annotCompositeDataURL(tabs[i], function(dataUrl,iw,ih){
-          composed.push({ name:(tabs[i].name||'Vue'), anns:(tabs[i].annotations||[]), dataUrl:dataUrl, iw:iw, ih:ih });
-          compose(i+1);
-        });
+        (function(t){
+          _annotCompositeDataURL(t, function(dataUrl,iw,ih){
+            composed.push({ name:(t.name||'Vue'), anns:(t.annotations||[]), dataUrl:dataUrl, iw:iw, ih:ih, group:(t.group!=null?t.group:null) });
+            compose(i+1);
+          });
+        })(tabs[i]);
       })(0);
     });
   });
@@ -9478,13 +9508,13 @@ document.addEventListener('keydown', function(e){
   box-shadow:0 6px 20px rgba(0,0,0,.45); touch-action:manipulation;
 }
 .pm-stage img{ display:block; width:100%; height:auto; user-select:none; -webkit-user-drag:none; }
-/* en phase "associer", la photo reste visible mais compacte */
+/* en phase "associer", la photo reste visible mais compacte (PAS de sticky :
+   la sticky masquait la barre des photos « ＋ Photo » au-dessus) */
 #pmOverlay.pm-assign .pm-stagewrap{
-  position:sticky; top:0; z-index:5;
   background:linear-gradient(to bottom,#04152c,#0d2140);
 }
-#pmOverlay.pm-assign .pm-stage{ max-height:38vh; }
-#pmOverlay.pm-assign .pm-stage img{ max-height:38vh; width:auto; margin:0 auto; }
+#pmOverlay.pm-assign .pm-stage{ max-height:34vh; }
+#pmOverlay.pm-assign .pm-stage img{ max-height:34vh; width:auto; margin:0 auto; }
 
 /* pastilles rondes numérotées */
 .pm-dot{
@@ -9705,17 +9735,21 @@ document.addEventListener('keydown', function(e){
 .pm-info-input::placeholder{ color:rgba(255,255,255,.5); }
 
 /* ---- sélecteur de partie (siège / dossier) ---- */
-.pm-parts{ display:none; gap:8px; padding:8px 10px 0; }
-#pmOverlay.pm-multi:not(.pm-info-phase) .pm-parts{ display:flex; }
+/* barre des photos (Siège 1, Siège 2, Dossier 1… + ＋ Photo) : rangée défilante */
+.pm-parts{ display:none; gap:8px; padding:8px 10px 2px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+#pmOverlay.pm-place-phase .pm-parts,
+#pmOverlay.pm-assign .pm-parts{ display:flex; }
 .pm-part{
-  flex:1 1 0; display:flex; align-items:center; justify-content:center; gap:7px;
-  padding:11px 8px; border-radius:12px; font-size:14.5px; font-weight:800; cursor:pointer;
+  flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:7px;
+  padding:10px 13px; border-radius:12px; font-size:14px; font-weight:800; cursor:pointer;
   background:rgba(255,255,255,.07); color:#cfe0f7; border:1.5px solid rgba(255,255,255,.18);
+  white-space:nowrap;
 }
 .pm-part.on{ background:linear-gradient(to bottom,#2f6fd0,#1b47a0); color:#fff; border-color:#4f8be6; }
 .pm-part .pm-part-dot{ width:9px; height:9px; border-radius:50%; background:#f59e0b; box-shadow:0 0 0 2px rgba(0,0,0,.25); }
 .pm-part.done .pm-part-dot{ background:#22c55e; }
 .pm-part:active{ transform:scale(.98); }
+.pm-part-add{ background:rgba(34,197,94,.18); color:#eafff1; border:1.5px dashed rgba(34,197,94,.6); }
 
 /* ---- splash anti-flash (mode téléphone) ---- */
 #pmBoot{ display:none; }
@@ -9731,10 +9765,12 @@ html.pm-booting #pmBoot{
 .pm-boot-spin{ width:34px; height:34px; border-radius:50%; border:3px solid rgba(255,255,255,.22); border-top-color:#60a5fa; animation:pmspin .8s linear infinite; }
 @keyframes pmspin{ to{ transform:rotate(360deg); } }
 html.pm-phone #pmOpenBtn{ display:none; }
-/* en mode téléphone : pas de double-tap qui zoome ; la page ne se déplace plus */
-html.pm-phone, html.pm-phone body{ touch-action:manipulation; overscroll-behavior:none; }
+/* en mode téléphone : AUCUN zoom (ni pincement ni double-tap), le défilement 1 doigt reste OK.
+   « pan-x pan-y » autorise le défilement mais interdit le pincement (contrairement à « manipulation »). */
+html.pm-phone, html.pm-phone body{ touch-action:pan-x pan-y; overscroll-behavior:none; background:#04152c; }
 html.pm-phone #pmOverlay, html.pm-phone #pmBoot,
-html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
+html.pm-phone #pmSheet, html.pm-phone #pmAddMenu,
+html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
 </style>
 
 <!-- Bouton d'ouverture -->
@@ -9842,9 +9878,13 @@ html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
   // Chaque partie a sa propre photo et ses propres ronds/phrases.
   var PARTS = [ {key:'siege',label:'Siège',icon:'🪑'}, {key:'dossier',label:'Dossier',icon:'🛋️'} ];
   function partLabel(k){ for(var i=0;i<PARTS.length;i++){ if(PARTS[i].key===k) return PARTS[i].label; } return k; }
-  function freshData(){ return { siege:{ on:true, photo:'', points:[] }, dossier:{ on:false, photo:'', points:[] } }; }
+  // Chaque item (siège/dossier) peut contenir PLUSIEURS photos (« vues ») : Siège 1, Siège 2…
+  // Chaque vue a sa propre photo + ses propres ronds/phrases.
+  function newView(){ return { photo:'', points:[] }; }
+  function freshData(){ return { siege:{ on:true, views:[newView()] }, dossier:{ on:false, views:[newView()] } }; }
   var data = freshData();
-  var cur = 'siege';      // partie active
+  var cur = 'siege';      // item actif (siege|dossier)
+  var vi = 0;             // index de la vue (photo) active dans l'item
   var phase = 'info';     // 'info' | 'photo' | 'place' | 'assign'
   var fromAssign = false; // true quand on revient placer des points depuis l'étape « phrases »
   var sheetIdx = -1;      // point en cours d'édition dans la feuille
@@ -9852,8 +9892,12 @@ html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
   var catFilter = null;   // catégorie filtrée
   var modInfo = { benef:'', cmd:'' };  // infos de la demande
 
-  function P(){ return data[cur]; }                 // partie active
-  function points(){ return data[cur].points; }     // ronds de la partie active
+  function P(){ return data[cur]; }                     // item actif
+  function V(){ return data[cur].views[vi]; }           // vue (photo) active
+  function points(){ return V().points; }               // ronds de la vue active
+  function viewLabel(k,i,total){ var t=(total!=null)?total:data[k].views.length; return partLabel(k)+(t>1?(' '+(i+1)):''); }
+  function curViewLabel(){ return viewLabel(cur, vi, data[cur].views.length); }
+  function itemHasPhoto(k){ return data[k].views.some(function(v){ return !!v.photo; }); }
   function selectedKeys(){ var out=[]; for(var i=0;i<PARTS.length;i++){ if(data[PARTS[i].key].on) out.push(PARTS[i].key); } return out; }
 
   // Résumé texte d'une modification (miroir de _modSummary)
@@ -9868,18 +9912,18 @@ html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
 
   // ---------- Photo (par partie) ----------
   function showPhoto(){
-    var img=E('pmPhoto'), no=E('pmNoPhoto'), src=P().photo;
+    var img=E('pmPhoto'), no=E('pmNoPhoto'), src=V().photo;
     if(src){ img.src=src; img.style.display='block'; no.style.display='none'; }
     else { img.removeAttribute('src'); img.style.display='none'; no.style.display='block'; }
-    var lbl=E('pmNoPhotoLbl'); if(lbl) lbl.textContent='Prenez la photo du '+partLabel(cur).toLowerCase();
+    var lbl=E('pmNoPhotoLbl'); if(lbl) lbl.textContent='Prenez la photo du '+curViewLabel().toLowerCase();
   }
   function onFile(ev){
     var f=ev.target.files && ev.target.files[0]; if(!f) return;
     var r=new FileReader();
     r.onload=function(){
-      var had=!!P().photo;
-      P().photo=r.result;
-      if(had) P().points=[];             // on reprend la photo → on repart des points à zéro
+      var had=!!V().photo;
+      V().photo=r.result;
+      if(had) V().points=[];             // on reprend la photo → on repart des points à zéro
       if(phase==='photo') phase='place'; // la photo prise = confirmée → on place directement les points
       showPhoto(); render(); window.scrollTo(0,0);
     };
@@ -9920,7 +9964,7 @@ html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
   }
 
   function renderList(){
-    var box=E('pmList'), pl=esc(partLabel(cur).toLowerCase());
+    var box=E('pmList'), pl=esc(curViewLabel().toLowerCase());
     if(phase==='photo'){ box.innerHTML=''; return; }   // liste masquée en phase photo
     if(!points().length){
       box.innerHTML='<div class="pm-list-empty">Aucun rond placé sur le '+pl+'.<br>Touchez la photo pour ajouter la modification n° 1.</div>';
@@ -9974,8 +10018,24 @@ html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
     }
   }
 
-  // (Le sélecteur de partie a été retiré : le déroulé est maintenant guidé, un item à la fois.)
-  function renderParts(){ var box=E('pmParts'); if(box) box.innerHTML=''; }
+  // Barre des photos (« vues ») : Siège 1, Siège 2, Dossier 1… + bouton « ＋ Photo ».
+  // Visible aux étapes « points » et « phrases » ; permet d'ajouter/naviguer entre les photos.
+  function renderParts(){
+    var box=E('pmParts'); if(!box) return;
+    if(phase!=='place' && phase!=='assign'){ box.innerHTML=''; return; }
+    var sel=selectedKeys(), h='';
+    sel.forEach(function(k){
+      var vs=data[k].views;
+      vs.forEach(function(v,i){
+        var isCur=(k===cur && i===vi);
+        var done=(v.photo && v.points.length);
+        h+='<div class="pm-part'+(isCur?' on':'')+(done?' done':'')+'" onclick="PM.gotoView(\''+k+'\','+i+')">'
+          +'<span class="pm-part-dot"></span>'+esc(viewLabel(k,i,vs.length))+'</div>';
+      });
+    });
+    h+='<div class="pm-part pm-part-add" onclick="PM.addView()">＋ Photo</div>';
+    box.innerHTML=h;
+  }
 
   // Reflète les infos dans le formulaire + la barre du haut
   function syncInfo(){
@@ -9988,9 +10048,8 @@ html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
     if(sub){
       if(phase==='info'){ sub.textContent='Version téléphone'; }
       else {
-        var sel=selectedKeys(), idx=sel.indexOf(cur)+1, tot=sel.length;
         var bits=[]; if(modInfo.benef) bits.push(modInfo.benef);
-        bits.push(partLabel(cur)+(tot>1?(' ('+idx+'/'+tot+')'):''));
+        bits.push(curViewLabel());
         sub.textContent = bits.join(' · ');
       }
     }
@@ -10002,15 +10061,15 @@ html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
     ov.classList.toggle('pm-photo-phase', phase==='photo');
     ov.classList.toggle('pm-place-phase', phase==='place');
     ov.classList.toggle('pm-assign', phase==='assign');
-    var pl=partLabel(cur), h=E('pmHint');
+    var pl=curViewLabel().toLowerCase(), h=E('pmHint');
     if(phase==='photo'){
-      h.textContent = 'Étape 1 : prenez la photo du '+pl.toLowerCase()+'.';
+      h.textContent = 'Étape 1 : prenez la photo du '+pl+'.';
     } else if(phase==='place'){
       h.textContent = fromAssign
-        ? ('Ajoutez ou retirez des points sur le '+pl.toLowerCase()+', puis touchez « Terminer ».')
+        ? ('Ajoutez ou retirez des points sur le '+pl+', puis touchez « Terminer ».')
         : 'Étape 2 : touchez la photo pour placer les points (touchez un point pour le retirer).';
     } else if(phase==='assign'){
-      h.textContent = 'Étape 3 : choisissez la modification de chaque rond du '+pl.toLowerCase()+'.';
+      h.textContent = 'Étape 3 : choisissez la modification de chaque rond du '+pl+'.';
     }
     // petit bouton « reprendre la photo » disponible pendant qu'on place les points
     var rt=E('pmRetakeWrap'); if(rt) rt.style.display=(phase==='place')?'block':'none';
@@ -10082,20 +10141,32 @@ html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
   function buildTabs(){
     var tabs=[];
     selectedKeys().forEach(function(k){
-      var part=data[k]; if(!part.photo) return;                 // pas de photo → pas de face
-      var anns=part.points.map(function(p){
-        return { t:'circle', x:p.xf, y:p.yf, r:0.05, color:'#000', width:4, mod:p.mod };
+      var vs=data[k].views;
+      vs.forEach(function(v,i){
+        if(!v.photo) return;                                    // vue sans photo → pas de face
+        var anns=v.points.map(function(p){
+          return { t:'circle', x:p.xf, y:p.yf, r:0.05, color:'#000', width:4, mod:p.mod };
+        });
+        // group:k → le moteur regroupe les photos d'un même item (Siège 1, Siège 2…) dans un bloc
+        tabs.push({ name:viewLabel(k,i,vs.length), data:v.photo, annotations:anns, group:k });
       });
-      tabs.push({ name:partLabel(k), data:part.photo, annotations:anns });
     });
     return tabs;
+  }
+  // Nom du moulage lisible : « Siège ×2 + Dossier » (compte les photos par item)
+  function moulageName(){
+    return selectedKeys().filter(itemHasPhoto).map(function(k){
+      var n=data[k].views.filter(function(v){ return !!v.photo; }).length;
+      return partLabel(k)+(n>1?(' ×'+n):'');
+    }).join(' + ');
   }
   function _pmMakePdf(){
     var tabs=buildTabs();
     if(!tabs.length){ alert('Prenez au moins une photo avant de créer le PDF.'); return; }
     var benef=(modInfo.benef||'').trim(), cmd=(modInfo.cmd||'').trim();
-    var labels=tabs.map(function(t){ return t.name; }).join(' + ');     // « Siège + Dossier »
-    var fnBits=['Modif', labels.replace(/ \+ /g,'-'), benef, cmd].map(nameSafe).filter(Boolean);
+    var labels=moulageName() || 'Moulage';                      // « Siège ×2 + Dossier »
+    var fnItems=selectedKeys().filter(itemHasPhoto).map(partLabel).join('-');
+    var fnBits=['Modif', fnItems, benef, cmd].map(nameSafe).filter(Boolean);
     var fn=(fnBits.join('_') || 'Demande_modification_moulage')+'.pdf';
     _annotCreatePDFInner({
       tabs:tabs,
@@ -10112,12 +10183,17 @@ html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
   }
 
   // ---------- API publique ----------
-  function anyWork(){ return !!(modInfo.benef || modInfo.cmd || data.siege.points.length || data.dossier.points.length || data.siege.photo || data.dossier.photo); }
+  function anyWork(){
+    if(modInfo.benef || modInfo.cmd) return true;
+    for(var i=0;i<PARTS.length;i++){ var vs=data[PARTS[i].key].views;
+      for(var j=0;j<vs.length;j++){ if(vs[j].photo || vs[j].points.length) return true; } }
+    return false;
+  }
 
   window.PM = {
     open:function(){
       // Nouvelle demande : état repartant à zéro, on démarre sur le formulaire d'infos.
-      data=freshData(); cur='siege'; phase='info'; fromAssign=false; sheetIdx=-1; draft=null; catFilter=null;
+      data=freshData(); cur='siege'; vi=0; phase='info'; fromAssign=false; sheetIdx=-1; draft=null; catFilter=null;
       modInfo={ benef:'', cmd:'' };
       showPhoto();
       E('pmOverlay').classList.add('pm-on');   // l'overlay couvre l'écran…
@@ -10139,7 +10215,7 @@ html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
       // on ne peut pas tout décocher : il faut au moins une partie
       if(data[k].on && selectedKeys().length<=1){ return; }
       data[k].on=!data[k].on;
-      if(!data[cur].on){ var sel=selectedKeys(); if(sel.length) cur=sel[0]; }
+      if(!data[cur].on){ var sel=selectedKeys(); if(sel.length){ cur=sel[0]; vi=0; } }
       syncInfo();
     },
     setBenef:function(v){ modInfo.benef=v; syncInfo(); },
@@ -10147,46 +10223,50 @@ html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
     // ----- Démarrage : on traite un item à la fois (photo → points → phrases → suivant) -----
     start:function(){
       var sel=selectedKeys(); if(!sel.length){ alert('Sélectionnez au moins « Siège » ou « Dossier ».'); return; }
-      cur=sel[0]; phase='photo';
+      cur=sel[0]; vi=0; phase='photo';
       showPhoto(); render(); window.scrollTo(0,0);
     },
     prevStep:function(){
+      // vue ajoutée (vide) → on la retire et on revient à la vue précédente
+      if(vi>0){ data[cur].views.splice(vi,1); vi=vi-1; phase = V().photo ? 'assign' : 'place'; showPhoto(); render(); window.scrollTo(0,0); return; }
       var s=selectedKeys(), i=s.indexOf(cur);
-      if(i>0){ cur=s[i-1]; phase='assign'; showPhoto(); render(); }  // revenir à l'item précédent
+      if(i>0){ cur=s[i-1]; vi=data[cur].views.length-1; phase='assign'; showPhoto(); render(); }  // item précédent
       else { phase='info'; render(); }                               // retour au formulaire
       window.scrollTo(0,0);
     },
-    // Points placés → on choisit les modifications de CE même item
+    // Points placés → on choisit les modifications de CETTE photo
     toAssign:function(){
       phase='assign'; fromAssign=false;
       showPhoto(); render(); window.scrollTo(0,0);
     },
-    // Retour depuis « phrases » pour ajouter/retirer des points
-    openAddMenu:function(){
-      var sel=selectedKeys().filter(function(k){ return data[k].photo; });  // seulement les items déjà photographiés
-      if(sel.length<=1){ PM.addPointsTo(sel[0]||cur); return; }              // un seul item → direct, sans menu
-      var box=E('pmAddOptions'), h='';
-      sel.forEach(function(k){ h+='<button type="button" class="pm-add-opt" onclick="PM.addPointsTo(\''+k+'\')">'+esc(partLabel(k))+'</button>'; });
-      box.innerHTML=h;
-      E('pmAddBackdrop').classList.add('pm-on'); E('pmAddMenu').classList.add('pm-on');
-    },
-    closeAddMenu:function(){ E('pmAddBackdrop').classList.remove('pm-on'); E('pmAddMenu').classList.remove('pm-on'); },
-    addPointsTo:function(k){
+    // ----- Barre des photos : naviguer / ajouter des vues -----
+    gotoView:function(k,i){
       if(!data[k] || !data[k].on) return;
-      this.closeAddMenu();
-      cur=k; fromAssign=true;
-      phase = data[k].photo ? 'place' : 'photo';   // pas de photo ? on la prend d'abord
+      cur=k; vi=i; fromAssign=false;
+      if(!V().photo){ phase='photo'; }                       // vue vide → prendre la photo
+      else if(phase!=='place' && phase!=='assign'){ phase='place'; }
       showPhoto(); render(); window.scrollTo(0,0);
     },
-    // Bouton « Terminer » après avoir ajouté/retiré des points → retour aux phrases de l'item
+    addView:function(){
+      data[cur].views.push(newView());
+      vi=data[cur].views.length-1; fromAssign=false; phase='photo';
+      showPhoto(); render(); window.scrollTo(0,0);
+    },
+    // « ← Ajouter des points » : revient placer/retirer des points sur la photo courante
+    openAddMenu:function(){
+      fromAssign=true; phase='place';
+      showPhoto(); render(); window.scrollTo(0,0);
+    },
+    closeAddMenu:function(){ E('pmAddBackdrop').classList.remove('pm-on'); E('pmAddMenu').classList.remove('pm-on'); },
+    // Bouton « Terminer » après avoir ajouté/retiré des points → retour aux phrases
     finishAdd:function(){
       fromAssign=false; phase='assign';
       showPhoto(); render(); window.scrollTo(0,0);
     },
-    // Modifications choisies → item suivant (nouvelle photo), ou création du PDF
+    // Modifications choisies → item suivant (1re photo), ou création du PDF
     assignNext:function(){
       var nx=nextSel();
-      if(nx){ cur=nx; phase='photo'; showPhoto(); render(); window.scrollTo(0,0); }
+      if(nx){ cur=nx; vi=0; phase = V().photo ? 'place' : 'photo'; fromAssign=false; showPhoto(); render(); window.scrollTo(0,0); }
       else { PM.pdf(); }
     },
     onFile:onFile,
