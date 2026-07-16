@@ -2856,7 +2856,7 @@ label.item-img-btn{ user-select:none; }
 </style>
 </head>
 <body>
-<div id="pmBoot" style="display:none;position:fixed;inset:0;z-index:99998;flex-direction:column;align-items:center;justify-content:center;gap:15px;color:#e8eefc;font-family:'DM Sans',sans-serif;background:linear-gradient(to bottom,#04152c 0%,#12294a 60%,#1e3a5f 100%);"><div class="pm-boot-spin"></div><div style="font-size:17px;font-weight:800;letter-spacing:.3px;">Modification moulage</div><div style="font-size:13px;opacity:.7;">Version téléphone — chargement…</div></div>
+<div id="pmBoot" style="display:none;position:fixed;inset:0;z-index:99998;flex-direction:column;align-items:center;justify-content:center;gap:15px;color:#e8eefc;font-family:'DM Sans',sans-serif;background:linear-gradient(to bottom,#04152c 0%,#12294a 60%,#1e3a5f 100%);"><div class="pm-boot-spin"></div><div style="font-size:17px;font-weight:800;letter-spacing:.3px;">Modification moulage</div><div style="font-size:13px;opacity:.7;">Version téléphone v71 — chargement…</div></div>
 <script>/* Mode téléphone détecté au plus tôt : le splash couvre TOUT de suite, et on verrouille le zoom
    pour que les boutons ne bougent plus quand on essaie de cliquer. */
 (function(){try{
@@ -9776,11 +9776,11 @@ document.addEventListener('keydown', function(e){
 /* étiquette de section (① exemples / ② votre phrase) */
 .pm-sec-lbl{ flex:0 0 auto; padding:7px 16px 1px; font-size:12px; font-weight:800; letter-spacing:.4px; color:#9fc0ea; text-transform:uppercase; }
 .pm-sec-lbl-big{ font-size:15px; color:#ffe6b0; letter-spacing:.2px; padding-top:9px; }
-/* section du bas : écrire la modification à faire (grande zone ≈ moitié de l'écran, adaptative) */
-.pm-sheet-write{ flex:5 1 0; display:flex; flex-direction:column; min-height:0; padding:2px 14px 6px; border-top:1px solid rgba(255,255,255,.18); background:rgba(201,161,74,.07); }
+/* zone d'écriture : carré compact (≈ 23vh) qui s'agrandit tout seul quand on écrit plus long */
+.pm-sheet-write{ flex:0 0 auto; display:flex; flex-direction:column; min-height:0; padding:2px 14px 6px; border-top:1px solid rgba(255,255,255,.18); background:rgba(201,161,74,.07); }
 .pm-free{
-  flex:1 1 auto; width:100%; margin-top:6px; padding:13px 14px; border-radius:12px; box-sizing:border-box;
-  min-height:120px;
+  flex:0 0 auto; width:100%; margin-top:6px; padding:13px 14px; border-radius:12px; box-sizing:border-box;
+  min-height:23vh; max-height:52vh; overflow-y:hidden;
   border:1.5px solid rgba(255,255,255,.3); background:rgba(255,255,255,.12); color:#fff;
   font-size:17px; font-family:'DM Sans',sans-serif; resize:none; line-height:1.4;
 }
@@ -9900,7 +9900,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   <!-- Panneau : nouvelle demande (bénéficiaire, commande, siège/dossier) -->
   <div id="pmInfo">
     <div class="pm-info-card">
-      <div class="pm-info-title">Nouvelle demande de modification</div>
+      <div class="pm-info-title">Nouvelle demande de modification <span style="font-size:12px;font-weight:700;color:#7ee0a3;opacity:.9;">· v71</span></div>
       <div class="pm-info-sub">Remplissez les informations, puis prenez la ou les photos du moulage.</div>
 
       <div class="pm-info-lbl">Nom du bénéficiaire</div>
@@ -9955,15 +9955,14 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       <span class="pm-sheet-h">Choisir la phrase</span>
     </div>
   </div>
-  <!-- SECTION DU HAUT : écrire la modification à faire — grande zone (≈ moitié de l'écran) -->
+  <!-- SECTION DU HAUT : écrire la modification à faire — carré compact qui s'agrandit en écrivant -->
   <div class="pm-sheet-write">
     <div class="pm-sec-lbl pm-sec-lbl-big">✍️ Écrire la modification à faire</div>
     <textarea id="pmFreeText" class="pm-free" placeholder="Écrivez ici la modification à faire… (ou votre propre phrase)" oninput="PM.onFreeText(this.value)"></textarea>
     <div class="pm-free-hint" id="pmFreeHint"></div>
   </div>
-  <!-- SECTION DU BAS : choisir un exemple (facultatif, plus compacte) -->
-  <div class="pm-sec-lbl">Ou choisir un exemple (facultatif)</div>
-  <div class="pm-cats" id="pmCats"></div>
+  <!-- SECTION DU BAS : suggestions qui se filtrent selon les mots écrits (aucune catégorie) -->
+  <div class="pm-sec-lbl">Suggestions (touchez pour utiliser)</div>
   <div class="pm-opts" id="pmOpts"></div>
   <div class="pm-sheet-foot">
     <button class="pm-act ghost" onclick="PM.closeSheet()">Annuler</button>
@@ -10263,9 +10262,19 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     freeText = (draft && draft.id==='__free__') ? (draft.free||'') : '';
     var ft=E('pmFreeText'); if(ft) ft.value=freeText;
     var num=baseNum()+i+1; var c=col(num); var b=E('pmSheetBadge'); b.textContent=num; b.style.background=c; b.style.borderColor='#fff';
-    renderCats(); renderOpts(); updateFreeHint();
+    renderOpts(); updateFreeHint();
     E('pmSheetBackdrop').classList.add('pm-on');
     E('pmSheet').classList.add('pm-on');
+    autoGrowFree();   // ajuste la hauteur du carré au contenu
+  }
+  // Le carré d'écriture s'agrandit tout seul selon ce qui est écrit (min ≈ 23vh, puis défile à 52vh)
+  function autoGrowFree(){
+    var ta=E('pmFreeText'); if(!ta) return;
+    ta.style.height='auto';
+    var max=Math.round(window.innerHeight*0.52);
+    var need=ta.scrollHeight;
+    if(need>max){ ta.style.height=max+'px'; ta.style.overflowY='auto'; }
+    else { ta.style.height=need+'px'; ta.style.overflowY='hidden'; }   // min-height (CSS) garde ≈ 23vh mini
   }
   // Affiche sous le champ « votre phrase » ce qui sera retenu (exemple choisi vs phrase écrite)
   function updateFreeHint(){
@@ -10283,10 +10292,11 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     sheetIdx=-1; draft=null;
   }
   function renderCats(){
+    var box=E('pmCats'); if(!box) return;   // catégories retirées : plus d'élément → rien à faire
     var cats=[]; OPTS().forEach(function(o){ if(cats.indexOf(o.cat)<0) cats.push(o.cat); });
     var h='<div class="pm-cat'+(catFilter===null?' sel':'')+'" onclick="PM.setCat(null)">Toutes</div>';
     cats.forEach(function(c){ h+='<div class="pm-cat'+(catFilter===c?' sel':'')+'" onclick="PM.setCat('+JSON.stringify(c).replace(/"/g,'&quot;')+')">'+esc(c)+'</div>'; });
-    E('pmCats').innerHTML=h;
+    box.innerHTML=h;
   }
   function renderOpts(){
     // Filtre MOT PAR MOT : chaque mot tapé doit se retrouver dans la phrase (et sans accents).
@@ -10304,7 +10314,6 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       }
       var sel = (o.id===selId);
       h+='<div class="pm-opt'+(sel?' sel':'')+'" onclick="PM.pick(\''+o.id+'\')">'
-       +   '<div class="pm-opt-cat">'+esc(o.cat)+'</div>'
        +   '<div class="pm-opt-label">'+esc(o.label)+(o.measure?' ___ '+esc(o.measure):'')+'</div>';
       if(sel) h+= extraHTML(o);
       h+= '</div>';
@@ -10563,6 +10572,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       freeText=v||'';
       if(freeText.trim()){ draft={ id:'__free__', free:freeText }; }        // phrase personnalisée
       else if(draft && draft.id==='__free__'){ draft=null; }                 // vidé → plus de choix
+      autoGrowFree();                                                        // le carré s'étire au besoin
       renderOpts(); updateFreeHint();
     },
     pick:function(id){
