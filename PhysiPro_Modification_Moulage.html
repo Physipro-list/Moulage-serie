@@ -9731,7 +9731,7 @@ document.addEventListener('keydown', function(e){
     } else {
       a.innerHTML =
         '<button class="pm-act ghost" onclick="PM.goPlace()">＋ Placer d\'autres ronds</button>'
-       +'<button class="pm-act primary" onclick="PM.finish()">✓ Terminé</button>';
+       +'<button class="pm-act primary" onclick="PM.pdf()">📄 Créer le PDF</button>';
     }
   }
 
@@ -9800,6 +9800,92 @@ document.addEventListener('keydown', function(e){
     return '';
   }
 
+  // ---------- Créer le PDF (100% local — aucun coût Firebase) ----------
+  function _pmHex(h){ h=(h||'#000').replace('#',''); if(h.length===3) h=h.split('').map(function(c){return c+c;}).join(''); var n=parseInt(h,16)||0; return [(n>>16)&255,(n>>8)&255,n&255]; }
+  // Compose la photo + les ronds numérotés sur un canevas hors-écran → JPEG compressé
+  function _pmComposite(cb){
+    var img=E('pmPhoto');
+    if(!img || img.style.display==='none' || !img.src){ cb(null); return; }
+    var im=new Image();
+    im.onload=function(){
+      var maxW=1000, sc=Math.min(1, maxW/(im.naturalWidth||maxW));
+      var W=Math.max(1,Math.round((im.naturalWidth||maxW)*sc));
+      var H=Math.max(1,Math.round((im.naturalHeight||maxW)*sc));
+      var c=document.createElement('canvas'); c.width=W; c.height=H;
+      var cx=c.getContext('2d');
+      cx.drawImage(im,0,0,W,H);
+      points.forEach(function(p,i){
+        var x=p.xf*W, y=p.yf*H, r=Math.max(12, Math.min(W,H)*0.033);
+        cx.beginPath(); cx.arc(x,y,r,0,Math.PI*2);
+        cx.fillStyle=col(i+1); cx.fill();
+        cx.lineWidth=Math.max(2,r*0.16); cx.strokeStyle='#fff'; cx.stroke();
+        cx.fillStyle='#fff'; cx.textAlign='center'; cx.textBaseline='middle';
+        cx.font='900 '+Math.round(r*1.2)+'px Arial,sans-serif';
+        cx.fillText(String(i+1), x, y);
+      });
+      cb(c.toDataURL('image/jpeg',0.72), W, H);   // compressé : léger, jamais envoyé à Firebase
+    };
+    im.onerror=function(){ cb(null); };
+    im.src=img.src;
+  }
+  function _pmMakePdf(){
+    if(!(window.jspdf && window.jspdf.jsPDF)){ alert('Générateur PDF indisponible.'); return; }
+    _pmComposite(function(photo, iw, ih){
+      var doc=new window.jspdf.jsPDF({unit:'pt', format:'letter'});
+      var W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=36;
+      // en-tête
+      doc.setFillColor(4,21,44); doc.rect(0,0,W,54,'F');
+      doc.setFillColor(201,161,74); doc.rect(0,52,W,2.5,'F');
+      try{ if(typeof _PDF_LOGO_B64!=='undefined'){ var lh=26, lw=lh*2.226; doc.addImage(_PDF_LOGO_B64,'PNG',14,14,lw,lh); } }catch(e){}
+      doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(255,255,255);
+      doc.text('Demande de modification moulage', W/2, 30, {align:'center', baseline:'middle'});
+      // infos (nom + date)
+      var name=''; try{ var nm=document.getElementById('soumissionPillName'); if(nm) name=(nm.textContent||'').trim(); }catch(e){}
+      var today=new Date().toISOString().slice(0,10);
+      var y=72;
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(17,36,58);
+      if(name) doc.text('Moulage : '+name, M, y);
+      doc.setFont('helvetica','normal'); doc.setTextColor(90,105,125);
+      doc.text(today, W-M, y, {align:'right'});
+      y+=14;
+      // photo avec les ronds
+      if(photo && iw && ih){
+        var availW=W-2*M, ph=availW*ih/iw, pw=availW, maxH=H*0.42;
+        if(ph>maxH){ ph=maxH; pw=ph*iw/ih; }
+        var px=(W-pw)/2;
+        try{ doc.addImage(photo,'JPEG',px,y,pw,ph); }catch(e){}
+        doc.setDrawColor(210,220,235); doc.setLineWidth(1); doc.roundedRect(px,y,pw,ph,6,6,'S');
+        y+=ph+18;
+      }
+      // titre liste
+      doc.setFont('helvetica','bold'); doc.setFontSize(11.5); doc.setTextColor(17,36,58);
+      doc.text('Modifications à faire', M, y); y+=10;
+      // lignes numérotées
+      var fs=10, lh=13, pad=6, badgeR=8;
+      var textX=M+pad+badgeR*2+9, textW=W-M-textX-pad;
+      points.forEach(function(p,i){
+        var rgb=_pmHex(col(i+1));
+        var sum=summary(p.mod)||'— à préciser —';
+        doc.setFont('helvetica','bold'); doc.setFontSize(fs);
+        var lines=doc.splitTextToSize(sum, textW);
+        var rowH=pad*2+Math.max(lh, lines.length*lh);
+        if(y+rowH>H-32){ doc.addPage(); y=40; }
+        doc.setFillColor(255,255,255); doc.setDrawColor(210,220,235); doc.setLineWidth(0.8);
+        doc.roundedRect(M,y,W-2*M,rowH,6,6,'FD');
+        doc.setFillColor(rgb[0],rgb[1],rgb[2]); doc.roundedRect(M,y,3.5,rowH,1.5,1.5,'F');
+        var cy=y+pad+fs*0.55;
+        doc.setFillColor(rgb[0],rgb[1],rgb[2]); doc.circle(M+pad+badgeR, cy, badgeR, 'F');
+        doc.setTextColor(255,255,255); doc.setFontSize(fs-0.5);
+        doc.text(String(i+1), M+pad+badgeR, cy, {align:'center', baseline:'middle'});
+        doc.setTextColor(17,36,58); doc.setFont('helvetica','bold'); doc.setFontSize(fs);
+        doc.text(lines, textX, y+pad+fs*0.9);
+        y+=rowH+6;
+      });
+      var safe=(name||'moulage').replace(/[^a-z0-9_-]/gi,'_').substring(0,40) || 'moulage';
+      try{ doc.save('Modification_moulage_'+safe+'.pdf'); }catch(e){ alert('Erreur à l\'enregistrement du PDF.'); }
+    });
+  }
+
   // ---------- API publique ----------
   window.PM = {
     open:function(){
@@ -9818,9 +9904,15 @@ document.addEventListener('keydown', function(e){
     del:function(i){ points.splice(i,1); render(); },
     goAssign:function(){ if(!points.length) return; phase='assign'; render(); window.scrollTo(0,0); },
     goPlace:function(){ phase='place'; render(); },
-    finish:function(){
-      var done=points.filter(function(p){return p.mod && p.mod.id;}).length;
-      alert('Essai : '+points.length+' rond(s) placé(s), '+done+' avec une phrase choisie.\n\n(À la prochaine étape, on branchera « Terminé » pour enregistrer dans la vraie demande de modification.)');
+    pdf:function(){
+      if(!points.length){ alert('Placez au moins un rond avant de créer le PDF.'); return; }
+      if(window.jspdf && window.jspdf.jsPDF){ _pmMakePdf(); return; }
+      if(typeof _ensureJsPDF==='function'){ _ensureJsPDF(function(ok){ if(ok) _pmMakePdf(); else alert('Impossible de charger le générateur PDF (vérifiez la connexion).'); }); return; }
+      var s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      s.onload=function(){ if(window.jspdf && window.jspdf.jsPDF) _pmMakePdf(); else alert('Générateur PDF indisponible.'); };
+      s.onerror=function(){ alert('Impossible de charger le générateur PDF.'); };
+      document.head.appendChild(s);
     },
     rowTap:function(i){ if(phase!=='assign'){ phase='assign'; render(); } openSheet(i); },
     closeSheet:closeSheet,
