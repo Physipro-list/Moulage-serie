@@ -2857,8 +2857,23 @@ label.item-img-btn{ user-select:none; }
 </head>
 <body>
 <div id="pmBoot" style="display:none;position:fixed;inset:0;z-index:99998;flex-direction:column;align-items:center;justify-content:center;gap:15px;color:#e8eefc;font-family:'DM Sans',sans-serif;background:linear-gradient(to bottom,#04152c 0%,#12294a 60%,#1e3a5f 100%);"><div class="pm-boot-spin"></div><div style="font-size:17px;font-weight:800;letter-spacing:.3px;">Modification moulage</div><div style="font-size:13px;opacity:.7;">Version téléphone — chargement…</div></div>
-<script>/* Mode téléphone détecté au plus tôt : le splash couvre TOUT de suite (styles en ligne), donc la version PC n'apparaît jamais. */
-(function(){try{var w=/[?&]tel=1\b/.test(location.search),m=/Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)||window.innerWidth<=768;if(w||m){document.documentElement.classList.add('pm-phone','pm-booting');var b=document.getElementById('pmBoot');if(b)b.style.display='flex';}}catch(e){}})();</script>
+<script>/* Mode téléphone détecté au plus tôt : le splash couvre TOUT de suite, et on verrouille le zoom
+   pour que les boutons ne bougent plus quand on essaie de cliquer. */
+(function(){try{
+  var w=/[?&]tel=1\b/.test(location.search),
+      m=/Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)||window.innerWidth<=768;
+  if(!(w||m)) return;
+  document.documentElement.classList.add('pm-phone','pm-booting');
+  var b=document.getElementById('pmBoot'); if(b) b.style.display='flex';
+  // Empêche le zoom (pincement / double-tap) et donc le déplacement de la page
+  try{ var vp=document.querySelector('meta[name=viewport]');
+    if(vp) vp.setAttribute('content','width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'); }catch(e){}
+  // iOS : bloque le pincement (sans gêner les touchers simples)
+  ['gesturestart','gesturechange','gestureend'].forEach(function(ev){
+    document.addEventListener(ev, function(e){ e.preventDefault(); }, {passive:false}); });
+  // Android : bloque le pincement à 2 doigts (le défilement à 1 doigt reste possible)
+  document.addEventListener('touchmove', function(e){ if(e.touches && e.touches.length>1){ e.preventDefault(); } }, {passive:false});
+}catch(e){}})();</script>
 
 <!-- ═══ LOGIN OVERLAY ═══ -->
 <div class="login-overlay" id="loginOverlay">
@@ -9702,6 +9717,10 @@ html.pm-booting #pmBoot{
 .pm-boot-spin{ width:34px; height:34px; border-radius:50%; border:3px solid rgba(255,255,255,.22); border-top-color:#60a5fa; animation:pmspin .8s linear infinite; }
 @keyframes pmspin{ to{ transform:rotate(360deg); } }
 html.pm-phone #pmOpenBtn{ display:none; }
+/* en mode téléphone : pas de double-tap qui zoome ; la page ne se déplace plus */
+html.pm-phone, html.pm-phone body{ touch-action:manipulation; overscroll-behavior:none; }
+html.pm-phone #pmOverlay, html.pm-phone #pmBoot,
+html.pm-phone #pmSheet, html.pm-phone #pmAddMenu{ touch-action:manipulation; }
 </style>
 
 <!-- Bouton d'ouverture -->
