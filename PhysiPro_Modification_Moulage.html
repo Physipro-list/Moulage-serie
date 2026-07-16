@@ -2856,7 +2856,7 @@ label.item-img-btn{ user-select:none; }
 </style>
 </head>
 <body>
-<div id="pmBoot" style="display:none;position:fixed;inset:0;z-index:99998;flex-direction:column;align-items:center;justify-content:center;gap:15px;color:#e8eefc;font-family:'DM Sans',sans-serif;background:linear-gradient(to bottom,#04152c 0%,#12294a 60%,#1e3a5f 100%);"><div class="pm-boot-spin"></div><div style="font-size:17px;font-weight:800;letter-spacing:.3px;">Modification moulage</div><div style="font-size:13px;opacity:.7;">Version téléphone v77 — chargement…</div></div>
+<div id="pmBoot" style="display:none;position:fixed;inset:0;z-index:99998;flex-direction:column;align-items:center;justify-content:center;gap:15px;color:#e8eefc;font-family:'DM Sans',sans-serif;background:linear-gradient(to bottom,#04152c 0%,#12294a 60%,#1e3a5f 100%);"><div class="pm-boot-spin"></div><div style="font-size:17px;font-weight:800;letter-spacing:.3px;">Modification moulage</div><div style="font-size:13px;opacity:.7;">Version téléphone v80 — chargement…</div></div>
 <script>/* Mode téléphone détecté au plus tôt : le splash couvre TOUT de suite, et on verrouille le zoom
    pour que les boutons ne bougent plus quand on essaie de cliquer. */
 (function(){try{
@@ -9116,19 +9116,13 @@ function _annotCreatePDFInner(opts){
       }
       function render(){
         if(composed.length && composed[0].group!=null){
-          // ---- Mode téléphone : on REGROUPE les faces par item (siège / dossier).
-          // Les photos d'un même item se suivent dans un bloc ; un nouvel item démarre
-          // sur une nouvelle page. Une face seule occupe toute la hauteur (photo plus grande).
-          var groups=[], gk=null, arr=null;
-          for(var i=0;i<composed.length;i++){ var f=composed[i]; if(f.group!==gk){ gk=f.group; arr=[]; groups.push(arr); } arr.push(f); }
-          var firstPage=true;
-          for(var g=0; g<groups.length; g++){
-            var faces=groups[g];
-            for(var p=0;p<faces.length;p+=2){
-              if(!firstPage) doc.addPage();
-              firstPage=false;
-              drawPage(faces, p);
-            }
+          // ---- Mode téléphone : 2 photos par PAGE, en continu (siège puis dossier).
+          // • 1 seule photo  → seule sur la page (plus grande) ;
+          // • 2 photos (ex. 1 siège + 1 dossier) → sur la MÊME page (haut / bas) ;
+          // • 3 photos et +  → les pages suivantes sont ajoutées automatiquement.
+          for(var p=0;p<composed.length;p+=2){
+            if(p>0) doc.addPage();
+            drawPage(composed, p);
           }
         } else {
           // ---- Mode PC d'origine (inchangé) : 2 faces par page en continu ----
@@ -9665,6 +9659,13 @@ document.addEventListener('keydown', function(e){
 }
 .pm-assign-banner.done{ color:#eafff0; background:linear-gradient(to bottom,#22c55e,#15803d); border:none; }
 .pm-assign-banner b{ font-weight:900; }
+/* Consigne de l'étape 2 (placer les points) : au-dessus de la photo, seulement en phase « place » */
+.pm-place-hint{
+  display:none; margin:10px 10px 0; padding:13px 14px; border-radius:13px; font-size:15px; font-weight:800;
+  color:#eaf3ff; background:linear-gradient(to bottom,#3b82f6,#1d4ed8);
+  border:none; box-shadow:0 3px 10px rgba(0,0,0,.28); line-height:1.4;
+}
+#pmOverlay.pm-place-phase .pm-place-hint{ display:block; }
 
 /* ---- barre d'action du bas ---- */
 /* Barre du bas DANS LE FLUX (plus de position:fixed) : les boutons prennent leur place
@@ -9854,6 +9855,15 @@ document.addEventListener('keydown', function(e){
 #pmInfo{ display:none; flex:1 1 auto; overflow:auto; padding:14px 12px 20px; -webkit-overflow-scrolling:touch; }
 #pmOverlay.pm-info-phase #pmInfo{ display:block; }
 #pmOverlay.pm-info-phase .pm-hint{ display:none; }
+/* Bandeau « version de test » bien visible en haut de l'écran de départ */
+.pm-testbanner{
+  max-width:520px; margin:0 auto 14px; padding:14px 16px; border-radius:16px; text-align:center;
+  background:linear-gradient(150deg,#f59e0b,#b45309); border:2px solid #fbbf24;
+  box-shadow:0 6px 20px rgba(245,158,11,.35);
+}
+.pm-testbanner-app{ font-size:18px; font-weight:900; color:#fff; letter-spacing:.3px; }
+.pm-testbanner-test{ font-size:24px; font-weight:900; color:#fff; margin-top:4px; letter-spacing:1px; text-shadow:0 1px 3px rgba(0,0,0,.4); }
+.pm-testbanner-ver{ display:inline-block; margin-top:8px; padding:3px 14px; border-radius:999px; background:rgba(0,0,0,.28); color:#fff; font-size:15px; font-weight:800; }
 .pm-info-card{
   max-width:520px; margin:0 auto; background:rgba(255,255,255,.06);
   border:1px solid rgba(255,255,255,.14); border-radius:16px; padding:16px 15px;
@@ -9932,8 +9942,14 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
 
   <!-- Panneau : nouvelle demande (bénéficiaire, commande, siège/dossier) -->
   <div id="pmInfo">
+    <!-- Bandeau bien visible : nom de l'app + version + mention « version de test » -->
+    <div class="pm-testbanner">
+      <div class="pm-testbanner-app">🖋️ Modification moulage</div>
+      <div class="pm-testbanner-test">🧪 VERSION DE TEST</div>
+      <div class="pm-testbanner-ver">v80</div>
+    </div>
     <div class="pm-info-card">
-      <div class="pm-info-title">Nouvelle demande de modification <span style="font-size:12px;font-weight:700;color:#7ee0a3;opacity:.9;">· v77</span></div>
+      <div class="pm-info-title">Nouvelle demande de modification</div>
       <div class="pm-info-sub">Remplissez les informations, puis prenez la ou les photos du moulage.</div>
 
       <div class="pm-info-lbl">Nom du bénéficiaire</div>
@@ -9956,6 +9972,8 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
 
   <!-- Zone défilante : photo + liste. La barre du bas est HORS de cette zone (dans le flux) -->
   <div class="pm-scroll" id="pmScroll">
+    <!-- Consigne de l'étape 2 (placer les points) — visible seulement en phase « place » -->
+    <div class="pm-place-hint" id="pmPlaceHint">👉 Avec votre doigt, pointez sur la photo les zones que vous voulez modifier. Ça va mettre des chiffres auxquels vous pourrez joindre des demandes de modification.</div>
     <div class="pm-stagewrap" id="pmStageWrap">
       <div class="pm-stage" id="pmStage">
         <img id="pmPhoto" alt="moulage" style="display:none">
@@ -9985,7 +10003,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     <div class="pm-sheet-titlerow">
       <button type="button" class="pm-sheet-back" onclick="PM.closeSheet()">← Retour</button>
       <span class="pm-badge" id="pmSheetBadge">1</span>
-      <span class="pm-sheet-h">Choisir la phrase <span style="font-size:12px;font-weight:700;color:#7ee0a3;opacity:.9;">v77</span></span>
+      <span class="pm-sheet-h">Choisir la phrase <span style="font-size:12px;font-weight:700;color:#7ee0a3;opacity:.9;">v80</span></span>
     </div>
   </div>
   <!-- SECTION DU HAUT : écrire la modification à faire — carré compact qui s'agrandit en écrivant -->
@@ -10025,28 +10043,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   </div>
 </div>
 
-<!-- Écran après création du PDF : envoyer par courriel -->
-<div id="pmDone">
-  <div class="pm-done-card">
-    <div class="pm-done-icon">✅</div>
-    <div class="pm-done-title">PDF créé</div>
-    <div class="pm-done-sub">Le PDF est enregistré dans vos téléchargements. Vous pouvez l'ouvrir et le partager avec les options de votre téléphone.</div>
-    <button type="button" class="pm-done-close" onclick="PM.doneClose()">Fermer</button>
-  </div>
-</div>
-
-<!-- Petite fenêtre : à quelle adresse envoyer le PDF -->
-<div id="pmMailAsk">
-  <div class="pm-ask-card">
-    <div class="pm-ask-title">À quelle adresse envoyer ?</div>
-    <div class="pm-ask-sub">Entrez le courriel du destinataire (le PDF sera joint).</div>
-    <input id="pmMailTo" type="email" inputmode="email" autocomplete="email" class="pm-ask-input" placeholder="courriel@exemple.com">
-    <div class="pm-ask-actions">
-      <button type="button" class="pm-act ghost" onclick="PM.mailAskCancel()">Annuler</button>
-      <button type="button" class="pm-act primary" onclick="PM.mailAskSend()">📧 Envoyer</button>
-    </div>
-  </div>
-</div>
+<!-- (fenêtre « PDF créé » retirée : après le PDF, le téléphone gère l'enregistrement/partage) -->
 
 <!-- Petit menu : ajouter des points de modification (siège / dossier) -->
 <div id="pmAddBackdrop" onclick="PM.closeAddMenu()"></div>
@@ -10183,11 +10180,11 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   function renderList(){
     var box=E('pmList'), pl=esc(curViewLabel().toLowerCase());
     if(phase==='photo'){ box.innerHTML=''; return; }   // liste masquée en phase photo
+    var assign=(phase==='assign'), h='', b0=baseNum();
     if(!points().length){
       box.innerHTML='<div class="pm-list-empty">Aucun rond placé sur le '+pl+'.<br>Touchez la photo pour ajouter la modification n° 1.</div>';
       return;
     }
-    var assign=(phase==='assign'), h='', b0=baseNum();
     if(assign){
       // Bandeau clair : « c'est l'étape où on choisit les phrases » + progression (x/y)
       var chosen=points().filter(function(p){return !!p.mod;}).length, tot=points().length;
@@ -10470,10 +10467,11 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       confirm: confirmData,
       notes: notes,
       onBlob: function(blob){
-        _lastPdfBlob=blob; _lastPdfFn=fn;                        // gardé en mémoire pour l'envoi courriel
+        _lastPdfBlob=blob; _lastPdfFn=fn;
+        // Le PDF est simplement enregistré/téléchargé : le téléphone affiche ses propres options.
+        // AUCUNE fenêtre « PDF créé » (retirée à la demande).
         if(typeof _downloadBlob==='function'){ _downloadBlob(blob, fn); }
         else { try{ var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; a.download=fn; document.body.appendChild(a); a.click(); setTimeout(function(){ try{document.body.removeChild(a);}catch(e){} URL.revokeObjectURL(url); },1000); }catch(e){ alert('Erreur à l\'enregistrement du PDF.'); } }
-        E('pmDone').classList.add('pm-on');                      // écran « PDF créé » + envoi courriel
       }
     });
   }
@@ -10589,30 +10587,6 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       E('pmConfirm').classList.remove('pm-on');
       _pmMakePdf();   // _annotCreatePDFInner charge jsPDF lui-même (_ensureJsPDF)
     },
-    doneClose:function(){ E('pmDone').classList.remove('pm-on'); },
-    // Ouvre la petite fenêtre « À quelle adresse envoyer ? »
-    // Ouvre DIRECTEMENT le partage natif du téléphone (courriel, messages, etc.) avec le PDF
-    // en pièce jointe. Pas de saisie d'adresse : on laisse la personne choisir dans les options
-    // que le téléphone offre déjà. Le PDF est aussi déjà enregistré dans les téléchargements.
-    emailPdf:function(){
-      var subject='Demande de modification moulage'+(modInfo.benef?(' — '+modInfo.benef):'');
-      var body='Bonjour,\n\nVoici la demande de modification de moulage'
-        +(modInfo.benef?(' pour '+modInfo.benef):'')
-        +(modInfo.cmd?(' (commande '+modInfo.cmd+')'):'')+'.\n\nMerci.';
-      try{
-        if(_lastPdfBlob && navigator.share && navigator.canShare){
-          var file=new File([_lastPdfBlob], _lastPdfFn||'modification_moulage.pdf', {type:'application/pdf'});
-          if(navigator.canShare({files:[file]})){
-            navigator.share({ files:[file], title:subject, text:body }).catch(function(){});
-            return;
-          }
-        }
-        if(_lastPdfBlob && navigator.share){ navigator.share({ title:subject, text:body }).catch(function(){}); return; }
-      }catch(e){}
-      // Sinon (ordinateur / partage indisponible) : le PDF est déjà téléchargé
-      alert('Le PDF est enregistré dans vos téléchargements. Ouvrez-le et utilisez le bouton de partage de votre téléphone pour l\'envoyer par courriel.');
-    },
-    mailAskCancel:function(){ E('pmMailAsk').classList.remove('pm-on'); },
     rowTap:function(i){ if(phase!=='assign') return; openSheet(i); },
     closeSheet:closeSheet,
     setCat:function(c){ catFilter=c; renderCats(); renderOpts(); },
