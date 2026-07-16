@@ -8897,7 +8897,7 @@ function _annotCompositeDataURL(tab, cb){
     var sCanvas=_annotCanvas, sCtx=_annotCtx, sDpr=_annotDpr;
     _annotCanvas=c; _annotCtx=cx; _annotDpr=1; cx.setTransform(1,0,0,1,0,0);
     try{
-      var anns=tab.annotations||[], n=0;
+      var anns=tab.annotations||[], n=(tab.numStart||0);   // numérotation continue (départ = numStart)
       for(var i=0;i<anns.length;i++){ var num=_isNumbered(anns[i])?(++n):0; _annotDrawOne(anns[i], num); }
     }catch(_){}
     _annotCanvas=sCanvas; _annotCtx=sCtx; _annotDpr=sDpr;
@@ -9006,7 +9006,7 @@ function _annotCreatePDFInner(opts){
         }
         doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(120,135,153);
         doc.text('DEMANDES DE MODIFICATION', RX, bodyTop+2);
-        var ry=bodyTop+10, n=0, fs=8.5, lh=10.5, pad=5, badgeR=7;
+        var ry=bodyTop+10, n=(face.numStart||0), fs=8.5, lh=10.5, pad=5, badgeR=7;   // numérotation continue
         var textX=RX+pad+badgeR*2+7, textW=RW-(textX-RX)-pad;
         for(var j=0;j<face.anns.length;j++){
           if(!_isNumbered(face.anns[j])) continue;
@@ -9087,7 +9087,7 @@ function _annotCreatePDFInner(opts){
         if(i>=tabs.length){ render(); return; }
         (function(t){
           _annotCompositeDataURL(t, function(dataUrl,iw,ih){
-            composed.push({ name:(t.name||'Vue'), anns:(t.annotations||[]), dataUrl:dataUrl, iw:iw, ih:ih, group:(t.group!=null?t.group:null) });
+            composed.push({ name:(t.name||'Vue'), anns:(t.annotations||[]), dataUrl:dataUrl, iw:iw, ih:ih, group:(t.group!=null?t.group:null), numStart:(t.numStart||0) });
             compose(i+1);
           });
         })(tabs[i]);
@@ -9563,7 +9563,7 @@ document.addEventListener('keydown', function(e){
 #pmOverlay.pm-place-phase .pm-list{ display:none; }
 
 /* ---- liste des ronds / modifications ---- */
-.pm-list{ flex:1 1 auto; overflow:auto; padding:6px 10px 120px; -webkit-overflow-scrolling:touch; }
+.pm-list{ flex:1 1 auto; overflow:auto; padding:6px 10px calc(env(safe-area-inset-bottom,0px) + 170px); -webkit-overflow-scrolling:touch; }
 .pm-list-empty{ text-align:center; opacity:.65; font-size:14px; padding:24px 12px; }
 .pm-row{
   display:flex; align-items:center; gap:11px; padding:11px 12px; margin:8px 0;
@@ -9895,6 +9895,9 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   function P(){ return data[cur]; }                     // item actif
   function V(){ return data[cur].views[vi]; }           // vue (photo) active
   function points(){ return V().points; }               // ronds de la vue active
+  // Numérotation CONTINUE par item : les ronds des photos précédentes du même item
+  // décalent la numérotation (Siège 1 : 1-4 → Siège 2 : 5-8…). Le dossier repart à 1.
+  function baseNum(){ var b=0; for(var i=0;i<vi;i++){ b+=data[cur].views[i].points.length; } return b; }
   function viewLabel(k,i,total){ var t=(total!=null)?total:data[k].views.length; return partLabel(k)+(t>1?(' '+(i+1)):''); }
   function curViewLabel(){ return viewLabel(cur, vi, data[cur].views.length); }
   function itemHasPhoto(k){ return data[k].views.some(function(v){ return !!v.photo; }); }
@@ -9948,10 +9951,12 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     var stage=E('pmStage');
     stage.querySelectorAll('.pm-dot').forEach(function(d){ d.remove(); });
     var img=E('pmPhoto'); if(img.style.display==='none') return;
+    var b0=baseNum();
     points().forEach(function(p,i){
+      var num=b0+i+1;
       var d=document.createElement('div');
-      d.className='pm-dot'; d.textContent=(i+1);
-      d.style.background=col(i+1); d.style.borderColor='#fff';
+      d.className='pm-dot'; d.textContent=num;
+      d.style.background=col(num); d.style.borderColor='#fff';
       d.style.left=(p.xf*100)+'%'; d.style.top=(p.yf*100)+'%';
       d.title = (phase==='place') ? 'Toucher pour retirer ce point' : '';
       d.onclick=function(e){
@@ -9970,12 +9975,12 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       box.innerHTML='<div class="pm-list-empty">Aucun rond placé sur le '+pl+'.<br>Touchez la photo pour ajouter la modification n° 1.</div>';
       return;
     }
-    var assign=(phase==='assign'), h='';
+    var assign=(phase==='assign'), h='', b0=baseNum();
     points().forEach(function(p,i){
-      var c=col(i+1), sum=summary(p.mod);
+      var num=b0+i+1, c=col(num), sum=summary(p.mod);
       var txt = sum ? esc(sum) : (assign ? '— toucher pour choisir la phrase —' : 'Phrase à choisir à l\'étape suivante');
       h+='<div class="pm-row" style="border-left-color:'+c+'"'+(assign?(' onclick="PM.rowTap('+i+')"'):'')+'>'
-       +   '<div class="pm-badge" style="background:'+c+';border-color:#fff">'+(i+1)+'</div>'
+       +   '<div class="pm-badge" style="background:'+c+';border-color:#fff">'+num+'</div>'
        +   '<div class="pm-row-txt'+(sum?'':' empty')+'">'+txt+'</div>'
        +   '<button class="pm-row-del" onclick="event.stopPropagation();PM.del('+i+')">✕</button>'
        + '</div>';
@@ -10011,7 +10016,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       }
     } else { // assign
       a.innerHTML =
-        '<button class="pm-act ghost" onclick="PM.openAddMenu()">← Ajouter des points</button>'
+        '<button class="pm-act ghost" onclick="PM.openAddMenu()">← Points</button>'
        +(nx
           ? '<button class="pm-act primary" onclick="PM.assignNext()">Passer au '+esc(partLabel(nx).toLowerCase())+' →</button>'
           : '<button class="pm-act primary" onclick="PM.pdf()">📄 Créer le PDF</button>');
@@ -10083,7 +10088,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     draft = points()[i].mod ? JSON.parse(JSON.stringify(points()[i].mod)) : null;
     catFilter=null;
     E('pmSearch').value='';
-    var c=col(i+1); var b=E('pmSheetBadge'); b.textContent=(i+1); b.style.background=c; b.style.borderColor='#fff';
+    var num=baseNum()+i+1; var c=col(num); var b=E('pmSheetBadge'); b.textContent=num; b.style.background=c; b.style.borderColor='#fff';
     renderCats(); renderOpts();
     E('pmSheetBackdrop').classList.add('pm-on');
     E('pmSheet').classList.add('pm-on');
@@ -10141,14 +10146,16 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   function buildTabs(){
     var tabs=[];
     selectedKeys().forEach(function(k){
-      var vs=data[k].views;
+      var vs=data[k].views, off=0;                              // off = numéro de départ (continu par item)
       vs.forEach(function(v,i){
-        if(!v.photo) return;                                    // vue sans photo → pas de face
-        var anns=v.points.map(function(p){
-          return { t:'circle', x:p.xf, y:p.yf, r:0.05, color:'#000', width:4, mod:p.mod };
-        });
-        // group:k → le moteur regroupe les photos d'un même item (Siège 1, Siège 2…) dans un bloc
-        tabs.push({ name:viewLabel(k,i,vs.length), data:v.photo, annotations:anns, group:k });
+        if(v.photo){
+          var anns=v.points.map(function(p){
+            return { t:'circle', x:p.xf, y:p.yf, r:0.05, color:'#000', width:4, mod:p.mod };
+          });
+          // group:k → regroupe les photos d'un même item ; numStart → numérotation continue
+          tabs.push({ name:viewLabel(k,i,vs.length), data:v.photo, annotations:anns, group:k, numStart:off });
+        }
+        off += v.points.length;                                 // les ronds décalent la numérotation
       });
     });
     return tabs;
