@@ -8690,6 +8690,7 @@ function _allMod(){ return MOD_OPTIONS.concat(_modCustomGet()); }
 function _modOptById(id){ var L=_allMod(); for(var i=0;i<L.length;i++) if(L[i].id===id) return L[i]; return null; }
 function _modSummary(mod){
   if (!mod || !mod.id) return null;
+  if (mod.id==='__free__') return (mod.free||'').trim() || null;   // phrase écrite à la main (mode téléphone)
   var o=_modOptById(mod.id); if(!o) return null;
   var base;
   if (o.custom) base=(mod.custom||'').trim() || o.label;
@@ -9011,6 +9012,22 @@ function _annotCreatePDFInner(opts){
           doc.text(ans, bx+bw/2, by+13.5, {align:'center'});
           y+=rowH+8;
         });
+        // ---- Notes supplémentaires (facultatif) ----
+        var notes=(((opts.notes||'')+'').trim());
+        var ntxt = notes || 'Aucune note supplémentaire';
+        doc.setFont('helvetica', notes?'normal':'italic'); doc.setFontSize(10.5);
+        var nlines = doc.splitTextToSize(ntxt, W-2*M-22);
+        var nboxH = Math.max(34, nlines.length*13 + 20);
+        var titleH = 20;
+        if(y + titleH + nboxH > H-40){ footer(); doc.addPage(); var hb2=pageHeader(); y=hb2+24; }
+        doc.setFont('helvetica','bold'); doc.setFontSize(11.5); doc.setTextColor(ink[0],ink[1],ink[2]);
+        doc.text('Notes supplémentaires / Additional notes', M, y);
+        y+=6; doc.setDrawColor(gold[0],gold[1],gold[2]); doc.setLineWidth(1.4); doc.line(M,y,M+180,y); y+=12;
+        doc.setFillColor(248,250,252); doc.setDrawColor(line[0],line[1],line[2]); doc.setLineWidth(0.6);
+        doc.roundedRect(M, y, W-2*M, nboxH, 4,4,'FD');
+        doc.setFont('helvetica', notes?'normal':'italic'); doc.setFontSize(10.5);
+        if(notes) doc.setTextColor(ink[0],ink[1],ink[2]); else doc.setTextColor(150,160,175);
+        doc.text(nlines, M+11, y+16);
         footer();
       }
       // Un bloc-face : photo \u00e0 gauche, demandes \u00e0 droite (texte r\u00e9duit, num\u00e9ro sur la m\u00eame ligne)
@@ -9682,6 +9699,12 @@ document.addEventListener('keydown', function(e){
 .pm-cf-btn.non.on{ background:linear-gradient(to bottom,#ef4444,#b91c1c); color:#fff; border-color:#ef4444; }
 .pm-cf-btn.na.on{ background:rgba(148,163,184,.55); color:#fff; border-color:#94a3b8; }
 .pm-cf-actions{ flex:0 0 auto; display:flex; gap:10px; padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 12px); background:linear-gradient(to top,#04152c 60%,rgba(4,21,44,0)); }
+/* dernière question : notes supplémentaires */
+.pm-cf-notes{ background:rgba(201,161,74,.10); border:1px solid rgba(201,161,74,.45); border-radius:13px; padding:12px 13px; margin:14px 0 6px; }
+.pm-cf-notes-q{ font-size:14.5px; font-weight:800; line-height:1.3; margin-bottom:9px; color:#ffe6b0; }
+.pm-cf-notes-q small{ display:block; font-weight:500; opacity:.6; font-size:12px; color:#e8eefc; }
+.pm-cf-notes-ta{ width:100%; box-sizing:border-box; padding:11px 12px; border-radius:11px; border:1px solid rgba(255,255,255,.28); background:rgba(255,255,255,.1); color:#fff; font-size:15px; font-family:'DM Sans',sans-serif; resize:vertical; line-height:1.35; }
+.pm-cf-notes-ta::placeholder{ color:rgba(255,255,255,.5); }
 /* ---- écran « PDF créé » + envoi courriel ---- */
 #pmDone{ position:fixed; inset:0; z-index:100007; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(2,10,22,.72); font-family:'DM Sans',sans-serif; }
 #pmDone.pm-on{ display:flex; }
@@ -9750,12 +9773,18 @@ document.addEventListener('keydown', function(e){
 .pm-sheet-h{ font-size:15px; font-weight:800; }
 .pm-sheet-title{ font-size:15px; font-weight:800; display:flex; align-items:center; gap:9px; }
 .pm-sheet-title .pm-badge{ width:26px; height:26px; font-size:13px; }
-.pm-search{
-  width:100%; margin-top:9px; padding:12px 13px; border-radius:11px;
+/* étiquette de section (① exemples / ② votre phrase) */
+.pm-sec-lbl{ flex:0 0 auto; padding:7px 16px 1px; font-size:12px; font-weight:800; letter-spacing:.4px; color:#9fc0ea; text-transform:uppercase; }
+/* section du bas : écrire sa propre phrase */
+.pm-sheet-write{ flex:0 0 auto; padding:2px 14px 4px; border-top:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.04); }
+.pm-free{
+  width:100%; margin-top:4px; padding:12px 13px; border-radius:11px; box-sizing:border-box;
   border:1px solid rgba(255,255,255,.28); background:rgba(255,255,255,.1); color:#fff;
-  font-size:15px; font-family:'DM Sans',sans-serif;
+  font-size:15px; font-family:'DM Sans',sans-serif; resize:none; line-height:1.3;
 }
-.pm-search::placeholder{ color:rgba(255,255,255,.55); }
+.pm-free::placeholder{ color:rgba(255,255,255,.5); }
+.pm-free.filled{ border-color:#22c55e; background:rgba(34,197,94,.14); }
+.pm-free-hint{ min-height:16px; padding:3px 2px 0; font-size:12.5px; font-weight:700; color:#7ee0a3; }
 .pm-cats{ flex:0 0 auto; display:flex; gap:7px; overflow-x:auto; padding:9px 14px 8px; -webkit-overflow-scrolling:touch; }
 .pm-cat{
   flex:0 0 auto; padding:7px 13px; border-radius:999px; font-size:13px; font-weight:700; cursor:pointer;
@@ -9921,12 +9950,19 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     <div class="pm-sheet-titlerow">
       <button type="button" class="pm-sheet-back" onclick="PM.closeSheet()">← Retour</button>
       <span class="pm-badge" id="pmSheetBadge">1</span>
-      <span class="pm-sheet-h">Choisir la modification</span>
+      <span class="pm-sheet-h">Choisir la phrase</span>
     </div>
-    <input class="pm-search" id="pmSearch" type="text" placeholder="Rechercher une phrase…" oninput="PM.renderOpts()">
   </div>
+  <!-- SECTION DU HAUT : sélectionner une phrase d'exemple -->
+  <div class="pm-sec-lbl">① Choisir une phrase d'exemple</div>
   <div class="pm-cats" id="pmCats"></div>
   <div class="pm-opts" id="pmOpts"></div>
+  <!-- SECTION DU BAS : écrire sa propre phrase (filtre les exemples au fur et à mesure) -->
+  <div class="pm-sheet-write">
+    <div class="pm-sec-lbl">② Ou écrire votre propre phrase</div>
+    <textarea id="pmFreeText" class="pm-free" rows="2" placeholder="Tapez votre phrase ici… (les exemples ci-dessus se filtrent au fur et à mesure)" oninput="PM.onFreeText(this.value)"></textarea>
+    <div class="pm-free-hint" id="pmFreeHint"></div>
+  </div>
   <div class="pm-sheet-foot">
     <button class="pm-act ghost" onclick="PM.closeSheet()">Annuler</button>
     <button class="pm-act primary" id="pmSheetOk" onclick="PM.confirmSheet()">Valider</button>
@@ -9936,7 +9972,14 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
 <!-- Écran de reconfirmation (avant de créer le PDF) -->
 <div id="pmConfirm">
   <div class="pm-cf-top">SVP reconfirmer ces choix<br>Please finally confirm these choices</div>
-  <div class="pm-cf-list" id="pmConfirmList"></div>
+  <div class="pm-cf-list">
+    <div id="pmConfirmList"></div>
+    <!-- Dernière question : notes supplémentaires (multi-lignes, facultatif) -->
+    <div class="pm-cf-notes">
+      <div class="pm-cf-notes-q">Avez-vous des notes supplémentaires à ajouter ?<small>Additional notes (optional)</small></div>
+      <textarea id="pmNotes" class="pm-cf-notes-ta" rows="4" placeholder="Écrivez vos notes ici… (laissez vide s'il n'y en a aucune)"></textarea>
+    </div>
+  </div>
   <div class="pm-cf-actions">
     <button type="button" class="pm-act ghost" onclick="PM.confirmCancel()">Annuler</button>
     <button type="button" class="pm-act primary" onclick="PM.confirmApprove()">✓ Approuver</button>
@@ -10004,6 +10047,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   var fromAssign = false; // true quand on revient placer des points depuis l'étape « phrases »
   var sheetIdx = -1;      // point en cours d'édition dans la feuille
   var draft = null;       // brouillon de mod pendant l'édition
+  var freeText = '';      // texte de la phrase écrite à la main (section du bas)
   var catFilter = null;   // catégorie filtrée
   var modInfo = { benef:'', cmd:'' };  // infos de la demande
 
@@ -10023,6 +10067,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   // Résumé texte d'une modification (miroir de _modSummary)
   function summary(mod){
     if(!mod || !mod.id) return null;
+    if(mod.id==='__free__') return (mod.free||'').trim() || null;   // phrase écrite à la main
     var o=optById(mod.id); if(!o) return null;
     if(o.custom) return (mod.custom||'').trim() || o.label;
     if(o.measure){ var m=(mod.measure||'').toString().trim(); return o.label+' '+(m||'___')+' '+o.measure; }
@@ -10203,11 +10248,23 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     sheetIdx=i;
     draft = points()[i].mod ? JSON.parse(JSON.stringify(points()[i].mod)) : null;
     catFilter=null;
-    E('pmSearch').value='';
+    // si la phrase existante était écrite à la main, on la ré-affiche dans le champ du bas
+    freeText = (draft && draft.id==='__free__') ? (draft.free||'') : '';
+    var ft=E('pmFreeText'); if(ft) ft.value=freeText;
     var num=baseNum()+i+1; var c=col(num); var b=E('pmSheetBadge'); b.textContent=num; b.style.background=c; b.style.borderColor='#fff';
-    renderCats(); renderOpts();
+    renderCats(); renderOpts(); updateFreeHint();
     E('pmSheetBackdrop').classList.add('pm-on');
     E('pmSheet').classList.add('pm-on');
+  }
+  // Affiche sous le champ « votre phrase » ce qui sera retenu (exemple choisi vs phrase écrite)
+  function updateFreeHint(){
+    var hint=E('pmFreeHint'), ft=E('pmFreeText'); if(!hint) return;
+    var isEx = draft && draft.id && draft.id!=='__free__';
+    var hasFree = (freeText||'').trim().length>0;
+    if(ft) ft.classList.toggle('filled', !isEx && hasFree);
+    if(isEx){ hint.textContent='✓ Exemple sélectionné ci-dessus'; hint.style.color='#8fd0ff'; }
+    else if(hasFree){ hint.textContent='✓ Votre phrase sera utilisée telle quelle'; hint.style.color='#7ee0a3'; }
+    else { hint.textContent=''; }
   }
   function closeSheet(){
     E('pmSheetBackdrop').classList.remove('pm-on');
@@ -10221,7 +10278,8 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     E('pmCats').innerHTML=h;
   }
   function renderOpts(){
-    var q=(E('pmSearch').value||'').toLowerCase().trim();
+    // le texte tapé dans la section du bas filtre les exemples du haut (« lien »)
+    var q=(freeText||'').toLowerCase().trim();
     var selId = draft && draft.id;
     var h='';
     OPTS().forEach(function(o){
@@ -10234,7 +10292,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       if(sel) h+= extraHTML(o);
       h+= '</div>';
     });
-    E('pmOpts').innerHTML = h || '<div class="pm-list-empty">Aucune phrase ne correspond.</div>';
+    E('pmOpts').innerHTML = h || '<div class="pm-list-empty">Aucun exemple ne correspond — votre phrase écrite ci-dessous sera utilisée.</div>';
   }
   function extraHTML(o){
     if(o.measure){
@@ -10317,6 +10375,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     var fn=(fnBits.join('_') || 'Demande_modification_moulage')+'.pdf';
     // choix reconfirmés → inclus dans le PDF
     var confirmData = CONFIRM_Q.map(function(q,i){ return { fr:q.fr, en:q.en, a:confirmAns[i]||'' }; });
+    var notes = (((E('pmNotes')||{}).value)||'').trim();   // notes supplémentaires (facultatif)
     _annotCreatePDFInner({
       tabs:tabs,
       soumName: labels,   // NOM DU MOULAGE = Siège / Dossier / Siège + Dossier
@@ -10325,6 +10384,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       soumInterv: '',
       soumRepr: '',
       confirm: confirmData,
+      notes: notes,
       onBlob: function(blob){
         _lastPdfBlob=blob; _lastPdfFn=fn;                        // gardé en mémoire pour l'envoi courriel
         if(typeof _downloadBlob==='function'){ _downloadBlob(blob, fn); }
@@ -10482,16 +10542,24 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     closeSheet:closeSheet,
     setCat:function(c){ catFilter=c; renderCats(); renderOpts(); },
     renderOpts:renderOpts,
+    // Section du bas : l'utilisateur écrit sa propre phrase → filtre les exemples ET devient la phrase retenue
+    onFreeText:function(v){
+      freeText=v||'';
+      if(freeText.trim()){ draft={ id:'__free__', free:freeText }; }        // phrase personnalisée
+      else if(draft && draft.id==='__free__'){ draft=null; }                 // vidé → plus de choix
+      renderOpts(); updateFreeHint();
+    },
     pick:function(id){
-      if(!draft || draft.id!==id) draft={ id:id };
-      renderOpts();
+      if(!draft || draft.id!==id) draft={ id:id };   // un exemple choisi remplace la phrase écrite
+      renderOpts(); updateFreeHint();
     },
     setMeasure:function(v){ if(draft) draft.measure=v; },
     setCustom:function(v){ if(draft) draft.custom=v; },
     toggleSide:function(s){ if(!draft) return; draft[s]=!draft[s]; renderOpts(); },
     confirmSheet:function(){
       if(sheetIdx<0) return;
-      if(!draft || !draft.id){ alert('Choisis d\'abord une phrase dans la liste.'); return; }
+      if(!draft || !draft.id){ alert('Choisissez une phrase d\'exemple en haut, ou écrivez votre propre phrase en bas.'); return; }
+      if(draft.id==='__free__' && !(draft.free||'').trim()){ alert('Écrivez votre phrase, ou choisissez un exemple.'); return; }
       points()[sheetIdx].mod = draft;
       closeSheet();
       render();
