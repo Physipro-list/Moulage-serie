@@ -2856,6 +2856,9 @@ label.item-img-btn{ user-select:none; }
 </style>
 </head>
 <body>
+<script>/* Mode téléphone détecté au plus tôt : évite d'afficher la version PC avant la version téléphone. */
+(function(){try{var w=/[?&]tel=1\b/.test(location.search),m=/Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)||window.innerWidth<=768;if(w||m)document.documentElement.classList.add('pm-phone','pm-booting');}catch(e){}})();</script>
+<div id="pmBoot"><div class="pm-boot-spin"></div><div class="pm-boot-title">Modification moulage</div><div class="pm-boot-sub">Version téléphone — chargement…</div></div>
 
 <!-- ═══ LOGIN OVERLAY ═══ -->
 <div class="login-overlay" id="loginOverlay">
@@ -9611,6 +9614,34 @@ document.addEventListener('keydown', function(e){
   font-size:16px; font-family:'DM Sans',sans-serif;
 }
 .pm-info-input::placeholder{ color:rgba(255,255,255,.5); }
+
+/* ---- sélecteur de partie (siège / dossier) ---- */
+.pm-parts{ display:none; gap:8px; padding:8px 10px 0; }
+#pmOverlay.pm-multi:not(.pm-info-phase) .pm-parts{ display:flex; }
+.pm-part{
+  flex:1 1 0; display:flex; align-items:center; justify-content:center; gap:7px;
+  padding:11px 8px; border-radius:12px; font-size:14.5px; font-weight:800; cursor:pointer;
+  background:rgba(255,255,255,.07); color:#cfe0f7; border:1.5px solid rgba(255,255,255,.18);
+}
+.pm-part.on{ background:linear-gradient(to bottom,#2f6fd0,#1b47a0); color:#fff; border-color:#4f8be6; }
+.pm-part .pm-part-dot{ width:9px; height:9px; border-radius:50%; background:#f59e0b; box-shadow:0 0 0 2px rgba(0,0,0,.25); }
+.pm-part.done .pm-part-dot{ background:#22c55e; }
+.pm-part:active{ transform:scale(.98); }
+
+/* ---- splash anti-flash (mode téléphone) ---- */
+#pmBoot{ display:none; }
+html.pm-booting #pmBoot{
+  position:fixed; inset:0; z-index:99998; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:15px; color:#e8eefc;
+  font-family:'DM Sans',sans-serif;
+  background:linear-gradient(to bottom,#04152c 0%,#12294a 60%,#1e3a5f 100%);
+}
+#pmBoot.pm-hide{ display:none !important; }
+.pm-boot-title{ font-size:17px; font-weight:800; letter-spacing:.3px; }
+.pm-boot-sub{ font-size:13px; opacity:.7; }
+.pm-boot-spin{ width:34px; height:34px; border-radius:50%; border:3px solid rgba(255,255,255,.22); border-top-color:#60a5fa; animation:pmspin .8s linear infinite; }
+@keyframes pmspin{ to{ transform:rotate(360deg); } }
+html.pm-phone #pmOpenBtn{ display:none; }
 </style>
 
 <!-- Bouton d'ouverture -->
@@ -9628,21 +9659,25 @@ document.addEventListener('keydown', function(e){
   <div id="pmInfo">
     <div class="pm-info-card">
       <div class="pm-info-title">Nouvelle demande de modification</div>
-      <div class="pm-info-sub">Remplissez les informations, puis prenez la photo du moulage.</div>
-
-      <div class="pm-info-lbl">Type de moulage</div>
-      <div class="pm-typewrap">
-        <button type="button" class="pm-type" id="pmTypeSiege" onclick="PM.setType('Siège')">🪑 Siège</button>
-        <button type="button" class="pm-type" id="pmTypeDossier" onclick="PM.setType('Dossier')">🛋️ Dossier</button>
-      </div>
+      <div class="pm-info-sub">Remplissez les informations, puis prenez la ou les photos du moulage.</div>
 
       <div class="pm-info-lbl">Nom du bénéficiaire</div>
       <input class="pm-info-input" id="pmBenef" type="text" autocomplete="off" placeholder="Nom du bénéficiaire" oninput="PM.setBenef(this.value)">
 
       <div class="pm-info-lbl">Numéro de commande</div>
       <input class="pm-info-input" id="pmCmd" type="text" autocomplete="off" inputmode="text" placeholder="N° de commande" oninput="PM.setCmd(this.value)">
+
+      <div class="pm-info-lbl">Contient</div>
+      <div class="pm-typewrap">
+        <button type="button" class="pm-type" id="pmPartSiege" onclick="PM.togglePart('siege')">🪑 Siège</button>
+        <button type="button" class="pm-type" id="pmPartDossier" onclick="PM.togglePart('dossier')">🛋️ Dossier</button>
+      </div>
+      <div class="pm-info-sub" style="margin:9px 2px 0">Vous pourrez faire le siège puis le dossier, l'un après l'autre. Chacun aura sa photo et ses phrases.</div>
     </div>
   </div>
+
+  <!-- Sélecteur de partie (affiché quand la demande contient siège ET dossier) -->
+  <div class="pm-parts" id="pmParts"></div>
 
   <div class="pm-stagewrap" id="pmStageWrap">
     <div class="pm-stage" id="pmStage">
@@ -9650,9 +9685,9 @@ document.addEventListener('keydown', function(e){
       <!-- pastilles injectées ici -->
     </div>
     <div class="pm-nophoto" id="pmNoPhoto" style="display:none">
-      Aucune photo de moulage chargée.
+      <span id="pmNoPhotoLbl">Aucune photo chargée.</span>
       <br>
-      <button class="pm-bigbtn" onclick="document.getElementById('pmFile').click()">📷 Prendre / choisir une photo</button>
+      <button class="pm-bigbtn" onclick="document.getElementById('pmFile').click()">📷 Prendre / choisir la photo</button>
       <input id="pmFile" type="file" accept="image/*" capture="environment" style="display:none" onchange="PM.onFile(event)">
     </div>
     <div id="pmRetakeWrap" style="text-align:center;margin-top:8px;display:none">
@@ -9694,13 +9729,22 @@ document.addEventListener('keydown', function(e){
   function OPTS(){ return (typeof MOD_OPTIONS!=='undefined' && MOD_OPTIONS.length) ? MOD_OPTIONS : []; }
   function optById(id){ var L=OPTS(); for(var i=0;i<L.length;i++) if(L[i].id===id) return L[i]; return null; }
 
-  // État isolé de l'essai
-  var points = [];        // { xf, yf, mod:{id,measure,gauche,droite,custom} }
+  // État isolé (aucun Firebase). Une demande peut contenir un siège ET/OU un dossier.
+  // Chaque partie a sa propre photo et ses propres ronds/phrases.
+  var PARTS = [ {key:'siege',label:'Siège',icon:'🪑'}, {key:'dossier',label:'Dossier',icon:'🛋️'} ];
+  function partLabel(k){ for(var i=0;i<PARTS.length;i++){ if(PARTS[i].key===k) return PARTS[i].label; } return k; }
+  function freshData(){ return { siege:{ on:true, photo:'', points:[] }, dossier:{ on:false, photo:'', points:[] } }; }
+  var data = freshData();
+  var cur = 'siege';      // partie active
   var phase = 'info';     // 'info' | 'place' | 'assign'
   var sheetIdx = -1;      // point en cours d'édition dans la feuille
   var draft = null;       // brouillon de mod pendant l'édition
   var catFilter = null;   // catégorie filtrée
-  var modInfo = { type:'Siège', benef:'', cmd:'' };  // infos de la demande (aucun coût Firebase)
+  var modInfo = { benef:'', cmd:'' };  // infos de la demande
+
+  function P(){ return data[cur]; }                 // partie active
+  function points(){ return data[cur].points; }     // ronds de la partie active
+  function selectedKeys(){ var out=[]; for(var i=0;i<PARTS.length;i++){ if(data[PARTS[i].key].on) out.push(PARTS[i].key); } return out; }
 
   // Résumé texte d'une modification (miroir de _modSummary)
   function summary(mod){
@@ -9712,20 +9756,17 @@ document.addEventListener('keydown', function(e){
     return o.label;
   }
 
-  // ---------- Photo ----------
-  function loadPhoto(){
-    var src=null;
-    var gEl=document.getElementById('globalImgEl'); if(gEl && gEl.src) src=gEl.src;
-    if(!src){ try{ var t=(typeof fichiersGlobaux!=='undefined')?fichiersGlobaux[currentFileTabIdx]:null;
-      if(t && t.data && (t.type||'').indexOf('image/')===0) src=t.data; }catch(e){} }
-    var img=E('pmPhoto'), no=E('pmNoPhoto');
+  // ---------- Photo (par partie) ----------
+  function showPhoto(){
+    var img=E('pmPhoto'), no=E('pmNoPhoto'), src=P().photo;
     if(src){ img.src=src; img.style.display='block'; no.style.display='none'; }
-    else { img.style.display='none'; no.style.display='block'; }
+    else { img.removeAttribute('src'); img.style.display='none'; no.style.display='block'; }
+    var lbl=E('pmNoPhotoLbl'); if(lbl) lbl.textContent='Prenez la photo du '+partLabel(cur).toLowerCase()+'.';
   }
   function onFile(ev){
     var f=ev.target.files && ev.target.files[0]; if(!f) return;
     var r=new FileReader();
-    r.onload=function(){ var img=E('pmPhoto'); img.src=r.result; img.style.display='block'; E('pmNoPhoto').style.display='none'; render(); };
+    r.onload=function(){ P().photo=r.result; showPhoto(); render(); };
     r.readAsDataURL(f);
     try{ ev.target.value=''; }catch(e){}   // permet de reprendre la même photo
   }
@@ -9739,7 +9780,7 @@ document.addEventListener('keydown', function(e){
     var xf=(ev.clientX-rect.left)/rect.width;
     var yf=(ev.clientY-rect.top)/rect.height;
     if(xf<0||xf>1||yf<0||yf>1) return;
-    points.push({ xf:xf, yf:yf, mod:null });
+    points().push({ xf:xf, yf:yf, mod:null });
     render();
   });
 
@@ -9747,7 +9788,7 @@ document.addEventListener('keydown', function(e){
     var stage=E('pmStage');
     stage.querySelectorAll('.pm-dot').forEach(function(d){ d.remove(); });
     var img=E('pmPhoto'); if(img.style.display==='none') return;
-    points.forEach(function(p,i){
+    points().forEach(function(p,i){
       var d=document.createElement('div');
       d.className='pm-dot'; d.textContent=(i+1);
       d.style.background=col(i+1); d.style.borderColor='#fff';
@@ -9759,12 +9800,12 @@ document.addEventListener('keydown', function(e){
 
   function renderList(){
     var box=E('pmList');
-    if(!points.length){
-      box.innerHTML='<div class="pm-list-empty">Aucun rond placé.<br>Touchez la photo pour ajouter la modification n° 1.</div>';
+    if(!points().length){
+      box.innerHTML='<div class="pm-list-empty">Aucun rond placé sur le '+esc(partLabel(cur).toLowerCase())+'.<br>Touchez la photo pour ajouter la modification n° 1.</div>';
       return;
     }
     var h='';
-    points.forEach(function(p,i){
+    points().forEach(function(p,i){
       var c=col(i+1), sum=summary(p.mod);
       var txt = sum ? esc(sum) : '— toucher pour choisir la phrase —';
       h+='<div class="pm-row" style="border-left-color:'+c+'" onclick="PM.rowTap('+i+')">'
@@ -9776,8 +9817,15 @@ document.addEventListener('keydown', function(e){
     box.innerHTML=h;
   }
 
+  // La partie « suivante » sélectionnée qui n'a pas encore de photo (pour guider en 2 étapes)
+  function nextPartNeedingPhoto(){
+    var sel=selectedKeys();
+    for(var i=0;i<sel.length;i++){ if(sel[i]!==cur && !data[sel[i]].photo) return sel[i]; }
+    return null;
+  }
+
   function renderActions(){
-    var a=E('pmActions'), n=points.length;
+    var a=E('pmActions'), n=points().length;
     if(phase==='info'){
       a.innerHTML =
         '<button class="pm-act primary" onclick="PM.toPhoto()">📷 Prendre la photo →</button>';
@@ -9786,45 +9834,69 @@ document.addEventListener('keydown', function(e){
         '<button class="pm-act ghost" '+(n?'':'disabled')+' onclick="PM.undo()">↩︎ Annuler le dernier</button>'
        +'<button class="pm-act primary" '+(n?'':'disabled')+' onclick="PM.goAssign()">Choisir les phrases ('+n+') →</button>';
     } else {
+      // phase « associer » : proposer la partie suivante si besoin, sinon créer le PDF
+      var nxt=nextPartNeedingPhoto();
+      var right = nxt
+        ? '<button class="pm-act primary" onclick="PM.switchPart(\''+nxt+'\')">📷 Photo du '+esc(partLabel(nxt).toLowerCase())+' →</button>'
+        : '<button class="pm-act primary" onclick="PM.pdf()">📄 Créer le PDF</button>';
       a.innerHTML =
-        '<button class="pm-act ghost" onclick="PM.goPlace()">＋ Placer d\'autres ronds</button>'
-       +'<button class="pm-act primary" onclick="PM.pdf()">📄 Créer le PDF</button>';
+        '<button class="pm-act ghost" onclick="PM.goPlace()">＋ Placer d\'autres ronds</button>' + right;
     }
+  }
+
+  // Sélecteur de partie (siège / dossier) — visible seulement quand la demande contient les deux
+  function renderParts(){
+    var box=E('pmParts'); if(!box) return;
+    var sel=selectedKeys();
+    if(sel.length<2){ box.innerHTML=''; return; }
+    var h='';
+    sel.forEach(function(k){
+      var done = data[k].photo && data[k].points.length;
+      h+='<div class="pm-part'+(k===cur?' on':'')+(done?' done':'')+'" onclick="PM.switchPart(\''+k+'\')">'
+        +'<span class="pm-part-dot"></span>'+partLabel(k)+'</div>';
+    });
+    box.innerHTML=h;
   }
 
   // Reflète les infos dans le formulaire + la barre du haut
   function syncInfo(){
-    var s=E('pmTypeSiege'), d=E('pmTypeDossier');
-    if(s) s.classList.toggle('on', modInfo.type==='Siège');
-    if(d) d.classList.toggle('on', modInfo.type==='Dossier');
+    var s=E('pmPartSiege'), d=E('pmPartDossier');
+    if(s) s.classList.toggle('on', data.siege.on);
+    if(d) d.classList.toggle('on', data.dossier.on);
     var b=E('pmBenef'); if(b && b.value!==modInfo.benef) b.value=modInfo.benef;
     var c=E('pmCmd'); if(c && c.value!==modInfo.cmd) c.value=modInfo.cmd;
     var sub=E('pmSubtitle');
     if(sub){
-      var bits=[modInfo.type]; if(modInfo.benef) bits.push(modInfo.benef);
-      if(modInfo.cmd) bits.push('N° '+modInfo.cmd);
-      sub.textContent = (phase==='info') ? 'Version téléphone' : bits.join(' · ');
+      if(phase==='info'){ sub.textContent='Version téléphone'; }
+      else {
+        var bits=[]; if(modInfo.benef) bits.push(modInfo.benef);
+        if(modInfo.cmd) bits.push('N° '+modInfo.cmd);
+        bits.push(partLabel(cur));
+        sub.textContent = bits.join(' · ');
+      }
     }
   }
 
   function updateHintPhase(){
     var ov=E('pmOverlay');
     ov.classList.toggle('pm-info-phase', phase==='info');
+    ov.classList.toggle('pm-multi', selectedKeys().length>1);
+    var pl=partLabel(cur);
     if(phase==='assign'){ ov.classList.add('pm-assign');
-      E('pmHint').textContent='Touchez un rond (sur la photo ou dans la liste) pour choisir sa phrase.'; }
+      E('pmHint').textContent=pl+' — touchez un rond (photo ou liste) pour choisir sa phrase.'; }
     else { ov.classList.remove('pm-assign');
-      E('pmHint').textContent='Touchez la photo pour placer chaque modification (1, 2, 3…)'; }
+      E('pmHint').textContent=pl+' — touchez la photo pour placer chaque modification (1, 2, 3…)'; }
     // bouton « reprendre la photo » : uniquement en phase « placer » et si une photo est chargée
     var rt=E('pmRetakeWrap');
     if(rt){ var img=E('pmPhoto'); rt.style.display=(phase==='place' && img && img.style.display!=='none')?'block':'none'; }
   }
 
-  function render(){ updateHintPhase(); syncInfo(); renderDots(); renderList(); renderActions(); }
+  function render(){ updateHintPhase(); syncInfo(); renderParts(); renderDots(); renderList(); renderActions(); }
 
   // ---------- Feuille de choix ----------
   function openSheet(i){
     sheetIdx=i;
-    draft = points[i].mod ? JSON.parse(JSON.stringify(points[i].mod)) : null;
+    draft = points()[i].mod ? JSON.parse(JSON.stringify(points()[i].mod)) : null;
     catFilter=null;
     E('pmSearch').value='';
     var c=col(i+1); var b=E('pmSheetBadge'); b.textContent=(i+1); b.style.background=c; b.style.borderColor='#fff';
@@ -9880,24 +9952,31 @@ document.addEventListener('keydown', function(e){
   // On RÉUTILISE le moteur PDF du PC (_annotCreatePDFInner) pour un rendu 100% identique :
   // mêmes entêtes, mêmes cartes d'info, même disposition. 100% local, aucun coût Firebase
   // (on passe par onBlob → téléchargement direct, sans écriture Firebase/OneDrive).
-  function nameSafe(s){ return (s||'').replace(/[^a-z0-9_-]/gi,'_').replace(/_+/g,'_').replace(/^_|_$/g,'').substring(0,40); }
-  function _pmMakePdf(){
-    // Convertit chaque rond placé en annotation « cercle » comprise par le moteur PC.
-    var anns = points.map(function(p){
-      return { t:'circle', x:p.xf, y:p.yf, r:0.05, color:'#000', width:4, mod:p.mod };
+  function nameSafe(s){ try{ s=(s||'').normalize('NFD').replace(/[̀-ͯ]/g,''); }catch(e){} return (s||'').replace(/[^a-z0-9_-]/gi,'_').replace(/_+/g,'_').replace(/^_|_$/g,'').substring(0,40); }
+  // Construit un « onglet » (= une face du PDF) par partie possédant une photo.
+  function buildTabs(){
+    var tabs=[];
+    selectedKeys().forEach(function(k){
+      var part=data[k]; if(!part.photo) return;                 // pas de photo → pas de face
+      var anns=part.points.map(function(p){
+        return { t:'circle', x:p.xf, y:p.yf, r:0.05, color:'#000', width:4, mod:p.mod };
+      });
+      tabs.push({ name:partLabel(k), data:part.photo, annotations:anns });
     });
-    var photo = E('pmPhoto');
-    var faceName = modInfo.type || 'Moulage';
-    var tab = { name:faceName, data:(photo && photo.src) || '', annotations:anns };
-    var benef = (modInfo.benef||'').trim();
-    var cmd   = (modInfo.cmd||'').trim();
-    var fnBits=['Modif', modInfo.type, benef, cmd].map(nameSafe).filter(Boolean);
-    var fn = (fnBits.join('_') || 'Demande_modification_moulage') + '.pdf';
+    return tabs;
+  }
+  function _pmMakePdf(){
+    var tabs=buildTabs();
+    if(!tabs.length){ alert('Prenez au moins une photo avant de créer le PDF.'); return; }
+    var benef=(modInfo.benef||'').trim(), cmd=(modInfo.cmd||'').trim();
+    var labels=tabs.map(function(t){ return t.name; }).join(' + ');     // « Siège + Dossier »
+    var fnBits=['Modif', labels.replace(/ \+ /g,'-'), benef, cmd].map(nameSafe).filter(Boolean);
+    var fn=(fnBits.join('_') || 'Demande_modification_moulage')+'.pdf';
     _annotCreatePDFInner({
-      tabs:[tab],
-      soumName: modInfo.type || '',   // NOM DU MOULAGE = Siège / Dossier
-      soumCmd: cmd,                    // N° COMMANDE
-      soumBenef: benef,                // NOM DU BÉNÉFICIAIRE
+      tabs:tabs,
+      soumName: labels,   // NOM DU MOULAGE = Siège / Dossier / Siège + Dossier
+      soumCmd: cmd,       // N° COMMANDE
+      soumBenef: benef,   // NOM DU BÉNÉFICIAIRE
       soumInterv: '',
       soumRepr: '',
       onBlob: function(blob){
@@ -9908,13 +9987,15 @@ document.addEventListener('keydown', function(e){
   }
 
   // ---------- API publique ----------
+  function anyWork(){ return !!(modInfo.benef || modInfo.cmd || data.siege.points.length || data.dossier.points.length || data.siege.photo || data.dossier.photo); }
+
   window.PM = {
     open:function(){
       // Nouvelle demande : état repartant à zéro, on démarre sur le formulaire d'infos.
-      points=[]; phase='info'; sheetIdx=-1; draft=null; catFilter=null;
-      modInfo={ type:'Siège', benef:'', cmd:'' };
-      var img=E('pmPhoto'); if(img){ img.removeAttribute('src'); img.style.display='none'; }
-      var no=E('pmNoPhoto'); if(no) no.style.display='block';
+      data=freshData(); cur='siege'; phase='info'; sheetIdx=-1; draft=null; catFilter=null;
+      modInfo={ benef:'', cmd:'' };
+      showPhoto();
+      hideBoot();
       E('pmOverlay').classList.add('pm-on');
       document.body.style.overflow='hidden';
       render();
@@ -9924,28 +10005,44 @@ document.addEventListener('keydown', function(e){
       document.body.style.overflow='';
     },
     back:function(){
-      if((points.length || modInfo.benef || modInfo.cmd) && !confirm('Retourner à l\'accueil ? La demande en cours ne sera pas conservée (crée le PDF avant si besoin).')) return;
+      if(anyWork() && !confirm('Retourner à l\'accueil ? La demande en cours ne sera pas conservée (crée le PDF avant si besoin).')) return;
       try{ location.href='index.html'; }catch(e){ history.back(); }
     },
     // ----- Formulaire d'infos -----
-    setType:function(t){ modInfo.type=t; syncInfo(); },
+    togglePart:function(k){
+      if(!data[k]) return;
+      // on ne peut pas tout décocher : il faut au moins une partie
+      if(data[k].on && selectedKeys().length<=1){ return; }
+      data[k].on=!data[k].on;
+      if(!data[cur].on){ var sel=selectedKeys(); if(sel.length) cur=sel[0]; }
+      syncInfo();
+    },
     setBenef:function(v){ modInfo.benef=v; syncInfo(); },
     setCmd:function(v){ modInfo.cmd=v; syncInfo(); },
     toPhoto:function(){
-      phase='place';
-      loadPhoto();            // affiche la photo si déjà chargée, sinon invite à la prendre
+      var sel=selectedKeys(); if(!sel.length){ alert('Choisissez au moins « Siège » ou « Dossier ».'); return; }
+      cur=sel[0]; phase='place';
+      showPhoto();
+      render();
+      window.scrollTo(0,0);
+    },
+    // Basculer entre siège et dossier (garde le travail de chaque partie)
+    switchPart:function(k){
+      if(!data[k] || !data[k].on) return;
+      cur=k;
+      // si cette partie n'a pas de photo → on repart en mode « placer » (invite à prendre la photo)
+      if(!data[k].photo) phase='place';
+      showPhoto();
       render();
       window.scrollTo(0,0);
     },
     onFile:onFile,
-    undo:function(){ points.pop(); render(); },
-    del:function(i){ points.splice(i,1); render(); },
-    goAssign:function(){ if(!points.length) return; phase='assign'; render(); window.scrollTo(0,0); },
+    undo:function(){ points().pop(); render(); },
+    del:function(i){ points().splice(i,1); render(); },
+    goAssign:function(){ if(!points().length) return; phase='assign'; render(); window.scrollTo(0,0); },
     goPlace:function(){ phase='place'; render(); },
     pdf:function(){
-      if(!points.length){ alert('Placez au moins un rond avant de créer le PDF.'); return; }
-      var img=E('pmPhoto');
-      if(!img || img.style.display==='none' || !img.src){ alert('Prenez d\'abord une photo du moulage.'); return; }
+      if(!buildTabs().length){ alert('Prenez au moins une photo (avec un rond) avant de créer le PDF.'); return; }
       _pmMakePdf();   // _annotCreatePDFInner charge jsPDF lui-même (_ensureJsPDF)
     },
     rowTap:function(i){ if(phase!=='assign'){ phase='assign'; render(); } openSheet(i); },
@@ -9962,11 +10059,14 @@ document.addEventListener('keydown', function(e){
     confirmSheet:function(){
       if(sheetIdx<0) return;
       if(!draft || !draft.id){ alert('Choisis d\'abord une phrase dans la liste.'); return; }
-      points[sheetIdx].mod = draft;
+      points()[sheetIdx].mod = draft;
       closeSheet();
       render();
     }
   };
+
+  // Masque le splash anti-flash (mode téléphone)
+  function hideBoot(){ try{ document.documentElement.classList.remove('pm-booting'); var b=E('pmBoot'); if(b) b.classList.add('pm-hide'); }catch(e){} }
 })();
 </script>
 
@@ -9980,13 +10080,15 @@ document.addEventListener('keydown', function(e){
   var opened=false;
   var t=setInterval(function(){
     var lo=document.getElementById('loginOverlay');
-    var loggedIn = !lo || lo.classList.contains('hidden') || (lo.offsetParent===null);
+    // fiable même pour une superposition position:fixed (offsetParent vaut toujours null pour fixed)
+    var loggedIn = !lo || lo.classList.contains('hidden') || getComputedStyle(lo).display==='none';
     if(loggedIn && !opened && window.PM && typeof PM.open==='function'){
       opened=true; clearInterval(t);
       try{ PM.open(); }catch(e){}
     }
-  }, 400);
-  setTimeout(function(){ clearInterval(t); }, 40000);
+  }, 120);
+  // Sécurité : si le mode téléphone ne s'ouvre pas, on retire le splash pour ne pas bloquer.
+  setTimeout(function(){ clearInterval(t); if(!opened){ try{ document.documentElement.classList.remove('pm-booting'); var b=document.getElementById('pmBoot'); if(b) b.classList.add('pm-hide'); }catch(e){} } }, 40000);
 })();
 </script>
 </body>
