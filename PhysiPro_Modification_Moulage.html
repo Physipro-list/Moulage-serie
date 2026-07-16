@@ -9539,6 +9539,24 @@ document.addEventListener('keydown', function(e){
 .pm-act-solo{ flex:1 1 0; }
 .pm-act:disabled{ opacity:.4; box-shadow:none; }
 .pm-act:active{ transform:scale(.98); }
+/* invite clignotante « placez les points » (attire l'attention) */
+.pm-cta-pulse{
+  flex:1 1 0; text-align:center; padding:18px 12px; border-radius:14px;
+  font-size:16.5px; font-weight:800; color:#fff; font-family:'DM Sans',sans-serif;
+  background:linear-gradient(to bottom,#3b82f6,#1d4ed8); border:none; cursor:default;
+  animation:pmpulse 1.05s ease-in-out infinite;
+}
+@keyframes pmpulse{
+  0%,100%{ transform:scale(1);    box-shadow:0 5px 14px rgba(59,130,246,.45); }
+  50%    { transform:scale(1.035); box-shadow:0 9px 24px rgba(59,130,246,.8); }
+}
+/* petit bouton discret « reprendre la photo » (sous la photo, en phase points) */
+.pm-retake{
+  background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.3);
+  border-radius:10px; padding:8px 14px; font-size:13px; font-weight:700; cursor:pointer;
+  font-family:'DM Sans',sans-serif;
+}
+.pm-retake:active{ transform:scale(.97); }
 
 /* ---- feuille du bas : choix de la phrase ---- */
 #pmSheetBackdrop{
@@ -9711,7 +9729,9 @@ html.pm-phone #pmOpenBtn{ display:none; }
       <input id="pmFile" type="file" accept="image/*" capture="environment" style="display:none" onchange="PM.onFile(event)">
       <input id="pmFileGallery" type="file" accept="image/*" style="display:none" onchange="PM.onFile(event)">
     </div>
-    <div id="pmRetakeWrap" style="display:none"></div>
+    <div id="pmRetakeWrap" style="display:none;text-align:center;margin-top:8px">
+      <button type="button" class="pm-retake" onclick="document.getElementById('pmFile').click()">📷 Reprendre la photo</button>
+    </div>
   </div>
 
   <div class="pm-list" id="pmList"></div>
@@ -9789,7 +9809,13 @@ html.pm-phone #pmOpenBtn{ display:none; }
   function onFile(ev){
     var f=ev.target.files && ev.target.files[0]; if(!f) return;
     var r=new FileReader();
-    r.onload=function(){ P().photo=r.result; showPhoto(); render(); };
+    r.onload=function(){
+      var had=!!P().photo;
+      P().photo=r.result;
+      if(had) P().points=[];             // on reprend la photo → on repart des points à zéro
+      if(phase==='photo') phase='place'; // la photo prise = confirmée → on place directement les points
+      showPhoto(); render(); window.scrollTo(0,0);
+    };
     r.readAsDataURL(f);
     try{ ev.target.value=''; }catch(e){}   // permet de reprendre la même photo
   }
@@ -9851,19 +9877,18 @@ html.pm-phone #pmOpenBtn{ display:none; }
       a.innerHTML =
         '<button class="pm-act primary pm-act-solo" onclick="PM.start()">Continuer →</button>';
     } else if(phase==='photo'){
-      if(!P().photo){
-        // les gros boutons (prendre / choisir) sont dans la page ; la barre du bas ne garde que « retour »
+      // les gros boutons (prendre / choisir) sont dans la page ; la barre du bas ne garde que « retour »
+      a.innerHTML =
+        '<button class="pm-act ghost pm-act-solo" onclick="PM.prevStep()">← Retour</button>';
+    } else if(phase==='place'){
+      if(!n){
+        // Aucun point encore : grosse invite clignotante pour bien montrer que c'est le moment
         a.innerHTML =
-          '<button class="pm-act ghost pm-act-solo" onclick="PM.prevStep()">← Retour</button>';
+          '<div class="pm-cta-pulse">👆 Placez les points de modification sur la photo</div>';
       } else {
         a.innerHTML =
-          '<button class="pm-act ghost" onclick="PM.retakePhoto()">↩︎ Reprendre</button>'
-         +'<button class="pm-act primary" onclick="PM.confirmPhoto()">✓ Confirmer la photo →</button>';
+          '<button class="pm-act primary pm-act-solo" onclick="PM.toAssign()">Choisir les modifications →</button>';
       }
-    } else if(phase==='place'){
-      a.innerHTML =
-        '<button class="pm-act ghost" '+(n?'':'disabled')+' onclick="PM.undo()">↩︎ Annuler le dernier</button>'
-       +'<button class="pm-act primary" onclick="PM.toAssign()">Choisir les modifications →</button>';
     } else { // assign
       a.innerHTML =
         '<button class="pm-act ghost" onclick="PM.goPlace()">＋ Placer d\'autres ronds</button>'
@@ -9902,13 +9927,14 @@ html.pm-phone #pmOpenBtn{ display:none; }
     ov.classList.toggle('pm-assign', phase==='assign');
     var pl=partLabel(cur), h=E('pmHint');
     if(phase==='photo'){
-      h.textContent = P().photo ? ('Cette photo du '+pl.toLowerCase()+' convient-elle ?')
-                                : ('Étape 1 : prenez la photo du '+pl.toLowerCase()+'.');
+      h.textContent = 'Étape 1 : prenez la photo du '+pl.toLowerCase()+'.';
     } else if(phase==='place'){
-      h.textContent = 'Étape 2 : placez les points sur le '+pl.toLowerCase()+' (touchez la photo : 1, 2, 3…).';
+      h.textContent = 'Étape 2 : touchez la photo du '+pl.toLowerCase()+' pour placer les points (1, 2, 3…).';
     } else if(phase==='assign'){
       h.textContent = 'Étape 3 : choisissez la modification de chaque rond du '+pl.toLowerCase()+'.';
     }
+    // petit bouton « reprendre la photo » disponible pendant qu'on place les points
+    var rt=E('pmRetakeWrap'); if(rt) rt.style.display=(phase==='place')?'block':'none';
   }
 
   function render(){ updateHintPhase(); syncInfo(); renderParts(); renderDots(); renderList(); renderActions(); }
@@ -10045,13 +10071,6 @@ html.pm-phone #pmOpenBtn{ display:none; }
       cur=sel[0]; phase='photo';
       showPhoto(); render(); window.scrollTo(0,0);
     },
-    // Photo prise → on confirme → on place les points de CE même item
-    confirmPhoto:function(){
-      if(!P().photo){ alert('Prenez d\'abord la photo.'); return; }
-      phase='place';
-      showPhoto(); render(); window.scrollTo(0,0);
-    },
-    retakePhoto:function(){ P().photo=''; P().points=[]; showPhoto(); render(); },
     prevStep:function(){
       var s=selectedKeys(), i=s.indexOf(cur);
       if(i>0){ cur=s[i-1]; phase='assign'; showPhoto(); render(); }  // revenir à l'item précédent
