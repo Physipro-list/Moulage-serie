@@ -2856,7 +2856,7 @@ label.item-img-btn{ user-select:none; }
 </style>
 </head>
 <body>
-<div id="pmBoot" style="display:none;position:fixed;inset:0;z-index:99998;flex-direction:column;align-items:center;justify-content:center;gap:15px;color:#e8eefc;font-family:'DM Sans',sans-serif;background:linear-gradient(to bottom,#04152c 0%,#12294a 60%,#1e3a5f 100%);"><div class="pm-boot-spin"></div><div style="font-size:17px;font-weight:800;letter-spacing:.3px;">Modification moulage</div><div style="font-size:13px;opacity:.7;">Version téléphone v71 — chargement…</div></div>
+<div id="pmBoot" style="display:none;position:fixed;inset:0;z-index:99998;flex-direction:column;align-items:center;justify-content:center;gap:15px;color:#e8eefc;font-family:'DM Sans',sans-serif;background:linear-gradient(to bottom,#04152c 0%,#12294a 60%,#1e3a5f 100%);"><div class="pm-boot-spin"></div><div style="font-size:17px;font-weight:800;letter-spacing:.3px;">Modification moulage</div><div style="font-size:13px;opacity:.7;">Version téléphone v72 — chargement…</div></div>
 <script>/* Mode téléphone détecté au plus tôt : le splash couvre TOUT de suite, et on verrouille le zoom
    pour que les boutons ne bougent plus quand on essaie de cliquer. */
 (function(){try{
@@ -8902,6 +8902,26 @@ function _annotCompositeDataURL(tab, cb){
       for(var i=0;i<anns.length;i++){ var num=_isNumbered(anns[i])?(++n):0; _annotDrawOne(anns[i], num); }
     }catch(_){}
     _annotCanvas=sCanvas; _annotCtx=sCtx; _annotDpr=sDpr;
+    // Rogner un peu le HAUT et le BAS des photos trop hautes (verticales), sans jamais
+    // couper les pastilles numérotées : on limite la coupe à la marge autour du 1er/dernier point.
+    var _isTall = H > W*1.05;
+    var cutT=0, cutB=0;
+    if(_isTall){
+      cutT=0.12; cutB=0.12;
+      var _ys=[], _aa=tab.annotations||[];
+      for(var _k=0;_k<_aa.length;_k++){ if(_isNumbered(_aa[_k]) && typeof _aa[_k].y==='number') _ys.push(_aa[_k].y); }
+      if(_ys.length){
+        var _minY=Math.min.apply(null,_ys), _maxY=Math.max.apply(null,_ys), _marg=0.09;
+        cutT=Math.max(0, Math.min(cutT, _minY-_marg));
+        cutB=Math.max(0, Math.min(cutB, (1-_maxY)-_marg));
+      }
+    }
+    if(cutT>0.005 || cutB>0.005){
+      var _y0=Math.round(H*cutT), _y1=Math.round(H*(1-cutB)), _nh=Math.max(1,_y1-_y0);
+      var _c2=document.createElement('canvas'); _c2.width=W; _c2.height=_nh;
+      _c2.getContext('2d').drawImage(c, 0,_y0, W,_nh, 0,0, W,_nh);
+      cb(_c2.toDataURL('image/jpeg',0.62), W, _nh); return;
+    }
     cb(c.toDataURL('image/jpeg',0.62), W, H);
   };
   img.onerror=function(){ cb(null); };
@@ -9035,19 +9055,25 @@ function _annotCreatePDFInner(opts){
         doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(ink[0],ink[1],ink[2]);
         doc.text((face.name||'Vue').toUpperCase(), M, yTop+9);
         var bodyTop=yTop+20, bodyH=blockH-20;
-        // Photo à gauche, demandes à droite. En mode « solo » (une seule photo sur la page),
-        // on élargit la colonne photo pour remplir la page et rendre la photo plus imposante.
         var midX=W/2, LW, divX, RX, RW;
-        if(solo){ LW=Math.round((W-2*M)*0.52); divX=M+LW+8; RX=M+LW+16; RW=W-M-RX; }
-        else    { LW=(midX-M)-14;             divX=midX;    RX=midX+6;   RW=W-M-RX; }
-        doc.setDrawColor(line[0],line[1],line[2]); doc.setLineWidth(0.8); doc.line(divX, bodyTop, divX, yTop+blockH);
+        var maxH=Math.min(bodyH, solo?240:190);
+        // On calcule D'ABORD la taille réelle de la photo, puis on colle la colonne
+        // « demandes de modification » juste à droite de la photo (aucun espace vide).
+        var pw=0, ph=0, LWcap=solo?Math.round((W-2*M)*0.52):((midX-M)-14);
         if(face.dataUrl && face.iw && face.ih){
-          // Photo plus compacte (~40% plus courte qu'avant) : moins imposante, surtout en mode « une seule photo ».
-          var maxH=Math.min(bodyH, solo?240:190);
-          var w=LW, h=LW*face.ih/face.iw;
-          if(h>maxH){ h=maxH; w=h*face.iw/face.ih; }
-          try{ doc.addImage(face.dataUrl,'JPEG', M, bodyTop, w, h); }catch(e){}
-          doc.setDrawColor(line[0],line[1],line[2]); doc.setLineWidth(1); doc.roundedRect(M,bodyTop,w,h,5,5,'S');
+          pw=LWcap; ph=LWcap*face.ih/face.iw;
+          if(ph>maxH){ ph=maxH; pw=ph*face.iw/face.ih; }
+        }
+        if(solo){
+          var photoRight = M + (pw>0?pw:LWcap);
+          divX = photoRight + 12; RX = divX + 8; RW = W - M - RX;   // demandes collées à la photo
+        } else {
+          divX = midX; RX = midX+6; RW = W-M-RX;                     // mode 2-photos : inchangé (comme PC)
+        }
+        doc.setDrawColor(line[0],line[1],line[2]); doc.setLineWidth(0.8); doc.line(divX, bodyTop, divX, yTop+blockH);
+        if(face.dataUrl && pw>0){
+          try{ doc.addImage(face.dataUrl,'JPEG', M, bodyTop, pw, ph); }catch(e){}
+          doc.setDrawColor(line[0],line[1],line[2]); doc.setLineWidth(1); doc.roundedRect(M,bodyTop,pw,ph,5,5,'S');
         }
         doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(120,135,153);
         doc.text('DEMANDES DE MODIFICATION', RX, bodyTop+2);
@@ -9900,7 +9926,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   <!-- Panneau : nouvelle demande (bénéficiaire, commande, siège/dossier) -->
   <div id="pmInfo">
     <div class="pm-info-card">
-      <div class="pm-info-title">Nouvelle demande de modification <span style="font-size:12px;font-weight:700;color:#7ee0a3;opacity:.9;">· v71</span></div>
+      <div class="pm-info-title">Nouvelle demande de modification <span style="font-size:12px;font-weight:700;color:#7ee0a3;opacity:.9;">· v72</span></div>
       <div class="pm-info-sub">Remplissez les informations, puis prenez la ou les photos du moulage.</div>
 
       <div class="pm-info-lbl">Nom du bénéficiaire</div>
