@@ -8986,6 +8986,33 @@ function _annotCreatePDFInner(opts){
         doc.text('PhysiPro \u2014 Atelier orthop\u00E9dique \u00B7 Sherbrooke (Qu\u00E9bec)', M, H-15);
         doc.text('Demande de modification moulage \u00B7 '+today, W-M, H-15, {align:'right'});
       }
+      // Page de reconfirmation des choix (OUI / NON) \u2014 ajout\u00e9e \u00e0 la fin si opts.confirm est fourni
+      function drawConfirmPage(){
+        doc.addPage();
+        var hb=pageHeader();
+        var y=hb+24;
+        doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(ink[0],ink[1],ink[2]);
+        doc.text('SVP reconfirmer ces choix / Please confirm these choices', M, y);
+        y+=6; doc.setDrawColor(gold[0],gold[1],gold[2]); doc.setLineWidth(1.6); doc.line(M,y,M+210,y);
+        y+=18;
+        var rowH=34, bw=58;
+        opts.confirm.forEach(function(c){
+          doc.setFillColor(248,250,252); doc.setDrawColor(line[0],line[1],line[2]); doc.setLineWidth(0.6);
+          doc.roundedRect(M,y,W-2*M,rowH,4,4,'FD');
+          doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(ink[0],ink[1],ink[2]);
+          doc.text(c.fr, M+11, y+14);
+          doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(120,135,153);
+          doc.text(c.en, M+11, y+25);
+          var ans=(c.a==='oui')?'OUI':((c.a==='non')?'NON':'\u2014');
+          var ac=(c.a==='oui')?[34,197,94]:((c.a==='non')?[239,68,68]:[150,165,185]);
+          var bx=W-M-bw-9, by=y+(rowH-20)/2;
+          doc.setFillColor(ac[0],ac[1],ac[2]); doc.roundedRect(bx,by,bw,20,4,4,'F');
+          doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(255,255,255);
+          doc.text(ans, bx+bw/2, by+13.5, {align:'center'});
+          y+=rowH+8;
+        });
+        footer();
+      }
       // Un bloc-face : photo \u00e0 gauche, demandes \u00e0 droite (texte r\u00e9duit, num\u00e9ro sur la m\u00eame ligne)
       function drawFace(face, yTop, blockH, solo){
         doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(ink[0],ink[1],ink[2]);
@@ -9072,6 +9099,8 @@ function _annotCreatePDFInner(opts){
             footer();
           }
         }
+        // Page de reconfirmation des choix (téléphone) — ajoutée à la fin
+        if(opts.confirm && opts.confirm.length){ try{ drawConfirmPage(); }catch(e){} }
         var moulageFolder=_odSanFolder((soumCmd||'SANS-NUM')+' - '+(soum||'Sans nom'));
         var fn='Demande_modification_moulage.pdf';
         var blob; try{ blob=doc.output('blob'); }catch(e){ if(typeof showToast==='function') showToast('Erreur cr\u00e9ation PDF','warning'); return; }
@@ -9485,13 +9514,14 @@ document.addEventListener('keydown', function(e){
   background:linear-gradient(to bottom,#04152c,#153059);
   border-bottom:1px solid rgba(255,255,255,.12);
 }
-.pm-top-title{ font-size:15px; font-weight:800; line-height:1.15; flex:1 1 auto; }
-.pm-top-title small{ display:block; font-weight:500; opacity:.7; font-size:11px; }
+.pm-top-title{ font-size:14.5px; font-weight:800; line-height:1.15; flex:1 1 auto; min-width:0; text-align:center; }
+.pm-top-title small{ display:block; font-weight:600; opacity:.72; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pm-top-btn{
-  background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.25);
-  border-radius:10px; padding:9px 12px; font-size:14px; font-weight:700; cursor:pointer;
+  flex:0 0 auto; background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.25);
+  border-radius:10px; padding:8px 10px; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap;
 }
 .pm-top-btn:active{ transform:scale(.96); }
+.pm-top-home{ background:rgba(255,255,255,.08); }
 
 /* ---- bandeau d'aide ---- */
 .pm-hint{
@@ -9586,9 +9616,13 @@ document.addEventListener('keydown', function(e){
 /* ---- barre d'action du bas ---- */
 .pm-actions{
   position:fixed; left:0; right:0; bottom:0; z-index:8;
-  display:flex; gap:10px; padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 12px);
-  background:linear-gradient(to top,#04152c 60%,rgba(4,21,44,0));
+  display:flex; align-items:stretch; gap:10px;
+  padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 8px);
+  background:#061a35; border-top:1px solid rgba(255,255,255,.12);
+  box-shadow:0 -6px 18px rgba(0,0,0,.45);
 }
+/* la barre du bas est masquée quand elle est vide (ex. étape photo) */
+#pmOverlay.pm-photo-phase .pm-actions{ display:none; }
 .pm-act{
   flex:1 1 0; padding:17px 10px; border-radius:14px; font-size:16px; font-weight:800;
   font-family:'DM Sans',sans-serif; cursor:pointer; border:1px solid rgba(255,255,255,.25);
@@ -9618,6 +9652,51 @@ document.addEventListener('keydown', function(e){
   font-family:'DM Sans',sans-serif;
 }
 .pm-retake:active{ transform:scale(.97); }
+/* ---- outil de rognage de la photo ---- */
+#pmCrop{ position:fixed; inset:0; z-index:100006; display:none; flex-direction:column; background:#04152c; color:#e8eefc; font-family:'DM Sans',sans-serif; }
+#pmCrop.pm-on{ display:flex; }
+.pm-crop-top{ flex:0 0 auto; padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 12px; text-align:center; font-size:13.5px; font-weight:700; color:#dbe9ff; background:linear-gradient(to bottom,#04152c,#153059); border-bottom:1px solid rgba(255,255,255,.12); }
+.pm-crop-stage{ flex:1 1 auto; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; touch-action:none; }
+#pmCropImg{ max-width:100%; max-height:100%; display:block; user-select:none; -webkit-user-drag:none; }
+.pm-crop-box{ position:absolute; border:2px solid #fff; box-shadow:0 0 0 9999px rgba(0,0,0,.55); box-sizing:border-box; touch-action:none; cursor:move; }
+.pm-crop-h{ position:absolute; width:28px; height:28px; background:#3b82f6; border:2px solid #fff; border-radius:50%; box-shadow:0 1px 4px rgba(0,0,0,.5); touch-action:none; }
+.pm-crop-h[data-h=nw]{ left:-14px; top:-14px; } .pm-crop-h[data-h=ne]{ right:-14px; top:-14px; }
+.pm-crop-h[data-h=sw]{ left:-14px; bottom:-14px; } .pm-crop-h[data-h=se]{ right:-14px; bottom:-14px; }
+.pm-crop-actions{ flex:0 0 auto; display:flex; gap:10px; padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 12px); background:#04152c; }
+/* ---- écran de reconfirmation (avant le PDF) ---- */
+#pmConfirm{ position:fixed; inset:0; z-index:100006; display:none; flex-direction:column; background:linear-gradient(to bottom,#04152c,#12294a); color:#e8eefc; font-family:'DM Sans',sans-serif; }
+#pmConfirm.pm-on{ display:flex; }
+.pm-cf-top{ flex:0 0 auto; padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 12px; text-align:center; font-size:15px; font-weight:800; color:#fff; background:linear-gradient(to bottom,#04152c,#153059); border-bottom:2px solid #c9a14a; line-height:1.3; }
+.pm-cf-list{ flex:1 1 auto; overflow:auto; padding:12px 12px 16px; -webkit-overflow-scrolling:touch; }
+.pm-cf-row{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:13px; padding:12px 13px; margin:9px 0; }
+.pm-cf-q{ font-size:14.5px; font-weight:700; line-height:1.3; margin-bottom:9px; }
+.pm-cf-q small{ display:block; font-weight:500; opacity:.62; font-size:12px; }
+.pm-cf-opts{ display:flex; gap:8px; }
+.pm-cf-btn{ flex:1 1 0; padding:11px 6px; border-radius:10px; font-size:14px; font-weight:800; cursor:pointer; font-family:'DM Sans',sans-serif; background:rgba(255,255,255,.08); color:#cfe0f7; border:1.5px solid rgba(255,255,255,.2); }
+.pm-cf-btn:active{ transform:scale(.97); }
+.pm-cf-btn.oui.on{ background:linear-gradient(to bottom,#22c55e,#15803d); color:#fff; border-color:#22c55e; }
+.pm-cf-btn.non.on{ background:linear-gradient(to bottom,#ef4444,#b91c1c); color:#fff; border-color:#ef4444; }
+.pm-cf-btn.na.on{ background:rgba(148,163,184,.55); color:#fff; border-color:#94a3b8; }
+.pm-cf-actions{ flex:0 0 auto; display:flex; gap:10px; padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 12px); background:linear-gradient(to top,#04152c 60%,rgba(4,21,44,0)); }
+/* ---- écran « PDF créé » + envoi courriel ---- */
+#pmDone{ position:fixed; inset:0; z-index:100007; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(2,10,22,.72); font-family:'DM Sans',sans-serif; }
+#pmDone.pm-on{ display:flex; }
+.pm-done-card{ width:min(420px,92vw); background:linear-gradient(to bottom,#0b2343,#071a33); border:1px solid rgba(255,255,255,.22); border-radius:20px; padding:24px 20px; text-align:center; color:#e8eefc; box-shadow:0 20px 55px rgba(0,0,0,.65); }
+.pm-done-icon{ font-size:46px; line-height:1; }
+.pm-done-title{ font-size:20px; font-weight:800; margin-top:6px; }
+.pm-done-sub{ font-size:13.5px; opacity:.75; margin:6px 4px 18px; line-height:1.4; }
+.pm-done-mail{ display:block; width:100%; box-sizing:border-box; padding:20px 16px; border:none; border-radius:16px; font-size:18px; font-weight:800; line-height:1.25; cursor:pointer; font-family:'DM Sans',sans-serif; color:#fff; background:linear-gradient(to bottom,#22c55e,#15803d); box-shadow:0 8px 20px rgba(34,197,94,.4); }
+.pm-done-mail:active{ transform:scale(.98); }
+.pm-done-close{ margin-top:12px; background:rgba(255,255,255,.1); color:#fff; border:1px solid rgba(255,255,255,.25); border-radius:12px; padding:12px 18px; font-size:15px; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; }
+/* ---- fenêtre « à quelle adresse envoyer » ---- */
+#pmMailAsk{ position:fixed; inset:0; z-index:100008; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(2,10,22,.72); font-family:'DM Sans',sans-serif; }
+#pmMailAsk.pm-on{ display:flex; }
+.pm-ask-card{ width:min(420px,92vw); background:linear-gradient(to bottom,#0b2343,#071a33); border:1px solid rgba(255,255,255,.22); border-radius:18px; padding:20px 18px; color:#e8eefc; box-shadow:0 20px 55px rgba(0,0,0,.65); }
+.pm-ask-title{ font-size:17px; font-weight:800; }
+.pm-ask-sub{ font-size:13px; opacity:.72; margin:5px 0 12px; line-height:1.4; }
+.pm-ask-input{ width:100%; box-sizing:border-box; padding:14px 14px; border-radius:12px; border:1px solid rgba(255,255,255,.28); background:rgba(255,255,255,.1); color:#fff; font-size:16px; font-family:'DM Sans',sans-serif; }
+.pm-ask-input::placeholder{ color:rgba(255,255,255,.5); }
+.pm-ask-actions{ display:flex; gap:10px; margin-top:14px; }
 /* menu « ajouter des points » */
 #pmAddBackdrop{ position:fixed; inset:0; z-index:100004; background:rgba(0,0,0,.55); display:none; }
 #pmAddBackdrop.pm-on{ display:block; }
@@ -9779,10 +9858,11 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
 <!-- Superposition mode téléphone -->
 <div id="pmOverlay">
   <div class="pm-top">
-    <button class="pm-top-btn" onclick="PM.back()">← Accueil</button>
-    <div class="pm-top-title">Modification moulage<small id="pmSubtitle">Version téléphone</small></div>
+    <button class="pm-top-btn" id="pmBackBtn" onclick="PM.stepBack()">← Retour</button>
+    <div class="pm-top-title" id="pmTopTitle">Nouvelle demande<small id="pmSubtitle"></small></div>
+    <button class="pm-top-btn pm-top-home" onclick="PM.back()">🏠 Accueil</button>
   </div>
-  <div class="pm-hint" id="pmHint">Touchez la photo pour placer chaque modification (1, 2, 3…)</div>
+  <div class="pm-hint" id="pmHint" style="display:none"></div>
 
   <!-- Panneau : nouvelle demande (bénéficiaire, commande, siège/dossier) -->
   <div id="pmInfo">
@@ -9823,7 +9903,8 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       <input id="pmFileGallery" type="file" accept="image/*" style="display:none" onchange="PM.onFile(event)">
     </div>
     <div id="pmRetakeWrap" style="display:none;text-align:center;margin-top:8px">
-      <button type="button" class="pm-retake" onclick="document.getElementById('pmFile').click()">📷 Reprendre la photo</button>
+      <button type="button" class="pm-retake" onclick="document.getElementById('pmFile').click()">📷 Reprendre</button>
+      <button type="button" class="pm-retake" onclick="PM.openCrop()">✂️ Rogner</button>
     </div>
   </div>
 
@@ -9849,6 +9930,58 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   <div class="pm-sheet-foot">
     <button class="pm-act ghost" onclick="PM.closeSheet()">Annuler</button>
     <button class="pm-act primary" id="pmSheetOk" onclick="PM.confirmSheet()">Valider</button>
+  </div>
+</div>
+
+<!-- Outil de rognage de la photo -->
+<div id="pmCrop">
+  <div class="pm-crop-top">✂️ Rognez la photo — glissez les coins pour garder la bonne partie</div>
+  <div class="pm-crop-stage" id="pmCropStage">
+    <img id="pmCropImg" alt="">
+    <div class="pm-crop-box" id="pmCropBox">
+      <span class="pm-crop-h" data-h="nw"></span>
+      <span class="pm-crop-h" data-h="ne"></span>
+      <span class="pm-crop-h" data-h="sw"></span>
+      <span class="pm-crop-h" data-h="se"></span>
+    </div>
+  </div>
+  <div class="pm-crop-actions">
+    <button type="button" class="pm-act ghost" onclick="PM.cropCancel()">Annuler</button>
+    <button type="button" class="pm-act primary" onclick="PM.cropApply()">✓ Appliquer</button>
+  </div>
+</div>
+
+<!-- Écran de reconfirmation (avant de créer le PDF) -->
+<div id="pmConfirm">
+  <div class="pm-cf-top">SVP reconfirmer ces choix<br>Please finally confirm these choices</div>
+  <div class="pm-cf-list" id="pmConfirmList"></div>
+  <div class="pm-cf-actions">
+    <button type="button" class="pm-act ghost" onclick="PM.confirmCancel()">Annuler</button>
+    <button type="button" class="pm-act primary" onclick="PM.confirmApprove()">✓ Approuver</button>
+  </div>
+</div>
+
+<!-- Écran après création du PDF : envoyer par courriel -->
+<div id="pmDone">
+  <div class="pm-done-card">
+    <div class="pm-done-icon">✅</div>
+    <div class="pm-done-title">PDF créé</div>
+    <div class="pm-done-sub">Vous pouvez l'envoyer par courriel au groupe moulage.</div>
+    <button type="button" class="pm-done-mail" onclick="PM.emailPdf()">📧 Envoyer par courriel<br>au groupe moulage</button>
+    <button type="button" class="pm-done-close" onclick="PM.doneClose()">Fermer</button>
+  </div>
+</div>
+
+<!-- Petite fenêtre : à quelle adresse envoyer le PDF -->
+<div id="pmMailAsk">
+  <div class="pm-ask-card">
+    <div class="pm-ask-title">À quelle adresse envoyer ?</div>
+    <div class="pm-ask-sub">Entrez le courriel du destinataire (le PDF sera joint).</div>
+    <input id="pmMailTo" type="email" inputmode="email" autocomplete="email" class="pm-ask-input" placeholder="courriel@exemple.com">
+    <div class="pm-ask-actions">
+      <button type="button" class="pm-act ghost" onclick="PM.mailAskCancel()">Annuler</button>
+      <button type="button" class="pm-act primary" onclick="PM.mailAskSend()">📧 Envoyer</button>
+    </div>
   </div>
 </div>
 
@@ -9998,9 +10131,8 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       a.innerHTML =
         '<button class="pm-act primary pm-act-solo" onclick="PM.start()">Continuer →</button>';
     } else if(phase==='photo'){
-      // les gros boutons (prendre / choisir) sont dans la page ; la barre du bas ne garde que « retour »
-      a.innerHTML =
-        '<button class="pm-act ghost pm-act-solo" onclick="PM.prevStep()">← Retour</button>';
+      // les gros boutons (prendre / choisir) sont dans la page ; retour via la barre du haut
+      a.innerHTML = '';
     } else if(phase==='place'){
       if(fromAssign){
         // on est revenu pour ajouter/retirer des points → gros bouton « Terminer »
@@ -10016,7 +10148,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       }
     } else { // assign
       a.innerHTML =
-        '<button class="pm-act ghost" onclick="PM.openAddMenu()">← Points</button>'
+        '<button class="pm-act ghost" onclick="PM.openAddMenu()">＋ Ajouter des<br>points de modif</button>'
        +(nx
           ? '<button class="pm-act primary" onclick="PM.assignNext()">Passer au '+esc(partLabel(nx).toLowerCase())+' →</button>'
           : '<button class="pm-act primary" onclick="PM.pdf()">📄 Créer le PDF</button>');
@@ -10049,33 +10181,24 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     if(d) d.classList.toggle('on', data.dossier.on);
     var b=E('pmBenef'); if(b && b.value!==modInfo.benef) b.value=modInfo.benef;
     var c=E('pmCmd'); if(c && c.value!==modInfo.cmd) c.value=modInfo.cmd;
-    var sub=E('pmSubtitle');
-    if(sub){
-      if(phase==='info'){ sub.textContent='Version téléphone'; }
-      else {
-        var bits=[]; if(modInfo.benef) bits.push(modInfo.benef);
-        bits.push(curViewLabel());
-        sub.textContent = bits.join(' · ');
-      }
-    }
+    // (le sous-titre est géré par updateHintPhase, dans la barre du haut)
   }
 
+  // Écrit l'étape courante dans la barre du haut (à côté de « Accueil »)
   function updateHintPhase(){
     var ov=E('pmOverlay');
     ov.classList.toggle('pm-info-phase', phase==='info');
     ov.classList.toggle('pm-photo-phase', phase==='photo');
     ov.classList.toggle('pm-place-phase', phase==='place');
     ov.classList.toggle('pm-assign', phase==='assign');
-    var pl=curViewLabel().toLowerCase(), h=E('pmHint');
-    if(phase==='photo'){
-      h.textContent = 'Étape 1 : prenez la photo du '+pl+'.';
-    } else if(phase==='place'){
-      h.textContent = fromAssign
-        ? ('Ajoutez ou retirez des points sur le '+pl+', puis touchez « Terminer ».')
-        : 'Étape 2 : touchez la photo pour placer les points (touchez un point pour le retirer).';
-    } else if(phase==='assign'){
-      h.textContent = 'Étape 3 : choisissez la modification de chaque rond du '+pl+'.';
-    }
+    var vl=curViewLabel(), main, sub;
+    if(phase==='info'){ main='Nouvelle demande'; sub=''; }
+    else if(phase==='photo'){ main='Étape 1 · Photo'; sub=vl; }
+    else if(phase==='place'){ main = fromAssign ? 'Ajouter des points' : 'Étape 2 · Points'; sub=vl; }
+    else { main='Étape 3 · Modifications'; sub=vl; }
+    var t=E('pmTopTitle'); if(t) t.innerHTML = esc(main)+'<small id="pmSubtitle">'+esc(sub)+'</small>';
+    // « ← Retour » sur toutes les étapes ; masqué sur l'écran de départ (rien avant)
+    var bb=E('pmBackBtn'); if(bb){ bb.textContent='← Retour'; bb.style.visibility=(phase==='info')?'hidden':'visible'; }
     // petit bouton « reprendre la photo » disponible pendant qu'on place les points
     var rt=E('pmRetakeWrap'); if(rt) rt.style.display=(phase==='place')?'block':'none';
   }
@@ -10137,6 +10260,45 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     return '';
   }
 
+  // ---------- Rogner la photo (100% local) ----------
+  var cropBox=null, cropImgBox=null, cropDrag=null, cropBound=false;
+  function cropComputeImgBox(){
+    var stage=E('pmCropStage'), img=E('pmCropImg');
+    var sr=stage.getBoundingClientRect(), ir=img.getBoundingClientRect();
+    cropImgBox={ x:ir.left-sr.left, y:ir.top-sr.top, w:ir.width, h:ir.height };
+  }
+  function cropRender(){
+    var b=E('pmCropBox'); if(!b||!cropBox) return;
+    b.style.left=cropBox.x+'px'; b.style.top=cropBox.y+'px'; b.style.width=cropBox.w+'px'; b.style.height=cropBox.h+'px';
+  }
+  function cropPt(e){ var sr=E('pmCropStage').getBoundingClientRect();
+    var cx=(e.touches&&e.touches[0])?e.touches[0].clientX:e.clientX, cy=(e.touches&&e.touches[0])?e.touches[0].clientY:e.clientY;
+    return { x:cx-sr.left, y:cy-sr.top }; }
+  function cropDown(e){
+    var t=e.target;
+    if(t.classList.contains('pm-crop-h')){ cropDrag={mode:'resize', h:t.getAttribute('data-h'), s:cropPt(e), b:{x:cropBox.x,y:cropBox.y,w:cropBox.w,h:cropBox.h}}; }
+    else if(t===E('pmCropBox')){ cropDrag={mode:'move', s:cropPt(e), b:{x:cropBox.x,y:cropBox.y,w:cropBox.w,h:cropBox.h}}; }
+    else return;
+    e.preventDefault();
+  }
+  function cropMove(e){
+    if(!cropDrag) return;
+    var p=cropPt(e), dx=p.x-cropDrag.s.x, dy=p.y-cropDrag.s.y, b0=cropDrag.b, i=cropImgBox, MIN=44;
+    if(cropDrag.mode==='move'){
+      cropBox.x=Math.min(Math.max(b0.x+dx, i.x), i.x+i.w-b0.w);
+      cropBox.y=Math.min(Math.max(b0.y+dy, i.y), i.y+i.h-b0.h);
+    } else {
+      var h=cropDrag.h, x=b0.x, y=b0.y, w=b0.w, ht=b0.h;
+      if(h.indexOf('w')>=0){ var nx=Math.max(i.x, Math.min(b0.x+dx, b0.x+b0.w-MIN)); w=w+(x-nx); x=nx; }
+      if(h.indexOf('e')>=0){ w=Math.max(MIN, Math.min(b0.w+dx, i.x+i.w-b0.x)); }
+      if(h.indexOf('n')>=0){ var ny=Math.max(i.y, Math.min(b0.y+dy, b0.y+b0.h-MIN)); ht=ht+(y-ny); y=ny; }
+      if(h.indexOf('s')>=0){ ht=Math.max(MIN, Math.min(b0.h+dy, i.y+i.h-b0.y)); }
+      cropBox={x:x,y:y,w:w,h:ht};
+    }
+    cropRender(); e.preventDefault();
+  }
+  function cropUp(){ cropDrag=null; }
+
   // ---------- Créer le PDF ----------
   // On RÉUTILISE le moteur PDF du PC (_annotCreatePDFInner) pour un rendu 100% identique :
   // mêmes entêtes, mêmes cartes d'info, même disposition. 100% local, aucun coût Firebase
@@ -10167,6 +10329,30 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       return partLabel(k)+(n>1?(' ×'+n):'');
     }).join(' + ');
   }
+  // ===== Reconfirmation des choix (OUI / NON) avant le PDF =====
+  var CONFIRM_Q = [
+    { fr:'Mousse de finition — siège',       en:'Seat Top layer foam' },
+    { fr:'Mousse de finition — dossier',     en:'Back Top layer foam' },
+    { fr:'Renforts d\'aluminium au siège',   en:'Seat aluminum reinforcements' },
+    { fr:'Renforts d\'aluminium au dossier', en:'Back aluminum reinforcements' },
+    { fr:'Imperméabilisant',                 en:'Waterproof spray coating' },
+    { fr:'Trous de ventilation',             en:'Ventilation holes' }
+  ];
+  var confirmAns = [];
+  var _lastPdfBlob=null, _lastPdfFn='';
+  function renderConfirm(){
+    var box=E('pmConfirmList'); if(!box) return; var h='';
+    CONFIRM_Q.forEach(function(q,i){
+      var a=confirmAns[i];
+      h+='<div class="pm-cf-row"><div class="pm-cf-q">'+esc(q.fr)+'<small>'+esc(q.en)+'</small></div>'
+        +'<div class="pm-cf-opts">'
+        +'<button type="button" class="pm-cf-btn oui'+(a==='oui'?' on':'')+'" onclick="PM.setConfirm('+i+',\'oui\')">OUI</button>'
+        +'<button type="button" class="pm-cf-btn non'+(a==='non'?' on':'')+'" onclick="PM.setConfirm('+i+',\'non\')">NON</button>'
+        +'</div></div>';
+    });
+    box.innerHTML=h;
+  }
+
   function _pmMakePdf(){
     var tabs=buildTabs();
     if(!tabs.length){ alert('Prenez au moins une photo avant de créer le PDF.'); return; }
@@ -10175,6 +10361,8 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     var fnItems=selectedKeys().filter(itemHasPhoto).map(partLabel).join('-');
     var fnBits=['Modif', fnItems, benef, cmd].map(nameSafe).filter(Boolean);
     var fn=(fnBits.join('_') || 'Demande_modification_moulage')+'.pdf';
+    // choix reconfirmés → inclus dans le PDF
+    var confirmData = CONFIRM_Q.map(function(q,i){ return { fr:q.fr, en:q.en, a:confirmAns[i]||'' }; });
     _annotCreatePDFInner({
       tabs:tabs,
       soumName: labels,   // NOM DU MOULAGE = Siège / Dossier / Siège + Dossier
@@ -10182,9 +10370,12 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       soumBenef: benef,   // NOM DU BÉNÉFICIAIRE
       soumInterv: '',
       soumRepr: '',
+      confirm: confirmData,
       onBlob: function(blob){
+        _lastPdfBlob=blob; _lastPdfFn=fn;                        // gardé en mémoire pour l'envoi courriel
         if(typeof _downloadBlob==='function'){ _downloadBlob(blob, fn); }
         else { try{ var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; a.download=fn; document.body.appendChild(a); a.click(); setTimeout(function(){ try{document.body.removeChild(a);}catch(e){} URL.revokeObjectURL(url); },1000); }catch(e){ alert('Erreur à l\'enregistrement du PDF.'); } }
+        E('pmDone').classList.add('pm-on');                      // écran « PDF créé » + envoi courriel
       }
     });
   }
@@ -10233,13 +10424,17 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       cur=sel[0]; vi=0; phase='photo';
       showPhoto(); render(); window.scrollTo(0,0);
     },
-    prevStep:function(){
-      // vue ajoutée (vide) → on la retire et on revient à la vue précédente
-      if(vi>0){ data[cur].views.splice(vi,1); vi=vi-1; phase = V().photo ? 'assign' : 'place'; showPhoto(); render(); window.scrollTo(0,0); return; }
+    // ----- « ← Retour » (barre du haut) : revient d'une étape, présent partout -----
+    stepBack:function(){
+      if(phase==='info'){ PM.back(); return; }                       // rien avant → accueil du site
+      if(phase==='assign'){ fromAssign=true; phase='place'; showPhoto(); render(); window.scrollTo(0,0); return; }
+      // phase « photo » ou « points » → écran précédent
+      // vue ajoutée restée vide → on la retire
+      if(vi>0 && !V().photo && !V().points.length){ data[cur].views.splice(vi,1); vi=vi-1; phase='assign'; showPhoto(); render(); window.scrollTo(0,0); return; }
+      if(vi>0){ vi=vi-1; phase='assign'; showPhoto(); render(); window.scrollTo(0,0); return; }   // photo précédente du même item
       var s=selectedKeys(), i=s.indexOf(cur);
-      if(i>0){ cur=s[i-1]; vi=data[cur].views.length-1; phase='assign'; showPhoto(); render(); }  // item précédent
-      else { phase='info'; render(); }                               // retour au formulaire
-      window.scrollTo(0,0);
+      if(i>0){ cur=s[i-1]; vi=data[cur].views.length-1; phase='assign'; showPhoto(); render(); window.scrollTo(0,0); return; } // item précédent
+      phase='info'; render(); window.scrollTo(0,0);                   // 1re photo du 1er item → formulaire
     },
     // Points placés → on choisit les modifications de CETTE photo
     toAssign:function(){
@@ -10257,6 +10452,49 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     addView:function(){
       data[cur].views.push(newView());
       vi=data[cur].views.length-1; fromAssign=false; phase='photo';
+      showPhoto(); render(); window.scrollTo(0,0);
+    },
+    // ----- Rogner la photo -----
+    openCrop:function(){
+      if(!V().photo){ return; }
+      var img=E('pmCropImg');
+      img.onload=function(){
+        cropComputeImgBox();
+        var i=cropImgBox, mx=i.w*0.06, my=i.h*0.06;
+        cropBox={ x:i.x+mx, y:i.y+my, w:i.w-2*mx, h:i.h-2*my };
+        cropRender();
+      };
+      img.src=V().photo;
+      E('pmCrop').classList.add('pm-on');
+      if(!cropBound){
+        E('pmCropStage').addEventListener('pointerdown', cropDown);
+        window.addEventListener('pointermove', cropMove);
+        window.addEventListener('pointerup', cropUp);
+        window.addEventListener('pointercancel', cropUp);
+        cropBound=true;
+      }
+    },
+    cropCancel:function(){ E('pmCrop').classList.remove('pm-on'); cropDrag=null; },
+    cropApply:function(){
+      if(!cropBox || !cropImgBox){ this.cropCancel(); return; }
+      var img=E('pmCropImg'), i=cropImgBox;
+      var fx=(cropBox.x-i.x)/i.w, fy=(cropBox.y-i.y)/i.h, fw=cropBox.w/i.w, fh=cropBox.h/i.h;
+      fx=Math.max(0,Math.min(1,fx)); fy=Math.max(0,Math.min(1,fy)); fw=Math.min(1-fx,Math.max(0.02,fw)); fh=Math.min(1-fy,Math.max(0.02,fh));
+      var nw=img.naturalWidth||1, nh=img.naturalHeight||1;
+      var sx=Math.round(fx*nw), sy=Math.round(fy*nh), sw=Math.max(1,Math.round(fw*nw)), sh=Math.max(1,Math.round(fh*nh));
+      var maxW=1400, sc=Math.min(1, maxW/sw), ow=Math.max(1,Math.round(sw*sc)), oh=Math.max(1,Math.round(sh*sc));
+      var c=document.createElement('canvas'); c.width=ow; c.height=oh; var cx=c.getContext('2d');
+      var out=null; try{ cx.drawImage(img, sx,sy,sw,sh, 0,0,ow,oh); out=c.toDataURL('image/jpeg',0.72); }catch(e){}
+      if(out){
+        V().photo=out;
+        // on replace les points existants dans la zone rognée ; ceux hors cadre sont retirés
+        V().points = V().points.map(function(p){
+          var nx=(p.xf-fx)/fw, ny=(p.yf-fy)/fh;
+          if(nx<0||nx>1||ny<0||ny>1) return null;
+          return { xf:nx, yf:ny, mod:p.mod };
+        }).filter(Boolean);
+      }
+      this.cropCancel();
       showPhoto(); render(); window.scrollTo(0,0);
     },
     // « ← Ajouter des points » : revient placer/retirer des points sur la photo courante
@@ -10282,7 +10520,49 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     goPlace:function(){ phase='place'; showPhoto(); render(); },
     pdf:function(){
       if(!buildTabs().length){ alert('Prenez au moins une photo avant de créer le PDF.'); return; }
+      // Étape de reconfirmation OUI/NON avant de générer le PDF
+      renderConfirm();
+      E('pmConfirm').classList.add('pm-on');
+    },
+    setConfirm:function(i,v){ confirmAns[i]=v; renderConfirm(); },
+    confirmCancel:function(){ E('pmConfirm').classList.remove('pm-on'); },
+    confirmApprove:function(){
+      for(var i=0;i<CONFIRM_Q.length;i++){ if(!confirmAns[i]){ alert('Veuillez répondre OUI ou NON à toutes les questions.'); return; } }
+      E('pmConfirm').classList.remove('pm-on');
       _pmMakePdf();   // _annotCreatePDFInner charge jsPDF lui-même (_ensureJsPDF)
+    },
+    doneClose:function(){ E('pmDone').classList.remove('pm-on'); },
+    // Ouvre la petite fenêtre « À quelle adresse envoyer ? »
+    emailPdf:function(){
+      var last=''; try{ last=localStorage.getItem('pm_mail_to')||''; }catch(e){}
+      var inp=E('pmMailTo'); if(inp) inp.value=last;
+      E('pmMailAsk').classList.add('pm-on');
+      setTimeout(function(){ try{ E('pmMailTo').focus(); }catch(e){} }, 60);
+    },
+    mailAskCancel:function(){ E('pmMailAsk').classList.remove('pm-on'); },
+    mailAskSend:function(){
+      var to=((E('pmMailTo')||{}).value||'').trim();
+      if(!to){ alert('Entrez une adresse courriel.'); return; }
+      try{ localStorage.setItem('pm_mail_to', to); }catch(e){}   // mémorisé pour la prochaine fois (aucun coût Firebase)
+      E('pmMailAsk').classList.remove('pm-on');
+      var subject='Demande de modification moulage'+(modInfo.benef?(' — '+modInfo.benef):'');
+      var body='Envoyer à : '+to+'\n\nBonjour,\n\nVoici la demande de modification de moulage'
+        +(modInfo.benef?(' pour '+modInfo.benef):'')
+        +(modInfo.cmd?(' (commande '+modInfo.cmd+')'):'')+'.\n\nMerci.';
+      // 1) Partage natif : le PDF est joint automatiquement (téléphone)
+      try{
+        if(_lastPdfBlob && navigator.share && navigator.canShare){
+          var file=new File([_lastPdfBlob], _lastPdfFn||'modification_moulage.pdf', {type:'application/pdf'});
+          if(navigator.canShare({files:[file]})){
+            navigator.share({ files:[file], title:subject, text:body }).catch(function(){});
+            return;
+          }
+        }
+      }catch(e){}
+      // 2) Sinon : courriel pré-adressé à l'adresse saisie (joindre le PDF téléchargé)
+      var url='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)
+        +'&body='+encodeURIComponent(body+'\n\n(Joindre le PDF téléchargé au message.)');
+      try{ location.href=url; }catch(e){}
     },
     rowTap:function(i){ if(phase!=='assign') return; openSheet(i); },
     closeSheet:closeSheet,
