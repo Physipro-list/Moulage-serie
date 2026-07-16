@@ -9021,11 +9021,12 @@ function _annotCreatePDFInner(opts){
         // Photo à gauche, demandes à droite. En mode « solo » (une seule photo sur la page),
         // on élargit la colonne photo pour remplir la page et rendre la photo plus imposante.
         var midX=W/2, LW, divX, RX, RW;
-        if(solo){ LW=Math.round((W-2*M)*0.56); divX=M+LW+8; RX=M+LW+16; RW=W-M-RX; }
+        if(solo){ LW=Math.round((W-2*M)*0.52); divX=M+LW+8; RX=M+LW+16; RW=W-M-RX; }
         else    { LW=(midX-M)-14;             divX=midX;    RX=midX+6;   RW=W-M-RX; }
         doc.setDrawColor(line[0],line[1],line[2]); doc.setLineWidth(0.8); doc.line(divX, bodyTop, divX, yTop+blockH);
         if(face.dataUrl && face.iw && face.ih){
-          var maxH=Math.min(bodyH, solo?430:250);   // seule photo sur la page → plus grande
+          // Photo plus compacte (~40% plus courte qu'avant) : moins imposante, surtout en mode « une seule photo ».
+          var maxH=Math.min(bodyH, solo?240:190);
           var w=LW, h=LW*face.ih/face.iw;
           if(h>maxH){ h=maxH; w=h*face.iw/face.ih; }
           try{ doc.addImage(face.dataUrl,'JPEG', M, bodyTop, w, h); }catch(e){}
@@ -9540,17 +9541,6 @@ document.addEventListener('keydown', function(e){
 /* La photo remplit toujours la largeur de la scène → les pastilles restent bien alignées.
    La hauteur suit la photo ; c'est la zone défilante (#pmScroll) qui gère le débordement. */
 .pm-stage img{ display:block; width:100%; height:auto; user-select:none; -webkit-user-drag:none; }
-/* Barre d'outils photo (rogner / reprendre) : HORS de la zone défilante, donc TOUJOURS visible,
-   juste sous la barre des vues. Ne se cache jamais derrière la photo ou les pastilles. */
-.pm-photobar{ flex:0 0 auto; display:flex; gap:8px; padding:2px 10px 8px; }
-.pm-ptool{
-  flex:1 1 0; text-align:center;
-  background:rgba(255,255,255,.08); color:#fff; border:1px solid rgba(255,255,255,.32);
-  border-radius:11px; padding:11px 10px; font-size:14px; font-weight:800; cursor:pointer;
-  font-family:'DM Sans',sans-serif; box-shadow:0 2px 8px rgba(0,0,0,.35);
-}
-.pm-ptool.crop{ background:rgba(96,165,250,.20); border-color:rgba(96,165,250,.7); }
-.pm-ptool:active{ transform:scale(.97); }
 
 /* pastilles rondes numérotées */
 .pm-dot{
@@ -9613,11 +9603,25 @@ document.addEventListener('keydown', function(e){
   font-weight:900; font-size:15px; color:#fff; border:2px solid #fff;
 }
 .pm-row-txt{ flex:1 1 auto; font-size:14.5px; font-weight:600; line-height:1.25; }
-.pm-row-txt.empty{ opacity:.6; font-style:italic; font-weight:500; }
+.pm-row-txt.empty{ opacity:.75; font-weight:700; color:#ffd98a; }
+/* petit chevron « › » à droite des lignes à remplir (montre que c'est tapable) */
+.pm-row-go{ flex:0 0 auto; font-size:22px; font-weight:900; color:#ffd98a; line-height:1; padding:0 2px; }
+/* ligne encore à choisir : bord ambre + léger clignotement pour attirer le doigt */
+.pm-row.todo{ border-color:rgba(255,200,80,.55); background:rgba(255,200,80,.10); animation:pmrowpulse 1.4s ease-in-out infinite; }
+@keyframes pmrowpulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(255,200,80,0); } 50%{ box-shadow:0 0 0 3px rgba(255,200,80,.28); } }
+.pm-row.done-row .pm-badge{ box-shadow:0 0 0 2px rgba(34,197,94,.5); }
 .pm-row-del{
   flex:0 0 auto; background:rgba(239,68,68,.85); color:#fff; border:none;
   width:32px; height:32px; border-radius:9px; font-size:16px; font-weight:800; cursor:pointer;
 }
+/* Bandeau d'instruction de l'étape « Choisir les phrases » : dit clairement quoi faire + progrès */
+.pm-assign-banner{
+  margin:4px 0 10px; padding:13px 14px; border-radius:13px; font-size:15px; font-weight:800;
+  color:#04152c; background:linear-gradient(to bottom,#ffe9a8,#ffd166);
+  border:1px solid rgba(0,0,0,.12); box-shadow:0 3px 10px rgba(0,0,0,.28); line-height:1.35;
+}
+.pm-assign-banner.done{ color:#eafff0; background:linear-gradient(to bottom,#22c55e,#15803d); border:none; }
+.pm-assign-banner b{ font-weight:900; }
 
 /* ---- barre d'action du bas ---- */
 /* Barre du bas DANS LE FLUX (plus de position:fixed) : les boutons prennent leur place
@@ -9663,17 +9667,6 @@ document.addEventListener('keydown', function(e){
   font-family:'DM Sans',sans-serif;
 }
 .pm-retake:active{ transform:scale(.97); }
-/* ---- outil de rognage de la photo ---- */
-#pmCrop{ position:fixed; inset:0; z-index:100006; display:none; flex-direction:column; background:#04152c; color:#e8eefc; font-family:'DM Sans',sans-serif; }
-#pmCrop.pm-on{ display:flex; }
-.pm-crop-top{ flex:0 0 auto; padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 12px; text-align:center; font-size:13.5px; font-weight:700; color:#dbe9ff; background:linear-gradient(to bottom,#04152c,#153059); border-bottom:1px solid rgba(255,255,255,.12); }
-.pm-crop-stage{ flex:1 1 auto; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; touch-action:none; }
-#pmCropImg{ max-width:100%; max-height:100%; display:block; user-select:none; -webkit-user-drag:none; }
-.pm-crop-box{ position:absolute; border:2px solid #fff; box-shadow:0 0 0 9999px rgba(0,0,0,.55); box-sizing:border-box; touch-action:none; cursor:move; }
-.pm-crop-h{ position:absolute; width:28px; height:28px; background:#3b82f6; border:2px solid #fff; border-radius:50%; box-shadow:0 1px 4px rgba(0,0,0,.5); touch-action:none; }
-.pm-crop-h[data-h=nw]{ left:-14px; top:-14px; } .pm-crop-h[data-h=ne]{ right:-14px; top:-14px; }
-.pm-crop-h[data-h=sw]{ left:-14px; bottom:-14px; } .pm-crop-h[data-h=se]{ right:-14px; bottom:-14px; }
-.pm-crop-actions{ flex:0 0 auto; display:flex; gap:10px; padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 12px); background:#04152c; }
 /* ---- écran de reconfirmation (avant le PDF) ---- */
 #pmConfirm{ position:fixed; inset:0; z-index:100006; display:none; flex-direction:column; background:linear-gradient(to bottom,#04152c,#12294a); color:#e8eefc; font-family:'DM Sans',sans-serif; }
 #pmConfirm.pm-on{ display:flex; }
@@ -9897,12 +9890,6 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   <!-- Sélecteur de partie (affiché quand la demande contient siège ET dossier) -->
   <div class="pm-parts" id="pmParts"></div>
 
-  <!-- Outils photo (rogner / reprendre) : toujours visibles, hors de la zone défilante -->
-  <div class="pm-photobar" id="pmPhotoBar" style="display:none">
-    <button type="button" class="pm-ptool crop" onclick="PM.openCrop()">✂️ Rogner (diminuer) la photo</button>
-    <button type="button" class="pm-ptool" onclick="document.getElementById('pmFile').click()">📷 Reprendre</button>
-  </div>
-
   <!-- Zone défilante : photo + liste. La barre du bas est HORS de cette zone (dans le flux) -->
   <div class="pm-scroll" id="pmScroll">
     <div class="pm-stagewrap" id="pmStageWrap">
@@ -9943,24 +9930,6 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   <div class="pm-sheet-foot">
     <button class="pm-act ghost" onclick="PM.closeSheet()">Annuler</button>
     <button class="pm-act primary" id="pmSheetOk" onclick="PM.confirmSheet()">Valider</button>
-  </div>
-</div>
-
-<!-- Outil de rognage de la photo -->
-<div id="pmCrop">
-  <div class="pm-crop-top">✂️ Rognez la photo — glissez les coins pour garder la bonne partie</div>
-  <div class="pm-crop-stage" id="pmCropStage">
-    <img id="pmCropImg" alt="">
-    <div class="pm-crop-box" id="pmCropBox">
-      <span class="pm-crop-h" data-h="nw"></span>
-      <span class="pm-crop-h" data-h="ne"></span>
-      <span class="pm-crop-h" data-h="sw"></span>
-      <span class="pm-crop-h" data-h="se"></span>
-    </div>
-  </div>
-  <div class="pm-crop-actions">
-    <button type="button" class="pm-act ghost" onclick="PM.cropCancel()">Annuler</button>
-    <button type="button" class="pm-act primary" onclick="PM.cropApply()">✓ Appliquer</button>
   </div>
 </div>
 
@@ -10041,6 +10010,8 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
   function P(){ return data[cur]; }                     // item actif
   function V(){ return data[cur].views[vi]; }           // vue (photo) active
   function points(){ return V().points; }               // ronds de la vue active
+  // Index du 1er rond dont la phrase n'est pas encore choisie (pour guider l'utilisateur), sinon -1
+  function firstEmptyPoint(){ var ps=points(); for(var i=0;i<ps.length;i++){ if(!ps[i].mod) return i; } return -1; }
   // Numérotation CONTINUE par item : les ronds des photos précédentes du même item
   // décalent la numérotation (Siège 1 : 1-4 → Siège 2 : 5-8…). Le dossier repart à 1.
   function baseNum(){ var b=0; for(var i=0;i<vi;i++){ b+=data[cur].views[i].points.length; } return b; }
@@ -10064,8 +10035,6 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     var img=E('pmPhoto'), no=E('pmNoPhoto'), src=V().photo;
     if(src){ img.src=src; img.style.display='block'; no.style.display='none'; }
     else { img.removeAttribute('src'); img.style.display='none'; no.style.display='block'; }
-    // barre d'outils (rogner/reprendre) : visible seulement quand on a une photo ET qu'on place/assigne
-    var bar=E('pmPhotoBar'); if(bar) bar.style.display=(src && (phase==='place'||phase==='assign'))?'flex':'none';
     var lbl=E('pmNoPhotoLbl'); if(lbl) lbl.textContent='Prenez la photo du '+curViewLabel().toLowerCase();
   }
   function onFile(ev){
@@ -10124,12 +10093,23 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       return;
     }
     var assign=(phase==='assign'), h='', b0=baseNum();
+    if(assign){
+      // Bandeau clair : « c'est l'étape où on choisit les phrases » + progression (x/y)
+      var chosen=points().filter(function(p){return !!p.mod;}).length, tot=points().length;
+      if(chosen>=tot){
+        h+='<div class="pm-assign-banner done">✅ Toutes les modifications sont choisies ('+chosen+'/'+tot+'). Vous pouvez créer le PDF.</div>';
+      } else {
+        h+='<div class="pm-assign-banner">👉 Touchez chaque numéro pour choisir sa modification <b>('+chosen+'/'+tot+' choisies)</b></div>';
+      }
+    }
     points().forEach(function(p,i){
       var num=b0+i+1, c=col(num), sum=summary(p.mod);
-      var txt = sum ? esc(sum) : (assign ? '— toucher pour choisir la phrase —' : 'Phrase à choisir à l\'étape suivante');
-      h+='<div class="pm-row" style="border-left-color:'+c+'"'+(assign?(' onclick="PM.rowTap('+i+')"'):'')+'>'
+      var todo = assign && !sum;   // ligne encore à remplir (met en évidence + chevron)
+      var txt = sum ? esc(sum) : (assign ? '👉 Touchez pour choisir la modification' : 'Phrase à choisir à l\'étape suivante');
+      h+='<div class="pm-row'+(todo?' todo':'')+(assign&&sum?' done-row':'')+'" style="border-left-color:'+c+'"'+(assign?(' onclick="PM.rowTap('+i+')"'):'')+'>'
        +   '<div class="pm-badge" style="background:'+c+';border-color:#fff">'+num+'</div>'
        +   '<div class="pm-row-txt'+(sum?'':' empty')+'">'+txt+'</div>'
+       +   (todo?'<div class="pm-row-go">›</div>':'')
        +   '<button class="pm-row-del" onclick="event.stopPropagation();PM.del('+i+')">✕</button>'
        + '</div>';
     });
@@ -10159,7 +10139,7 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
           '<div class="pm-cta-pulse">👆 Placez les points de modification sur la photo</div>';
       } else {
         a.innerHTML =
-          '<button class="pm-act primary pm-act-solo" onclick="PM.toAssign()">Choisir les modifications →</button>';
+          '<button class="pm-act primary pm-act-solo" onclick="PM.toAssign()">Choisir les phrases →</button>';
       }
     } else { // assign
       a.innerHTML =
@@ -10210,12 +10190,10 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     if(phase==='info'){ main='Nouvelle demande'; sub=''; }
     else if(phase==='photo'){ main='Étape 1 · Photo'; sub=vl; }
     else if(phase==='place'){ main = fromAssign ? 'Ajouter des points' : 'Étape 2 · Points'; sub=vl; }
-    else { main='Étape 3 · Modifications'; sub=vl; }
+    else { main='Étape 3 · Choisir les phrases'; sub=vl; }
     var t=E('pmTopTitle'); if(t) t.innerHTML = esc(main)+'<small id="pmSubtitle">'+esc(sub)+'</small>';
     // « ← Retour » sur toutes les étapes ; masqué sur l'écran de départ (rien avant)
     var bb=E('pmBackBtn'); if(bb){ bb.textContent='← Retour'; bb.style.visibility=(phase==='info')?'hidden':'visible'; }
-    // sécurité : la barre d'outils photo n'apparaît qu'aux étapes points/phrases (avec photo)
-    if(phase!=='place' && phase!=='assign'){ var pb=E('pmPhotoBar'); if(pb) pb.style.display='none'; }
   }
 
   function render(){ updateHintPhase(); syncInfo(); renderParts(); renderDots(); renderList(); renderActions(); }
@@ -10274,45 +10252,6 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     }
     return '';
   }
-
-  // ---------- Rogner la photo (100% local) ----------
-  var cropBox=null, cropImgBox=null, cropDrag=null, cropBound=false;
-  function cropComputeImgBox(){
-    var stage=E('pmCropStage'), img=E('pmCropImg');
-    var sr=stage.getBoundingClientRect(), ir=img.getBoundingClientRect();
-    cropImgBox={ x:ir.left-sr.left, y:ir.top-sr.top, w:ir.width, h:ir.height };
-  }
-  function cropRender(){
-    var b=E('pmCropBox'); if(!b||!cropBox) return;
-    b.style.left=cropBox.x+'px'; b.style.top=cropBox.y+'px'; b.style.width=cropBox.w+'px'; b.style.height=cropBox.h+'px';
-  }
-  function cropPt(e){ var sr=E('pmCropStage').getBoundingClientRect();
-    var cx=(e.touches&&e.touches[0])?e.touches[0].clientX:e.clientX, cy=(e.touches&&e.touches[0])?e.touches[0].clientY:e.clientY;
-    return { x:cx-sr.left, y:cy-sr.top }; }
-  function cropDown(e){
-    var t=e.target;
-    if(t.classList.contains('pm-crop-h')){ cropDrag={mode:'resize', h:t.getAttribute('data-h'), s:cropPt(e), b:{x:cropBox.x,y:cropBox.y,w:cropBox.w,h:cropBox.h}}; }
-    else if(t===E('pmCropBox')){ cropDrag={mode:'move', s:cropPt(e), b:{x:cropBox.x,y:cropBox.y,w:cropBox.w,h:cropBox.h}}; }
-    else return;
-    e.preventDefault();
-  }
-  function cropMove(e){
-    if(!cropDrag) return;
-    var p=cropPt(e), dx=p.x-cropDrag.s.x, dy=p.y-cropDrag.s.y, b0=cropDrag.b, i=cropImgBox, MIN=44;
-    if(cropDrag.mode==='move'){
-      cropBox.x=Math.min(Math.max(b0.x+dx, i.x), i.x+i.w-b0.w);
-      cropBox.y=Math.min(Math.max(b0.y+dy, i.y), i.y+i.h-b0.h);
-    } else {
-      var h=cropDrag.h, x=b0.x, y=b0.y, w=b0.w, ht=b0.h;
-      if(h.indexOf('w')>=0){ var nx=Math.max(i.x, Math.min(b0.x+dx, b0.x+b0.w-MIN)); w=w+(x-nx); x=nx; }
-      if(h.indexOf('e')>=0){ w=Math.max(MIN, Math.min(b0.w+dx, i.x+i.w-b0.x)); }
-      if(h.indexOf('n')>=0){ var ny=Math.max(i.y, Math.min(b0.y+dy, b0.y+b0.h-MIN)); ht=ht+(y-ny); y=ny; }
-      if(h.indexOf('s')>=0){ ht=Math.max(MIN, Math.min(b0.h+dy, i.y+i.h-b0.y)); }
-      cropBox={x:x,y:y,w:w,h:ht};
-    }
-    cropRender(); e.preventDefault();
-  }
-  function cropUp(){ cropDrag=null; }
 
   // ---------- Créer le PDF ----------
   // On RÉUTILISE le moteur PDF du PC (_annotCreatePDFInner) pour un rendu 100% identique :
@@ -10451,10 +10390,13 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       if(i>0){ cur=s[i-1]; vi=data[cur].views.length-1; phase='assign'; showPhoto(); render(); window.scrollTo(0,0); return; } // item précédent
       phase='info'; render(); window.scrollTo(0,0);                   // 1re photo du 1er item → formulaire
     },
-    // Points placés → on choisit les modifications de CETTE photo
+    // Points placés → on choisit les modifications de CETTE photo.
+    // Guidage : on ouvre AUTOMATIQUEMENT la 1re phrase à choisir, pour que l'étape soit évidente.
     toAssign:function(){
       phase='assign'; fromAssign=false;
       showPhoto(); render(); window.scrollTo(0,0);
+      var e=firstEmptyPoint();
+      if(e>=0){ setTimeout(function(){ if(phase==='assign') openSheet(e); }, 280); }
     },
     // ----- Barre des photos : naviguer / ajouter des vues -----
     gotoView:function(k,i){
@@ -10467,49 +10409,6 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
     addView:function(){
       data[cur].views.push(newView());
       vi=data[cur].views.length-1; fromAssign=false; phase='photo';
-      showPhoto(); render(); window.scrollTo(0,0);
-    },
-    // ----- Rogner la photo -----
-    openCrop:function(){
-      if(!V().photo){ return; }
-      var img=E('pmCropImg');
-      img.onload=function(){
-        cropComputeImgBox();
-        var i=cropImgBox, mx=i.w*0.06, my=i.h*0.06;
-        cropBox={ x:i.x+mx, y:i.y+my, w:i.w-2*mx, h:i.h-2*my };
-        cropRender();
-      };
-      img.src=V().photo;
-      E('pmCrop').classList.add('pm-on');
-      if(!cropBound){
-        E('pmCropStage').addEventListener('pointerdown', cropDown);
-        window.addEventListener('pointermove', cropMove);
-        window.addEventListener('pointerup', cropUp);
-        window.addEventListener('pointercancel', cropUp);
-        cropBound=true;
-      }
-    },
-    cropCancel:function(){ E('pmCrop').classList.remove('pm-on'); cropDrag=null; },
-    cropApply:function(){
-      if(!cropBox || !cropImgBox){ this.cropCancel(); return; }
-      var img=E('pmCropImg'), i=cropImgBox;
-      var fx=(cropBox.x-i.x)/i.w, fy=(cropBox.y-i.y)/i.h, fw=cropBox.w/i.w, fh=cropBox.h/i.h;
-      fx=Math.max(0,Math.min(1,fx)); fy=Math.max(0,Math.min(1,fy)); fw=Math.min(1-fx,Math.max(0.02,fw)); fh=Math.min(1-fy,Math.max(0.02,fh));
-      var nw=img.naturalWidth||1, nh=img.naturalHeight||1;
-      var sx=Math.round(fx*nw), sy=Math.round(fy*nh), sw=Math.max(1,Math.round(fw*nw)), sh=Math.max(1,Math.round(fh*nh));
-      var maxW=1400, sc=Math.min(1, maxW/sw), ow=Math.max(1,Math.round(sw*sc)), oh=Math.max(1,Math.round(sh*sc));
-      var c=document.createElement('canvas'); c.width=ow; c.height=oh; var cx=c.getContext('2d');
-      var out=null; try{ cx.drawImage(img, sx,sy,sw,sh, 0,0,ow,oh); out=c.toDataURL('image/jpeg',0.72); }catch(e){}
-      if(out){
-        V().photo=out;
-        // on replace les points existants dans la zone rognée ; ceux hors cadre sont retirés
-        V().points = V().points.map(function(p){
-          var nx=(p.xf-fx)/fw, ny=(p.yf-fy)/fh;
-          if(nx<0||nx>1||ny<0||ny>1) return null;
-          return { xf:nx, yf:ny, mod:p.mod };
-        }).filter(Boolean);
-      }
-      this.cropCancel();
       showPhoto(); render(); window.scrollTo(0,0);
     },
     // « ← Ajouter des points » : revient placer/retirer des points sur la photo courante
@@ -10596,6 +10495,10 @@ html.pm-phone #pmStage{ touch-action:pan-x pan-y; }
       points()[sheetIdx].mod = draft;
       closeSheet();
       render();
+      // Guidage : on enchaîne automatiquement vers la prochaine modification à choisir.
+      // Quand tout est choisi, on s'arrête (l'utilisateur voit « Créer le PDF »).
+      var e=firstEmptyPoint();
+      if(phase==='assign' && e>=0){ setTimeout(function(){ if(phase==='assign') openSheet(e); }, 300); }
     }
   };
 
