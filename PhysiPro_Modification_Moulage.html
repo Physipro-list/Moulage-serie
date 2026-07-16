@@ -9498,8 +9498,10 @@ document.addEventListener('keydown', function(e){
 .pm-bigbtn-green{ background:linear-gradient(to bottom,#22c55e,#15803d); color:#fff; box-shadow:0 6px 16px rgba(34,197,94,.35); }
 .pm-bigbtn-alt{ background:rgba(255,255,255,.12); color:#fff; border:1.5px solid rgba(255,255,255,.32); }
 .pm-bigbtn:active{ transform:scale(.98); }
-/* en phase « photo », on masque la liste pour laisser toute la place aux gros boutons */
-#pmOverlay.pm-photo-phase .pm-list{ display:none; }
+/* on masque la liste des phrases tant qu'on n'est pas à l'étape « choisir les modifications » :
+   en phase « photo » (gros boutons) ET en phase « points » (photo + numéros seulement) */
+#pmOverlay.pm-photo-phase .pm-list,
+#pmOverlay.pm-place-phase .pm-list{ display:none; }
 
 /* ---- liste des ronds / modifications ---- */
 .pm-list{ flex:1 1 auto; overflow:auto; padding:6px 10px 120px; -webkit-overflow-scrolling:touch; }
@@ -9557,6 +9559,27 @@ document.addEventListener('keydown', function(e){
   font-family:'DM Sans',sans-serif;
 }
 .pm-retake:active{ transform:scale(.97); }
+/* menu « ajouter des points » */
+#pmAddBackdrop{ position:fixed; inset:0; z-index:100004; background:rgba(0,0,0,.55); display:none; }
+#pmAddBackdrop.pm-on{ display:block; }
+#pmAddMenu{
+  position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:100005;
+  width:min(360px,88vw); display:none; flex-direction:column; gap:9px;
+  background:linear-gradient(to bottom,#0b2343,#071a33); color:#e8eefc;
+  border:1px solid rgba(255,255,255,.25); border-radius:18px; padding:20px 18px;
+  box-shadow:0 20px 50px rgba(0,0,0,.65); font-family:'DM Sans',sans-serif;
+}
+#pmAddMenu.pm-on{ display:flex; }
+.pm-add-title{ font-size:17px; font-weight:800; line-height:1.3; }
+.pm-add-sub{ font-size:13px; opacity:.72; margin-bottom:6px; }
+#pmAddOptions{ display:flex; flex-direction:column; gap:9px; }
+.pm-add-opt{
+  display:flex; align-items:center; justify-content:center; gap:9px;
+  padding:16px 12px; border-radius:13px; font-size:16px; font-weight:800; cursor:pointer;
+  background:linear-gradient(to bottom,#2f6fd0,#1b47a0); color:#fff; border:none;
+  font-family:'DM Sans',sans-serif;
+}
+.pm-add-opt:active{ transform:scale(.98); }
 
 /* ---- feuille du bas : choix de la phrase ---- */
 #pmSheetBackdrop{
@@ -9759,6 +9782,15 @@ html.pm-phone #pmOpenBtn{ display:none; }
   </div>
 </div>
 
+<!-- Petit menu : ajouter des points de modification (siège / dossier) -->
+<div id="pmAddBackdrop" onclick="PM.closeAddMenu()"></div>
+<div id="pmAddMenu">
+  <div class="pm-add-title">Voulez-vous ajouter des points de modification ?</div>
+  <div class="pm-add-sub">Choisissez l'item où ajouter des points.</div>
+  <div id="pmAddOptions"></div>
+  <button type="button" class="pm-act ghost" style="width:100%;margin-top:6px" onclick="PM.closeAddMenu()">Annuler</button>
+</div>
+
 <script id="pmJS">
 (function(){
   var COLORS = (typeof ANNOT_NUM_COLORS!=='undefined' && ANNOT_NUM_COLORS.length)
@@ -9779,7 +9811,8 @@ html.pm-phone #pmOpenBtn{ display:none; }
   function freshData(){ return { siege:{ on:true, photo:'', points:[] }, dossier:{ on:false, photo:'', points:[] } }; }
   var data = freshData();
   var cur = 'siege';      // partie active
-  var phase = 'info';     // 'info' | 'place' | 'assign'
+  var phase = 'info';     // 'info' | 'photo' | 'place' | 'assign'
+  var fromAssign = false; // true quand on revient placer des points depuis l'étape « phrases »
   var sheetIdx = -1;      // point en cours d'édition dans la feuille
   var draft = null;       // brouillon de mod pendant l'édition
   var catFilter = null;   // catégorie filtrée
@@ -9842,7 +9875,12 @@ html.pm-phone #pmOpenBtn{ display:none; }
       d.className='pm-dot'; d.textContent=(i+1);
       d.style.background=col(i+1); d.style.borderColor='#fff';
       d.style.left=(p.xf*100)+'%'; d.style.top=(p.yf*100)+'%';
-      d.onclick=function(e){ e.stopPropagation(); if(phase==='assign') openSheet(i); };
+      d.title = (phase==='place') ? 'Toucher pour retirer ce point' : '';
+      d.onclick=function(e){
+        e.stopPropagation();
+        if(phase==='assign'){ openSheet(i); }
+        else if(phase==='place'){ points().splice(i,1); render(); }  // toucher un point le retire
+      };
       stage.appendChild(d);
     });
   }
@@ -9881,7 +9919,11 @@ html.pm-phone #pmOpenBtn{ display:none; }
       a.innerHTML =
         '<button class="pm-act ghost pm-act-solo" onclick="PM.prevStep()">← Retour</button>';
     } else if(phase==='place'){
-      if(!n){
+      if(fromAssign){
+        // on est revenu pour ajouter/retirer des points → gros bouton « Terminer »
+        a.innerHTML =
+          '<button class="pm-act primary pm-act-solo" onclick="PM.finishAdd()">✓ Terminer</button>';
+      } else if(!n){
         // Aucun point encore : grosse invite clignotante pour bien montrer que c'est le moment
         a.innerHTML =
           '<div class="pm-cta-pulse">👆 Placez les points de modification sur la photo</div>';
@@ -9891,7 +9933,7 @@ html.pm-phone #pmOpenBtn{ display:none; }
       }
     } else { // assign
       a.innerHTML =
-        '<button class="pm-act ghost" onclick="PM.goPlace()">＋ Placer d\'autres ronds</button>'
+        '<button class="pm-act ghost" onclick="PM.openAddMenu()">← Ajouter des points</button>'
        +(nx
           ? '<button class="pm-act primary" onclick="PM.assignNext()">Passer au '+esc(partLabel(nx).toLowerCase())+' →</button>'
           : '<button class="pm-act primary" onclick="PM.pdf()">📄 Créer le PDF</button>');
@@ -9924,12 +9966,15 @@ html.pm-phone #pmOpenBtn{ display:none; }
     var ov=E('pmOverlay');
     ov.classList.toggle('pm-info-phase', phase==='info');
     ov.classList.toggle('pm-photo-phase', phase==='photo');
+    ov.classList.toggle('pm-place-phase', phase==='place');
     ov.classList.toggle('pm-assign', phase==='assign');
     var pl=partLabel(cur), h=E('pmHint');
     if(phase==='photo'){
       h.textContent = 'Étape 1 : prenez la photo du '+pl.toLowerCase()+'.';
     } else if(phase==='place'){
-      h.textContent = 'Étape 2 : touchez la photo du '+pl.toLowerCase()+' pour placer les points (1, 2, 3…).';
+      h.textContent = fromAssign
+        ? ('Ajoutez ou retirez des points sur le '+pl.toLowerCase()+', puis touchez « Terminer ».')
+        : 'Étape 2 : touchez la photo pour placer les points (touchez un point pour le retirer).';
     } else if(phase==='assign'){
       h.textContent = 'Étape 3 : choisissez la modification de chaque rond du '+pl.toLowerCase()+'.';
     }
@@ -10038,7 +10083,7 @@ html.pm-phone #pmOpenBtn{ display:none; }
   window.PM = {
     open:function(){
       // Nouvelle demande : état repartant à zéro, on démarre sur le formulaire d'infos.
-      data=freshData(); cur='siege'; phase='info'; sheetIdx=-1; draft=null; catFilter=null;
+      data=freshData(); cur='siege'; phase='info'; fromAssign=false; sheetIdx=-1; draft=null; catFilter=null;
       modInfo={ benef:'', cmd:'' };
       showPhoto();
       E('pmOverlay').classList.add('pm-on');   // l'overlay couvre l'écran…
@@ -10079,7 +10124,29 @@ html.pm-phone #pmOpenBtn{ display:none; }
     },
     // Points placés → on choisit les modifications de CE même item
     toAssign:function(){
-      phase='assign';
+      phase='assign'; fromAssign=false;
+      showPhoto(); render(); window.scrollTo(0,0);
+    },
+    // Retour depuis « phrases » pour ajouter/retirer des points
+    openAddMenu:function(){
+      var sel=selectedKeys().filter(function(k){ return data[k].photo; });  // seulement les items déjà photographiés
+      if(sel.length<=1){ PM.addPointsTo(sel[0]||cur); return; }              // un seul item → direct, sans menu
+      var box=E('pmAddOptions'), h='';
+      sel.forEach(function(k){ h+='<button type="button" class="pm-add-opt" onclick="PM.addPointsTo(\''+k+'\')">'+esc(partLabel(k))+'</button>'; });
+      box.innerHTML=h;
+      E('pmAddBackdrop').classList.add('pm-on'); E('pmAddMenu').classList.add('pm-on');
+    },
+    closeAddMenu:function(){ E('pmAddBackdrop').classList.remove('pm-on'); E('pmAddMenu').classList.remove('pm-on'); },
+    addPointsTo:function(k){
+      if(!data[k] || !data[k].on) return;
+      this.closeAddMenu();
+      cur=k; fromAssign=true;
+      phase = data[k].photo ? 'place' : 'photo';   // pas de photo ? on la prend d'abord
+      showPhoto(); render(); window.scrollTo(0,0);
+    },
+    // Bouton « Terminer » après avoir ajouté/retiré des points → retour aux phrases de l'item
+    finishAdd:function(){
+      fromAssign=false; phase='assign';
       showPhoto(); render(); window.scrollTo(0,0);
     },
     // Modifications choisies → item suivant (nouvelle photo), ou création du PDF
