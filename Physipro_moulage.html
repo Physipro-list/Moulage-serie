@@ -8,6 +8,43 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1804 - PHOTOS : CORBEILLE 30 JOURS + TÉLÉCHARGER SUR LES 2 SECTIONS
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1804: Supprimer ne détruit plus rien tout de suite. La photo est
+       DÉPLACÉE vers photos/corbeille/<commande>/ avec, en métadonnées,
+       son chemin d'origine et la date de suppression. Elle y reste 30
+       jours, puis elle est effacée pour de bon.
+       ♻️ Restauration : ⚙️ Réglages ▸ 🗑️ Corbeille photos → la liste des
+       photos supprimées avec un bouton par photo. Restaurer la remet à
+       son emplacement d'origine et régénère sa miniature.
+       🧹 Purge automatique des +30 jours au démarrage, une fois par jour
+       maximum (repère dans localStorage) pour ne pas gaspiller d'appels.
+       ⬇️ Le bouton « Télécharger » est maintenant sur LES DEUX sections :
+       « Sans essayage » (orange) et « Photo inspection » (bleu).
+       ⚠️ RÈGLES STORAGE : photos/corbeille/** doit être autorisé, sinon
+       la suppression échouera. Fichier storage.rules fourni à part.
+
+    v1803 - PHOTOS : SUPPRIMER UNE PHOTO DEPUIS LA VUE AGRANDIE
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1803: Bouton 🗑️ Supprimer, visible UNIQUEMENT quand la photo est
+       ouverte en grand (zoom PC et zoom téléphone). Rien dans la grille
+       → impossible d'effacer une photo par un clic malencontreux.
+       Double sécurité : confirmation qui nomme le fichier avant d'agir.
+       🧹 La MINIATURE (thumbs/) est supprimée en même temps que la photo,
+       sinon elle restait orpheline dans Firebase Storage et continuait
+       d'être facturée. L'ancienne deleteFirebasePhoto ne le faisait pas.
+       Après la suppression : la vue agrandie passe à la photo suivante,
+       ou se ferme s'il n'en reste plus, et la grille se rafraîchit sans
+       relire Firebase (0 egress).
+
+    v1802 - PHOTOS : BOUTON « TÉLÉCHARGER » SOUS LE TITRE DE SECTION
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1802: Le bouton « ⬇️ Cette section » devient « ⬇️ Télécharger ».
+       Il n'est plus collé à droite en position absolue : il passe SOUS
+       le titre, centré. La bande devient une colonne (titre centré, puis
+       bouton centré) → plus aucun risque qu'il chevauche le titre ou
+       déborde quand la zone photos est étroite.
+
     v1801 - PHOTOS : TITRES DE SECTION PLUS GROS ET CENTRÉS
     ═══════════════════════════════════════════════════════════════════
     🆕 v1801: « 🚫 Sans essayage » et « 📷 Photo inspection » passent de
@@ -655,7 +692,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1801</title>
+  <title>PhysiPro Moulages v1804</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -1323,23 +1360,22 @@
     /* Entêtes de section dans la grille mobile */
     .mobile-photos-section {
       grid-column: 1 / -1;
-      position: relative;                                  /* v1801 */
-      display: flex; align-items: center; justify-content: center;
-      padding: 10px 92px; margin-top: 2px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;   /* v1802 */
+      padding: 10px 12px; margin-top: 2px;
       background: rgba(0,0,0,0.32);
       border-left: 3px solid #60a5fa; border-radius: 7px;
     }
     .mobile-photos-section.se { border-left-color: #f97316; background: rgba(249,115,22,0.18); }
     .mobile-photos-section-title { font-size: 15px; font-weight: 700; color: #f1f5f9; text-align: center; text-transform: uppercase; letter-spacing: .5px; }   /* v1801 */
     .mobile-photos-section-dl {
-      position: absolute; right: 9px; top: 50%; transform: translateY(-50%);   /* v1801 */
-      flex-shrink: 0; padding: 5px 10px;
-      font-size: 10px; font-weight: 700; font-family: inherit; color: #fff;
+      flex-shrink: 0; padding: 7px 18px;
+      font-size: 12px; font-weight: 700; font-family: inherit; color: #fff;
       background: linear-gradient(135deg,#f97316,#ea580c);
       border: 1px solid rgba(255,255,255,0.3); border-radius: 7px;
       cursor: pointer; white-space: nowrap;
     }
-    .mobile-photos-section-dl:active { transform: translateY(-50%) scale(0.96); }
+    .mobile-photos-section-dl.insp { background: linear-gradient(135deg,#3b82f6,#2563eb); }
+    .mobile-photos-section-dl:active { transform: scale(0.96); }
 
     /* ═══ v1799 — UN SEUL bouton coupé en deux, PC et mobile ═══
        Moitié gauche = Sans essayage (orange), moitié droite = Photos (vert).
@@ -1372,10 +1408,11 @@
 
 
     /* Entête de section dans la grille (occupe toute la largeur) */
-    .photos-section-head { grid-column: 1 / -1; position: relative; display: flex; align-items: center; justify-content: center; margin-top: 2px; padding: 8px 76px; background: rgba(0,0,0,0.32); border-left: 3px solid #60a5fa; border-radius: 6px; }
+    .photos-section-head { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; margin-top: 2px; padding: 8px 10px; background: rgba(0,0,0,0.32); border-left: 3px solid #60a5fa; border-radius: 6px; }
     .photos-section-head.se { border-left-color: #f97316; background: rgba(249,115,22,0.18); }
     .photos-section-title { font-size: 14px; font-weight: 700; color: #f1f5f9; text-align: center; text-transform: uppercase; letter-spacing: .5px; }   /* v1801 */
-    .photos-section-dl { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); flex-shrink: 0; padding: 4px 8px; font-size: 9px; font-weight: 700; color: #fff; background: linear-gradient(135deg,#f97316,#ea580c); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .photos-section-dl { flex-shrink: 0; padding: 5px 14px; font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(135deg,#f97316,#ea580c); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .photos-section-dl.insp { background: linear-gradient(135deg,#3b82f6,#2563eb); }
     .photos-section-dl:hover { filter: brightness(1.15); }
     .photos-section-dl:disabled { opacity: .5; cursor: not-allowed; transform: none; }
     
@@ -1506,6 +1543,29 @@
       box-shadow: 0 2px 10px rgba(0,0,0,0.5);
     }
     .photo-inline-zoom-close:hover { background: #dc2626; }
+    /* v1803 — Supprimer : visible seulement dans la vue agrandie */
+    .photo-inline-zoom-delete {
+      position: absolute;
+      top: 12px;
+      right: 62px;
+      padding: 0 14px;
+      height: 40px;
+      background: rgba(15,23,42,0.85);
+      border: 2px solid rgba(239,68,68,0.8);
+      border-radius: 20px;
+      color: #fecaca;
+      font-size: 13px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 20;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      transition: all 0.2s;
+    }
+    .photo-inline-zoom-delete:hover { background: #dc2626; color: #fff; border-color: #fff; }
     .photo-inline-zoom-nav {
       position: absolute;
       top: 50%;
@@ -5972,6 +6032,19 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           </div>
           <div id="photoOptStatus" style="font-size:10px;color:#94a3b8;margin-top:6px;line-height:1.4;">Aucune analyse lancée.</div>
           <button class="settings-btn secondary" id="photoOptCancelBtn" onclick="cancelPhotoOptimization()" style="width:100%;margin-top:8px;display:none;">⏹️ Arrêter</button>
+        </div>
+
+        <!-- SECTION : Corbeille photos (v1804) -->
+        <div class="settings-section">
+          <div class="settings-section-title">🗑️ Corbeille photos</div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:8px;line-height:1.4;">Une photo supprimée est déplacée ici et reste récupérable <b>30 jours</b>. Après ce délai, elle est effacée pour de bon — le ménage se fait tout seul, une fois par jour au démarrage.</div>
+          <div class="settings-btns-row">
+            <button class="settings-btn secondary" onclick="chargerCorbeillePhotos()">👁️ Voir la corbeille</button>
+            <button class="settings-btn primary" onclick="purgeCorbeillePhotos(true).then(r=>showToast('🧹 '+(r.efface||0)+' photo(s) effacée(s)','success')).then(chargerCorbeillePhotos)">🧹 Purger +30 j</button>
+          </div>
+          <div class="backup-list" id="corbeilleList" style="margin-top:8px;">
+            <div style="text-align:center;padding:14px;color:#64748b;font-size:11px;">Clique « Voir la corbeille »</div>
+          </div>
         </div>
 
         <!-- SECTION 3: Import/Export -->
@@ -15112,6 +15185,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
       // v1750 : démarrer tôt le poller d'ouverture auto du calendrier (?vue=calendrier) — il attend connexion + données
       try { maybeAutoOpenCalendar(); } catch(e) {}
+
+      // v1804 : ménage de la corbeille photos (>30 j), 1× par jour max, en arrière-plan
+      setTimeout(() => { try { purgeCorbeillePhotos(); } catch(e) {} }, 15000);
       
       // Afficher le bouton retour menu sur mobile
       var _isMob = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isMobileView();
@@ -15897,8 +15973,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     async function deleteFirebasePhoto(fullPath, orderNumber) {
       if (!confirm('Supprimer cette photo?')) return;
       try {
-        await storage.ref(fullPath).delete();
-        showToast('🗑️ Photo supprimée', 'success');
+        await _deletePhotoAndThumb(fullPath);
+        showToast('🗑️ Photo mise à la corbeille', 'success');
         sidebarPhotosLoaded = false;
         sidebarPhotosCardId = null;
         loadSidebarPhotos();
@@ -15908,6 +15984,206 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
     }
     window.deleteFirebasePhoto = deleteFirebasePhoto;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // v1803 — SUPPRESSION D'UNE PHOTO DEPUIS LA VUE AGRANDIE
+    // Efface la pleine taille ET sa miniature (sinon thumbs/ garde un
+    // fichier orphelin facturé pour rien).
+    // ═══════════════════════════════════════════════════════════════════
+    const CORBEILLE_JOURS = 30;   // v1804 — délai de conservation
+
+    // Déplace la photo dans la corbeille (copie puis efface l'original).
+    // Firebase Storage n'a pas de « move » : on relit les octets et on
+    // réécrit ailleurs. Les photos font ≤150 Ko, donc le coût est minime.
+    async function _deletePhotoAndThumb(fullPath) {
+      const ref = storage.ref(fullPath);
+      const i = fullPath.lastIndexOf('/');
+      const dossier = fullPath.slice(0, i);
+      const nom = fullPath.slice(i + 1);
+      // photos/moulages/<commande>/<nom> → <commande>
+      const bouts = fullPath.split('/');
+      const commande = bouts.length >= 3 ? bouts[2] : 'inconnu';
+
+      try {
+        const url = await ref.getDownloadURL();
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const blob = await resp.blob();
+        const cible = storage.ref(`photos/corbeille/${commande}/${Date.now()}__${nom}`);
+        await cible.put(blob, {
+          contentType: 'image/jpeg',
+          customMetadata: { origPath: fullPath, deletedAt: String(Date.now()), commande }
+        });
+      } catch (e) {
+        // Si la copie échoue, on N'EFFACE PAS : mieux vaut garder la photo
+        console.error('❌ Copie vers la corbeille impossible:', e);
+        throw new Error('corbeille inaccessible — photo conservée (' + (e.message || e) + ')');
+      }
+
+      await ref.delete();
+      try { await storage.ref(`${dossier}/thumbs/${nom}`).delete(); }
+      catch (e) { /* pas de miniature (vieille photo) → normal */ }
+    }
+
+    // ─── Purge des photos de plus de 30 jours (1× par jour maximum) ───
+    async function purgeCorbeillePhotos(force = false) {
+      const cle = 'physipro_lastCorbeillePurge';
+      if (!force) {
+        const dernier = parseInt(localStorage.getItem(cle) || '0', 10);
+        if (Date.now() - dernier < 24 * 60 * 60 * 1000) return { skipped: true };
+      }
+      localStorage.setItem(cle, String(Date.now()));
+
+      const limite = Date.now() - CORBEILLE_JOURS * 24 * 60 * 60 * 1000;
+      let efface = 0;
+      try {
+        const racine = await storage.ref('photos/corbeille').listAll();
+        for (const dossier of racine.prefixes) {
+          const res = await dossier.listAll();
+          for (const item of res.items) {
+            try {
+              const meta = await item.getMetadata();
+              const t = parseInt((meta.customMetadata || {}).deletedAt || '0', 10)
+                        || Date.parse(meta.timeCreated || '') || 0;
+              if (t && t < limite) { await item.delete(); efface++; }
+            } catch (e) { /* fichier illisible → on passe */ }
+          }
+        }
+        if (efface > 0) console.log(`🧹 Corbeille : ${efface} photo(s) de plus de ${CORBEILLE_JOURS} jours effacée(s)`);
+      } catch (e) {
+        console.warn('Purge corbeille impossible:', e && e.message);
+      }
+      return { efface };
+    }
+    window.purgeCorbeillePhotos = purgeCorbeillePhotos;
+
+    // ─── Lister la corbeille (⚙️ Réglages) ───
+    async function chargerCorbeillePhotos() {
+      const el = document.getElementById('corbeilleList');
+      if (el) el.innerHTML = '<div style="padding:10px;color:#64748b;font-size:11px;text-align:center;">Chargement…</div>';
+      const items = [];
+      try {
+        const racine = await storage.ref('photos/corbeille').listAll();
+        for (const dossier of racine.prefixes) {
+          const res = await dossier.listAll();
+          for (const item of res.items) {
+            try {
+              const meta = await item.getMetadata();
+              const cm = meta.customMetadata || {};
+              items.push({
+                path: item.fullPath,
+                nom: (cm.origPath || item.name).split('/').pop(),
+                commande: cm.commande || dossier.name,
+                quand: parseInt(cm.deletedAt || '0', 10) || Date.parse(meta.timeCreated || '') || 0
+              });
+            } catch (e) {}
+          }
+        }
+      } catch (e) {
+        if (el) el.innerHTML = `<div style="padding:10px;color:#ef4444;font-size:11px;">Corbeille inaccessible : ${e.message}</div>`;
+        return;
+      }
+      items.sort((a, b) => b.quand - a.quand);
+      if (!el) return;
+      if (items.length === 0) {
+        el.innerHTML = '<div style="padding:14px;color:#64748b;font-size:11px;text-align:center;">Corbeille vide</div>';
+        return;
+      }
+      el.innerHTML = items.slice(0, 50).map(it => {
+        const jours = it.quand ? Math.floor((Date.now() - it.quand) / 86400000) : '?';
+        const reste = (typeof jours === 'number') ? Math.max(0, CORBEILLE_JOURS - jours) : '?';
+        return `
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid rgba(255,255,255,0.08);">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:11px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${it.nom}</div>
+              <div style="font-size:9px;color:#94a3b8;">Cmd ${it.commande} • supprimée il y a ${jours} j • effacée dans ${reste} j</div>
+            </div>
+            <button class="settings-btn secondary" style="padding:4px 9px;font-size:10px;" onclick="restaurerPhotoCorbeille('${it.path}')">♻️ Restaurer</button>
+          </div>`;
+      }).join('');
+    }
+    window.chargerCorbeillePhotos = chargerCorbeillePhotos;
+
+    // ─── Restaurer une photo à son emplacement d'origine ───
+    async function restaurerPhotoCorbeille(path) {
+      try {
+        const ref = storage.ref(path);
+        const meta = await ref.getMetadata();
+        const orig = (meta.customMetadata || {}).origPath;
+        if (!orig) throw new Error('chemin d\'origine inconnu');
+
+        const url = await ref.getDownloadURL();
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const blob = await resp.blob();
+
+        await storage.ref(orig).put(blob, { contentType: 'image/jpeg', customMetadata: { opt: 'v1793' } });
+
+        // Régénérer la miniature
+        try {
+          const i = orig.lastIndexOf('/');
+          const thumb = await compressPhotoThumb(blob);
+          if (thumb) await storage.ref(`${orig.slice(0, i)}/thumbs/${orig.slice(i + 1)}`).put(thumb, { contentType: 'image/jpeg' });
+        } catch (e) { console.warn('Miniature non régénérée:', e && e.message); }
+
+        await ref.delete();
+        showToast('♻️ Photo restaurée', 'success');
+        sidebarPhotosLoaded = false;
+        sidebarPhotosCardId = null;
+        chargerCorbeillePhotos();
+      } catch (e) {
+        console.error('❌ Restauration impossible:', e);
+        showToast('❌ Restauration impossible : ' + e.message, 'error');
+      }
+    }
+    window.restaurerPhotoCorbeille = restaurerPhotoCorbeille;
+
+    // Retire la photo des caches mémoire, sans relire Firebase
+    function _removePhotoFromCaches(fullPath) {
+      const filtre = (arr) => Array.isArray(arr) ? arr.filter(p => p.fullPath !== fullPath) : arr;
+      sidebarPhotos = filtre(sidebarPhotos);
+      galleryPhotos = sidebarPhotos;
+      if (window.mobileGalleryPhotos) window.mobileGalleryPhotos = filtre(window.mobileGalleryPhotos);
+      mobileZoomPhotos = filtre(mobileZoomPhotos);
+    }
+
+    // Point d'entrée des 2 boutons 🗑️ (PC et téléphone)
+    // mobile = true → on rafraîchit la grille du téléphone
+    async function supprimerPhotoAgrandie(mobile) {
+      const liste = mobile ? mobileZoomPhotos : sidebarPhotos;
+      const index = mobile ? mobileZoomIndex : inlineZoomIndex;
+      const photo = liste && liste[index];
+      if (!photo) return;
+
+      if (!confirm(`Supprimer cette photo ?\n\n${photo.name}\n\nElle ira dans la corbeille et sera récupérable pendant ${CORBEILLE_JOURS} jours (⚙️ Réglages ▸ Corbeille photos).`)) return;
+
+      try {
+        await _deletePhotoAndThumb(photo.fullPath);
+        _removePhotoFromCaches(photo.fullPath);
+        showToast('🗑️ Photo mise à la corbeille', 'success');
+
+        const reste = mobile ? mobileZoomPhotos : sidebarPhotos;
+        if (!reste || reste.length === 0) {
+          if (mobile) { closeMobileZoom(); renderMobilePhotos([]); }
+          else { closeInlineZoom(); renderSidebarPhotosGrid(); }
+          return;
+        }
+
+        if (mobile) {
+          mobileZoomIndex = Math.min(mobileZoomIndex, mobileZoomPhotos.length - 1);
+          renderMobileZoom();
+          renderMobilePhotos(window.mobileGalleryPhotos || []);
+        } else {
+          inlineZoomIndex = Math.min(inlineZoomIndex, sidebarPhotos.length - 1);
+          renderInlineZoom();
+          renderSidebarPhotosGrid();
+        }
+      } catch (error) {
+        console.error('❌ Suppression impossible:', error);
+        showToast('❌ Suppression impossible : ' + error.message, 'error');
+      }
+    }
+    window.supprimerPhotoAgrandie = supprimerPhotoAgrandie;
     
     // ═══ Ouvrir la galerie de photos ═══
     async function openPhotosOneDrive(cardId) {
@@ -16147,7 +16423,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         html += `
           <div class="photos-section-head se">
             <span class="photos-section-title">🚫 Sans essayage (${se.length})</span>
-            <button type="button" class="photos-section-dl" onclick="downloadSansEssayagePhotos()" title="Télécharger UNIQUEMENT les photos sans essayage, dans un sous-dossier « NOM - NUMÉRO - SANS ESSAYAGE ».">⬇️ Cette section</button>
+            <button type="button" class="photos-section-dl" onclick="downloadSansEssayagePhotos()" title="Télécharger UNIQUEMENT les photos sans essayage, dans un sous-dossier « NOM - NUMÉRO - SANS ESSAYAGE ».">⬇️ Télécharger</button>
           </div>`;
         html += se.map(({ p, i }) => vignette(p, i)).join('');
       }
@@ -16155,6 +16431,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         html += `
           <div class="photos-section-head">
             <span class="photos-section-title">📷 Photo inspection (${normales.length})</span>
+            <button type="button" class="photos-section-dl insp" onclick="downloadInspectionPhotos()" title="Télécharger UNIQUEMENT les photos d'inspection.">⬇️ Télécharger</button>
           </div>`;
         html += normales.map(({ p, i }) => vignette(p, i)).join('');
       }
@@ -16253,6 +16530,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       return downloadAllSidebarPhotos(se, ' - SANS ESSAYAGE');
     }
     window.downloadSansEssayagePhotos = downloadSansEssayagePhotos;
+
+    // ─── v1804 — Télécharger UNIQUEMENT la section « Photo inspection » ───
+    function downloadInspectionPhotos() {
+      const insp = _currentPhotoList().filter(p => !isSansEssayage(p));
+      if (insp.length === 0) {
+        showToast('⚠️ Aucune photo d\'inspection', 'warning');
+        return;
+      }
+      return downloadAllSidebarPhotos(insp, ' - INSPECTION');
+    }
+    window.downloadInspectionPhotos = downloadInspectionPhotos;
 
     // ─── Helpers UI communs du téléchargement ───
     function _dlStart() {
@@ -16471,6 +16759,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       
       zoomDiv.innerHTML = `
         <button class="photo-inline-zoom-close" onclick="closeInlineZoom(event)">✕</button>
+        <button class="photo-inline-zoom-delete" onclick="event.stopPropagation();supprimerPhotoAgrandie(false)" title="Supprimer définitivement cette photo">🗑️ Supprimer</button>
         <div class="photo-inline-zoom-hint">🖱️ Molette = zoom | Glisser = déplacer</div>
         ${total > 1 ? `<button class="photo-inline-zoom-nav prev" onclick="inlineZoomPrev(event)">◀</button>` : ''}
         <img id="inlineZoomImg" 
@@ -18499,7 +18788,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         html += `
           <div class="mobile-photos-section se">
             <span class="mobile-photos-section-title">🚫 Sans essayage (${se.length})</span>
-            <button type="button" class="mobile-photos-section-dl" onclick="event.stopPropagation();downloadSansEssayagePhotos()">⬇️ Cette section</button>
+            <button type="button" class="mobile-photos-section-dl" onclick="event.stopPropagation();downloadSansEssayagePhotos()">⬇️ Télécharger</button>
           </div>`;
         html += se.map(({ p, i }) => vignette(p, i)).join('');
       }
@@ -18507,6 +18796,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         html += `
           <div class="mobile-photos-section">
             <span class="mobile-photos-section-title">📷 Photo inspection (${normales.length})</span>
+            <button type="button" class="mobile-photos-section-dl insp" onclick="event.stopPropagation();downloadInspectionPhotos()">⬇️ Télécharger</button>
           </div>`;
         html += normales.map(({ p, i }) => vignette(p, i)).join('');
       }
@@ -18562,6 +18852,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           </div>
           <div class="mobile-zoom-nav">
             <button class="mobile-zoom-nav-btn" onclick="mobileZoomPrev()">◀</button>
+            <button class="mobile-zoom-delete" onclick="supprimerPhotoAgrandie(true)">🗑️ Supprimer</button>
             <button class="mobile-zoom-nav-btn" onclick="mobileZoomNext()">▶</button>
           </div>
           <div class="mobile-zoom-hint">Pincez pour zoomer • Double-tap pour réinitialiser</div>
@@ -18589,6 +18880,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           .mobile-zoom-counter {
             color: white; font-size: 14px; font-weight: 600;
           }
+          /* v1803 — Supprimer : uniquement dans la vue agrandie */
+          .mobile-zoom-delete {
+            padding: 0 16px; height: 46px;
+            background: rgba(15,23,42,0.9);
+            border: 2px solid rgba(239,68,68,0.85);
+            border-radius: 23px;
+            color: #fecaca; font-size: 13px; font-weight: 700; font-family: inherit;
+            cursor: pointer; display: flex; align-items: center; gap: 6px;
+            white-space: nowrap;
+          }
+          .mobile-zoom-delete:active { background: #dc2626; color: #fff; transform: scale(0.96); }
           .mobile-zoom-controls { display: flex; gap: 10px; }
           .mobile-zoom-btn {
             width: 44px; height: 44px; border-radius: 50%;
@@ -20981,7 +21283,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           if (msg.image) delete msg.image;
           // Re-render
           if (typeof renderMessages === 'function') renderMessages();
-          if (typeof showToast === 'function') showToast('🗑️ Photo supprimée', 'success');
+          if (typeof showToast === 'function') showToast('🗑️ Photo mise à la corbeille', 'success');
         }).catch(function(err) {
           console.error('deleteMessageImage error:', err);
           if (typeof showToast === 'function') showToast('Erreur: ' + err.message, 'error');
