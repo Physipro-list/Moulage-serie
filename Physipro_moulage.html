@@ -692,7 +692,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1804</title>
+  <title>PhysiPro Moulages v1805</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -5687,6 +5687,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           <span style="flex:1;"></span>
           <button class="qchat-action-btn" onclick="openImportantDateCalendar()" title="Épingler une date importante (calendrier)" style="background:#fde047;color:#422006;border:1px solid #ca8a04;font-weight:700;">📌 Épingler date importante</button>
           <button class="qchat-action-btn" onclick="MChat.openCompose('pinned')" title="Épingler un message" style="background:#facc15;color:#1f2937;border:1px solid #ca8a04;font-weight:700;">📌 Épinglé</button>
+          <button class="qchat-action-btn" onclick="MChat.copyChat()" title="Copier toute la conversation">📋</button>
           <button class="qchat-action-btn" onclick="MChat.printChat()" title="Imprimer">🖨️</button>
           <button class="chat-close-btn fiche-close-btn" onclick="closeFiche(event)" title="Fermer">✕</button>
         </div>
@@ -22018,6 +22019,101 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
       
       // ---- Print ----
+      /* ===== COPIER TOUTE LA CONVERSATION =====
+         Reprend la même lecture des messages que printChat : texte mis en
+         forme dans le presse-papiers (collable dans Word ou un courriel)
+         et version texte simple en parallèle. */
+      function copyChat() {
+        if (!_currentJobId || !_messages || _messages.length === 0) {
+          if (typeof showToast === 'function') showToast('Aucun message à copier', 'warning');
+          return;
+        }
+
+        var job = cardsData[_currentJobId] || {};
+        var orderNum = esc(job.order || '?');
+        var clientName = esc(job.client || job.nom || '');
+        var titre = 'Notes & Chat — Job #' + orderNum + (clientName ? ' — ' + clientName : '');
+
+        var H = ['<div style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937;max-width:760px">'];
+        H.push('<div style="font:700 16px Segoe UI,Arial,sans-serif;color:#1e40af;' +
+               'border-bottom:2px solid #dbeafe;padding-bottom:6px;margin-bottom:12px">' + titre + '</div>');
+        var T = [titre, ''];
+
+        _messages.forEach(function(entry) {
+          var msg = entry[1];
+          var isReply = msg.type === 'reply' || !!msg.replyTo;
+          var typeLabel = isReply ? '↩️ Réponse' : '💬 Conversation';
+          var timeStr = esc(fmtTime(msg.timestamp));
+          var authorName = esc(msg.authorName || '?');
+
+          var rawText = '';
+          if (msg.contentHtml) {
+            var tmp = document.createElement('div');
+            tmp.innerHTML = msg.contentHtml;
+            rawText = tmp.textContent || tmp.innerText || '';
+          } else {
+            rawText = msg.content || msg.text || '';
+          }
+
+          H.push('<div style="margin-bottom:14px;padding:9px 11px;border-radius:7px;' +
+                 'background:' + (isReply ? '#f0fdf4' : '#f8fafc') + ';' +
+                 'border-left:3px solid ' + (isReply ? '#22c55e' : '#3b82f6') + '">');
+          H.push('<div style="font:700 11px Segoe UI,Arial,sans-serif;color:#64748b">' +
+                 typeLabel + ' &#183; ' + timeStr + '</div>');
+          H.push('<div style="font:700 13px Segoe UI,Arial,sans-serif;color:#1e293b;' +
+                 'margin:2px 0 4px">' + authorName + '</div>');
+          H.push('<div style="font:13px/1.5 Segoe UI,Arial,sans-serif;white-space:pre-wrap">' +
+                 esc(rawText) + '</div>');
+
+          var imgs = [];
+          if (msg.image) imgs.push(msg.image);
+          if (msg.images && Array.isArray(msg.images)) imgs = imgs.concat(msg.images);
+          imgs.forEach(function(src) {
+            H.push('<img src="' + src + '" width="520" style="display:block;max-width:100%;' +
+                   'margin-top:7px;border:1px solid #e2e8f0;border-radius:5px">');
+          });
+          H.push('</div>');
+
+          T.push('[' + timeStr + '] ' + (isReply ? '↩ ' : '') + authorName + ' :');
+          T.push(rawText);
+          if (imgs.length) T.push('(' + imgs.length + ' image' + (imgs.length > 1 ? 's' : '') + ')');
+          T.push('');
+        });
+        H.push('</div>');
+
+        var html = H.join(''), texte = T.join('\n');
+        var nb = _messages.length;
+
+        function fini() {
+          if (typeof showToast === 'function')
+            showToast(nb + ' message' + (nb > 1 ? 's' : '') + ' copié' + (nb > 1 ? 's' : ''), 'success');
+        }
+        function secours() {
+          var d = document.createElement('div');
+          d.innerHTML = html;
+          d.style.cssText = 'position:fixed;left:-99999px;top:0';
+          document.body.appendChild(d);
+          var sel = window.getSelection(), rg = document.createRange();
+          rg.selectNodeContents(d); sel.removeAllRanges(); sel.addRange(rg);
+          try { document.execCommand('copy'); fini(); }
+          catch (e) {
+            if (typeof showToast === 'function') showToast('Copie impossible sur ce navigateur', 'error');
+          }
+          sel.removeAllRanges(); d.remove();
+        }
+
+        if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+          try {
+            navigator.clipboard.write([ new ClipboardItem({
+              'text/html':  new Blob([html], { type: 'text/html' }),
+              'text/plain': new Blob([texte], { type: 'text/plain' })
+            })]).then(fini).catch(secours);
+            return;
+          } catch (e) {}
+        }
+        secours();
+      }
+
       function printChat() {
         if (!_currentJobId || !_messages || _messages.length === 0) {
           if (typeof showToast === 'function') showToast('Aucun message à imprimer', 'warning');
@@ -22236,6 +22332,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         zoomSelectedImage: zoomSelectedImage,
         closeZoom: closeZoom,
         printChat: printChat,
+        copyChat: copyChat,
         openEmailForm: openEmailForm,
         closePdfForm: closePdfForm,
         savePdf: savePdf,
