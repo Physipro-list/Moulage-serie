@@ -35,12 +35,13 @@
     inspcouture: { icon: '🧵', label: 'Prod. Couture',     sub: 'Production Couture',         file: 'PhysiPro_Production_Couture.html',      color: '#a855f7' },
     serviceClient:        { icon: '🎧', label: 'Questionnements',  sub: 'Questionnements',            file: 'PhysiPro_Questionnements.html',           color: '#f59e0b' },
     photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' },
-    inspfinale:  { icon: '🔍', label: 'Insp. Finale',      sub: 'Inspection finale',          file: 'PhysiPro_Inspection_Finale.html',        color: '#6366f1' }
+    inspfinale:  { icon: '🔍', label: 'Insp. Finale',      sub: 'Inspection finale',          file: 'PhysiPro_Inspection_Finale.html',        color: '#6366f1' },
+    psm:         { icon: '📐', label: 'PSM',                sub: 'Produits sur mesure',        file: 'PhysiPro_PSM.html',                      color: '#0ea5e9' }
   };
 
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
-    'moulage', 'serviceClient', 'inspection', 'inspcouture', 'inspfinale'
+    'moulage', 'serviceClient', 'inspection', 'inspcouture', 'inspfinale', 'psm'
   ];
 
   // ── RÈGLE MOBILE (v_nav3) ──────────────────────────────
@@ -63,11 +64,11 @@
   //  ACCÈS PAR UTILISATEUR (emails en base64)
   // ══════════════════════════════════════
   var HUB_ACCESS = {
-    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient'], // atelieratp (Daniel)
-    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient'],   // valerie18 (Valérie)
-    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','serviceClient'],                              // simdut (Cassie)
-    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient'],                // michelle.bouchard
-    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient'],                // sroy (Stéphanie)
+    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'], // atelieratp (Daniel)
+    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],   // valerie18 (Valérie)
+    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','serviceClient','psm'],                              // simdut (Cassie)
+    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],                // michelle.bouchard
+    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],                // sroy (Stéphanie)
     'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','serie','inspfinale','serviceClient'],                                            // sonia.boulanger
     'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','serviceClient'],                                                                 // service3 (Jacynthe)
     'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','serviceClient'],                                                                 // service1 (Jonathan)
@@ -81,10 +82,10 @@
     'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage'],                                                                        // marioouellette (Mario O.)
     'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':             [],                                                                                 // magasinatp2 (Sylvain)
     'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':             [],                                                                                 // magasinatp3 (Stéphane Del.)
-    'cmhAcGh5c2lwcm8uY29t':                         ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient'],          // rh (Roxanne)
+    'cmhAcGh5c2lwcm8uY29t':                         ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],          // rh (Roxanne)
     'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':         [],                                                                            // eric.poirier (Éric)
     'Y29udGFjdEBwaHlzaXByby5mcg==':                 ['serviceClient'],                                                                            // contact (France)
-    'amVhbmNocmlzdG9waGVkYW5qb3VAcGh5c2lwcm8uY29t': ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient'],                // jeanchristophedanjou (Jean-Christophe)
+    'amVhbmNocmlzdG9waGVkYW5qb3VAcGh5c2lwcm8uY29t': ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],                // jeanchristophedanjou (Jean-Christophe)
     'Z3VpbGxhdW1lcGljaG9uQHBoeXNpcHJvLmZy':         ['serviceClient']                                                                             // guillaumepichon (Guillaume PICHON)
   };
 
