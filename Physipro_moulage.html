@@ -692,7 +692,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1805</title>
+  <title>PhysiPro Moulages v1806</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -2623,7 +2623,37 @@
     .login-btn:hover { background: linear-gradient(to bottom, #00bbff, #0088dd); transform: translateY(-1px); }
     .login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
     
-    .login-error { color: #ff6666; font-size: 11px; margin-top: 8px; min-height: 18px; }
+    /* v1806 — Erreur de connexion bien visible (mobile inclus) + code technique */
+    .login-error {
+      display: none;
+      color: #ffd0d0;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.35;
+      text-align: center;
+      margin-top: 10px;
+      padding: 9px 11px;
+      border-radius: 8px;
+      background: rgba(220,38,38,0.22);
+      border: 1px solid rgba(248,113,113,0.6);
+    }
+    .login-error.visible { display: block; animation: loginErrPop 0.28s ease-out; }
+    .login-error-code {
+      display: block;
+      margin-top: 5px;
+      font-size: 10px;
+      font-weight: 500;
+      opacity: 0.75;
+      font-family: 'Consolas', 'Monaco', monospace;
+      word-break: break-word;
+    }
+    @keyframes loginErrPop {
+      0% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-3px); }
+      100% { transform: translateX(0); }
+    }
     
     .login-remember {
       display: flex;
@@ -14873,12 +14903,21 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       return re.test(email);
     }
     
-    // Afficher erreur de connexion
-    function showLoginError(message) {
+    // Afficher erreur de connexion (v1806 : message clair + code technique)
+    function showLoginError(message, code) {
       const errorDiv = document.getElementById('loginError');
-      if (errorDiv) {
-        errorDiv.textContent = message;
+      if (!errorDiv) return;
+      errorDiv.textContent = '';
+      const msg = document.createElement('div');
+      msg.textContent = '⚠️ ' + message;
+      errorDiv.appendChild(msg);
+      if (code) {
+        const c = document.createElement('span');
+        c.className = 'login-error-code';
+        c.textContent = code;
+        errorDiv.appendChild(c);
       }
+      errorDiv.classList.add('visible');
     }
     
     // Masquer erreur
@@ -14886,6 +14925,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       const errorDiv = document.getElementById('loginError');
       if (errorDiv) {
         errorDiv.textContent = '';
+        errorDiv.classList.remove('visible');
       }
     }
     
@@ -14944,34 +14984,55 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       } catch (error) {
         console.error('❌ Erreur de connexion:', error);
         
-        // Messages d'erreur en français
+        // v1806 — Messages d'erreur en français + code technique affiché
         let errorMessage = 'Une erreur est survenue. Veuillez réessayer.';
         
         switch (error.code) {
           case 'auth/user-not-found':
-            errorMessage = 'Aucun compte ne correspond à cette adresse email.';
+            errorMessage = 'Aucun compte ne correspond à ce courriel. Vérifiez l\'adresse (attention à la correction automatique du clavier).';
             break;
           case 'auth/wrong-password':
-            errorMessage = 'Mot de passe incorrect.';
-            break;
-          case 'auth/invalid-email':
-            errorMessage = 'Adresse email invalide.';
-            break;
-          case 'auth/user-disabled':
-            errorMessage = 'Ce compte a été désactivé.';
-            break;
-          case 'auth/too-many-requests':
-            errorMessage = 'Trop de tentatives. Veuillez patienter quelques minutes.';
-            break;
-          case 'auth/network-request-failed':
-            errorMessage = 'Erreur de connexion réseau. Vérifiez votre connexion internet.';
+            errorMessage = 'Mot de passe incorrect. Effacez complètement le champ et retapez-le à la main : le téléphone peut avoir remis l\'ancien mot de passe.';
             break;
           case 'auth/invalid-credential':
-            errorMessage = 'Email ou mot de passe incorrect.';
+          case 'auth/invalid-login-credentials':
+            errorMessage = 'Courriel ou mot de passe incorrect. Effacez complètement le champ mot de passe et retapez-le à la main : le téléphone peut avoir remis l\'ancien automatiquement.';
+            break;
+          case 'auth/invalid-email':
+            errorMessage = 'Adresse courriel invalide (espace ou caractère de trop?).';
+            break;
+          case 'auth/missing-password':
+            errorMessage = 'Le champ mot de passe est vide.';
+            break;
+          case 'auth/user-disabled':
+            errorMessage = 'Ce compte a été désactivé. Avisez Daniel.';
+            break;
+          case 'auth/too-many-requests':
+            errorMessage = 'Trop de tentatives échouées. Attendez 5 à 10 minutes avant de réessayer.';
+            break;
+          case 'auth/network-request-failed':
+            errorMessage = 'Pas de connexion au serveur. Vérifiez le Wi-Fi ou les données cellulaires.';
+            break;
+          case 'auth/operation-not-allowed':
+            errorMessage = 'La connexion par courriel est désactivée dans Firebase. Avisez Daniel.';
+            break;
+          case 'auth/unauthorized-domain':
+            errorMessage = 'Ce domaine n\'est pas autorisé dans Firebase. Avisez Daniel.';
+            break;
+          case 'auth/quota-exceeded':
+            errorMessage = 'Quota Firebase dépassé. Avisez Daniel.';
+            break;
+          case 'auth/internal-error':
+            errorMessage = 'Erreur interne Firebase. Réessayez dans quelques instants.';
+            break;
+          case 'auth/web-storage-unsupported':
+            errorMessage = 'Le navigateur bloque le stockage local. Désactivez la navigation privée.';
             break;
         }
         
-        showLoginError(errorMessage);
+        // Code technique affiché sous le message (utile pour le dépannage à distance)
+        const techCode = (error.code || 'sans-code') + (error.message ? ' — ' + error.message : '');
+        showLoginError(errorMessage, techCode);
         
         // Réactiver le bouton
         loginBtn.disabled = false;
