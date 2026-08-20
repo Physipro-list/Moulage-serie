@@ -17,6 +17,10 @@
          id="logoFlipContainer" OU class="topbar-logo"
          (le script s'y attache automatiquement).
 
+    v_nav8 : nouveau module « questactifs » (Questionnements actifs),
+             ouvert à tout le monde, bureau et téléphone. La tuile
+             « Questionnements » passe à Daniel + les 4 agentes.
+
     MODIFIER LES ACCÈS OU MODULES :
       → Changer uniquement ce fichier. Toutes les apps
         récupèrent les changements automatiquement.
@@ -36,12 +40,13 @@
     serviceClient:        { icon: '🎧', label: 'Questionnements',  sub: 'Questionnements',            file: 'PhysiPro_Questionnements.html',           color: '#f59e0b' },
     photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' },
     inspfinale:  { icon: '🔍', label: 'Insp. Finale',      sub: 'Inspection finale',          file: 'PhysiPro_Inspection_Finale.html',        color: '#6366f1' },
-    psm:         { icon: '📐', label: 'PSM',                sub: 'Produits sur mesure',        file: 'PhysiPro_PSM.html',                      color: '#0ea5e9' }
+    psm:         { icon: '📐', label: 'PSM',                sub: 'Produits sur mesure',        file: 'PhysiPro_PSM.html',                      color: '#0ea5e9' },
+    questactifs: { icon: '📌', label: 'Quest. actifs',      sub: 'Questionnements en attente', file: 'PhysiPro_Questionnements_Actifs.html',   color: '#c9a14a' }
   };
 
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
-    'moulage', 'serviceClient', 'inspection', 'inspcouture', 'inspfinale', 'psm'
+    'moulage', 'serviceClient', 'questactifs', 'inspection', 'inspcouture', 'inspfinale', 'psm'
   ];
 
   // ── RÈGLE MOBILE (v_nav3) ──────────────────────────────
@@ -49,7 +54,8 @@
   //          rangée 1 du menu = Moulage + Questionnements (2 colonnes).
   // Moulage pour tout le monde ; Questionnements (serviceClient)
   // UNIQUEMENT pour les 2 Marie. Plus de bypass "full access" sur mobile.
-  var MOBILE_BASE = ['moulage'];
+  // v_nav8 : « Quest. actifs » suit Moulage -- tout le monde y a droit, aussi sur téléphone.
+  var MOBILE_BASE = ['moulage', 'questactifs'];
   // v_nav4 : sur mobile, Questionnements suit la même liste QUEST_ALLOWED.
   // (Avant, les 2 Marie l'avaient sur téléphone — elles ne sont plus dans
   //  la liste autorisée, donc elles ne le voient plus nulle part.)
@@ -69,12 +75,18 @@
   //  plus bas lui accorde 'serviceClient' (on ne touche pas à HUB_ACCESS
   //  pour ne rien casser des autres modules : ce filtre passe par-dessus).
   //  POUR AJOUTER QUELQU'UN : ajouter son adresse en minuscules ici.
+  //  v_nav8 : liste resserrée à Daniel + les 4 agentes du service client.
+  //  Valérie, Stéphanie et Cassie ont été retirées ; pour en remettre une,
+  //  il suffit de décommenter sa ligne.
   var QUEST_ALLOWED = [
-    'atelieratp@physipro.com',   // Daniel
-    'valerie18@videotron.ca',    // Valérie
-    'sroy@physipro.com',         // Stéphanie
-    'simdut@physipro.com'        // Cassie
-    // , 'adresse.de.martine@physipro.com'   // Martine — adresse à confirmer
+    'atelieratp@physipro.com',        // Daniel
+    'service3@physipro.com',          // Jacynthe
+    'sonia.boulanger@physipro.com',   // Sonia
+    'ngagne@physipro.com',            // Nadia
+    'contact@physipro.fr'             // France
+    // , 'valerie18@videotron.ca'     // Valérie
+    // , 'sroy@physipro.com'          // Stéphanie
+    // , 'simdut@physipro.com'        // Cassie
   ];
   function _questAutorise(emailLower) {
     return QUEST_ALLOWED.indexOf((emailLower || '').toLowerCase()) !== -1;
@@ -92,29 +104,29 @@
   }
 
   var HUB_ACCESS = {
-    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'], // atelieratp (Daniel)
-    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],   // valerie18 (Valérie)
-    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','serviceClient','psm'],                              // simdut (Cassie)
-    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],                // michelle.bouchard
-    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],                // sroy (Stéphanie)
-    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','inspfinale'],                                                                    // sonia.boulanger — v_nav5 : 'serie' et 'serviceClient' retirés
-    'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','serviceClient'],                                                                 // service3 (Jacynthe)
-    'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','serviceClient'],                                                                 // service1 (Jonathan)
-    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspfinale','serviceClient'],                                            // ngagne (Nadia)
-    'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':             ['moulage','serviceClient'],                                                                 // mplanguedoc (Marie-Pier)
-    'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':         ['moulage','serviceClient'],                                                                 // mariesoleilr (Marie-Soleil)
-    'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':     ['moulage','serie','serviceClient'],                                                         // fabrys.frechette
-    'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':                 ['moulage','inspfinale','serviceClient'],                                                    // cncatp (Sina)
-    'cGV0ZXJiYXNzNzZAZ21haWwuY29t':                 ['moulage'],                                                                        // peterbass76 (Pierre)
-    'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':         ['moulage','serviceClient'],                                                                 // mario.jacques (Mario J.)
-    'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage'],                                                                        // marioouellette (Mario O.)
-    'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':             [],                                                                                 // magasinatp2 (Sylvain)
-    'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':             [],                                                                                 // magasinatp3 (Stéphane Del.)
-    'cmhAcGh5c2lwcm8uY29t':                         ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],          // rh (Roxanne)
-    'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':         [],                                                                            // eric.poirier (Éric)
-    'Y29udGFjdEBwaHlzaXByby5mcg==':                 ['serviceClient'],                                                                            // contact (France)
-    'amVhbmNocmlzdG9waGVkYW5qb3VAcGh5c2lwcm8uY29t': ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],                // jeanchristophedanjou (Jean-Christophe)
-    'Z3VpbGxhdW1lcGljaG9uQHBoeXNpcHJvLmZy':         ['serviceClient']                                                                             // guillaumepichon (Guillaume PICHON)
+    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm','questactifs'], // atelieratp (Daniel)
+    'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm','questactifs'],   // valerie18 (Valérie)
+    'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','serviceClient','psm','questactifs'],                              // simdut (Cassie)
+    'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm','questactifs'],                // michelle.bouchard
+    'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm','questactifs'],                // sroy (Stéphanie)
+    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','inspfinale','questactifs'],                                                                    // sonia.boulanger — v_nav5 : 'serie' et 'serviceClient' retirés
+    'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','serviceClient','questactifs'],                                                                 // service3 (Jacynthe)
+    'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','serviceClient','questactifs'],                                                                 // service1 (Jonathan)
+    'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspfinale','serviceClient','questactifs'],                                            // ngagne (Nadia)
+    'bXBsYW5ndWVkb2NAcGh5c2lwcm8uY29t':             ['moulage','serviceClient','questactifs'],                                                                 // mplanguedoc (Marie-Pier)
+    'bWFyaWVzb2xlaWxyQHBoeXNpcHJvLmNvbQ==':         ['moulage','serviceClient','questactifs'],                                                                 // mariesoleilr (Marie-Soleil)
+    'ZmFicnlzLmZyZWNoZXR0ZUBwaHlzaXByby5jb20=':     ['moulage','serie','serviceClient','questactifs'],                                                         // fabrys.frechette
+    'Y25jYXRwQHBoeXNpcHJvLmNvbQ==':                 ['moulage','inspfinale','serviceClient','questactifs'],                                                    // cncatp (Sina)
+    'cGV0ZXJiYXNzNzZAZ21haWwuY29t':                 ['moulage','questactifs'],                                                                        // peterbass76 (Pierre)
+    'bWFyaW8uamFjcXVlc0BwaHlzaXByby5jb20=':         ['moulage','serviceClient','questactifs'],                                                                 // mario.jacques (Mario J.)
+    'bWFyaW9vdWVsbGV0dGVAcGh5c2lwcm8uY29t':         ['moulage','questactifs'],                                                                        // marioouellette (Mario O.)
+    'bWFnYXNpbmF0cDJAcGh5c2lwcm8uY29t':             ['questactifs'],                                                                                 // magasinatp2 (Sylvain)
+    'bWFnYXNpbmF0cDNAcGh5c2lwcm8uY29t':             ['questactifs'],                                                                                 // magasinatp3 (Stéphane Del.)
+    'cmhAcGh5c2lwcm8uY29t':                         ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm','questactifs'],          // rh (Roxanne)
+    'ZXJpYy5wb2lyaWVyQHBoeXNpcHJvLmNvbQ==':         ['questactifs'],                                                                            // eric.poirier (Éric)
+    'Y29udGFjdEBwaHlzaXByby5mcg==':                 ['serviceClient','questactifs'],                                                                            // contact (France)
+    'amVhbmNocmlzdG9waGVkYW5qb3VAcGh5c2lwcm8uY29t': ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm','questactifs'],                // jeanchristophedanjou (Jean-Christophe)
+    'Z3VpbGxhdW1lcGljaG9uQHBoeXNpcHJvLmZy':         ['serviceClient','questactifs']                                                                             // guillaumepichon (Guillaume PICHON)
   };
 
   // ══════════════════════════════════════
@@ -229,8 +241,9 @@
 
     grid.innerHTML = '';
 
-    // Rangée 1 : Moulage + Questionnements (2 colonnes, pleine largeur)
-    var ROW1 = ['moulage', 'serviceClient'];
+    // Rangée 1 (v_nav8) : Moulage + Questionnements + Quest. actifs.
+    // Le nombre de colonnes s'ajuste à ce que la personne voit réellement.
+    var ROW1 = ['moulage', 'serviceClient', 'questactifs'];
     // Rangée 2 : Insp. Atelier + Prod. Couture + Insp. Finale (3 colonnes)
     var ROW2 = ['inspection', 'inspcouture', 'inspfinale'];
     // Rangée 3 : PSM (v_nav6 — il manquait au menu alors qu'il est sur l'accueil)
@@ -260,7 +273,11 @@
       var el = _buildItem(mod);
       if (el) row1El.appendChild(el);
     });
-    if (row1El.children.length) grid.appendChild(row1El);
+    if (row1El.children.length) {
+      // v_nav8 : 1, 2 ou 3 boutons -- la rangée se répartit toute seule
+      row1El.style.gridTemplateColumns = 'repeat(' + row1El.children.length + ', 1fr)';
+      grid.appendChild(row1El);
+    }
 
     var row2El = document.createElement('div');
     row2El.className = 'ppnav-row row2';
