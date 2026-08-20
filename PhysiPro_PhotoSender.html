@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>PhysiPro 📷 Photos v6</title>
+<title>PhysiPro 📷 Photos v7</title>
 <!-- PhotoSender v5 : DEUX qualités selon la demande.
      - Photos normales (moulages, questionnements) : max 1200 px / qualité 60 % / ~90 Ko,
        comme avant — l'économie Firebase reste la règle.
@@ -383,19 +383,57 @@
   /* v6 — TÉLÉPHONE À L'HORIZONTALE : l'aperçu prenait toute la hauteur et
      il n'en restait presque rien. Les boutons passent à droite, l'aperçu
      récupère la place. */
-  @media (orientation: landscape) and (max-height: 560px) {
-    #screenPhoto { flex-direction: row; }
-    #screenPhoto .simple-topbar { display: none; }
-    .cam-area { flex: 1 1 auto; padding: 6px; gap: 6px; }
-    .cam-live-wrap { max-width: none; }
-    .cam-status { font-size: 12px; min-height: 0; }
-    #badgeHires { font-size: 11px; padding: 5px 8px; margin: 3px 0; }
-    .cam-thumbs .photo-thumb-wrap { width: 48px; height: 48px; }
-    .cam-actions { flex: 0 0 150px; padding: 8px 8px 8px 0; justify-content: center; }
-    .big-cam-btn { min-height: 84px; border-radius: 18px; }
-    .big-cam-ico { font-size: 30px; }
-    .big-cam-label { font-size: 15px; }
-    .send-slim-btn { font-size: 14px; padding: 8px 12px; }
+  /* v7 — APERÇU PLEIN ÉCRAN. La vraie cause du « je vois une petite zone » :
+     le cadre d'aperçu était coincé entre la barre du haut, les vignettes,
+     le texte et le gros bouton. À l'horizontale il ne restait qu'une bande
+     de 80 px. Maintenant la caméra occupe TOUT l'écran et les boutons
+     flottent par-dessus. */
+  #screenPhoto.plein .cam-area {
+    position: absolute; inset: 0; padding: 0; gap: 0; z-index: 1;
+  }
+  #screenPhoto.plein .cam-live-wrap {
+    position: absolute; inset: 0; max-width: none; width: 100%; height: 100%;
+    border: 0; border-radius: 0;
+  }
+  #screenPhoto.plein .simple-topbar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 4;
+    background: linear-gradient(to bottom, rgba(0,0,0,.55), transparent);
+  }
+  #screenPhoto.plein .cam-thumbs {
+    position: absolute; left: 8px; bottom: 8px; z-index: 4; width: auto; max-width: 60%;
+  }
+  #screenPhoto.plein .cam-thumbs .photo-thumb-wrap { width: 54px; height: 54px; }
+  #screenPhoto.plein .cam-status {
+    position: absolute; left: 0; right: 0; bottom: 74px; z-index: 4;
+    color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.9); font-size: 13px;
+  }
+  #screenPhoto.plein #camDef {
+    position: absolute; left: 0; right: 0; bottom: 58px; z-index: 4; color: #fff;
+  }
+  #screenPhoto.plein #badgeHires {
+    position: absolute; left: 8px; right: 8px; top: 46px; z-index: 4; margin: 0;
+  }
+  #screenPhoto.plein .cam-actions {
+    position: absolute; right: 10px; bottom: 10px; z-index: 5;
+    padding: 0; width: auto; align-items: flex-end;
+  }
+  #screenPhoto.plein .big-cam-btn {
+    width: auto; min-width: 132px; min-height: 72px; padding: 0 18px; border-radius: 18px;
+  }
+  #screenPhoto.plein .big-cam-ico { font-size: 26px; }
+  #screenPhoto.plein .big-cam-label { font-size: 15px; }
+
+  /* Le cadre de visée : ce qui est DEDANS est ce qui part. Le reste est
+     assombri, pour qu'on voie bien ce qui sera coupé. */
+  .cam-guide { position: absolute; inset: 0; z-index: 3; pointer-events: none; display: none; }
+  .cam-guide.on { display: block; }
+  .cam-guide .trou {
+    position: absolute; border: 2px solid #f5c518; border-radius: 6px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.45);
+  }
+  .cam-guide .txt {
+    position: absolute; left: 0; right: 0; text-align: center; color: #f5c518;
+    font-size: 12px; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,.9);
   }
   .cam-thumbs { display:flex; gap:8px; justify-content:flex-start; width:100%; max-width:480px; overflow-x:auto; padding:2px 0; -webkit-overflow-scrolling:touch; flex-shrink:0; }
   .cam-thumbs:empty { display:none; }
@@ -554,6 +592,11 @@
     <div class="cam-live-wrap" id="camLiveWrap" style="display:none;">
       <video id="camVideo" autoplay playsinline muted></video>
     </div>
+    <!-- v7 : cadre de visée — la photo est coupée exactement là-dedans -->
+    <div class="cam-guide" id="camGuide">
+      <div class="trou" id="camGuideTrou"></div>
+      <div class="txt" id="camGuideTxt">Place le haut du bon dans le cadre</div>
+    </div>
     <div class="cam-thumbs" id="photoPreviews"></div>
     <!-- v5 : prévient quand la demande exige la pleine résolution -->
     <div id="badgeHires" style="display:none;background:#0f766e;color:#fff;border-radius:8px;
@@ -675,6 +718,7 @@ function _majReglagePhoto(req){
     : { taille: 1200, qualite: 0.60, plafond: 120000, hires: false };
   var b = document.getElementById('badgeHires');
   if (b) b.style.display = hi ? '' : 'none';
+  if (typeof _majGuide === 'function') setTimeout(_majGuide, 60);
 }
 let pendingPhotos = []; // { dataUrl, name }
 let jobsListener = null;
@@ -1044,12 +1088,15 @@ async function startLiveCamera() {
     if (v) { v.srcObject = _camStream; try { await v.play(); } catch(e) {} }
     var wrap = document.getElementById('camLiveWrap');
     if (wrap) wrap.style.display = 'block';
-    /* v6 : dire tout de suite ce que la caméra fournit vraiment */
+    /* v6 : dire tout de suite ce que la caméra fournit vraiment
+       v7 : et passer l'écran en mode plein écran + poser le cadre de visée */
+    document.getElementById('screenPhoto').classList.add('plein');
     if (v) {
       setTimeout(function(){
         if (!v.videoWidth) return;
         var d = document.getElementById('camDef');
         if (d) d.textContent = 'Caméra : ' + v.videoWidth + ' × ' + v.videoHeight + ' px';
+        _majGuide();
       }, 700);
     }
     return true;
@@ -1078,11 +1125,62 @@ async function takePhoto() {
   }
 }
 
+/* ============================================================
+   v7 — CE QUE TU VOIS EST CE QUE TU PRENDS
+   L'aperçu est en « contain » : l'image est posée dans l'élément vidéo
+   avec des bandes noires. On calcule d'abord ce rectangle affiché, puis
+   le cadre de visée à l'intérieur, et on découpe la photo EXACTEMENT là.
+   Plus de photo plus large que la zone vue.
+   ============================================================ */
+function _rectAffiche(v){
+  // rectangle réellement occupé par l'image dans l'élément vidéo (contain)
+  var ew = v.clientWidth, eh = v.clientHeight;
+  var vw = v.videoWidth, vh = v.videoHeight;
+  if (!ew || !eh || !vw || !vh) return null;
+  var e = Math.min(ew / vw, eh / vh);
+  var w = vw * e, h = vh * e;
+  return { x: (ew - w) / 2, y: (eh - h) / 2, w: w, h: h, ech: e };
+}
+
+/* Le cadre de visée, en fraction de l'image affichée. Pour un devis on
+   vise un rectangle large et bas : c'est la forme du haut du bon. */
+function _cadreVisee(){
+  return PHOTO_REGLAGE.hires
+    ? { x: 0.02, y: 0.13, w: 0.96, h: 0.74 }
+    : { x: 0.00, y: 0.00, w: 1.00, h: 1.00 };
+}
+
+function _majGuide(){
+  var v = document.getElementById('camVideo');
+  var g = document.getElementById('camGuide');
+  if (!v || !g) return;
+  if (!PHOTO_REGLAGE.hires || !v.videoWidth){ g.classList.remove('on'); return; }
+  var r = _rectAffiche(v);
+  if (!r) { g.classList.remove('on'); return; }
+  var c = _cadreVisee();
+  var t = document.getElementById('camGuideTrou');
+  t.style.left   = (r.x + c.x * r.w) + 'px';
+  t.style.top    = (r.y + c.y * r.h) + 'px';
+  t.style.width  = (c.w * r.w) + 'px';
+  t.style.height = (c.h * r.h) + 'px';
+  var txt = document.getElementById('camGuideTxt');
+  txt.style.top = (r.y + c.y * r.h - 18) + 'px';
+  g.classList.add('on');
+}
+window.addEventListener('resize', _majGuide);
+window.addEventListener('orientationchange', function(){ setTimeout(_majGuide, 350); });
+
 // Capture l'image de l'aperçu vidéo (sans confirmation)
 function captureFrame() {
   var v = document.getElementById('camVideo');
   if (!v || !v.videoWidth) { setCamStatus('⏳ Caméra pas prête…'); return; }
-  var maxSize = PHOTO_REGLAGE.taille, w = v.videoWidth, h = v.videoHeight;
+  /* v7 : on découpe la source selon le cadre de visée, puis on met à
+     l'échelle. Ce qui était hors du cadre n'existe plus. */
+  var c = _cadreVisee();
+  var sx = Math.round(v.videoWidth  * c.x), sy = Math.round(v.videoHeight * c.y);
+  var sw = Math.round(v.videoWidth  * c.w), sh = Math.round(v.videoHeight * c.h);
+
+  var maxSize = PHOTO_REGLAGE.taille, w = sw, h = sh;
   if (w > maxSize || h > maxSize) {
     if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
     else       { w = Math.round(w * maxSize / h); h = maxSize; }
@@ -1091,7 +1189,7 @@ function captureFrame() {
   canvas.width = w; canvas.height = h;
   var ctx = canvas.getContext('2d');
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(v, 0, 0, w, h);
+  ctx.drawImage(v, sx, sy, sw, sh, 0, 0, w, h);
   var quality = PHOTO_REGLAGE.qualite;
   var plancher = PHOTO_REGLAGE.hires ? 0.72 : 0.45;   // v5 : on ne descend pas plus bas pour un devis
   var result = canvas.toDataURL('image/jpeg', quality);
