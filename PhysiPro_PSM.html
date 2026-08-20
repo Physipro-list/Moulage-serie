@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1045-pdf-seul]</title>
+<title>PhysiPro — Liste des matériaux [v1046-pdf-seul]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -7085,36 +7085,75 @@ function exportCostXlsm() {
     return;
   }
 
-  // Récupère TOUS les matériaux des 3 départements (Atelier + Couture + Métal)
-  // Doublons (même code) → quantités additionnées
+  /* v1046 : les quantités posées avec la petite règle 📐 sont des FRACTIONS
+     (« 1 1/2 », « 3/4 »). parseFloat("1 1/2") donne 1 — le pied carré calculé
+     était donc perdu à l'export. Cette fonction lit les deux formes. */
+  function _qteNum(v){
+    if (v == null || v === '') return 0;
+    if (typeof v === 'number') return v;
+    var t = String(v).trim().replace(',', '.');
+    var m = t.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);          // « 1 1/2 »
+    if (m) return parseFloat(m[1]) + (parseFloat(m[2]) / parseFloat(m[3]));
+    m = t.match(/^(\d+)\s*\/\s*(\d+)$/);                        // « 3/4 »
+    if (m) return parseFloat(m[1]) / parseFloat(m[2]);
+    var f = parseFloat(t);
+    return isNaN(f) ? 0 : f;
+  }
+
+  /* v1046 : les matériaux vivent à DEUX endroits — la liste de gauche
+     (soumissionMats) et le matériel attaché à chaque carte photo
+     (fichiersGlobaux[].mats), qui est celui que la règle 📐 remplit.
+     L'export ne lisait que le premier : tout le matériel posé sur les
+     cartes était absent du coût de revient. On additionne les deux. */
   var allMats = [];
+  function _ajouterMat(m){
+    if (!m || (!m.code && !m.name)) return;
+    var cle = m.code || m.name;
+    var existing = allMats.find(function(x){ return (x.code || x.name) === cle; });
+    var q = _qteNum(m.qty);
+    if (q === 0) q = 1;
+    if (existing) {
+      existing.qty = (existing.qty || 0) + q;
+    } else {
+      allMats.push({
+        code: m.code || '',
+        name: m.name || '',
+        w: m.w, h: m.h,
+        thickness: m.thickness,
+        qty: q
+      });
+    }
+  }
   ['atelier'].forEach(function(d){ // Couture/Métal retirés v956
     var arr = (typeof soumissionMats !== 'undefined' && soumissionMats[d]) ? soumissionMats[d] : [];
-    arr.forEach(function(m){
-      var existing = allMats.find(function(x){ return x.code === m.code; });
-      if (existing) {
-        existing.qty = (parseFloat(existing.qty) || 0) + (parseFloat(m.qty) || 1);
-      } else {
-        allMats.push({
-          code: m.code || '',
-          name: m.name || '',
-          w: m.w, h: m.h,
-          thickness: m.thickness,
-          qty: (m.qty == null) ? 1 : m.qty
-        });
-      }
-    });
+    arr.forEach(_ajouterMat);
+  });
+  (typeof fichiersGlobaux !== 'undefined' ? fichiersGlobaux : []).forEach(function(carte){
+    if (carte && Array.isArray(carte.mats)) carte.mats.forEach(_ajouterMat);
   });
 
-  // Calcule les temps totaux par département (somme des minutes de tous les items, ÷ 60)
-  function _totalHeuresDept(dept) {
+  /* v1046 : LE POINT IMPORTANT. Le temps que tu inscris se trouve sur chaque
+     CARTE PHOTO (fichiersGlobaux[].temps), c'est ce que l'impression additionne.
+     L'export lisait « itemsParDept », l'ancienne structure du module Items,
+     restée vide : la case Atelier du coût de revient sortait donc toujours à 0.
+     On additionne maintenant les cartes, exactement comme la feuille imprimée,
+     et on garde l'ancienne source au cas où un vieux projet en contiendrait. */
+  function _minutesCartes(){
+    var totalMin = 0;
+    (typeof fichiersGlobaux !== 'undefined' ? fichiersGlobaux : []).forEach(function(t){
+      totalMin += parseFloat(t && t.temps) || 0;
+    });
+    return totalMin;
+  }
+  function _minutesItemsLegacy(dept){
     var arr = (typeof itemsParDept !== 'undefined' && itemsParDept[dept]) ? itemsParDept[dept] : [];
     var totalMin = 0;
     arr.forEach(function(it){ totalMin += parseFloat(it && it.temps) || 0; });
-    return totalMin / 60; // en heures
+    return totalMin;
   }
+  var minAtelier = _minutesCartes() + _minutesItemsLegacy('atelier');
   var hCouture = 0; // Couture retiré v956
-  var hAtelier = _totalHeuresDept('atelier');
+  var hAtelier = minAtelier / 60; // en heures
   var hMetal = 0; // Métal retiré v956
 
   // Nom de la soumission
@@ -7172,7 +7211,14 @@ function exportCostXlsm() {
 
       // === SECTION 1 : MATÉRIAUX (rows 8-18, max 11 lignes) ===
       var MAT_START = 8, MAT_END = 18;
-      for (var i = 0; i < (MAT_END - MAT_START + 1); i++) {
+      /* v1046 : le gabarit n'a que 11 lignes de matériaux. Au-delà, elles
+         étaient coupées en silence — on le dit maintenant. */
+      var MAT_MAX = MAT_END - MAT_START + 1;
+      if (allMats.length > MAT_MAX) {
+        showToast('⚠️ ' + allMats.length + ' matériaux — seuls les ' + MAT_MAX +
+                  ' premiers entrent dans le gabarit Excel', 'warning');
+      }
+      for (var i = 0; i < MAT_MAX; i++) {
         var rowNum = MAT_START + i;
         var m = allMats[i];
         if (!m) break; // pas plus de matériaux
@@ -7182,9 +7228,9 @@ function exportCostXlsm() {
         // Col D = mesure (ex: 20″×20″)
         var mes = (m.w && m.h) ? (m.w + '\u2033\u00d7' + m.h + '\u2033') : '';
         if (mes) sheetXml = _patchCellText(sheetXml, 'D' + rowNum, mes);
-        // Col E = quantité (numérique)
-        var qty = parseFloat(m.qty);
-        if (!isNaN(qty)) sheetXml = _patchCellNum(sheetXml, 'E' + rowNum, qty);
+        // Col E = quantité (numérique, fractions de feuille comprises — v1046)
+        var qty = Math.round((parseFloat(m.qty) || 0) * 10000) / 10000;
+        if (qty > 0) sheetXml = _patchCellNum(sheetXml, 'E' + rowNum, qty);
       }
 
       // === SECTION 2 : TEMPS DE PRODUCTION (heures) ===
