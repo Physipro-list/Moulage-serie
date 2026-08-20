@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1044-pdf-seul]</title>
+<title>PhysiPro — Liste des matériaux [v1045-pdf-seul]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -1670,6 +1670,17 @@ label.footer-btn-label{
   font-size:10px;
   padding:2px 5px;
   gap:3px;
+}
+/* v1045 : petit bouton de forme collé au bouton Zoom — bascule entre
+   le cadre carré et le cadre rectangle (plus large que haut). */
+.photo-card .item-img-btn.forme-btn{
+  font-size:11px;
+  padding:2px 6px;
+  margin-left:-2px;
+  font-weight:700;
+}
+.photo-card .item-img-btn.forme-btn.rect{
+  background:#f5c518; border-color:#d1a600; color:#04141c;
 }
 /* v1016 : corps de carte en 2 colonnes — photo à gauche, matériel à droite */
 .photo-card-body{
@@ -4709,6 +4720,7 @@ function _ensurePhotoCards() {
       +       '<div class="pch-photos-nav" id="photosNav_' + i + '"></div>'
       +       '<span class="pch-equilibre"></span>'
       +       '<button id="btnItemStamp_' + i + '" class="item-img-btn stamp-btn" onclick="event.stopPropagation();toggleItemStampMode(' + i + ')" title="Sélectionner une zone de la photo pour l\'agrandir (molette = taille du cadre)">🔍 <span id="btnItemStampLabel_' + i + '">Zoom</span></button>'
+      +       '<button id="btnItemStampShape_' + i + '" class="item-img-btn forme-btn" onclick="event.stopPropagation();toggleStampForme()" title="Forme du cadre de zoom : carré ou rectangle">◻</button>'
       +       '<button class="item-img-btn copy-btn" onclick="event.stopPropagation();copierPhoto(' + i + ')" title="Copier cette photo — ensuite Ctrl+V pour la coller ailleurs">📋</button>'
       +     '</div>'
       +     '<div class="pch-rest">'
@@ -5308,6 +5320,31 @@ function _renderCardZone(idx) {
 // Le cadre sert à AGRANDIR une zone de la photo de la carte.
 // Aucun cadre n'est conservé : l'image d'avant part dans t.history pour ↩.
 // ============================================================
+/* v1045 : deux formes de cadre au choix.
+   'carre' = 1:1, comme avant. 'rect' = plus large que haut, pratique pour
+   une étiquette ou une ligne de texte. Maj+molette change la proportion. */
+var _stampForme = 'carre';
+var _stampProp  = 1.6;                       // largeur / hauteur en mode rectangle
+var _STAMP_PROP_MIN = 1.15, _STAMP_PROP_MAX = 3.0;
+
+function toggleStampForme(){
+  _stampForme = (_stampForme === 'carre') ? 'rect' : 'carre';
+  _majBoutonsForme();
+}
+
+function _majBoutonsForme(){
+  var rect = (_stampForme === 'rect');
+  for (var i = 0; i < fichiersGlobaux.length; i++){
+    var b = document.getElementById('btnItemStampShape_' + i);
+    if (!b) continue;
+    b.textContent = rect ? '▬' : '◻';
+    b.classList.toggle('rect', rect);
+    b.title = rect
+      ? 'Cadre RECTANGLE — cliquer pour revenir au carré (Maj+molette change la forme)'
+      : 'Cadre CARRÉ — cliquer pour passer au rectangle';
+  }
+}
+
 var _stampMode = false;          // true quand le mode étampe est actif
 var _stampModeDept = null;       // dept dans lequel le mode a été activé
 var _stampPreviewEl = null;      // élément preview (rectangle jaune dashed)
@@ -5321,6 +5358,7 @@ function _updateStampButtonLabel() {
     var lbl = document.getElementById('btnItemStampLabel_' + i);
     if (lbl) lbl.textContent = 'Zoom';   // v1026
   }
+  _majBoutonsForme();                    // v1045 : ◻ / ▬ suit la forme choisie
 }
 
 // Active / désactive le mode étampe
@@ -5415,9 +5453,10 @@ function _stampCreateCaptureOverlay() {
   // CACHE du ratio EXACT de la zone item au moment de l'activation
   // → Garantit que le cadre d'étampe ait exactement le même ratio que la zone d'affichage
   // → Donc avec object-fit:cover, l'image capturée remplira PARFAITEMENT sans coupure
-  // v1020 : cadre CARRÉ — la photo recadrée reste carrée comme les autres
+  // v1045 : le ratio suit la forme choisie (hauteur / largeur).
+  // Carré = 1 ; rectangle = 1 / proportion, donc plus large que haut.
   function _getTargetRatio() {
-    return 1;
+    return (_stampForme === 'rect') ? (1 / _stampProp) : 1;
   }
   
   // Stocker le ratio cible au moment du démarrage (et le recalculer si la zone change)
@@ -5434,8 +5473,9 @@ function _stampCreateCaptureOverlay() {
     var imgW = imgEl.offsetWidth;
     // Largeur de base = 40% de la largeur de l'image × zoom
     var pw = Math.max(60, imgW * 0.40 * _stampZoomLevel);
-    // Hauteur dérivée du ratio EXACT de la zone milieu (mis en cache)
-    var ratio = _cachedTargetRatio;
+    // v1045 : ratio relu à chaque tracé — bascule carré/rectangle en direct
+    var ratio = _getTargetRatio();
+    _cachedTargetRatio = ratio;
     var ph = pw * ratio;
     // Limites : ne dépasse pas l'image — recalcul pour MAINTENIR le ratio exact
     if (pw > imgW * 0.95) {
@@ -5475,10 +5515,17 @@ function _stampCreateCaptureOverlay() {
   ov.addEventListener('wheel', function(e) {
     e.preventDefault();
     e.stopPropagation();
-    var step = (e.deltaY < 0) ? 0.10 : -0.10;
-    _stampZoomLevel = _stampZoomLevel + step;
-    if (_stampZoomLevel < 0.40) _stampZoomLevel = 0.40;
-    if (_stampZoomLevel > 2.50) _stampZoomLevel = 2.50;
+    if (e.shiftKey && _stampForme === 'rect') {
+      // v1045 : Maj + molette = forme du rectangle (plus large / plus carré)
+      _stampProp *= (e.deltaY < 0) ? 1.08 : (1 / 1.08);
+      if (_stampProp < _STAMP_PROP_MIN) _stampProp = _STAMP_PROP_MIN;
+      if (_stampProp > _STAMP_PROP_MAX) _stampProp = _STAMP_PROP_MAX;
+    } else {
+      var step = (e.deltaY < 0) ? 0.10 : -0.10;
+      _stampZoomLevel = _stampZoomLevel + step;
+      if (_stampZoomLevel < 0.40) _stampZoomLevel = 0.40;
+      if (_stampZoomLevel > 2.50) _stampZoomLevel = 2.50;
+    }
     var rect = ov.getBoundingClientRect();
     var xPx = e.clientX - rect.left;
     var yPx = e.clientY - rect.top;
