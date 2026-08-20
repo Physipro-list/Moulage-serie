@@ -6,8 +6,16 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>PhysiPro 📷 Photos</title>
-<!-- PhotoSender v4 : photos compressées max 1200px / qualité 60% / ~90 Ko (économie Firebase). caméra intégrée (aperçu direct grand, capture sans confirmation),
+<title>PhysiPro 📷 Photos v6</title>
+<!-- PhotoSender v5 : DEUX qualités selon la demande.
+     - Photos normales (moulages, questionnements) : max 1200 px / qualité 60 % / ~90 Ko,
+       comme avant — l'économie Firebase reste la règle.
+     - Photos de DEVIS à lire (demande marquée « hires ») : max 2400 px / qualité 88 %
+       / plafond 900 Ko. Une photo compressée à 60 % est illisible pour la
+       reconnaissance de texte : les petits caractères partent en bouillie.
+       Ces photos ne dorment pas dans Firebase — la page de questionnement les
+       retire dès qu'elle les a reçues.
+     v4 : photos compressées max 1200px / qualité 60% / ~90 Ko (économie Firebase). caméra intégrée (aperçu direct grand, capture sans confirmation),
      accumulation des photos côte à côte, bouton "Envoyer les photos" qui n'apparaît
      que lorsqu'au moins une photo a été prise. Qualité d'image: 1300px / plafond ~150 Ko
      (compromis netteté/poids pour un zoom correct sans surcharger). Repli caméra système si besoin. -->
@@ -364,7 +372,31 @@
   .back-btn:active { background:rgba(59,130,246,0.25); transform:scale(0.97); }
   .cam-area { flex:1; display:flex; flex-direction:column; align-items:center; gap:10px; padding:10px 12px; overflow:hidden; min-height:0; }
   .cam-live-wrap { width:100%; max-width:480px; flex:1; min-height:0; border-radius:18px; overflow:hidden; background:#000; border:1.5px solid var(--border); }
-  .cam-live-wrap video { width:100%; height:100%; object-fit:cover; display:block; }
+  /* v6 — CORRECTIF : l'aperçu était en « cover », c'est-à-dire ROGNÉ pour
+     remplir le cadre, alors que la capture prend l'image ENTIÈRE de la
+     caméra. Tu voyais donc une petite portion et tu recevais beaucoup plus
+     large, surtout à l'horizontale où le cadre est bas et le rognage
+     énorme. En « contain », l'aperçu montre exactement l'image capturée :
+     ce que tu vois est ce que tu prends. */
+  .cam-live-wrap video { width:100%; height:100%; object-fit:contain; display:block; background:#000; }
+
+  /* v6 — TÉLÉPHONE À L'HORIZONTALE : l'aperçu prenait toute la hauteur et
+     il n'en restait presque rien. Les boutons passent à droite, l'aperçu
+     récupère la place. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #screenPhoto { flex-direction: row; }
+    #screenPhoto .simple-topbar { display: none; }
+    .cam-area { flex: 1 1 auto; padding: 6px; gap: 6px; }
+    .cam-live-wrap { max-width: none; }
+    .cam-status { font-size: 12px; min-height: 0; }
+    #badgeHires { font-size: 11px; padding: 5px 8px; margin: 3px 0; }
+    .cam-thumbs .photo-thumb-wrap { width: 48px; height: 48px; }
+    .cam-actions { flex: 0 0 150px; padding: 8px 8px 8px 0; justify-content: center; }
+    .big-cam-btn { min-height: 84px; border-radius: 18px; }
+    .big-cam-ico { font-size: 30px; }
+    .big-cam-label { font-size: 15px; }
+    .send-slim-btn { font-size: 14px; padding: 8px 12px; }
+  }
   .cam-thumbs { display:flex; gap:8px; justify-content:flex-start; width:100%; max-width:480px; overflow-x:auto; padding:2px 0; -webkit-overflow-scrolling:touch; flex-shrink:0; }
   .cam-thumbs:empty { display:none; }
   .cam-thumbs .photo-thumb-wrap { width:72px; height:72px; flex:0 0 auto; }
@@ -523,7 +555,14 @@
       <video id="camVideo" autoplay playsinline muted></video>
     </div>
     <div class="cam-thumbs" id="photoPreviews"></div>
+    <!-- v5 : prévient quand la demande exige la pleine résolution -->
+    <div id="badgeHires" style="display:none;background:#0f766e;color:#fff;border-radius:8px;
+         padding:8px 12px;font-size:13px;font-weight:700;margin:6px 0;text-align:center;line-height:1.35">
+      📄 Devis à lire — pleine résolution<br>
+      <span style="font-weight:500;opacity:.9">Cadre le HAUT du bon en remplissant l'écran, feuille à plat et bien éclairée.</span>
+    </div>
     <div class="cam-status" id="camStatus">Touchez « Prendre une photo »</div>
+    <div class="cam-status" id="camDef" style="font-size:11px;opacity:.6;min-height:0"></div>
   </div>
 
   <div class="cam-actions">
@@ -625,6 +664,18 @@ let currentUserName = '';
 let jobsData = {};
 let filteredJobs = [];
 let selectedJob = null;
+
+/* v5 : la demande venue du bureau peut réclamer la pleine résolution
+   (lecture d'un devis). On garde le réglage courant ici. */
+var PHOTO_REGLAGE = { taille: 1200, qualite: 0.60, plafond: 120000, hires: false };
+function _majReglagePhoto(req){
+  var hi = !!(req && (req.hires === true || req.qualite === 'haute'));
+  PHOTO_REGLAGE = hi
+    ? { taille: 2400, qualite: 0.88, plafond: 900000, hires: true }
+    : { taille: 1200, qualite: 0.60, plafond: 120000, hires: false };
+  var b = document.getElementById('badgeHires');
+  if (b) b.style.display = hi ? '' : 'none';
+}
 let pendingPhotos = []; // { dataUrl, name }
 let jobsListener = null;
 
@@ -748,6 +799,7 @@ function listenForRequests() {
       if (reqKey !== _lastHandledRequestId || !onPhoto) {
         _lastHandledRequestId = reqKey;
         _pendingRequest = found;
+        _majReglagePhoto(found);          // v5 : qualité selon la demande
         db.ref('photoRequests/' + found.jobId).update({ status: 'answering' }).catch(function(){});
         selectJob(found.jobId);
       }
@@ -977,13 +1029,29 @@ async function startLiveCamera() {
   if (_camStream) return true;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
   try {
+    /* v6 : on réclame la meilleure définition disponible. Sans ces
+       « ideal », certains téléphones ouvrent la caméra en 640×480 — la
+       photo part alors minuscule, quelle que soit la qualité JPEG. */
     _camStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } }, audio: false
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 3840 },
+        height: { ideal: 2160 }
+      },
+      audio: false
     });
     var v = document.getElementById('camVideo');
     if (v) { v.srcObject = _camStream; try { await v.play(); } catch(e) {} }
     var wrap = document.getElementById('camLiveWrap');
     if (wrap) wrap.style.display = 'block';
+    /* v6 : dire tout de suite ce que la caméra fournit vraiment */
+    if (v) {
+      setTimeout(function(){
+        if (!v.videoWidth) return;
+        var d = document.getElementById('camDef');
+        if (d) d.textContent = 'Caméra : ' + v.videoWidth + ' × ' + v.videoHeight + ' px';
+      }, 700);
+    }
     return true;
   } catch (e) {
     _camStream = null;
@@ -1014,16 +1082,22 @@ async function takePhoto() {
 function captureFrame() {
   var v = document.getElementById('camVideo');
   if (!v || !v.videoWidth) { setCamStatus('⏳ Caméra pas prête…'); return; }
-  var maxSize = 1200, w = v.videoWidth, h = v.videoHeight;
+  var maxSize = PHOTO_REGLAGE.taille, w = v.videoWidth, h = v.videoHeight;
   if (w > maxSize || h > maxSize) {
     if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
     else       { w = Math.round(w * maxSize / h); h = maxSize; }
   }
   var canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
-  canvas.getContext('2d').drawImage(v, 0, 0, w, h);
-  var quality = 0.60, result = canvas.toDataURL('image/jpeg', quality);
-  while (result.length > 120000 && quality > 0.45) { quality -= 0.05; result = canvas.toDataURL('image/jpeg', quality); }
+  var ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(v, 0, 0, w, h);
+  var quality = PHOTO_REGLAGE.qualite;
+  var plancher = PHOTO_REGLAGE.hires ? 0.72 : 0.45;   // v5 : on ne descend pas plus bas pour un devis
+  var result = canvas.toDataURL('image/jpeg', quality);
+  while (result.length > PHOTO_REGLAGE.plafond && quality > plancher) {
+    quality -= 0.05; result = canvas.toDataURL('image/jpeg', quality);
+  }
   pendingPhotos.push({ dataUrl: result, name: 'photo_' + Date.now() + '.jpg' });
   renderPreviews();
   updateSendBtn();
@@ -1073,10 +1147,11 @@ function readAndCompress(file) {
       reader.onload = function(e) {
         var img = new Image();
         img.onload = function() {
-          var canvas = _drawWithOrientation(img, orientation, 1200);
-          var quality = 0.60;
+          var canvas = _drawWithOrientation(img, orientation, PHOTO_REGLAGE.taille);
+          var quality = PHOTO_REGLAGE.qualite;
+          var plancher = PHOTO_REGLAGE.hires ? 0.72 : 0.45;
           var result = canvas.toDataURL('image/jpeg', quality);
-          while (result.length > 120000 && quality > 0.45) {
+          while (result.length > PHOTO_REGLAGE.plafond && quality > plancher) {
             quality -= 0.05;
             result = canvas.toDataURL('image/jpeg', quality);
           }
