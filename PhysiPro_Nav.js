@@ -50,26 +50,54 @@
   // Moulage pour tout le monde ; Questionnements (serviceClient)
   // UNIQUEMENT pour les 2 Marie. Plus de bypass "full access" sur mobile.
   var MOBILE_BASE = ['moulage'];
-  var MOBILE_QUEST_EMAILS = [
-    'mplanguedoc@physipro.com',   // Marie-Pier
-    'mariesoleilr@physipro.com'   // Marie-Soleil
-  ];
+  // v_nav4 : sur mobile, Questionnements suit la même liste QUEST_ALLOWED.
+  // (Avant, les 2 Marie l'avaient sur téléphone — elles ne sont plus dans
+  //  la liste autorisée, donc elles ne le voient plus nulle part.)
   function _mobileAllowed(emailLower) {
     var list = MOBILE_BASE.slice();
-    if (MOBILE_QUEST_EMAILS.indexOf(emailLower) !== -1) list.push('serviceClient');
+    if (_questAutorise(emailLower)) list.push('serviceClient');
     return list;
   }
 
   // ══════════════════════════════════════
   //  ACCÈS PAR UTILISATEUR (emails en base64)
   // ══════════════════════════════════════
+  // ══════════════════════════════════════
+  //  ACCÈS RESTREINT — QUESTIONNEMENTS (v_nav4)
+  //  La tuile « Questionnements » n'apparaît QUE pour ces adresses.
+  //  Tout le monde d'autre ne la voit pas du tout, même si HUB_ACCESS
+  //  plus bas lui accorde 'serviceClient' (on ne touche pas à HUB_ACCESS
+  //  pour ne rien casser des autres modules : ce filtre passe par-dessus).
+  //  POUR AJOUTER QUELQU'UN : ajouter son adresse en minuscules ici.
+  var QUEST_ALLOWED = [
+    'atelieratp@physipro.com',   // Daniel
+    'valerie18@videotron.ca',    // Valérie
+    'sroy@physipro.com',         // Stéphanie
+    'simdut@physipro.com'        // Cassie
+    // , 'adresse.de.martine@physipro.com'   // Martine — adresse à confirmer
+  ];
+  function _questAutorise(emailLower) {
+    return QUEST_ALLOWED.indexOf((emailLower || '').toLowerCase()) !== -1;
+  }
+
+  // ══════════════════════════════════════
+  //  ACCÈS RESTREINT — PSM (v_nav7)
+  //  La tuile « PSM » n'apparaît QUE pour ces adresses.
+  //  POUR OUVRIR À QUELQU'UN : ajouter son adresse en minuscules ici.
+  var PSM_ALLOWED = [
+    'atelieratp@physipro.com'    // Daniel — seul utilisateur pour l'instant
+  ];
+  function _psmAutorise(emailLower) {
+    return PSM_ALLOWED.indexOf((emailLower || '').toLowerCase()) !== -1;
+  }
+
   var HUB_ACCESS = {
     'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'], // atelieratp (Daniel)
     'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],   // valerie18 (Valérie)
     'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','serviceClient','psm'],                              // simdut (Cassie)
     'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],                // michelle.bouchard
     'c3JveUBwaHlzaXByby5jb20=':                     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm'],                // sroy (Stéphanie)
-    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','serie','inspfinale','serviceClient'],                                            // sonia.boulanger
+    'c29uaWEuYm91bGFuZ2VyQHBoeXNpcHJvLmNvbQ==':     ['moulage','inspfinale'],                                                                    // sonia.boulanger — v_nav5 : 'serie' et 'serviceClient' retirés
     'c2VydmljZTNAcGh5c2lwcm8uY29t':                 ['moulage','serviceClient'],                                                                 // service3 (Jacynthe)
     'c2VydmljZTFAcGh5c2lwcm8uY29t':                 ['moulage','serviceClient'],                                                                 // service1 (Jonathan)
     'bmdhZ25lQHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspfinale','serviceClient'],                                            // ngagne (Nadia)
@@ -103,6 +131,7 @@
 .ppnav-row{display:grid;gap:10px;}\
 .ppnav-row.row1{grid-template-columns:1fr 1fr;}\
 .ppnav-row.row2{grid-template-columns:1fr 1fr 1fr;}\
+.ppnav-row.row3{grid-template-columns:1fr;}\
 .ppnav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 6px 10px;border-radius:12px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.03);cursor:pointer;text-decoration:none;transition:all .2s;position:relative;}\
 .ppnav-item:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.3);}\
 .ppnav-item.current{border-color:rgba(74,142,245,0.4);background:rgba(74,142,245,0.1);}\
@@ -204,10 +233,16 @@
     var ROW1 = ['moulage', 'serviceClient'];
     // Rangée 2 : Insp. Atelier + Prod. Couture + Insp. Finale (3 colonnes)
     var ROW2 = ['inspection', 'inspcouture', 'inspfinale'];
+    // Rangée 3 : PSM (v_nav6 — il manquait au menu alors qu'il est sur l'accueil)
+    var ROW3 = ['psm'];
 
     function _buildItem(mod) {
       if (access.indexOf(mod) === -1) return null;
       if (mobile && mobileAllowedList.indexOf(mod) === -1) return null;
+      // v_nav4 : Questionnements réservé à une liste précise
+      if (mod === 'serviceClient' && !_questAutorise(emailLower)) return null;
+      // v_nav7 : PSM réservé à une liste précise
+      if (mod === 'psm' && !_psmAutorise(emailLower)) return null;
       var m = NAV_MODULES[mod];
       if (!m) return null;
       var a = document.createElement('a');
@@ -234,6 +269,14 @@
       if (el) row2El.appendChild(el);
     });
     if (row2El.children.length) grid.appendChild(row2El);
+
+    var row3El = document.createElement('div');
+    row3El.className = 'ppnav-row row3';
+    ROW3.forEach(function(mod) {
+      var el = _buildItem(mod);
+      if (el) row3El.appendChild(el);
+    });
+    if (row3El.children.length) grid.appendChild(row3El);
 
     // Attacher le clic sur le logo
     var logo = document.getElementById('logoFlipContainer')
