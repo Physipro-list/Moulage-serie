@@ -8,6 +8,33 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1811 - CHAT : BLOC « IMPORTANT » + COURRIEL À PLUSIEURS PERSONNES
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1811: Le bloc courriel du modal des destinataires devient un vrai
+       choix multiple, à la place du simple Oui/Non vers la représentante :
+       • Une case à cocher « ⚠️ IMPORTANT — envoyer aussi ce message par
+         courriel ». Décochée par défaut, rien ne change.
+       • Une fois cochée, la liste des noms apparaît avec la consigne
+         « 👉 Cliquez sur les noms à qui envoyer le courriel ». Chaque nom
+         cliqué s'illumine en doré (cliquer de nouveau l'éteint).
+       • À l'envoi, UN SEUL courriel prérempli s'ouvre avec toutes les
+         personnes illuminées en destinataires.
+       • La représentante du dossier est placée en tête avec 👩‍💼 et les
+         personnes cochées côté notification sont proposées en premier.
+       • La bulle affiche « 📧 Courriel : … » avec tous les noms visés.
+    ═══════════════════════════════════════════════════════════════════
+
+    v1810 - CHAT : L'EXPÉDITEUR RESTE DANS LA LISTE DES NOMS
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1810: v1809 retirait l'expéditeur de sa propre liste (_noSelf).
+       Résultat : Daniel ne se voyait pas dans son propre modal.
+       La liste est maintenant IDENTIQUE pour tout le monde — chacun voit
+       son propre nom, suivi de « (vous) », et peut le cocher/décocher.
+       On ne s'envoie évidemment pas de cloche à soi-même : si l'expéditeur
+       est coché, il est retiré au moment de l'envoi, et la ligne
+       « 📤 Notifié : … » sous la bulle reflète exactement ce qui est parti.
+    ═══════════════════════════════════════════════════════════════════
+
     v1809 - CHAT : PLUS AUCUN DESTINATAIRE AUTOMATIQUE
     ═══════════════════════════════════════════════════════════════════
     🆕 v1809: Seules les personnes COCHÉES dans le modal reçoivent une
@@ -747,7 +774,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1809</title>
+  <title>PhysiPro Moulages v1811</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -4540,6 +4567,10 @@
 /* v1808 — destinataires notifiés, affichés sous chaque bulle */
 .qmsg-notified{margin-top:4px;padding-top:3px;border-top:1px dashed rgba(0,0,0,0.08);font-size:9.5px;font-weight:700;color:#1d4ed8;line-height:1.45;}
 .qmsg-notified.none{color:#b45309;}
+/* v1811 — pastilles de noms du bloc courriel (illuminées au clic) */
+.qmail-name{padding:5px 10px;border-radius:14px;border:1px solid rgba(255,255,255,0.22);background:rgba(0,0,0,0.3);color:#e5e7eb;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;}
+.qmail-name:hover{background:rgba(201,161,74,0.28);border-color:rgba(201,161,74,0.6);}
+.qmail-name.on{background:linear-gradient(135deg,#C9A14A,#a07f34);border-color:#f0d99a;color:#1a1206;box-shadow:0 0 10px rgba(201,161,74,0.75);}
 .qmsg-seen-pill{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:#15803d;background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:1px 6px;line-height:1.5;white-space:nowrap;}
 .qmsg-seen-check{color:#16a34a;font-weight:900;font-size:12px;line-height:1;flex-shrink:0;}
 .qmsg-seen-time{font-weight:700;color:#16a34a;margin-left:1px;}
@@ -6573,7 +6604,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260827;
+    var APP_VERSION = 20260829;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -20620,8 +20651,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       var _extraDests = [];
       var _destChosen = false;
       var _sendAfterPicker = false;
-      var _emailRepWanted = false;   // v1808 — « Aviser la représentante par courriel ? »
-      var _repDisplayName = '';      // v1808 — représentante inscrite sur la carte
+      var _emailRepWanted = false;   // v1811 — case « IMPORTANT : envoyer aussi par courriel »
+      var _repDisplayName = '';      // représentante inscrite sur la carte
+      var _mailDests = [];           // v1811 — noms illuminés à qui le courriel sera adressé
       var _seen = {}; // accusés de lecture: { emailEncodé: {name, ts} }
       var _seenListener = null;
       
@@ -21099,9 +21131,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
       function _buildNotifGroups() {
         var card = cardsData[_currentJobId] || {};
-        // v1809: on ne retire que l'expéditeur lui-même (on ne se notifie pas)
-        var _meName = _normName(getMyName());
-        function _noSelf(arr){ return arr.filter(function(n){ return _normName(n) !== _meName; }); }
+        // v1810: plus aucun filtre — la liste est la même pour tout le monde,
+        // chacun s'y voit lui-même (marqué « (vous) » à l'affichage).
         var cardRep = card.representante && String(card.representante).trim();
         var repNames = cardRep ? [cardRep] : (_membersByDept(['Représentante']).length ? _membersByDept(['Représentante']) : ['Marie-Soleil','Marie-Pier']);
         var repLabel = cardRep ? cardRep.split(' ')[0] : 'Représentante';
@@ -21109,11 +21140,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var couture = coutureAll.filter(function(n){ return _normName(n).indexOf('michelle') === -1; });
         var inspection = coutureAll.filter(function(n){ return _normName(n).indexOf('michelle') !== -1; });
         return [
-          { label: repLabel, names: _noSelf(repNames) },
-          { label: 'Atelier', names: _noSelf(_membersByDept(['Atelier'])) },
-          { label: 'Couture', names: _noSelf(couture) },
-          { label: 'CNC', names: _noSelf(_membersByDept(['CNC'])) },
-          { label: 'Inspection finale', names: _noSelf(inspection) }
+          { label: repLabel, names: repNames },
+          { label: 'Atelier', names: _membersByDept(['Atelier']) },
+          { label: 'Couture', names: couture },
+          { label: 'CNC', names: _membersByDept(['CNC']) },
+          { label: 'Inspection finale', names: inspection }
         ];
       }
 
@@ -21151,6 +21182,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var isEdit = (_notifModalMode === 'edit');
         _closeNotifModal();
         _emailRepWanted = false;
+        _mailDests = [];
         var groups = _buildNotifGroups();
         var _preset = isEdit ? (_extraDests || []) : _defaultChecked();  // v1809
         // v1809: participants du fil absents des groupes (ex. Service client) →
@@ -21165,9 +21197,10 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           var inner = '';
           g.names.forEach(function(n){
             var chk = (_preset && _preset.some(function(x){ return _normName(x) === _normName(n); })) ? ' checked' : '';
+            var _isMe = (_normName(n) === _normName(getMyName()));  // v1810
             inner += '<label style="display:flex;align-items:center;gap:6px;padding:2px 2px;cursor:pointer;font-size:12px;color:#e2e8f0;line-height:1.25;">' +
               '<input type="checkbox" class="qnotif-cb" value="' + esc(n) + '"' + chk + ' style="width:15px;height:15px;accent-color:#22c55e;margin:0;flex-shrink:0;">' +
-              esc(n) + '</label>';
+              esc(n) + (_isMe ? '<span style="font-size:10px;color:#93c5fd;font-weight:700;">(vous)</span>' : '') + '</label>';
           });
           rows += '<div style="break-inside:avoid;-webkit-column-break-inside:avoid;page-break-inside:avoid;margin-bottom:8px;">' +
                     '<div style="font-size:10px;font-weight:800;color:#93c5fd;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #334155;padding-bottom:2px;margin-bottom:3px;">' + esc(g.label) + '</div>' +
@@ -21192,16 +21225,38 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
         // v1808 — bloc « aviser la représentante par courriel ? »
         _repDisplayName = (_c.representante && String(_c.representante).trim()) || '';
-        var _repMail = _repDisplayName && (typeof nameToEmail === 'function') ? nameToEmail(_repDisplayName) : '';
+
+        // v1811 — bloc « IMPORTANT » : case à cocher + liste de noms cliquables
         var _mailHtml = '';
-        if (!isEdit && _repDisplayName && _repMail) {
+        if (!isEdit) {
+          var _meN = _normName(getMyName());
+          var _mailPeople = (typeof TEAM_MEMBERS !== 'undefined' ? TEAM_MEMBERS : [])
+            .filter(function(m){ return m.email && _normName(m.name) !== _meN; })
+            .map(function(m){ return m.name; });
+          // La représentante du dossier d'abord, puis les personnes déjà cochées
+          var _rank = function(n){
+            if (_repDisplayName && _normName(n).indexOf(_normName(_repDisplayName)) === 0) return 0;
+            if (_preset.some(function(x){ return _normName(x) === _normName(n); })) return 1;
+            return 2;
+          };
+          _mailPeople.sort(function(a,b){ return _rank(a) - _rank(b); });
+
+          var _chips = _mailPeople.map(function(n){
+            var isRep = _repDisplayName && _normName(n).indexOf(_normName(_repDisplayName)) === 0;
+            return '<button type="button" class="qmail-name" data-name="' + esc(n) + '" onclick="MChat.toggleMailName(this)">' +
+                   (isRep ? '👩‍💼 ' : '') + esc(n.split(' ')[0]) + '</button>';
+          }).join('');
+
           _mailHtml = '<div style="margin-top:10px;background:rgba(201,161,74,0.14);border:1px solid rgba(201,161,74,0.5);border-radius:9px;padding:9px 11px;">' +
-            '<div style="font-size:12px;font-weight:800;color:#f5e7c4;margin-bottom:7px;">📧 Aviser ' + esc(_repDisplayName.split(' ')[0]) + ' par courriel ?</div>' +
-            '<div style="display:flex;gap:8px;">' +
-              '<button type="button" id="qmailNo" onclick="MChat.setMailRep(false)" style="flex:1;padding:8px;border-radius:7px;border:1px solid #C9A14A;background:linear-gradient(135deg,#C9A14A,#a07f34);color:#1a1206;font-size:12px;font-weight:800;cursor:pointer;">Non</button>' +
-              '<button type="button" id="qmailYes" onclick="MChat.setMailRep(true)" style="flex:1;padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.3);color:#e5e7eb;font-size:12px;font-weight:800;cursor:pointer;">Oui, l\'aviser</button>' +
+            '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">' +
+              '<input type="checkbox" id="qmailChk" onchange="MChat.toggleMailBlock(this.checked)" style="width:17px;height:17px;accent-color:#C9A14A;margin:1px 0 0;flex-shrink:0;">' +
+              '<span style="font-size:12px;font-weight:800;color:#f5e7c4;line-height:1.35;">⚠️ IMPORTANT — envoyer aussi ce message par courriel</span>' +
+            '</label>' +
+            '<div id="qmailNames" style="display:none;margin-top:9px;">' +
+              '<div style="font-size:11px;font-weight:800;color:#fde047;margin-bottom:6px;">👉 Cliquez sur les noms à qui envoyer le courriel</div>' +
+              '<div style="display:flex;flex-wrap:wrap;gap:5px;max-height:150px;overflow-y:auto;">' + _chips + '</div>' +
+              '<div id="qmailCount" style="margin-top:7px;font-size:10px;color:#cbd5e1;line-height:1.35;">Aucun nom sélectionné.</div>' +
             '</div>' +
-            '<div style="margin-top:6px;font-size:10px;color:#cbd5e1;line-height:1.35;">Ouvre un courriel déjà rédigé (commande, bénéficiaire, texte du message). Il reste à cliquer « Envoyer » dans Outlook.</div>' +
           '</div>';
         }
 
@@ -21226,39 +21281,67 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         document.body.appendChild(ov);
       }
 
-      // v1808 — bascule Oui/Non du courriel à la représentante
-      function setMailRep(on) {
+      // v1811 — case « IMPORTANT » : affiche/masque la liste des noms
+      function toggleMailBlock(on) {
         _emailRepWanted = !!on;
-        var y = document.getElementById('qmailYes'), n = document.getElementById('qmailNo');
-        var onCss = 'linear-gradient(135deg,#C9A14A,#a07f34)', offCss = 'rgba(0,0,0,0.3)';
-        if (y) { y.style.background = _emailRepWanted ? onCss : offCss; y.style.color = _emailRepWanted ? '#1a1206' : '#e5e7eb'; y.style.borderColor = _emailRepWanted ? '#C9A14A' : 'rgba(255,255,255,0.25)'; }
-        if (n) { n.style.background = _emailRepWanted ? offCss : onCss; n.style.color = _emailRepWanted ? '#e5e7eb' : '#1a1206'; n.style.borderColor = _emailRepWanted ? 'rgba(255,255,255,0.25)' : '#C9A14A'; }
+        var box = document.getElementById('qmailNames');
+        if (box) box.style.display = _emailRepWanted ? 'block' : 'none';
+        if (!_emailRepWanted) {
+          _mailDests = [];
+          var ov = document.getElementById('qchatNotifModal');
+          if (ov) ov.querySelectorAll('.qmail-name.on').forEach(function(b){ b.classList.remove('on'); });
+        }
+        _updateMailCount();
       }
 
-      // v1808 — courriel prérempli vers la représentante de la carte
-      function _mailToRep(text) {
+      // v1811 — un clic illumine le nom, un autre l'éteint
+      function toggleMailName(btn) {
+        var n = btn.getAttribute('data-name') || '';
+        if (!n) return;
+        var k = _normName(n);
+        var idx = -1;
+        _mailDests.forEach(function(x, i){ if (_normName(x) === k) idx = i; });
+        if (idx === -1) { _mailDests.push(n); btn.classList.add('on'); }
+        else { _mailDests.splice(idx, 1); btn.classList.remove('on'); }
+        _updateMailCount();
+      }
+
+      function _updateMailCount() {
+        var el = document.getElementById('qmailCount');
+        if (!el) return;
+        el.textContent = _mailDests.length === 0
+          ? 'Aucun nom sélectionné.'
+          : 'Courriel à : ' + _mailDests.map(function(n){ return n.split(' ')[0]; }).join(', ');
+      }
+
+      // v1811 — un seul courriel prérempli vers toutes les personnes illuminées
+      function _mailToDests(text, names) {
         try {
-          var em = (typeof nameToEmail === 'function') ? nameToEmail(_repDisplayName) : '';
-          if (!em) return;
-          em = em.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          if (!names || !names.length) return;
+          var emails = names.map(function(n){
+            var em = (typeof nameToEmail === 'function') ? nameToEmail(n) : '';
+            return em ? em.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : '';
+          }).filter(function(e){ return !!e; });
+          if (!emails.length) return;
           var card = cardsData[_currentJobId] || {};
           var subject = encodeURIComponent('💬 Message — Moulage #' + (card.order || '') + (card.name ? ' — ' + card.name : ''));
           var body = encodeURIComponent(
-            'Bonjour ' + (_repDisplayName || '').split(' ')[0] + ',\n\n' +
-            'Un message vient d\'être inscrit sur un dossier dont vous êtes la représentante.\n\n' +
+            'Bonjour,\n\n' +
+            'Un message vient d\'être inscrit sur ce dossier.\n\n' +
             '📋 Dossier\n' +
             '• Numéro de commande : #' + (card.order || '(non précisé)') + '\n' +
             '• Bénéficiaire : ' + (card.name || '(non précisé)') + '\n' +
             (card.client ? '• Centre : ' + card.client + '\n' : '') +
             (card.item ? '• Item : ' + card.item + '\n' : '') +
+            (card.representante ? '• Représentante : ' + card.representante + '\n' : '') +
             '\n💬 Message\n' +
             '• De : ' + getMyName() + '\n' +
             '• Texte :\n' + (text || '(photo / pièce jointe)') + '\n' +
             '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
             'Pour répondre, ouvrez la carte #' + (card.order || '') + ' dans l\'application Moulages.'
           );
-          window.open('mailto:' + em + '?subject=' + subject + '&body=' + body);
-        } catch (e) { console.error('Courriel représentante:', e); }
+          window.open('mailto:' + emails.join(',') + '?subject=' + subject + '&body=' + body);
+        } catch (e) { console.error('Courriel destinataires:', e); }
       }
 
       function _confirmNotifModal() {
@@ -21978,13 +22061,16 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var _notifContent = contentDesc;
         var _notifType = (_composeType === 'reply') ? 'reply' : (_composeType === 'pinned' ? 'pinned' : 'normal');
         var _notifHasImg = _composeImages.length > 0;
-        var _mailWanted = _emailRepWanted;  // v1808 — capturé avant le reset de la zone de saisie
+        var _mailWanted = _emailRepWanted && _mailDests.length > 0;  // v1811
+        var _mailNames = _mailDests.slice();
         var _mailText = text;
         // v1809: AUCUN ajout automatique — uniquement les personnes cochées.
         // (l'auteur du dernier message est pré-coché dans le modal, pas forcé ici)
-        var _finalRecips = _extraDests.slice();
+        // v1810: on ne s'envoie pas de notification à soi-même, même si on s'est coché
+        var _myNameNorm = _normName(myName);
+        var _finalRecips = _extraDests.filter(function(n){ return _normName(n) !== _myNameNorm; });
         msgData.notifiedTo = _finalRecips.map(function(n){ return n.split(' ')[0]; });
-        if (_mailWanted && _repDisplayName) msgData.emailedTo = _repDisplayName.split(' ')[0];
+        if (_mailWanted) msgData.emailedTo = _mailNames.map(function(n){ return n.split(' ')[0]; }).join(', ');
 
         database.ref('chats/' + _currentJobId + '/messages').push().set(msgData)
           .then(function() {
@@ -22017,8 +22103,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               }
             }
             // v1808 — courriel à la représentante, si demandé dans le modal
-            if (_mailWanted && _repDisplayName) _mailToRep(_mailText);
+            if (_mailWanted) _mailToDests(_mailText, _mailNames);
             _emailRepWanted = false;
+            _mailDests = [];
           })
           .catch(function(e) { if (typeof showToast === 'function') showToast('\u274c Erreur: ' + e.message, 'error'); });
       }
@@ -22787,7 +22874,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         composeKeydown: composeKeydown,
         editDests: editDests,
         replyTo: replyTo,
-        setMailRep: setMailRep,
+        toggleMailBlock: toggleMailBlock,
+        toggleMailName: toggleMailName,
         handlePaste: handlePaste,
         clearImages: clearImages,
         send: send,
