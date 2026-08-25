@@ -8,6 +8,43 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1809 - CHAT : PLUS AUCUN DESTINATAIRE AUTOMATIQUE
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1809: Seules les personnes COCHÉES dans le modal reçoivent une
+       notification. Tout envoi automatique est retiré :
+       • Valérie et Daniel ne sont plus ajoutés d'office à chaque message
+         (ils apparaissent maintenant dans la liste Atelier, cochables
+         et décochables comme tout le monde).
+       • L'ajout automatique de « l'auteur du dernier message reçu »
+         (v1656) est retiré lui aussi : cette personne est désormais
+         simplement PRÉ-COCHÉE dans le modal.
+       • Pré-cochage : tous les participants du fil (auteurs des messages
+         précédents) + les destinataires du message précédent. On peut
+         décocher n'importe qui avant d'envoyer.
+       • L'expéditeur n'apparaît plus dans sa propre liste.
+       • Si personne n'est coché, le message est enregistré et la bulle
+         affiche « 💾 Aucune notification envoyée ».
+    ═══════════════════════════════════════════════════════════════════
+
+    v1808 - VRAI CHAT DE LA FICHE (MChat) : DESTINATAIRES TOUJOURS DEMANDÉS
+    ═══════════════════════════════════════════════════════════════════
+    ⚠️ v1807 avait modifié l'ANCIEN système de messages (Section 14,
+       renderMessages) qui n'est plus celui affiché dans la fiche.
+       Le chat réellement utilisé est le module MChat (« QUEST CHAT »,
+       nœud Firebase chats/<jobId>/messages).
+    🆕 v1808 corrige le bon module :
+       • send() n'a plus le raccourci v1662
+         « if (_destChosen || _messages.length > 0) → envoi direct ».
+         Le modal « À qui envoyer ? » s'ouvre MAINTENANT À CHAQUE MESSAGE,
+         avec les destinataires précédents déjà cochés (2 clics).
+       • Le modal affiche le contexte : n° de commande, bénéficiaire et
+         aperçu du message qu'on vient d'écrire.
+       • Nouveau bloc « 📧 Aviser <représentante> par courriel ? »
+         (Non par défaut) → ouvre un courriel prérempli après l'envoi.
+       • Chaque bulle affiche « 📤 Notifié : … » (+ « 📧 Courriel : … »),
+         en plus des pastilles « vu par ».
+    ═══════════════════════════════════════════════════════════════════
+
     v1807 - CHAT : DESTINATAIRES TOUJOURS DEMANDÉS + COURRIEL REPRÉSENTANTE
     ═══════════════════════════════════════════════════════════════════
     🆕 v1807: Le menu « Envoyer à » s'ouvre MAINTENANT AUSSI pour les
@@ -710,7 +747,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1807</title>
+  <title>PhysiPro Moulages v1809</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -4500,6 +4537,9 @@
 .fiche-chat-zone.qchat-container{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;background:#0f2847;position:relative;}
 /* Pastilles "vu" sous chaque bulle */
 .qmsg-seen{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;padding-top:3px;border-top:1px dashed rgba(0,0,0,0.08);}
+/* v1808 — destinataires notifiés, affichés sous chaque bulle */
+.qmsg-notified{margin-top:4px;padding-top:3px;border-top:1px dashed rgba(0,0,0,0.08);font-size:9.5px;font-weight:700;color:#1d4ed8;line-height:1.45;}
+.qmsg-notified.none{color:#b45309;}
 .qmsg-seen-pill{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:#15803d;background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:1px 6px;line-height:1.5;white-space:nowrap;}
 .qmsg-seen-check{color:#16a34a;font-weight:900;font-size:12px;line-height:1;flex-shrink:0;}
 .qmsg-seen-time{font-weight:700;color:#16a34a;margin-left:1px;}
@@ -6533,7 +6573,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260825;
+    var APP_VERSION = 20260827;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -20580,6 +20620,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       var _extraDests = [];
       var _destChosen = false;
       var _sendAfterPicker = false;
+      var _emailRepWanted = false;   // v1808 — « Aviser la représentante par courriel ? »
+      var _repDisplayName = '';      // v1808 — représentante inscrite sur la carte
       var _seen = {}; // accusés de lecture: { emailEncodé: {name, ts} }
       var _seenListener = null;
       
@@ -21006,6 +21048,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           }).join('') + '</div>';
         }
         
+        // v1808 — bandeau « qui a été notifié » sous la bulle
+        var notifHtml = '';
+        if (msg.notifiedTo && msg.notifiedTo.length) {
+          notifHtml = '<div class="qmsg-notified">📤 Notifié : ' + esc(msg.notifiedTo.join(', ')) +
+            (msg.emailedTo ? '  •  📧 Courriel : ' + esc(msg.emailedTo) : '') + '</div>';
+        } else if (msg.emailedTo) {
+          notifHtml = '<div class="qmsg-notified">📧 Courriel : ' + esc(msg.emailedTo) + '</div>';
+        } else if (!isLegacy && msg.notifiedTo) {
+          notifHtml = '<div class="qmsg-notified none">💾 Aucune notification envoyée</div>';
+        }
+
         // ── Apparence bulles de texto (v1654) ──
         var firstName = (msg.authorName || '?').split(' ')[0];
         var initial = ((msg.authorName || '?').trim().charAt(0) || '?').toUpperCase();
@@ -21023,6 +21076,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               imgHtml +
               filesHtml +
               replyBtn +
+              notifHtml +
               seenHtml +
             '</div>' +
           '</div>' +
@@ -21030,7 +21084,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
       
       // ---- Construit les groupes (département -> noms) pour le modal de notification ----
-      // NB: Valérie & Daniel sont retirés de l'affichage (toujours notifiés en auto via _doSend).
+      // v1809: plus AUCUN destinataire automatique. Tout le monde est cochable,
+      // y compris Valérie et Daniel. Seul l'expéditeur est retiré de sa liste.
       var _notifModalMode = 'send';
 
       // v1653: résumé des destinataires affiché à droite du nom
@@ -21044,8 +21099,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
       function _buildNotifGroups() {
         var card = cardsData[_currentJobId] || {};
-        var _auto = ['valerie','daniel'];
-        function _noAuto(arr){ return arr.filter(function(n){ var k=_normName(n); return !_auto.some(function(a){ return k.indexOf(a) !== -1; }); }); }
+        // v1809: on ne retire que l'expéditeur lui-même (on ne se notifie pas)
+        var _meName = _normName(getMyName());
+        function _noSelf(arr){ return arr.filter(function(n){ return _normName(n) !== _meName; }); }
         var cardRep = card.representante && String(card.representante).trim();
         var repNames = cardRep ? [cardRep] : (_membersByDept(['Représentante']).length ? _membersByDept(['Représentante']) : ['Marie-Soleil','Marie-Pier']);
         var repLabel = cardRep ? cardRep.split(' ')[0] : 'Représentante';
@@ -21053,26 +21109,62 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var couture = coutureAll.filter(function(n){ return _normName(n).indexOf('michelle') === -1; });
         var inspection = coutureAll.filter(function(n){ return _normName(n).indexOf('michelle') !== -1; });
         return [
-          { label: repLabel, names: _noAuto(repNames) },
-          { label: 'Atelier', names: _noAuto(_membersByDept(['Atelier'])) },
-          { label: 'Couture', names: _noAuto(couture) },
-          { label: 'CNC', names: _noAuto(_membersByDept(['CNC'])) },
-          { label: 'Inspection finale', names: _noAuto(inspection) }
+          { label: repLabel, names: _noSelf(repNames) },
+          { label: 'Atelier', names: _noSelf(_membersByDept(['Atelier'])) },
+          { label: 'Couture', names: _noSelf(couture) },
+          { label: 'CNC', names: _noSelf(_membersByDept(['CNC'])) },
+          { label: 'Inspection finale', names: _noSelf(inspection) }
         ];
       }
 
+      // v1809 — noms à pré-cocher : participants du fil + destinataires précédents
+      function _defaultChecked() {
+        var out = [];
+        var meName = _normName(getMyName());
+        function add(n) {
+          if (!n) return;
+          var k = _normName(n);
+          if (!k || k === meName) return;
+          if (!out.some(function(x){ return _normName(x) === k; })) out.push(n);
+        }
+        (_extraDests || []).forEach(add);
+        (_messages || []).forEach(function(e){
+          var m = e && e[1];
+          if (m && m.authorName) add(m.authorName);
+        });
+        return out;
+      }
+
       // ---- Modal « À qui voulez-vous envoyer une notification ? » (ouvert au clic Envoyer) ----
+      // v1808 — texte du message en cours, pour l'aperçu dans le modal
+      function _currentComposeText() {
+        var ce = document.getElementById('qchatComposeText');
+        if (!ce) return '';
+        var t = (ce.tagName === 'TEXTAREA') ? ce.value : (ce.innerText || ce.textContent || '');
+        t = (t || '').trim();
+        if (t === '<br>' || t === '&nbsp;' || t === '<div><br></div>') t = '';
+        return t;
+      }
+
       function _openNotifModal(mode) {
         _notifModalMode = (mode === 'edit') ? 'edit' : 'send';
         var isEdit = (_notifModalMode === 'edit');
         _closeNotifModal();
+        _emailRepWanted = false;
         var groups = _buildNotifGroups();
+        var _preset = isEdit ? (_extraDests || []) : _defaultChecked();  // v1809
+        // v1809: participants du fil absents des groupes (ex. Service client) →
+        // groupe « Dans la discussion » pour qu'ils restent visibles et décochables
+        var _listed = [];
+        groups.forEach(function(g){ g.names.forEach(function(n){ _listed.push(_normName(n)); }); });
+        var _orphans = (_preset || []).filter(function(n){ return _listed.indexOf(_normName(n)) === -1; });
+        if (_orphans.length) groups.unshift({ label: 'Dans la discussion', names: _orphans });
         var rows = '';
         groups.forEach(function(g){
           if (!g.names.length) return;
           var inner = '';
           g.names.forEach(function(n){
-            var chk = (_extraDests && _extraDests.some(function(x){ return _normName(x) === _normName(n); })) ? ' checked' : '';
+            var chk = (_preset && _preset.some(function(x){ return _normName(x) === _normName(n); })) ? ' checked' : '';
             inner += '<label style="display:flex;align-items:center;gap:6px;padding:2px 2px;cursor:pointer;font-size:12px;color:#e2e8f0;line-height:1.25;">' +
               '<input type="checkbox" class="qnotif-cb" value="' + esc(n) + '"' + chk + ' style="width:15px;height:15px;accent-color:#22c55e;margin:0;flex-shrink:0;">' +
               esc(n) + '</label>';
@@ -21082,15 +21174,48 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
                     inner +
                   '</div>';
         });
+        // v1808 — bandeau de contexte (commande / bénéficiaire / aperçu du texte)
+        var _c = cardsData[_currentJobId] || {};
+        var _bits = [];
+        if (_c.order) _bits.push('Commande #' + esc(String(_c.order)));
+        if (_c.name) _bits.push(esc(_c.name));
+        if (_c.representante) _bits.push('Rep. : ' + esc(String(_c.representante)));
+        var _prev = isEdit ? '' : _currentComposeText();
+        if (_prev.length > 160) _prev = _prev.substring(0, 160) + '…';
+        var _ctxHtml = '';
+        if (_bits.length || _prev) {
+          _ctxHtml = '<div style="background:rgba(59,130,246,0.12);border-left:4px solid #4a8ef5;border-radius:8px;padding:8px 10px;margin-bottom:10px;">' +
+            (_bits.length ? '<div style="font-size:11px;font-weight:800;color:#dbeafe;">' + _bits.join('  •  ') + '</div>' : '') +
+            (_prev ? '<div style="margin-top:5px;font-size:11px;color:#cbd5e1;font-style:italic;background:rgba(0,0,0,0.28);border-radius:6px;padding:5px 7px;">' + esc(_prev) + '</div>' : '') +
+          '</div>';
+        }
+
+        // v1808 — bloc « aviser la représentante par courriel ? »
+        _repDisplayName = (_c.representante && String(_c.representante).trim()) || '';
+        var _repMail = _repDisplayName && (typeof nameToEmail === 'function') ? nameToEmail(_repDisplayName) : '';
+        var _mailHtml = '';
+        if (!isEdit && _repDisplayName && _repMail) {
+          _mailHtml = '<div style="margin-top:10px;background:rgba(201,161,74,0.14);border:1px solid rgba(201,161,74,0.5);border-radius:9px;padding:9px 11px;">' +
+            '<div style="font-size:12px;font-weight:800;color:#f5e7c4;margin-bottom:7px;">📧 Aviser ' + esc(_repDisplayName.split(' ')[0]) + ' par courriel ?</div>' +
+            '<div style="display:flex;gap:8px;">' +
+              '<button type="button" id="qmailNo" onclick="MChat.setMailRep(false)" style="flex:1;padding:8px;border-radius:7px;border:1px solid #C9A14A;background:linear-gradient(135deg,#C9A14A,#a07f34);color:#1a1206;font-size:12px;font-weight:800;cursor:pointer;">Non</button>' +
+              '<button type="button" id="qmailYes" onclick="MChat.setMailRep(true)" style="flex:1;padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.3);color:#e5e7eb;font-size:12px;font-weight:800;cursor:pointer;">Oui, l\'aviser</button>' +
+            '</div>' +
+            '<div style="margin-top:6px;font-size:10px;color:#cbd5e1;line-height:1.35;">Ouvre un courriel déjà rédigé (commande, bénéficiaire, texte du message). Il reste à cliquer « Envoyer » dans Outlook.</div>' +
+          '</div>';
+        }
+
         var ov = document.createElement('div');
         ov.id = 'qchatNotifModal';
         ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
         ov.innerHTML =
           '<div style="background:#1f2937;border:2px solid #3b82f6;border-radius:14px;max-width:440px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.6);">' +
-            '<div style="padding:12px 16px;background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;font-size:14px;font-weight:800;border-radius:12px 12px 0 0;">' + (isEdit ? '🔔 Qui sera notifié ?' : '🔔 À qui voulez-vous envoyer une notification ?') + '</div>' +
-            '<div style="padding:8px 16px 10px;flex:1;">' +
-              '<div style="font-size:10px;color:#94a3b8;font-style:italic;padding:2px 0 8px;">✅ Valérie est toujours notifiée automatiquement.</div>' +
+            '<div style="padding:12px 16px;background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;font-size:14px;font-weight:800;border-radius:12px 12px 0 0;">' + (isEdit ? '🔔 Qui sera notifié ?' : '🔔 À qui voulez-vous envoyer ce message ?') + '</div>' +
+            '<div style="padding:8px 16px 10px;flex:1;overflow-y:auto;">' +
+              _ctxHtml +
+              '<div style="font-size:10px;color:#94a3b8;font-style:italic;padding:2px 0 8px;">Seules les personnes cochées recevront une notification. Les participants de la discussion sont pré-cochés — décochez ceux qui ne sont pas concernés.</div>' +
               '<div style="column-count:2;column-gap:18px;">' + rows + '</div>' +
+              _mailHtml +
             '</div>' +
             '<div style="padding:10px 16px;display:flex;gap:10px;border-top:1px solid #334155;">' +
               '<button onclick="MChat.closeNotif()" style="flex:1;padding:10px;background:#374151;color:#e5e7eb;border:1px solid #4b5563;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Annuler</button>' +
@@ -21099,6 +21224,41 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           '</div>';
         ov.addEventListener('click', function(e){ if (e.target === ov) _closeNotifModal(); });
         document.body.appendChild(ov);
+      }
+
+      // v1808 — bascule Oui/Non du courriel à la représentante
+      function setMailRep(on) {
+        _emailRepWanted = !!on;
+        var y = document.getElementById('qmailYes'), n = document.getElementById('qmailNo');
+        var onCss = 'linear-gradient(135deg,#C9A14A,#a07f34)', offCss = 'rgba(0,0,0,0.3)';
+        if (y) { y.style.background = _emailRepWanted ? onCss : offCss; y.style.color = _emailRepWanted ? '#1a1206' : '#e5e7eb'; y.style.borderColor = _emailRepWanted ? '#C9A14A' : 'rgba(255,255,255,0.25)'; }
+        if (n) { n.style.background = _emailRepWanted ? offCss : onCss; n.style.color = _emailRepWanted ? '#e5e7eb' : '#1a1206'; n.style.borderColor = _emailRepWanted ? 'rgba(255,255,255,0.25)' : '#C9A14A'; }
+      }
+
+      // v1808 — courriel prérempli vers la représentante de la carte
+      function _mailToRep(text) {
+        try {
+          var em = (typeof nameToEmail === 'function') ? nameToEmail(_repDisplayName) : '';
+          if (!em) return;
+          em = em.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          var card = cardsData[_currentJobId] || {};
+          var subject = encodeURIComponent('💬 Message — Moulage #' + (card.order || '') + (card.name ? ' — ' + card.name : ''));
+          var body = encodeURIComponent(
+            'Bonjour ' + (_repDisplayName || '').split(' ')[0] + ',\n\n' +
+            'Un message vient d\'être inscrit sur un dossier dont vous êtes la représentante.\n\n' +
+            '📋 Dossier\n' +
+            '• Numéro de commande : #' + (card.order || '(non précisé)') + '\n' +
+            '• Bénéficiaire : ' + (card.name || '(non précisé)') + '\n' +
+            (card.client ? '• Centre : ' + card.client + '\n' : '') +
+            (card.item ? '• Item : ' + card.item + '\n' : '') +
+            '\n💬 Message\n' +
+            '• De : ' + getMyName() + '\n' +
+            '• Texte :\n' + (text || '(photo / pièce jointe)') + '\n' +
+            '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+            'Pour répondre, ouvrez la carte #' + (card.order || '') + ' dans l\'application Moulages.'
+          );
+          window.open('mailto:' + em + '?subject=' + subject + '&body=' + body);
+        } catch (e) { console.error('Courriel représentante:', e); }
       }
 
       function _confirmNotifModal() {
@@ -21770,9 +21930,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var text = _rawText.trim();
         if (text === '<br>' || text === '&nbsp;' || text === '<div><br></div>') text = '';
         if (!text && _composeImages.length === 0 && _composeFiles.length === 0) return;
-        // v1662: demander UNIQUEMENT au tout premier message (aucun message encore ET pas déjà choisi).
-        // Ensuite, envoi direct vers les mêmes destinataires (+ auteur du dernier message + Valérie).
-        if (_destChosen || (_messages && _messages.length > 0)) { _doSend(); return; }
+        // v1808: on demande À CHAQUE MESSAGE à qui envoyer.
+        // Les destinataires du message précédent restent cochés → 2 clics.
         _openNotifModal('send');
       }
 
@@ -21819,16 +21978,14 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var _notifContent = contentDesc;
         var _notifType = (_composeType === 'reply') ? 'reply' : (_composeType === 'pinned' ? 'pinned' : 'normal');
         var _notifHasImg = _composeImages.length > 0;
-        var _notifRecips = _extraDests.slice();
-        // v1656: + auteur du dernier message reçu (la personne à qui on répond)
-        for (var _mi = _messages.length - 1; _mi >= 0; _mi--) {
-          var _lm = _messages[_mi] && _messages[_mi][1];
-          if (_lm && _lm.authorEmail && _lm.authorEmail.toLowerCase() !== myEmail) {
-            if (_lm.authorName && !_notifRecips.some(function(x){ return _normName(x) === _normName(_lm.authorName); })) _notifRecips.push(_lm.authorName);
-            break;
-          }
-        }
-        
+        var _mailWanted = _emailRepWanted;  // v1808 — capturé avant le reset de la zone de saisie
+        var _mailText = text;
+        // v1809: AUCUN ajout automatique — uniquement les personnes cochées.
+        // (l'auteur du dernier message est pré-coché dans le modal, pas forcé ici)
+        var _finalRecips = _extraDests.slice();
+        msgData.notifiedTo = _finalRecips.map(function(n){ return n.split(' ')[0]; });
+        if (_mailWanted && _repDisplayName) msgData.emailedTo = _repDisplayName.split(' ')[0];
+
         database.ref('chats/' + _currentJobId + '/messages').push().set(msgData)
           .then(function() {
             _replyToId = null;
@@ -21838,11 +21995,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             if (typeof createNotification === 'function') {
               var card = cardsData[_currentJobId] || {};
               var cardName = '#' + (card.order || '') + (card.name ? ' ' + card.name : '');
-              var recips = _notifRecips.slice();
-              ['Valérie','Daniel'].forEach(function(n){
-                var exists = recips.some(function(x){ return _normName(x) === _normName(n); });
-                if (!exists) recips.push(n);
-              });
+              var recips = _finalRecips.slice();
               var _notifSent = 0;
               recips.forEach(function(n){
                 var em = (typeof nameToEmail==='function') ? nameToEmail(n) : '';
@@ -21858,8 +22011,14 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
                 });
                 _notifSent++;
               });
-              if (_notifSent > 0 && typeof showToast === 'function') showToast('🔔 ' + _notifSent + ' personne(s) notifiée(s)', 'info');
+              if (typeof showToast === 'function') {
+                if (_notifSent > 0) showToast('🔔 ' + _notifSent + ' personne(s) notifiée(s)', 'info');
+                else showToast('💾 Message enregistré — aucune notification envoyée', 'warning');
+              }
             }
+            // v1808 — courriel à la représentante, si demandé dans le modal
+            if (_mailWanted && _repDisplayName) _mailToRep(_mailText);
+            _emailRepWanted = false;
           })
           .catch(function(e) { if (typeof showToast === 'function') showToast('\u274c Erreur: ' + e.message, 'error'); });
       }
@@ -22628,6 +22787,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         composeKeydown: composeKeydown,
         editDests: editDests,
         replyTo: replyTo,
+        setMailRep: setMailRep,
         handlePaste: handlePaste,
         clearImages: clearImages,
         send: send,
