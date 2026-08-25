@@ -41,7 +41,7 @@
     photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' },
     inspfinale:  { icon: '🔍', label: 'Insp. Finale',      sub: 'Inspection finale',          file: 'PhysiPro_Inspection_Finale.html',        color: '#6366f1' },
     psm:         { icon: '📐', label: 'PSM',                sub: 'Produits sur mesure',        file: 'PhysiPro_PSM.html',                      color: '#0ea5e9' },
-    questactifs: { icon: '📌', label: 'Quest. actifs',      sub: 'Questionnements en attente', file: 'PhysiPro_Questionnements_Actifs.html',   color: '#c9a14a' }
+    questactifs: { icon: '📌', label: 'Questionnements actifs', sub: 'Commandes clients',      file: 'PhysiPro_Questionnements_Actifs.html',   color: '#c9a14a' }
   };
 
   // Ordre d'affichage dans le modal
@@ -54,7 +54,9 @@
   //          rangée 1 du menu = Moulage + Questionnements (2 colonnes).
   // Moulage pour tout le monde ; Questionnements (serviceClient)
   // UNIQUEMENT pour les 2 Marie. Plus de bypass "full access" sur mobile.
-  // v_nav8 : « Quest. actifs » suit Moulage -- tout le monde y a droit, aussi sur téléphone.
+  // v_nav8 : « Questionnements actifs » suit Moulage -- tout le monde y a droit,
+  // aussi sur téléphone. v_nav9 : c'est bien la liste complète du téléphone —
+  // deux entrées seulement, Moulage et Questionnements actifs.
   var MOBILE_BASE = ['moulage', 'questactifs'];
   // v_nav4 : sur mobile, Questionnements suit la même liste QUEST_ALLOWED.
   // (Avant, les 2 Marie l'avaient sur téléphone — elles ne sont plus dans
