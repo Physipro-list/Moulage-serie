@@ -8,6 +8,38 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1819 - BLOC REPRÉSENTANTE : DÉCALÉ À GAUCHE + CLIGNOTANT
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1819: • Le bloc est décalé d'environ 1,2 cm vers la gauche
+         (right 370px → 415px ; 280px → 330px sous 1200px de large), ce
+         qui dégage l'espace du compteur sans coller à la loupe.
+       • Le bouton « Réponse représentante » CLIGNOTE lui aussi (vert
+         émeraude ↔ vert vif + halo), comme la cloche des notifications.
+       • Le bloc reste masqué tant qu'il n'y a aucune réponse non vue :
+         masqué au chargement (display:none), puis affiché/masqué par
+         updateRepButton() à chaque rafraîchissement du listener Firebase.
+         Un appel est ajouté à l'ouverture de session pour couvrir le cas
+         où l'utilisateur n'a aucune notification du tout.
+    ═══════════════════════════════════════════════════════════════════
+
+    v1818 - RÉPONSES DES REPRÉSENTANTES (ÉTAPE 2)
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1818: • Le bloc « Réponse représentante » n'apparaît QUE s'il reste
+         au moins une réponse non vue POUR LA PERSONNE CONNECTÉE.
+       • Un compteur séparé, à droite du bouton, affiche le nombre. Un clic
+         (sur le bouton ou le compteur) ouvre un popup calqué sur celui de
+         la cloche : expéditrice, extrait du message, carte visée, « → ».
+       • Les cartes visées deviennent VERTES et CLIGNOTENT.
+       • Suivi « vu » PAR PERSONNE : il s'appuie sur moulageNotifications,
+         où une entrée distincte existe déjà par destinataire (champ « to »
+         + « read »). Quand quelqu'un ouvre la fiche et que MChat marque les
+         messages comme vus (_markSeen), SES notifications de représentante
+         pour cette carte passent à read:true — sa carte cesse de clignoter,
+         celle des autres participants continue jusqu'à ce qu'ils l'ouvrent.
+       • Représentantes détectées par TEAM_MEMBERS (dept « Représentante ») :
+         Marie-Pier Languedoc et Marie-Soleil Riverin.
+    ═══════════════════════════════════════════════════════════════════
+
     v1817 - EN-TÊTE : BOUTON « RÉPONSE REPRÉSENTANTE » (ÉTAPE 1)
     ═══════════════════════════════════════════════════════════════════
     🆕 v1817: • Les DEUX pastilles de l'en-tête sont retirées : le cercle
@@ -857,7 +889,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1817</title>
+  <title>PhysiPro Moulages v1819</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -944,8 +976,8 @@
     .btn-pill.btn-departcal-pill:hover { filter: brightness(1.08); }
     /* v1817 — Bouton « Réponse représentante » : occupe l'ancien emplacement du
        calendrier des départs (v1763 « Moyennes » et v1731 « Calendrier » retirés). */
-    .tb-repbtn { position: absolute; right: 370px; top: 50%; transform: translateY(-50%); z-index: 3; display: flex; align-items: center; }
-    @media (max-width: 1200px) { .tb-repbtn { right: 280px; } }
+    .tb-repbtn { position: absolute; right: 415px; top: 50%; transform: translateY(-50%); z-index: 3; display: flex; align-items: center; }
+    @media (max-width: 1200px) { .tb-repbtn { right: 330px; } }
     .btn-pill.btn-rep-pill {
       flex-direction: column; justify-content: center; gap: 0;
       height: 50px; padding: 0 20px; border-radius: 14px;
@@ -956,6 +988,47 @@
     }
     .btn-pill.btn-rep-pill span { display: block; font-size: 15px; }
     .btn-pill.btn-rep-pill:hover { filter: brightness(1.1); transform: scale(1.03); }
+    /* v1819 — le bouton clignote tant qu'une réponse n'a pas été vue */
+    .btn-pill.btn-rep-pill { animation: repBtnBlink 1.1s ease-in-out infinite; }
+    @keyframes repBtnBlink {
+      0%, 100% { background: linear-gradient(135deg, #34d399 0%, #047857 100%);
+                 border-color: #000; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+      50%      { background: linear-gradient(135deg, #86efac 0%, #16a34a 100%);
+                 border-color: #bbf7d0; box-shadow: 0 0 22px 7px rgba(34,197,94,0.95); }
+    }
+    /* v1818 — compteur séparé, à droite du bouton */
+    .tb-repbtn { gap: 7px; }
+    .btn-rep-count {
+      min-width: 34px; height: 34px; padding: 0 8px; border-radius: 17px;
+      border: 2px solid #000; cursor: pointer;
+      background: linear-gradient(135deg, #fbbf24 0%, #b45309 100%);
+      color: #1f2937; font-size: 17px; font-weight: 900; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      text-shadow: 1px 1px 0 rgba(255,255,255,0.45);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+      animation: repCountPulse 1.1s ease-in-out infinite;
+    }
+    .btn-rep-count:hover { filter: brightness(1.1); }
+    @keyframes repCountPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0.85); transform: scale(1); }
+      50%      { box-shadow: 0 0 0 9px rgba(251,191,36,0); transform: scale(1.08); }
+    }
+    /* v1818 — carte avec une réponse de représentante non vue : verte + clignotante */
+    .mcard.rep-reply-blink { border-color: #22c55e !important; animation: repCardBlink 1.1s ease-in-out infinite !important; }
+    .mcard.rep-reply-blink::before {
+      content: ''; position: absolute; inset: 0; border-radius: 6px;
+      background: rgba(34,197,94,0.55); pointer-events: none; z-index: 0;
+      animation: repCardVeil 1.1s ease-in-out infinite;
+    }
+    .mcard.rep-reply-blink > * { position: relative; z-index: 1; }
+    @keyframes repCardBlink {
+      0%, 100% { box-shadow: 0 0 8px rgba(34,197,94,0.65); }
+      50%      { box-shadow: 0 0 20px 4px rgba(34,197,94,1); }
+    }
+    @keyframes repCardVeil {
+      0%, 100% { opacity: 0.30; }
+      50%      { opacity: 0.75; }
+    }
     .tb-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; pointer-events: none; max-width: calc(100% - 650px); overflow: hidden; text-overflow: ellipsis; }
     .top-title { font-size: 30px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #fdfdfd; text-shadow: 0 2px 3px rgba(0,0,0,0.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
     
@@ -3070,6 +3143,8 @@
     @keyframes notifPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
     .notif-popup { position: fixed; top: 60px; right: 20px; width: 340px; max-height: 450px; background: #1f2937; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); z-index: 99997; display: none; flex-direction: column; overflow: hidden; border: 2px solid #3b82f6; }
     .notif-popup.active { display: flex; }
+    .notif-popup.rep-popup { border-color: #22c55e; }
+    .notif-popup.rep-popup .notif-item.unread { background: rgba(34,197,94,0.15); border-left: 4px solid #22c55e; }
     .notif-popup-header { padding: 14px 16px; background: linear-gradient(135deg, #1e40af, #3b82f6); color: white; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 700; }
     .notif-popup-close { width: 28px; height: 28px; border: none; background: rgba(255,255,255,0.2); color: white; border-radius: 6px; cursor: pointer; font-size: 14px; }
     .notif-popup-list { flex: 1; overflow-y: auto; max-height: 320px; }
@@ -5797,7 +5872,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     </div>
     <div class="tb-create-btn"><button class="btn-pill" onclick="openCreateModal()"><span>+</span><span>Créer moulage</span></button><button class="btn-pill btn-fauteuil-pill" id="btnFauteuil" onclick="event.stopPropagation(); openFauteuilModal()"><span>🦽</span><span>Ajouter fauteuil roulant</span></button></div>
     <div class="tb-center"><span class="top-title">Outil de gestion des moulages</span></div>
-    <div class="tb-repbtn"><button class="btn-pill btn-rep-pill" id="btnRepRep" onclick="openReponsesRep()" title="Réponses des représentantes"><span>Réponse</span><span>représentante</span></button></div>
+    <div class="tb-repbtn" id="tbRepBlock" style="display:none;"><button class="btn-pill btn-rep-pill" id="btnRepRep" onclick="openReponsesRep()" title="Réponses des représentantes non vues"><span>Réponse</span><span>représentante</span></button><button class="btn-rep-count" id="btnRepCount" onclick="event.stopPropagation(); openReponsesRep()" title="Nombre de réponses non vues">0</button></div>
     <div class="tb-right" style="flex-direction:row;align-items:center;gap:6px;">
         <button class="tb-notif-btn" id="notifBtnDesktop" onclick="toggleNotifPopup()" title="Notifications">
           <span class="tb-notif-icon" style="font-size:11px;flex-shrink:0;">🔔</span>
@@ -6485,6 +6560,20 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     </div>
   </div>
   
+  <!-- ===== v1818 — POPUP « RÉPONSES DES REPRÉSENTANTES » ===== -->
+  <div class="notif-popup rep-popup" id="repPopup">
+    <div class="notif-popup-header" style="background:linear-gradient(135deg,#047857,#34d399);">
+      <span>💬 Réponses des représentantes</span>
+      <button class="notif-popup-close" onclick="closeReponsesRep()">✕</button>
+    </div>
+    <div class="notif-popup-list" id="repPopupList">
+      <div class="notif-empty">Aucune réponse en attente</div>
+    </div>
+    <div class="notif-popup-footer">
+      <button class="notif-mark-all" onclick="markAllRepRead()" style="flex:1;">✓ Tout marquer vu</button>
+    </div>
+  </div>
+
   <!-- ===== MODAL DÉTAIL NOTIFICATION ===== -->
   <div class="notif-detail-overlay" id="notifDetailOverlay" onclick="closeNotifDetail()">
     <div class="notif-detail-panel" onclick="event.stopPropagation()">
@@ -6701,7 +6790,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260904;
+    var APP_VERSION = 20260906;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -9645,6 +9734,10 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       
       div.className = `mcard region-${getRegionClass(card.region)} ${isAssociated ? 'associated' : ''} ${isSelected ? 'selected-for-association' : ''}`;
       div.dataset.cardId = cardId;
+      // v1818 — réponse de représentante non vue : carte verte clignotante
+      try {
+        if (getRepNotifs().some(function(n) { return n.cardId === cardId; })) div.classList.add('rep-reply-blink');
+      } catch(e) {}
       
       // IMPORTANT: Désactiver le drag en mode association ET si pas permission
       div.draggable = !associationMode && canDragCards();
@@ -12364,16 +12457,141 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     window.openMoyennesPopup = openMoyennesPopup;
 
     // ═══════════════════════════════════════════════════════════════════
-    // v1817 — BOUTON « RÉPONSE REPRÉSENTANTE » (en-tête)
-    // ÉTAPE 1 : le bouton occupe l'emplacement de l'ancien calendrier des
-    //   départs. Le comportement réel (liste des réponses non vues, suivi
-    //   « vu » par personne) arrive à l'ÉTAPE 2 avec le clignotement vert
-    //   des cartes.
+    // v1817/v1818 — RÉPONSES DES REPRÉSENTANTES (en-tête)
+    // Le bloc occupe l'emplacement de l'ancien calendrier des départs et
+    //   n'apparaît que s'il reste des réponses NON VUES par la personne
+    //   connectée. Le suivi « vu » est par personne : il s'appuie sur
+    //   moulageNotifications, où une entrée distincte existe déjà par
+    //   destinataire (champ « to » + « read »).
     // ═══════════════════════════════════════════════════════════════════
+    // Courriels des représentantes, tirés de TEAM_MEMBERS (dept « Représentante »).
+    var REP_EMAILS = (function() {
+      var set = {};
+      try {
+        TEAM_MEMBERS.forEach(function(m) {
+          if (m && m.dept === 'Représentante' && m.email) set[m.email.toLowerCase().trim()] = true;
+        });
+      } catch(e) {}
+      return set;
+    })();
+    function isRepEmail(email) { return !!REP_EMAILS[(email || '').toLowerCase().trim()]; }
+
+    // Les notifications de représentantes NON VUES par la personne connectée.
+    // firebaseNotifications ne contient déjà que les non-lues qui me sont adressées.
+    function getRepNotifs() {
+      try { return firebaseNotifications.filter(function(n) { return isRepEmail(n.from); }); }
+      catch(e) { return []; }
+    }
+
+    // Bouton + compteur : visibles seulement s'il reste des réponses non vues.
+    function updateRepButton() {
+      var block = document.getElementById('tbRepBlock');
+      var countEl = document.getElementById('btnRepCount');
+      var reps = getRepNotifs();
+      if (block) block.style.display = reps.length > 0 ? 'flex' : 'none';
+      if (countEl) countEl.textContent = reps.length > 99 ? '99+' : reps.length;
+      if (reps.length === 0) closeReponsesRep();
+      applyRepBlink();
+    }
+    window.updateRepButton = updateRepButton;
+
+    // Fait clignoter en vert les cartes visées, sans redessiner le kanban.
+    function applyRepBlink() {
+      var ids = {};
+      getRepNotifs().forEach(function(n) { if (n.cardId) ids[n.cardId] = true; });
+      try {
+        document.querySelectorAll('.mcard[data-card-id]').forEach(function(el) {
+          el.classList.toggle('rep-reply-blink', !!ids[el.dataset.cardId]);
+        });
+      } catch(e) {}
+    }
+    window.applyRepBlink = applyRepBlink;
+
     function openReponsesRep() {
-      showToast('Réponses des représentantes — à venir (étape 2)', 'info');
+      var popup = document.getElementById('repPopup');
+      if (!popup) return;
+      popup.classList.toggle('active');
+      if (popup.classList.contains('active')) renderRepPopup();
     }
     window.openReponsesRep = openReponsesRep;
+
+    function closeReponsesRep() {
+      var popup = document.getElementById('repPopup');
+      if (popup) popup.classList.remove('active');
+    }
+    window.closeReponsesRep = closeReponsesRep;
+
+    function renderRepPopup() {
+      var list = document.getElementById('repPopupList');
+      if (!list) return;
+      var reps = getRepNotifs();
+      if (reps.length === 0) {
+        list.innerHTML = '<div class="notif-empty">💬 Aucune réponse en attente<br><span style="font-size:11px;color:#6b7280;">Vous êtes à jour!</span></div>';
+        return;
+      }
+      var typeIcons  = { problem: '❓', solution: '✅', reply: '💬', normal: '💬', pinned: '📌' };
+      var typeLabels = { problem: 'Question', solution: 'Réponse', reply: 'Réponse', normal: 'Note', pinned: 'Épinglé' };
+      var html = '';
+      reps.forEach(function(notif) {
+        var icon  = typeIcons[notif.messageType]  || '💬';
+        var label = typeLabels[notif.messageType] || 'Réponse';
+        var texte = notif.messageContent || 'Nouveau message';
+        var court = texte.substring(0, 60) + (texte.length > 60 ? '...' : '');
+        html += '<div class="notif-item unread" onclick="goToRepCard(\'' + notif.firebaseKey + '\')" style="cursor:pointer;">'
+              +   '<div class="notif-item-header">'
+              +     '<span class="notif-item-from">' + icon + ' ' + escapeHtml(notif.fromName || 'Représentante') + '</span>'
+              +     '<span class="notif-item-time">' + getTimeAgo(notif.timestamp) + '</span>'
+              +   '</div>'
+              +   '<div class="notif-item-content">' + label + ' : ' + escapeHtml(court) + '</div>'
+              +   '<div class="notif-item-card">📋 ' + escapeHtml(notif.cardName || 'Moulage') + ' <span class="notif-item-arrow">→</span></div>'
+              + '</div>';
+      });
+      list.innerHTML = html;
+    }
+    window.renderRepPopup = renderRepPopup;
+
+    // Ouvre la carte visée. La notification n'est PAS marquée vue ici :
+    // c'est MChat qui la marquera quand les messages seront réellement affichés.
+    function goToRepCard(firebaseKey) {
+      var notif = null;
+      try { notif = firebaseNotifications.filter(function(n) { return n.firebaseKey === firebaseKey; })[0]; } catch(e) {}
+      if (!notif) return;
+      closeReponsesRep();
+      if (cardsData[notif.cardId]) {
+        if (isMobileView()) {
+          mobileCurrentCardId = notif.cardId;
+          openMobileFiche(notif.cardId);
+          setTimeout(function() { goToMobileChat(); }, 300);
+        } else {
+          openFiche(notif.cardId);
+        }
+      } else {
+        showToast('❌ Moulage non trouvé', 'error');
+      }
+    }
+    window.goToRepCard = goToRepCard;
+
+    // Marque comme vues MES notifications de représentante pour une carte donnée.
+    // Les entrées des AUTRES destinataires ne sont pas touchées : leur carte
+    // continue de clignoter jusqu'à ce qu'ils ouvrent la fiche à leur tour.
+    function markRepNotifsSeen(cardId) {
+      if (!firebaseDb || !cardId) return;
+      getRepNotifs().forEach(function(n) {
+        if (n.cardId === cardId && n.firebaseKey) {
+          firebaseDb.ref('moulageNotifications/' + n.firebaseKey).update({ read: true }).catch(function() {});
+        }
+      });
+    }
+    window.markRepNotifsSeen = markRepNotifsSeen;
+
+    function markAllRepRead() {
+      if (!firebaseDb) return;
+      getRepNotifs().forEach(function(n) {
+        if (n.firebaseKey) firebaseDb.ref('moulageNotifications/' + n.firebaseKey).update({ read: true }).catch(function() {});
+      });
+      showToast('✅ Réponses marquées comme vues', 'success');
+    }
+    window.markAllRepRead = markAllRepRead;
 
     function _moyRenderFrom(expediees) {
       const content = document.getElementById('moyPopupContent');
@@ -17992,7 +18210,12 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     
     function initNotifications() {
       if (!firebaseDb || !currentUser) return;
-      
+
+      // v1819 — état de départ explicite : tant que rien n'est reçu, le bloc
+      //   « Réponse représentante » reste masqué (cas d'un utilisateur sans
+      //   aucune notification, où le listener ne changera jamais l'affichage).
+      try { updateRepButton(); } catch(e) {}
+
       const userEmail = (currentUser.email || '').toLowerCase().trim();
       let firstLoad = true;
       
@@ -18234,6 +18457,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           if (text) text.textContent = '';
         }
       }
+
+      // v1818 — bloc « Réponse représentante » + clignotement des cartes
+      try {
+        updateRepButton();
+        var rp = document.getElementById('repPopup');
+        if (rp && rp.classList.contains('active')) renderRepPopup();
+      } catch(e) {}
     }
     
     function toggleNotifPopup() {
@@ -20895,6 +21125,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           _messages = legacy.concat(v2).sort(function(a,b){ return (a[1].timestamp||0)-(b[1].timestamp||0); });
           render();
           _markSeen(jobId); // marquer comme vus les messages affichés (dont ceux déjà présents)
+          // v1818 — la personne voit le fil : ses réponses de représentante pour
+          //   cette carte cessent de clignoter (les autres participants gardent les leurs)
+          try { if (window.markRepNotifsSeen) window.markRepNotifsSeen(jobId); } catch(e) {}
         });
         
         // If this job came from PSM, also listen to psmChat messages
