@@ -8,6 +8,82 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1822 - REGISTRE SANS NOTIFICATION + PASTILLE D'ATTENTE MULTILIGNE
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1822 (1) ENREGISTRER SANS NOTIFIER PERSONNE
+       • MChat écrivait DÉJÀ le message dans Firebase avant de créer les
+         notifications : envoyer sans cocher personne fonctionnait, mais
+         le message de confirmation était un AVERTISSEMENT jaune, ce qui
+         laissait croire à un échec. Il devient un succès explicite :
+         « 💾 Enregistré au registre — personne n'a été notifié ».
+       • Le modal indique maintenant qu'on peut envoyer sans cocher
+         personne, et le bouton devient « ➤ Enregistrer sans notifier »
+         quand aucune case n'est cochée (mise à jour en direct).
+       • L'ANCIEN système (card.messages) refusait, lui, de finaliser
+         sans destinataire (« Choisissez au moins une personne »). Cette
+         garde est retirée : le message est un registre, il s'enregistre
+         toujours.
+
+    🆕 v1822 (2) PASTILLE « RAISON D'ATTENTE » SUR 2-3 LIGNES
+       • La police tombait jusqu'à 6px pour un texte long (illisible) :
+         « Att. approbation client » (23 car.) descendait à 8px.
+       • Les pastilles EN ATTENTE gardent maintenant 11px et passent
+         sur 2 ou 3 lignes, la carte s'agrandissant en hauteur.
+       • Le rétrécissement d'origine est conservé pour les autres
+         pastilles (item, délai, expédition) — mise en page inchangée.
+       • Au passage : la mise à jour incrémentale écrasait le
+         <span class="pill-text"> par du texte brut (textContent), donc
+         le CSS de la pastille ne s'appliquait pas ; le span est rétabli.
+    ═══════════════════════════════════════════════════════════════════
+
+    v1821 - FIX : MESSAGE ÉCRIT MAIS JAMAIS ENREGISTRÉ (BROUILLON)
+    ═══════════════════════════════════════════════════════════════════
+    🐛 CAUSE : le texte n'est écrit dans Firebase QUE si on clique
+       « ➤ Envoyer » dans le modal « À qui envoyer ce message ? ».
+       Trois façons de tout perdre SANS aucun avertissement :
+       (1) cliquer À CÔTÉ du modal → l'overlay se ferme (listener sur
+           e.target === ov) et rien n'est envoyé ;
+       (2) cliquer « Annuler » → idem ;
+       (3) ensuite rouvrir la fiche → attach() appelle openCompose(),
+           qui VIDE la zone de texte. Le message est perdu sans trace.
+
+    🆕 v1821: BROUILLON PERSISTANT PAR CARTE.
+       • Le texte est sauvegardé dans localStorage à chaque frappe
+         (clé « mchat_draft_<jobId> »), donc il survit à la fermeture
+         du modal, de la fiche, de l'onglet ou du navigateur.
+       • À la réouverture de la fiche, le brouillon est restauré et un
+         bandeau ambre « ✏️ Brouillon non envoyé » s'affiche au-dessus
+         de la zone d'écriture : on VOIT ce qui a été écrit et qu'il
+         est resté.
+       • Le brouillon n'est effacé qu'après une écriture Firebase
+         RÉUSSIE (dans le .then() de _doSend).
+       • Fermer le modal sans envoyer affiche désormais un avertissement
+         clair : « Message PAS envoyé — conservé en brouillon ».
+    ═══════════════════════════════════════════════════════════════════
+
+    v1820 - FIX : DOUBLE NOTIFICATION POUR LA MÊME PERSONNE
+    ═══════════════════════════════════════════════════════════════════
+    🐛 CAUSE : la déduplication se faisait sur le NOM, alors que
+       nameToEmail() accepte le nom complet ET le prénom seul.
+       • card.representante vient de REPRESENTANTES = ['Marie-Soleil',
+         'Marie-Pier'] → PRÉNOM SEUL dans la colonne « Représentante ».
+       • Les participants du fil viennent de getMyName() → NOM COMPLET
+         (« Marie-Soleil Riverin »), donc jugé absent des groupes et
+         renvoyé dans « Dans la discussion », PRÉ-COCHÉ.
+       → Deux cases distinctes pour UNE seule personne, les deux cochées,
+         toutes deux résolues vers mariesoleilr@physipro.com : 2 notifs.
+
+    🆕 v1820: la déduplication se fait maintenant par COURRIEL RÉSOLU
+       (_emailKey), et non plus par nom, à chacune des quatre étapes :
+       • _defaultChecked()  — pré-cochage des participants du fil
+       • _openNotifModal()  — une seule case par personne dans le modal
+                              (plus de doublon entre une colonne et
+                              « Dans la discussion »)
+       • _confirmNotifModal() — noms retenus au clic « Envoyer »
+       • _doSend()          — FILET FINAL : même si deux cases visaient la
+                              même personne, une seule notification part.
+    ═══════════════════════════════════════════════════════════════════
+
     v1819 - BLOC REPRÉSENTANTE : DÉCALÉ À GAUCHE + CLIGNOTANT
     ═══════════════════════════════════════════════════════════════════
     🆕 v1819: • Le bloc est décalé d'environ 1,2 cm vers la gauche
@@ -889,7 +965,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1819</title>
+  <title>PhysiPro Moulages v1822</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -1432,6 +1508,17 @@
     .mcard-item-pill.pret-expedier { background: linear-gradient(to bottom, #f59e0b, #b45309) !important; cursor: pointer; }
     .mcard-item-pill.expedie { background: linear-gradient(to bottom, #22c55e, #15803d) !important; cursor: default; }
     .mcard-item-pill.en-attente { background: linear-gradient(to bottom, #dc2626, #7f1d1d) !important; cursor: pointer; border-color: #450a0a; }
+    /* v1822 — raison d'attente : jusqu'à 3 lignes à taille lisible plutôt qu'une
+       ligne écrasée à 6px. La pastille grandit en hauteur, la carte suit. */
+    .mcard-item-pill.en-attente {
+      white-space: normal; height: auto; min-height: 18px;
+      line-height: 1.15; padding: 2px 4px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .mcard-item-pill.en-attente .pill-text {
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+      white-space: normal; overflow: hidden; width: 100%;
+    }
     .mcard-item-pill.en-attente.attente-alerte { animation: clignoteAttente 1s infinite; }
     .mcard-item-pill.en-attente.attente-no-raison { animation: clignoteNoRaison 0.8s infinite; background: linear-gradient(to bottom, #f97316, #c2410c) !important; border: 2px solid #fbbf24 !important; }
     @keyframes clignoteAttente {
@@ -6038,6 +6125,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           <div class="qchat-messages" id="qchatMessages"><div class="qchat-empty">💬 Aucun message encore</div></div>
         </div>
         <div class="qchat-compose" id="qchatCompose">
+          <div id="qchatDraftBanner" style="display:none;align-items:center;gap:6px;margin-bottom:6px;padding:5px 9px;background:rgba(201,161,74,0.18);border:1px solid rgba(201,161,74,0.6);border-radius:8px;font-size:11px;font-weight:700;color:#f5e7c4;">✏️ Brouillon non envoyé — cliquez ↑ puis « ➤ Envoyer » pour l'enregistrer<button onclick="MChat.discardDraft()" title="Effacer ce brouillon" style="margin-left:auto;background:rgba(239,68,68,0.25);border:1px solid rgba(239,68,68,0.5);color:#fca5a5;border-radius:6px;font-size:10px;font-weight:700;padding:2px 7px;cursor:pointer;">Effacer</button></div>
           <div class="qchat-compose-author" id="qchatComposeAuthor" style="display:none;"></div>
           <div class="qchat-compose-dests" id="qchatComposeDests" style="margin-bottom:6px;"></div>
           <div class="qchat-compose-img-zone" id="qchatComposeImgZone"><div id="qchatComposeImgs"></div><button class="qchat-compose-img-remove" onclick="MChat.clearImages()">✕</button></div>
@@ -6790,7 +6878,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260906;
+    var APP_VERSION = 20260909;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -9475,15 +9563,25 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         // Calculer la taille de police
         const itemLen = pillText.length;
         let itemFontSize = 11;
-        if (itemLen > 30) itemFontSize = 6;
+        // v1822 — même règle qu'au rendu complet : les raisons d'attente
+        //   gardent 11px et s'étalent sur 2-3 lignes.
+        if (pillClass.indexOf('en-attente') !== -1) {
+          itemFontSize = 11;
+        } else if (itemLen > 30) itemFontSize = 6;
         else if (itemLen > 25) itemFontSize = 7;
         else if (itemLen > 20) itemFontSize = 8;
         else if (itemLen > 15) itemFontSize = 9;
         else if (itemLen > 10) itemFontSize = 10;
-        
+
         itemEl.className = `mcard-item-pill ${pillClass}`;
         itemEl.style.fontSize = itemFontSize + 'px';
-        itemEl.textContent = pillText;
+        // v1822 — rétablir le <span class="pill-text"> : textContent l'écrasait,
+        //   ce qui neutralisait le CSS multiligne de la pastille.
+        itemEl.innerHTML = '';
+        const _pt = document.createElement('span');
+        _pt.className = 'pill-text';
+        _pt.textContent = pillText;
+        itemEl.appendChild(_pt);
       }
     }
 
@@ -9775,7 +9873,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       // Calcul taille dynamique pour l'item - plus le texte est long, plus petit
       const itemLen = pillText.length;
       let itemFontSize = 11; // Taille par défaut
-      if (itemLen > 30) itemFontSize = 6;
+      // v1822 — une raison d'attente reste à 11px et passe sur 2-3 lignes (CSS),
+      //   au lieu d'être écrasée jusqu'à 6px sur une seule ligne.
+      if (pillClass.indexOf('en-attente') !== -1) {
+        itemFontSize = 11;
+      } else if (itemLen > 30) itemFontSize = 6;
       else if (itemLen > 25) itemFontSize = 7;
       else if (itemLen > 20) itemFontSize = 8;
       else if (itemLen > 15) itemFontSize = 9;
@@ -17988,10 +18090,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     }
 
     function sendToSelectedDestinatairesFinal() {
-      if (selectedDestinataires.length === 0 && !destEmailWanted) {
-        showToast('⚠️ Choisissez au moins une personne, ou cliquez « N\'avertir personne »', 'warning');
-        return;
-      }
+      // v1822 — plus de blocage : le message est un REGISTRE. Sans destinataire,
+      //   on l'enregistre quand même (le toast final le confirme).
 
       if (!pendingMessageData) { closeDestModal(null, true); return; }
 
@@ -18056,8 +18156,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       let toast;
       if (selectedDestinataires.length > 0) {
         toast = '📤 Envoyé à : ' + selectedDestinataires.map(d => d.name.split(' ')[0]).join(', ');
-      } else {
+      } else if (emailWanted) {
         toast = '📧 Courriel préparé';
+      } else {
+        // v1822 — aucun destinataire ET aucun courriel : c'est le cas « registre »
+        toast = '💾 Enregistré au registre — personne n\'a été notifié';
       }
       if (emailWanted && repMember && selectedDestinataires.length > 0) toast += '  +  📧 ' + repMember.name.split(' ')[0];
       showToast(toast, 'success');
@@ -20997,6 +21100,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       var _seenListener = null;
       
       function _normName(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
+      // v1820 — clé d'identité d'une personne = son COURRIEL, pas son nom.
+      //   nameToEmail() accepte le nom complet ET le prénom seul, donc
+      //   « Marie-Soleil » et « Marie-Soleil Riverin » donnent la même clé.
+      //   Repli sur le nom normalisé si le courriel est introuvable.
+      function _emailKey(name) {
+        var em = '';
+        try { if (typeof nameToEmail === 'function') em = nameToEmail(name) || ''; } catch(e) {}
+        return em ? em.toLowerCase().trim() : _normName(name);
+      }
       var _DEST_REMOVE = ['patrick bouchard','eric poirier','elise bolduc','elyse bolduc','roxane valois','roxanne valois','mario ouellet','mario ouellette','fabrice frechette','fabrys frechette','sylvie carrier','sylvain carrier','stephane duchesneau','stephane delorme','sonia boulanger','nadia gagne','nadia gagner','jacynthe gaumond','jacinthe gaumond','jacinthe gourmond','jonathan perreault','jonathan perrault'];
       function _membersByDept(depts) {
         if (typeof TEAM_MEMBERS === 'undefined') return [];
@@ -21083,6 +21195,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         if (!jobId) return;
         // v1652: fenêtre d'écriture toujours ouverte (mode conversation) dès l'ouverture du chat
         openCompose('conversation');
+        _restoreDraft();  // v1821 — un message écrit mais jamais envoyé revient ici
         
         // Pas de destinataire automatique: l'utilisateur choisit au 1er envoi
         var job = cardsData[jobId];
@@ -21493,12 +21606,12 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       // v1809 — noms à pré-cocher : participants du fil + destinataires précédents
       function _defaultChecked() {
         var out = [];
-        var meName = _normName(getMyName());
+        var meKey = _emailKey(getMyName());   // v1820 — comparaison par courriel
         function add(n) {
           if (!n) return;
-          var k = _normName(n);
-          if (!k || k === meName) return;
-          if (!out.some(function(x){ return _normName(x) === k; })) out.push(n);
+          var k = _emailKey(n);
+          if (!k || k === meKey) return;
+          if (!out.some(function(x){ return _emailKey(x) === k; })) out.push(n);
         }
         (_extraDests || []).forEach(add);
         (_messages || []).forEach(function(e){
@@ -21531,7 +21644,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         _notifModalMode = (mode === 'edit') ? 'edit' : 'send';
         var isEdit = (_notifModalMode === 'edit');
         var _ph = _isPhone();  // v1814
-        _closeNotifModal();
+        _closeNotifModal(true);   // v1821 — simple nettoyage, pas une annulation
         _emailRepWanted = false;
         _mailDests = [];
         var _c = cardsData[_currentJobId] || {};
@@ -21540,16 +21653,31 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var _preset = isEdit ? (_extraDests || []) : _defaultChecked();  // v1809
         // v1809: participants du fil absents des groupes (ex. Service client) →
         // groupe « Dans la discussion » pour qu'ils restent visibles et décochables
+        // v1820 — comparaison par COURRIEL : « Marie-Soleil » (colonne
+        //   Représentante) et « Marie-Soleil Riverin » (participante du fil)
+        //   sont la même personne et ne doivent produire qu'UNE case.
         var _listed = [];
-        groups.forEach(function(g){ g.names.forEach(function(n){ _listed.push(_normName(n)); }); });
-        var _orphans = (_preset || []).filter(function(n){ return _listed.indexOf(_normName(n)) === -1; });
+        groups.forEach(function(g){ g.names.forEach(function(n){ _listed.push(_emailKey(n)); }); });
+        var _orphans = (_preset || []).filter(function(n){ return _listed.indexOf(_emailKey(n)) === -1; });
         if (_orphans.length) groups.unshift({ label: 'Dans la discussion', names: _orphans });
+        // v1820 — filet : si une personne figure malgré tout dans deux groupes
+        //   (ex. deux départements), on ne garde que sa première occurrence.
+        var _seenKeys = [];
+        groups.forEach(function(g){
+          g.names = g.names.filter(function(n){
+            var k = _emailKey(n);
+            if (!k) return true;
+            if (_seenKeys.indexOf(k) !== -1) return false;
+            _seenKeys.push(k);
+            return true;
+          });
+        });
         var rows = '';
         groups.forEach(function(g){
           if (!g.names.length) return;
           var inner = '';
           g.names.forEach(function(n){
-            var chk = (_preset && _preset.some(function(x){ return _normName(x) === _normName(n); })) ? ' checked' : '';
+            var chk = (_preset && _preset.some(function(x){ return _emailKey(x) === _emailKey(n); })) ? ' checked' : '';  // v1820
             var _isMe = (_normName(n) === _normName(getMyName()));  // v1810
             var _isRep = _repDisplayName && _normName(n).indexOf(_normName(_repDisplayName)) === 0;
             // v1812: le NOM lui-même est recliquable → sélection courriel (illumination dorée)
@@ -21604,16 +21732,29 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               _mailHtml +
               // v1816 — séparateur net entre le bloc courriel (or) et le bloc notifications (vert)
               '<div style="height:1px;background:linear-gradient(to right, transparent, #475569 15%, #475569 85%, transparent);margin:' + (_ph ? '12px 0 10px' : '13px 0 10px') + ';"></div>' +
-              '<div id="qnotifHint" style="font-size:' + (_ph ? '12.5px' : '11.5px') + ';font-weight:700;color:#bbf7d0;padding:0 0 8px;">☑️ Mettez un crochet sur les noms à qui vous voulez qu\'on envoie une notification</div>' +
+              '<div id="qnotifHint" style="font-size:' + (_ph ? '12.5px' : '11.5px') + ';font-weight:700;color:#bbf7d0;padding:0 0 8px;">☑️ Mettez un crochet sur les noms à qui vous voulez qu\'on envoie une notification' +
+                (isEdit ? '' : '<div style="margin-top:4px;font-weight:600;color:#94a3b8;font-size:' + (_ph ? '11.5px' : '11px') + ';">Aucun crochet ? Le message est quand même enregistré au registre — personne ne sera notifié.</div>') +
+              '</div>' +
               '<div style="column-count:' + (_ph ? '2' : '3') + ';column-gap:' + (_ph ? '10px' : '16px') + ';">' + rows + '</div>' +
             '</div>' +
             '<div style="padding:' + (_ph ? '10px 12px calc(10px + env(safe-area-inset-bottom))' : '10px 16px') + ';display:flex;gap:10px;border-top:1px solid #334155;">' +
               '<button onclick="MChat.closeNotif()" style="flex:1;padding:' + (_ph ? '14px 10px' : '10px') + ';background:#374151;color:#e5e7eb;border:1px solid #4b5563;border-radius:9px;font-size:' + (_ph ? '15px' : '13px') + ';font-weight:700;cursor:pointer;">Annuler</button>' +
-              '<button onclick="MChat.confirmNotif()" style="flex:1.4;padding:' + (_ph ? '14px 10px' : '10px') + ';background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:1px solid #15803d;border-radius:9px;font-size:' + (_ph ? '16px' : '14px') + ';font-weight:800;cursor:pointer;">' + (isEdit ? '✓ Enregistrer' : '➤ Envoyer') + '</button>' +
+              '<button id="qnotifSendBtn" onclick="MChat.confirmNotif()" style="flex:1.4;padding:' + (_ph ? '14px 10px' : '10px') + ';background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:1px solid #15803d;border-radius:9px;font-size:' + (_ph ? '16px' : '14px') + ';font-weight:800;cursor:pointer;">' + (isEdit ? '✓ Enregistrer' : '➤ Envoyer') + '</button>' +
             '</div>' +
           '</div>';
         ov.addEventListener('click', function(e){ if (e.target === ov) _closeNotifModal(); });
         document.body.appendChild(ov);
+        // v1822 — le bouton dit ce qui va réellement se passer
+        if (!isEdit) {
+          var _syncSendLabel = function() {
+            var btn = document.getElementById('qnotifSendBtn');
+            if (!btn) return;
+            var n = ov.querySelectorAll('input.qnotif-cb:checked').length;
+            btn.textContent = n > 0 ? '➤ Envoyer' : '➤ Enregistrer sans notifier';
+          };
+          ov.querySelectorAll('input.qnotif-cb').forEach(function(cb){ cb.addEventListener('change', _syncSendLabel); });
+          _syncSendLabel();
+        }
       }
 
       // v1812 — case « IMPORTANT » : active le mode « clic sur les noms = courriel »
@@ -21706,10 +21847,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       function _confirmNotifModal() {
         var ov = document.getElementById('qchatNotifModal');
         var chosen = [];
+        var _keys = [];   // v1820 — une personne = un courriel, jamais deux entrées
         if (ov) {
           ov.querySelectorAll('input.qnotif-cb:checked').forEach(function(cb){
             var n = (cb.value || '').trim();
-            if (n && chosen.indexOf(n) === -1) chosen.push(n);
+            if (!n) return;
+            var k = _emailKey(n);
+            if (k && _keys.indexOf(k) !== -1) return;
+            if (k) _keys.push(k);
+            chosen.push(n);
           });
         }
         _extraDests = chosen;
@@ -21717,13 +21863,21 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         _destChosen = true;
         _saveExtraDests();
         _renderDestSummary();
-        _closeNotifModal();
+        _closeNotifModal(true);   // v1821 — l'envoi suit, aucun avertissement
         if (_notifModalMode !== 'edit') _doSend();
       }
 
-      function _closeNotifModal() {
+      function _closeNotifModal(silent) {
         var ov = document.getElementById('qchatNotifModal');
-        if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
+        if (!ov) return;
+        // v1821 — fermer sans envoyer était SILENCIEUX : on le dit clairement,
+        //   et le texte reste en brouillon (il n'est effacé qu'après un envoi).
+        var wasSend = (_notifModalMode !== 'edit');
+        if (ov.parentNode) ov.parentNode.removeChild(ov);
+        if (!silent && wasSend && _getComposeText() && typeof showToast === 'function') {
+          showToast('⚠️ Message PAS envoyé — conservé en brouillon', 'warning');
+          _showDraftBanner(true);
+        }
       }
       
       // ---- Dest Picker (legacy header dropdown — conservé, non utilisé) ----
@@ -21806,6 +21960,64 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
       
       // ---- Compose ----
+      // ═══════════════════════════════════════════════════════════════
+      // v1821 — BROUILLON PERSISTANT
+      //   Le message n'est écrit dans Firebase qu'au clic « ➤ Envoyer » du
+      //   modal. Tant qu'il n'est pas parti, on le garde dans localStorage
+      //   pour qu'il survive à la fermeture du modal, de la fiche ou du
+      //   navigateur. Effacé uniquement après un envoi réussi.
+      // ═══════════════════════════════════════════════════════════════
+      function _draftKey(jobId) { return 'mchat_draft_' + (jobId || _currentJobId || ''); }
+
+      function _getComposeText() {
+        var ce = document.getElementById('qchatComposeText');
+        if (!ce) return '';
+        var t = (ce.tagName === 'TEXTAREA') ? ce.value : (ce.innerText || ce.textContent || '');
+        t = (t || '').trim();
+        if (t === '<br>' || t === '&nbsp;' || t === '<div><br></div>') t = '';
+        return t;
+      }
+
+      function _saveDraft() {
+        if (!_currentJobId) return;
+        var t = _getComposeText();
+        try {
+          if (t) localStorage.setItem(_draftKey(), t);
+          else localStorage.removeItem(_draftKey());
+        } catch(e) {}
+        _showDraftBanner(!!t);
+      }
+
+      function _clearDraft(jobId) {
+        try { localStorage.removeItem(_draftKey(jobId)); } catch(e) {}
+        _showDraftBanner(false);
+      }
+
+      function _showDraftBanner(on) {
+        var b = document.getElementById('qchatDraftBanner');
+        if (b) b.style.display = on ? 'flex' : 'none';
+      }
+
+      // Restaure le brouillon de cette carte, s'il y en a un.
+      function _restoreDraft() {
+        if (!_currentJobId) return;
+        var t = '';
+        try { t = localStorage.getItem(_draftKey()) || ''; } catch(e) {}
+        if (!t) { _showDraftBanner(false); return; }
+        var ce = document.getElementById('qchatComposeText');
+        if (!ce) return;
+        if (ce.tagName === 'TEXTAREA') ce.value = t; else ce.innerText = t;
+        _showDraftBanner(true);
+        if (typeof showToast === 'function') showToast('✏️ Brouillon non envoyé restauré', 'warning');
+      }
+
+      function discardDraft() {
+        var ce = document.getElementById('qchatComposeText');
+        if (ce) { if (ce.tagName === 'TEXTAREA') ce.value = ''; else ce.innerHTML = ''; }
+        _clearDraft();
+        if (typeof showToast === 'function') showToast('🗑️ Brouillon effacé', 'info');
+      }
+
       function openCompose(type) {
         // Show camera button only for users with 'jobs' access (not moulage-only)
         var myEmail = getMyEmail();
@@ -21828,6 +22040,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         document.getElementById('qchatComposeImgs').innerHTML = '';
         var ta = document.getElementById('qchatComposeText');
         if (ta.tagName === 'TEXTAREA') { ta.value = ''; ta.placeholder = isReply ? 'Répondre...' : 'Votre message...'; } else { ta.innerHTML = ''; ta.setAttribute('data-placeholder', isReply ? 'Répondre...' : 'Votre message...'); }
+        // v1821 — chaque frappe est conservée en brouillon
+        ta.oninput = _saveDraft;
+        _showDraftBanner(false);
         ta.focus();
         var scroll = document.getElementById('qchatScroll');
         setTimeout(function(){ scroll.scrollTop = scroll.scrollHeight; }, 100);
@@ -22430,20 +22645,29 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         msgData.notifiedTo = _finalRecips.map(function(n){ return n.split(' ')[0]; });
         if (_mailWanted) msgData.emailedTo = _mailNames.map(function(n){ return n.split(' ')[0]; }).join(', ');
 
+        var _jobAtSend = _currentJobId;   // v1821 — la carte visée au moment de l'envoi
         database.ref('chats/' + _currentJobId + '/messages').push().set(msgData)
           .then(function() {
             _replyToId = null;
+            _clearDraft(_jobAtSend);     // v1821 — envoi confirmé : le brouillon peut partir
             openCompose('conversation'); // v1652: reste ouverte, prête pour le message suivant
             if (typeof showToast === 'function') showToast('\ud83d\udce4 Message envoyé', 'success');
             // Notifications (cloche): destinataires choisis + TOUJOURS Valérie & Daniel
             if (typeof createNotification === 'function') {
               var card = cardsData[_currentJobId] || {};
               var cardName = '#' + (card.order || '') + (card.name ? ' ' + card.name : '');
+              // v1820 — FILET FINAL : une seule notification par COURRIEL.
+              //   Même si deux cases du modal visaient la même personne
+              //   (prénom seul vs nom complet), elle n'est notifiée qu'une fois.
               var recips = _finalRecips.slice();
               var _notifSent = 0;
+              var _sentEmails = [];
               recips.forEach(function(n){
                 var em = (typeof nameToEmail==='function') ? nameToEmail(n) : '';
                 if (!em) return; // v1812: se notifier soi-même est permis
+                em = em.toLowerCase().trim();
+                if (_sentEmails.indexOf(em) !== -1) return; // déjà notifiée
+                _sentEmails.push(em);
                 createNotification({
                   to: em, toName: n.split(' ')[0],
                   from: myEmail, fromName: myName,
@@ -22457,7 +22681,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               });
               if (typeof showToast === 'function') {
                 if (_notifSent > 0) showToast('🔔 ' + _notifSent + ' personne(s) notifiée(s)', 'info');
-                else showToast('💾 Message enregistré — aucune notification envoyée', 'warning');
+                // v1822 — cas voulu, pas un échec : le message EST au registre.
+                else showToast('💾 Enregistré au registre — personne n\'a été notifié', 'success');
               }
             }
             // v1808 — courriel à la représentante, si demandé dans le modal
@@ -23239,6 +23464,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         send: send,
         confirmNotif: _confirmNotifModal,
         closeNotif: _closeNotifModal,
+        discardDraft: discardDraft,        // v1821
         getCurrentJobId: function() { return _currentJobId; },
         deleteMsg: deleteMsg,
         editMsg: editMsg,
