@@ -8,6 +8,26 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1823 - CASE « MESSAGE IMPORTANT / COURRIEL » MASQUÉE (NON SUPPRIMÉE)
+    ═══════════════════════════════════════════════════════════════════
+    ⏸️  v1823: la bande dorée « ⚠️ Ce message est IMPORTANT — l'envoyer par
+       courriel » n'est plus affichée dans le modal « À qui envoyer ce
+       message ? ». Elle est seulement MASQUÉE, pas retirée.
+
+       ► POUR LA FAIRE REVENIR : une seule ligne à changer, chercher
+         MAIL_BAND_VISIBLE dans le module MChat et le remettre à true.
+         Aucun autre changement n'est requis.
+
+       Tout le mécanisme reste en place et intact : toggleMailBlock(),
+       clickName() en mode courriel, _mailDests, _mailToDests(),
+       _updateMailCount(), le champ msgData.emailedTo et le CSS
+       .qnotif-name.mailmode. Avec la bande masquée, _emailRepWanted
+       reste false, donc _mailWanted est toujours false et aucun courriel
+       n'est préparé — le code dort sans rien faire.
+       Le séparateur v1816 (le trait entre le bloc or et le bloc vert)
+       est masqué en même temps, sinon il resterait orphelin en haut.
+    ═══════════════════════════════════════════════════════════════════
+
     v1822 - REGISTRE SANS NOTIFICATION + PASTILLE D'ATTENTE MULTILIGNE
     ═══════════════════════════════════════════════════════════════════
     🆕 v1822 (1) ENREGISTRER SANS NOTIFIER PERSONNE
@@ -965,7 +985,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1822</title>
+  <title>PhysiPro Moulages v1823</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -6878,7 +6898,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260909;
+    var APP_VERSION = 20260910;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -21094,6 +21114,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       var _destChosen = false;
       var _sendAfterPicker = false;
       var _emailRepWanted = false;   // v1811 — case « IMPORTANT : envoyer aussi par courriel »
+      // ═══════════════════════════════════════════════════════════════
+      // v1823 — AFFICHAGE de la bande « message IMPORTANT → courriel ».
+      //   Mise à false à la demande de Daniel : la fonction n'est pas
+      //   utilisée pour l'instant, mais elle peut revenir.
+      //   ► POUR LA RÉACTIVER : remettre true ci-dessous. C'est tout.
+      //   Tout le code de la fonctionnalité est conservé plus bas
+      //   (toggleMailBlock, clickName, _mailDests, _mailToDests...).
+      // ═══════════════════════════════════════════════════════════════
+      var MAIL_BAND_VISIBLE = false;
       var _repDisplayName = '';      // représentante inscrite sur la carte
       var _mailDests = [];           // v1811 — noms illuminés à qui le courriel sera adressé
       var _seen = {}; // accusés de lecture: { emailEncodé: {name, ts} }
@@ -21709,8 +21738,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         }
 
         // v1812 — case « IMPORTANT » placée EN HAUT (aucun défilement nécessaire)
+        // v1823 — masquée tant que MAIL_BAND_VISIBLE est false
         var _mailHtml = '';
-        if (!isEdit) {
+        if (!isEdit && MAIL_BAND_VISIBLE) {
           _mailHtml = '<div id="qmailBand" style="margin-bottom:8px;background:rgba(201,161,74,0.14);border:1px solid rgba(201,161,74,0.5);border-radius:9px;padding:' + (_ph ? '9px 10px' : '7px 10px') + ';">' +
             '<label style="display:flex;align-items:center;gap:9px;cursor:pointer;">' +
               '<input type="checkbox" id="qmailChk" onchange="MChat.toggleMailBlock(this.checked)" style="width:' + (_ph ? '22px' : '17px') + ';height:' + (_ph ? '22px' : '17px') + ';accent-color:#C9A14A;margin:0;flex-shrink:0;">' +
@@ -21731,7 +21761,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               _ctxHtml +
               _mailHtml +
               // v1816 — séparateur net entre le bloc courriel (or) et le bloc notifications (vert)
-              '<div style="height:1px;background:linear-gradient(to right, transparent, #475569 15%, #475569 85%, transparent);margin:' + (_ph ? '12px 0 10px' : '13px 0 10px') + ';"></div>' +
+              // v1823 — sans la bande dorée, ce trait serait orphelin : on le masque avec elle
+              (_mailHtml ? '<div style="height:1px;background:linear-gradient(to right, transparent, #475569 15%, #475569 85%, transparent);margin:' + (_ph ? '12px 0 10px' : '13px 0 10px') + ';"></div>' : '') +
               '<div id="qnotifHint" style="font-size:' + (_ph ? '12.5px' : '11.5px') + ';font-weight:700;color:#bbf7d0;padding:0 0 8px;">☑️ Mettez un crochet sur les noms à qui vous voulez qu\'on envoie une notification' +
                 (isEdit ? '' : '<div style="margin-top:4px;font-weight:600;color:#94a3b8;font-size:' + (_ph ? '11.5px' : '11px') + ';">Aucun crochet ? Le message est quand même enregistré au registre — personne ne sera notifié.</div>') +
               '</div>' +
