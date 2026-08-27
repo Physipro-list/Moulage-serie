@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Inspection Atelier v20260829</title>
+<title>PhysiPro — Inspection Atelier v20260831</title>
 <style>
 :root{--bg-main:#0f172a;--bg-card:#1e293b;--bg-input:#0f172a;--border:#334155;--gold:#c9a227;--gold-light:#fbbf24;--text:#e2e8f0;--text-muted:#94a3b8;--success:#22c55e;--danger:#ef4444;--info:#3b82f6;--purple:#a855f7;--teal:#14b8a6;--tbl-zoom:11px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -710,7 +710,7 @@ function safeFbUpdate(ref, data, callback) {
 }
 
 // === VERSION PROTECTION ===
-var APP_VERSION=20260829;var APP_MODULE='inspection';var _versionOK=true;
+var APP_VERSION=20260831;var APP_MODULE='inspection';var _versionOK=true;
 function checkAppVersion(){if(!fbDb)return;fbDb.ref('appSettings/versions/'+APP_MODULE).once('value').then(function(s){var r=s.val();if(r&&typeof r==='number'&&APP_VERSION<r){_versionOK=false;var b=document.createElement('div');b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;background:#dc2626;color:white;padding:12px 20px;font-weight:700;text-align:center;font-size:14px;';b.innerHTML='⚠️ VERSION OBSOLÈTE. <button onclick="location.reload(true)" style="margin-left:15px;background:white;color:#dc2626;border:none;padding:6px 16px;border-radius:6px;font-weight:bold;cursor:pointer;">🔄 Rafraîchir</button>';document.body.prepend(b);}else{fbDb.ref('appSettings/versions/'+APP_MODULE).set(APP_VERSION);_versionOK=true;}});}
 function writeBlocked(s){if(!_versionOK){if(!s)alert('🔒 Version obsolète');return true;}return false;}
 
@@ -4192,11 +4192,18 @@ var PChat = (function() {
   function clearAllNotifs() {
     var _db = getDb();
     if (_db) {
-      if (_crossAppNotifs._job) { Object.keys(_crossAppNotifs._job).forEach(function(k) { _db.ref('jobNotifications/' + k).remove().catch(function(){}); }); }
+      if (_crossAppNotifs._job) { Object.keys(_crossAppNotifs._job).forEach(function(k) { _db.ref('jobNotifications/' + k).remove().catch(function(e){ console.warn('[PChat] Effacement refusé : jobNotifications/' + k + ' — ' + (e && e.message)); }); }); }
       if (_crossAppNotifs._moulage) { Object.keys(_crossAppNotifs._moulage).forEach(function(k) { _db.ref('moulageNotifications/' + k).update({ read: true }).catch(function(){}); }); }
     }
-    _crossAppNotifs = {};
+    // 🔧 v20260831 : on marque D'ABORD (markAllRead a encore besoin de _crossAppNotifs),
+    // PUIS on remet le compteur local à zéro pour que la cloche arrête immédiatement,
+    // même si une écriture Firebase est refusée par les règles.
     markAllRead();
+    _crossAppNotifs = {};
+    _unreadCounts = {};
+    _unreadMessages = {};
+    _totalUnread = 0;
+    updateBell(0);
   }
 
   // ═══ INIT ═══
@@ -4852,6 +4859,8 @@ var SERIES = (function () {
   };
 })();
 window.SERIES = SERIES;
+
+
 
 </script>
 </html>
