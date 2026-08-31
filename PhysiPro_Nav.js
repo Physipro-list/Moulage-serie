@@ -17,6 +17,13 @@
          id="logoFlipContainer" OU class="topbar-logo"
          (le script s'y attache automatiquement).
 
+    v_nav10 : « codes » devient aussi accessible sur téléphone, pour les
+              seules adresses de CODES_ALLOWED. Rien ne change pour les
+              autres : MOBILE_BASE reste Moulage + Quest. actifs.
+
+    v_nav9 : nouveau module « codes » (Codes et matériaux), réservé à la
+             liste CODES_ALLOWED plus bas.
+
     v_nav8 : nouveau module « questactifs » (Questionnements actifs),
              ouvert à tout le monde, bureau et téléphone. La tuile
              « Questionnements » passe à Daniel + les 4 agentes.
@@ -41,12 +48,13 @@
     photos:      { icon: '📷', label: 'Photo Sender',      sub: 'Envoi de photos',            file: 'PhysiPro_PhotoSender.html',              color: '#06b6d4' },
     inspfinale:  { icon: '🔍', label: 'Insp. Finale',      sub: 'Inspection finale',          file: 'PhysiPro_Inspection_Finale.html',        color: '#6366f1' },
     psm:         { icon: '📐', label: 'PSM',                sub: 'Produits sur mesure',        file: 'PhysiPro_PSM.html',                      color: '#0ea5e9' },
-    questactifs: { icon: '📌', label: 'Questionnements actifs', sub: 'Commandes clients',      file: 'PhysiPro_Questionnements_Actifs.html',   color: '#c9a14a' }
+    questactifs: { icon: '📌', label: 'Questionnements actifs', sub: 'Commandes clients',      file: 'PhysiPro_Questionnements_Actifs.html',   color: '#c9a14a' },
+    codes:       { icon: '📇', label: 'Codes',             sub: 'Codes et matériaux',         file: 'PhysiPro_Codes.html',                    color: '#0d4f75' }
   };
 
   // Ordre d'affichage dans le modal
   var DISPLAY_ORDER = [
-    'moulage', 'serviceClient', 'questactifs', 'inspection', 'inspcouture', 'inspfinale', 'psm'
+    'moulage', 'serviceClient', 'questactifs', 'inspection', 'inspcouture', 'inspfinale', 'psm', 'codes'
   ];
 
   // ── RÈGLE MOBILE (v_nav3) ──────────────────────────────
@@ -61,9 +69,12 @@
   // v_nav4 : sur mobile, Questionnements suit la même liste QUEST_ALLOWED.
   // (Avant, les 2 Marie l'avaient sur téléphone — elles ne sont plus dans
   //  la liste autorisée, donc elles ne le voient plus nulle part.)
+  // v_nav10 : « codes » s'ajoute sur téléphone UNIQUEMENT pour CODES_ALLOWED.
+  // Pour tout le monde d'autre, la liste mobile reste exactement MOBILE_BASE.
   function _mobileAllowed(emailLower) {
     var list = MOBILE_BASE.slice();
     if (_questAutorise(emailLower)) list.push('serviceClient');
+    if (_codesAutorise(emailLower)) list.push('codes');
     return list;
   }
 
@@ -105,8 +116,20 @@
     return PSM_ALLOWED.indexOf((emailLower || '').toLowerCase()) !== -1;
   }
 
+  // ══════════════════════════════════════
+  //  ACCÈS RESTREINT — CODES (v_nav9)
+  //  La tuile « Codes » n'apparaît QUE pour ces adresses.
+  //  Doit rester identique à CODES_ALLOWED dans PhysiPro_Codes.html.
+  //  POUR OUVRIR À QUELQU'UN : ajouter son adresse en minuscules ici.
+  var CODES_ALLOWED = [
+    'atelieratp@physipro.com'    // Daniel — seul utilisateur pour l'instant
+  ];
+  function _codesAutorise(emailLower) {
+    return CODES_ALLOWED.indexOf((emailLower || '').toLowerCase()) !== -1;
+  }
+
   var HUB_ACCESS = {
-    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm','questactifs'], // atelieratp (Daniel)
+    'YXRlbGllcmF0cEBwaHlzaXByby5jb20=':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm','questactifs','codes'], // atelieratp (Daniel)
     'dmFsZXJpZTE4QHZpZGVvdHJvbi5jYQ==':             ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm','questactifs'],   // valerie18 (Valérie)
     'c2ltZHV0QHBoeXNpcHJvLmNvbQ==':                 ['moulage','serie','inspection','inspcouture','serviceClient','psm','questactifs'],                              // simdut (Cassie)
     'bWljaGVsbGUuYm91Y2hhcmRAcGh5c2lwcm8uY29t':     ['moulage','serie','inspection','inspcouture','inspfinale','serviceClient','psm','questactifs'],                // michelle.bouchard
@@ -248,8 +271,8 @@
     var ROW1 = ['moulage', 'serviceClient', 'questactifs'];
     // Rangée 2 : Insp. Atelier + Prod. Couture + Insp. Finale (3 colonnes)
     var ROW2 = ['inspection', 'inspcouture', 'inspfinale'];
-    // Rangée 3 : PSM (v_nav6 — il manquait au menu alors qu'il est sur l'accueil)
-    var ROW3 = ['psm'];
+    // Rangée 3 : PSM (v_nav6) + Codes (v_nav9)
+    var ROW3 = ['psm', 'codes'];
 
     function _buildItem(mod) {
       if (access.indexOf(mod) === -1) return null;
@@ -258,6 +281,8 @@
       if (mod === 'serviceClient' && !_questAutorise(emailLower)) return null;
       // v_nav7 : PSM réservé à une liste précise
       if (mod === 'psm' && !_psmAutorise(emailLower)) return null;
+      // v_nav9 : Codes réservé à une liste précise
+      if (mod === 'codes' && !_codesAutorise(emailLower)) return null;
       var m = NAV_MODULES[mod];
       if (!m) return null;
       var a = document.createElement('a');
@@ -295,7 +320,11 @@
       var el = _buildItem(mod);
       if (el) row3El.appendChild(el);
     });
-    if (row3El.children.length) grid.appendChild(row3El);
+    if (row3El.children.length) {
+      // v_nav9 : 1 ou 2 boutons — la rangée se répartit toute seule
+      row3El.style.gridTemplateColumns = 'repeat(' + row3El.children.length + ', 1fr)';
+      grid.appendChild(row3El);
+    }
 
     // Attacher le clic sur le logo
     var logo = document.getElementById('logoFlipContainer')
