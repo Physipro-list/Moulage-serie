@@ -8,6 +8,78 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1829 - MIGRATION DES ANCIENNES PHOTOS DE CHAT (base64 → Storage)
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1829 — OUTIL DE MIGRATION (Réglages ▸ « Photos du chat »)
+       Les photos envoyées entre v1825 et v1827 vivent en base64 DANS le
+       message : elles sont relues en entier à chaque ouverture du fil.
+       Le v1828 a réglé le cas des NOUVELLES photos ; cet outil s'occupe
+       des anciennes.
+
+       • « 🔍 Compter » — lecture SHALLOW (clés seulement) de chats puis
+         de chaque chats/<jobId>/messages. Dit combien de fils et combien
+         de messages existent. Coût quasi nul, aucun contenu téléchargé.
+       • « 🔀 Migrer » — pour chaque fil : une lecture, puis pour chaque
+         message marqué sansEssayage contenant une image data: →
+         la photo est déposée dans Storage
+         (photos/moulages/<commande>/chat/ + /chat/thumbs/) et le message
+         est réécrit avec images[i] = adresse pleine taille et
+         thumbs[i] = adresse de la miniature. image (singulier) est mis
+         à null.
+       • Annulable et REPRENABLE : un message déjà migré n'a plus
+         d'image data:, il est sauté. Relancer reprend où ça s'est arrêté.
+       • PORTÉE VOLONTAIREMENT ÉTROITE : seuls les messages
+         « sans essayage » sont migrés. Les autres photos du chat
+         (collées, jointes, PhotoSender) restent en base64 — elles
+         partent parfois par courriel, et Outlook bloque les images
+         distantes. À rediscuter si on veut les migrer aussi.
+       • Un message sans numéro de commande est sauté et compté à part :
+         sans commande, il n'y a pas de dossier Storage où le ranger.
+       • La lecture des fils est le coût unique de l'opération : c'est
+         justement ce qu'on cesse de payer à chaque ouverture ensuite.
+    ═══════════════════════════════════════════════════════════════════
+
+    v1828 - PHOTOS « SANS ESSAYAGE » DANS STORAGE, PLUS DANS LA BASE
+    ═══════════════════════════════════════════════════════════════════
+    ⚠️  CE QUI CLOCHAIT (v1825 → v1827)
+       La photo d'essayage voyageait en base64 À L'INTÉRIEUR du message,
+       dans la Realtime Database. Conséquence : chaque ouverture du fil
+       relisait toutes les photos en pleine taille, à chaque fois, pour
+       toujours. C'est exactement la redondance que Daniel refuse.
+
+    🆕 v1828 (1) MÊME MÉCANIQUE QUE LA COLONNE DE GAUCHE
+       • La photo part maintenant dans Firebase STORAGE, comme celles de
+         la colonne de gauche. Le message ne garde que deux ADRESSES :
+         msgData.images[i]  = pleine taille (800 px)
+         msgData.thumbs[i]  = miniature (400 px)
+       • La grille de la bulle affiche la MINIATURE (loading=lazy) ; la
+         pleine taille n'est demandée qu'à l'ouverture du visualiseur.
+       • Le navigateur met les URL Storage en cache : rouvrir le fil ne
+         redemande rien tant que le cache tient. La base, elle, ne
+         transporte plus que quelques centaines d'octets par photo au
+         lieu de 75 000.
+       • Rangement : photos/moulages/<commande>/chat/ (+ /chat/thumbs/).
+         Un SOUS-dossier — listAll() ne renvoie que les enfants directs,
+         donc ces photos n'apparaissent PAS dans la colonne de gauche,
+         et les règles Storage de photos/moulages/** les couvrent déjà.
+       • Repli : si l'envoi vers Storage échoue (réseau, règle), la photo
+         retombe en base64 dans le message plutôt que d'être perdue, et
+         un avertissement s'affiche.
+
+    🆕 v1828 (2) TÉLÉCHARGEMENT ESPACÉ DE 2 SECONDES
+       • _downloadPhotosToFiles() attend 2 s entre deux photos au lieu de
+         250 ms (colonne de gauche ET chat : c'est la même fonction).
+         Chrome cesse de bloquer les téléchargements en rafale.
+       • Le chemin « choisir un dossier » (Chrome/Edge) écrit directement
+         et n'a jamais eu besoin d'attendre : il reste immédiat.
+
+    🔧 v1828 (3) DÉTAILS QUI SUIVENT
+       • Supprimer une photo d'une bulle retire aussi sa miniature
+         (champ thumbs tenu aligné avec images).
+       • Pivoter n'est proposé que sur une photo encore en base64 : une
+         photo dans Storage se pivote en la reprenant.
+    ═══════════════════════════════════════════════════════════════════
+
     v1827 - CHAT : PLACE ÉCONOMISÉE, PHOTOS PLUS LÉGÈRES, NOM RETIRÉ
     ═══════════════════════════════════════════════════════════════════
     🆕 v1827 (1) BOUTON DU BAS
@@ -1130,7 +1202,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1827</title>
+  <title>PhysiPro Moulages v1829</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -6681,6 +6753,21 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           <button class="settings-btn secondary" id="photoOptCancelBtn" onclick="cancelPhotoOptimization()" style="width:100%;margin-top:8px;display:none;">⏹️ Arrêter</button>
         </div>
 
+        <!-- SECTION : Photos du chat — migration base64 → Storage (v1829) -->
+        <div class="settings-section">
+          <div class="settings-section-title">🔀 Photos du chat — Migration</div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:8px;line-height:1.4;">Les photos « sans essayage » envoyées avant la v1828 sont écrites <b>dans le message</b> : elles sont relues en entier à chaque ouverture du fil. Cet outil les dépose dans Storage et ne laisse que leur adresse — comme la colonne de gauche. « Compter » ne lit que les clés (coût quasi nul). « Migrer » lit les fils une fois, c'est le prix à payer une seule fois pour ne plus le payer à chaque ouverture. Annulable et reprenable.</div>
+          <div class="settings-btns-row">
+            <button class="settings-btn secondary" onclick="countChatPhotos()">🔍 Compter</button>
+            <button class="settings-btn primary" id="chatMigRunBtn" onclick="migrateChatPhotos()">🔀 Migrer</button>
+          </div>
+          <div style="height:6px;background:#1f2937;border-radius:4px;overflow:hidden;margin-top:8px;">
+            <div id="chatMigBarFill" style="height:100%;width:0%;background:linear-gradient(90deg,#f97316,#ea580c);transition:width .2s;"></div>
+          </div>
+          <div id="chatMigStatus" style="font-size:10px;color:#94a3b8;margin-top:6px;line-height:1.4;">Aucune migration lancée.</div>
+          <button class="settings-btn secondary" id="chatMigCancelBtn" onclick="cancelChatMigration()" style="width:100%;margin-top:8px;display:none;">⏹️ Arrêter</button>
+        </div>
+
         <!-- SECTION : Corbeille photos (v1804) -->
         <div class="settings-section">
           <div class="settings-section-title">🗑️ Corbeille photos</div>
@@ -7117,7 +7204,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260914;
+    var APP_VERSION = 20260916;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -16364,6 +16451,32 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       return { downloadUrl, thumbnailUrl, fullPath: `photos/moulages/${orderNumber}/${fileName}` };
     }
     
+    // v1828 — PHOTO DU CHAT → STORAGE (et non plus en base64 dans le message).
+    // Rangée dans un SOUS-dossier « chat » : listAll() ne renvoie que les
+    // enfants directs, donc la colonne de gauche ne la voit pas, et les
+    // règles Storage de photos/moulages/** la couvrent déjà.
+    async function _uploadChatPhoto(file, orderNumber, fileName) {
+      const compressed = await compressPhotoFile(file, CHAT_PHOTO_W, CHAT_PHOTO_Q, CHAT_PHOTO_B) || file;
+      const ref = storage.ref(`photos/moulages/${orderNumber}/chat/${fileName}`);
+      await ref.put(compressed, { contentType: 'image/jpeg', customMetadata: { opt: 'v1828-chat' } });
+      const downloadUrl = await ref.getDownloadURL();
+      let thumbnailUrl = downloadUrl;
+      try {
+        const thumb = await compressPhotoThumb(file);            // 400 px
+        if (!thumb) throw new Error('image non décodable');
+        const tref = storage.ref(`photos/moulages/${orderNumber}/chat/thumbs/${fileName}`);
+        await tref.put(thumb, { contentType: 'image/jpeg' });
+        thumbnailUrl = await tref.getDownloadURL();
+      } catch (e) { console.warn('Miniature de chat non générée:', e && e.message); }
+      return { downloadUrl, thumbnailUrl, fullPath: `photos/moulages/${orderNumber}/chat/${fileName}` };
+    }
+    window._uploadChatPhoto = _uploadChatPhoto;
+
+    // Gabarit des photos du chat — les deux seules valeurs à changer.
+    const CHAT_PHOTO_W = 800;          // largeur max
+    const CHAT_PHOTO_Q = 0.60;         // qualité JPEG de départ
+    const CHAT_PHOTO_B = 75 * 1024;    // plafond de poids
+
     // ═══════════════════════════════════════════════════════════════════
     // v1791 — OPTIMISATION UNIQUE DES ANCIENNES PHOTOS
     // Parcourt photos/moulages/<commande>/ pour tous les moulages.
@@ -16372,6 +16485,188 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     //            recompresse au gabarit et les réécrit à la même adresse,
     //            puis régénère la miniature. Reprenable et annulable.
     // ═══════════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════════
+    // v1829 — MIGRATION DES PHOTOS DE CHAT : base64 → Firebase Storage
+    // Les photos « sans essayage » d'avant la v1828 sont écrites DANS le
+    // message et relues à chaque ouverture du fil. On les dépose dans
+    // Storage et on ne garde que leur adresse.
+    // Annulable, reprenable : un message déjà migré n'a plus d'image
+    // « data: » et se saute tout seul.
+    // ═══════════════════════════════════════════════════════════════════
+    let chatMigRunning = false;
+    let chatMigCancel  = false;
+
+    function _migLog(msg) {
+      const el = document.getElementById('chatMigStatus');
+      if (el) el.textContent = msg;
+    }
+    function _migBar(pct) {
+      const el = document.getElementById('chatMigBarFill');
+      if (el) el.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    }
+    function _migButtons(on) {
+      const run = document.getElementById('chatMigRunBtn');
+      const cancel = document.getElementById('chatMigCancelBtn');
+      if (run) run.disabled = on;
+      if (cancel) cancel.style.display = on ? 'block' : 'none';
+    }
+    function _isDataImg(x) { return typeof x === 'string' && x.indexOf('data:') === 0; }
+
+    // Clés seulement (shallow) — aucun contenu téléchargé.
+    async function _shallowKeys(path) {
+      const token = await firebase.auth().currentUser.getIdToken();
+      const url = firebase.app().options.databaseURL + '/' + path + '.json?shallow=true&auth=' + token;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const obj = await res.json();
+      return obj ? Object.keys(obj) : [];
+    }
+
+    // Numéro de commande du moulage : le cache d'abord, la base ensuite.
+    async function _orderOfJob(jobId) {
+      const c = (typeof cardsData !== 'undefined') ? cardsData[jobId] : null;
+      if (c && c.order) return String(c.order).trim();
+      try {
+        const snap = await firebaseDb.ref(DB_PATHS.moulages + '/' + jobId + '/order').once('value');
+        const v = snap.val();
+        return v ? String(v).trim() : '';
+      } catch (e) { return ''; }
+    }
+
+    async function countChatPhotos() {
+      if (chatMigRunning) return;
+      chatMigRunning = true;
+      chatMigCancel = false;
+      _migButtons(true);
+      _migBar(0);
+      try {
+        _migLog('Lecture des clés…');
+        const jobs = await _shallowKeys('chats');
+        let messages = 0;
+        for (let i = 0; i < jobs.length; i++) {
+          if (chatMigCancel) { _migLog('Comptage annulé.'); return; }
+          try { messages += (await _shallowKeys('chats/' + jobs[i] + '/messages')).length; } catch (e) {}
+          _migBar(((i + 1) / jobs.length) * 100);
+          if (i % 5 === 0) _migLog(`Comptage ${i + 1}/${jobs.length} fils — ${messages} message(s)…`);
+        }
+        _migBar(100);
+        _migLog(`${jobs.length} fil(s), ${messages} message(s). Le comptage ne peut pas dire lesquels portent une photo sans lire les fils — « Migrer » le fait en une seule passe.`);
+      } catch (err) {
+        _migLog('❌ Erreur pendant le comptage : ' + (err && err.message));
+      } finally {
+        chatMigRunning = false;
+        chatMigCancel = false;
+        _migButtons(false);
+      }
+    }
+    window.countChatPhotos = countChatPhotos;
+
+    async function migrateChatPhotos() {
+      if (chatMigRunning) return;
+      if (!confirm('Migrer les photos « sans essayage » du chat vers Storage ?\n\nChaque fil est lu une fois (c\'est le coût unique), puis les photos sont déposées dans Storage et le message ne garde que leur adresse.\n\nOpération annulable et reprenable.')) return;
+      chatMigRunning = true;
+      chatMigCancel = false;
+      _migButtons(true);
+      _migBar(0);
+
+      let fils = 0, msgsMigres = 0, photos = 0, octets = 0, sautesSansCommande = 0, echecs = 0;
+      try {
+        _migLog('Lecture des clés…');
+        const jobs = await _shallowKeys('chats');
+        if (jobs.length === 0) { _migBar(100); _migLog('Aucun fil de discussion.'); return; }
+
+        for (let j = 0; j < jobs.length; j++) {
+          if (chatMigCancel) break;
+          const jobId = jobs[j];
+          fils++;
+          _migBar((j / jobs.length) * 100);
+          _migLog(`Fil ${j + 1}/${jobs.length} — ${msgsMigres} message(s) migré(s), ${photos} photo(s), ${_fmtMo(octets)} sortis de la base…`);
+
+          let snap;
+          try { snap = await firebaseDb.ref('chats/' + jobId + '/messages').once('value'); }
+          catch (e) { echecs++; continue; }
+          const all = snap.val();
+          if (!all) continue;
+
+          // Ne garder que ce qui a vraiment besoin d'être migré
+          const ids = Object.keys(all).filter(function(id) {
+            const m = all[id];
+            if (!m || !m.sansEssayage) return false;
+            if (_isDataImg(m.image)) return true;
+            return Array.isArray(m.images) && m.images.some(_isDataImg);
+          });
+          if (ids.length === 0) continue;
+
+          const order = await _orderOfJob(jobId);
+          if (!order) { sautesSansCommande += ids.length; continue; }
+
+          for (const id of ids) {
+            if (chatMigCancel) break;
+            const m = all[id];
+            let liste = [];
+            if (m.image) liste.push(m.image);
+            if (Array.isArray(m.images)) liste = liste.concat(m.images);
+            const anciennesThumbs = Array.isArray(m.thumbs) ? m.thumbs : [];
+
+            const nouvelles = [], nouvellesThumbs = [];
+            let okMsg = true;
+            for (let i = 0; i < liste.length; i++) {
+              const src = liste[i];
+              if (!_isDataImg(src)) {                       // déjà une adresse : on garde
+                nouvelles.push(src);
+                nouvellesThumbs.push(anciennesThumbs[i] || '');
+                continue;
+              }
+              try {
+                const blob = await (await fetch(src)).blob();
+                const up = await _uploadChatPhoto(blob, order, Date.now() + '_' + i + '_essayage.jpg');
+                nouvelles.push(up.downloadUrl);
+                nouvellesThumbs.push(up.thumbnailUrl);
+                photos++;
+                octets += src.length;                        // poids sorti de la base
+              } catch (e) {
+                console.warn('Migration photo échouée:', e && e.message);
+                nouvelles.push(src);                         // on ne perd rien
+                nouvellesThumbs.push(anciennesThumbs[i] || '');
+                okMsg = false;
+              }
+            }
+
+            try {
+              await firebaseDb.ref('chats/' + jobId + '/messages/' + id).update({
+                images: nouvelles,
+                thumbs: nouvellesThumbs.some(function(t){ return !!t; }) ? nouvellesThumbs : null,
+                image: null
+              });
+              if (okMsg) msgsMigres++; else echecs++;
+            } catch (e) {
+              echecs++;
+            }
+          }
+        }
+
+        _migBar(100);
+        const fin = `${msgsMigres} message(s), ${photos} photo(s), ${_fmtMo(octets)} sortis de la base`
+          + (sautesSansCommande ? ` — ${sautesSansCommande} sauté(s) faute de numéro de commande` : '')
+          + (echecs ? ` — ${echecs} échec(s), relancer pour réessayer` : '');
+        _migLog(chatMigCancel ? `⏸️ Arrêté : ${fin}. Relancer reprend où c'était rendu.` : `✅ Terminé — ${fin}.`);
+      } catch (err) {
+        _migLog('❌ Erreur : ' + (err && err.message));
+      } finally {
+        chatMigRunning = false;
+        chatMigCancel = false;
+        _migButtons(false);
+      }
+    }
+    window.migrateChatPhotos = migrateChatPhotos;
+
+    function cancelChatMigration() {
+      if (!chatMigRunning) return;
+      chatMigCancel = true;
+      _migLog('Arrêt demandé — fin de la photo en cours…');
+    }
+    window.cancelChatMigration = cancelChatMigration;
 
     let photoOptRunning = false;
     let photoOptCancel  = false;
@@ -17476,7 +17771,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           }
           done++;
           _dlProgress(done, total);
-          if (i < total - 1) await new Promise(r => setTimeout(r, 250));
+          if (i < total - 1) await new Promise(r => setTimeout(r, 2000));   // v1828 — 2 s entre deux photos
         }
         if (failed === total) {
           showToast('❌ Aucune photo n\'a pu être téléchargée', 'error');
@@ -21694,8 +21989,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           // v1826 — bulle « sans essayage » : grille de vignettes, comme la
           // colonne Photos de gauche. Clic = agrandissement.
           imgHtml = '<div class="qmsg-photo-grid">' + images.map(function(src, idx) {
+            // v1828 — miniature 400 px si elle existe ; la pleine taille
+            // n'est demandée qu'à l'ouverture du visualiseur.
+            var vign = (msg.thumbs && msg.thumbs[idx]) ? msg.thumbs[idx] : src;
             return '<div class="photos-sidebar-thumb" onclick="event.stopPropagation();MChat.openChatPhoto(\''+id+'\','+idx+')">' +
-                     '<img src="'+src+'" alt="" draggable="false" ondragstart="return false">' +
+                     '<img src="'+vign+'" alt="" loading="lazy" draggable="false" ondragstart="return false">' +
                      '<div class="photos-sidebar-thumb-overlay"><span>🔍</span></div>' +
                    '</div>';
           }).join('') + '</div>';
@@ -22254,6 +22552,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         _composeImages = [];
         _composeFiles = [];
         _composeSE = false;                 // v1825
+        _composeThumbMap = {};              // v1828
         _renderSEBadge();
         var zone = document.getElementById('qchatCompose');
         var isReply = (type === 'reply');
@@ -22350,6 +22649,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       // Supprimer UNE image du compose
       function removeComposeImage(index) {
         if (index < 0 || index >= _composeImages.length) return;
+        var gone = _composeImages[index];                 // v1828
+        if (gone && _composeThumbMap[gone]) delete _composeThumbMap[gone];
         _composeImages.splice(index, 1);
         updateComposeImagePreview();
       }
@@ -22392,6 +22693,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       function rotateComposeImage(index) {
         if (index < 0 || index >= _composeImages.length) return;
         var current = _composeImages[index];
+        // v1828 — photo déjà rangée dans Storage : le canvas serait teinté.
+        if (String(current).indexOf('data:') !== 0) {
+          if (typeof showToast === 'function') showToast('↩️ Reprenez la photo pour la pivoter', 'warning');
+          return;
+        }
         rotateImageDataUrl(current).then(function(rotated) {
           _composeImages[index] = rotated;
           updateComposeImagePreview();
@@ -22631,6 +22937,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         // Mettre à jour Firebase
         var updates = { images: imgArr.length > 0 ? imgArr : null };
         if (msg.image) updates.image = null; // Toujours nettoyer le champ singulier
+        // v1828 — la liste des miniatures suit la même coupe
+        var thArr = null;
+        if (msg.thumbs && msg.thumbs.length) {
+          thArr = msg.thumbs.slice();
+          thArr.splice(imgIndex, 1);
+          updates.thumbs = thArr.length > 0 ? thArr : null;
+        }
         
         database.ref(path).update(updates).then(function() {
           // Mettre à jour localement
@@ -22640,6 +22953,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             delete msg.images;
           }
           if (msg.image) delete msg.image;
+          if (thArr) { if (thArr.length > 0) msg.thumbs = thArr; else delete msg.thumbs; }   // v1828
           // Re-render
           if (typeof renderMessages === 'function') renderMessages();
           if (typeof showToast === 'function') showToast('🗑️ Photo mise à la corbeille', 'success');
@@ -22674,8 +22988,48 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       // Poids : la photo est réduite DANS LE NAVIGATEUR avant d'entrer dans
       // le message (les images du chat vivent en base64 dans la Realtime
       // Database — chaque octet est relu à chaque ouverture du fil).
-      var CHAT_PHOTO_MAX_WIDTH = 800;          // largeur max
-      var CHAT_PHOTO_MAX_BYTES = 75 * 1024;    // v1827 — plafond de poids (90 → 75 Ko)
+      // v1828 — le gabarit vit maintenant dans CHAT_PHOTO_W / _Q / _B
+      // (près de _uploadChatPhoto), utilisé par les deux chemins.
+      var CHAT_PHOTO_MAX_WIDTH = (typeof CHAT_PHOTO_W !== 'undefined') ? CHAT_PHOTO_W : 800;
+      var CHAT_PHOTO_MAX_BYTES = (typeof CHAT_PHOTO_B !== 'undefined') ? CHAT_PHOTO_B : 75 * 1024;
+
+      // Adresse pleine taille → adresse de la miniature, le temps de la
+      // composition. Une CARTE et non un tableau parallèle : n'importe quel
+      // chemin (coller, joindre, PhotoSender) peut pousser dans
+      // _composeImages sans risque de décalage.
+      var _composeThumbMap = {};
+
+      // Envoie une photo d'essayage dans Storage et met son ADRESSE dans le
+      // message. Repli en base64 si Storage refuse — mieux qu'une photo perdue.
+      async function _seAddPhoto(src) {
+        var card = (typeof cardsData !== 'undefined' && cardsData[_currentJobId]) ? cardsData[_currentJobId] : {};
+        var order = (card.order || '').toString().trim();
+        var blob = src;
+        if (typeof src === 'string') {                 // dataURL (PhotoSender)
+          try { blob = await (await fetch(src)).blob(); } catch (e) { blob = null; }
+        }
+        if (order && blob && typeof _uploadChatPhoto === 'function') {
+          try {
+            var up = await _uploadChatPhoto(blob, order, Date.now() + '_essayage.jpg');
+            _composeImages.push(up.downloadUrl);
+            _composeThumbMap[up.downloadUrl] = up.thumbnailUrl;
+            updateComposeImagePreview();
+            return true;
+          } catch (e) {
+            console.warn('Storage refusé pour la photo de chat:', e && e.message);
+            if (typeof showToast === 'function') showToast('⚠️ Stockage refusé — photo gardée dans le message', 'warning');
+          }
+        }
+        // ── Repli : base64 dans le message ──
+        var dataUrl = (typeof src === 'string') ? src : await _phoneChatPhotoToDataUrl(src);
+        if (!dataUrl) {
+          if (typeof showToast === 'function') showToast('❌ Photo illisible — reprenez-la', 'error');
+          return false;
+        }
+        _composeImages.push(dataUrl);
+        updateComposeImagePreview();
+        return true;
+      }
 
       function capturePhoneChatPhoto() {
         if (!_currentJobId) {
@@ -22814,7 +23168,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               '<button class="qcpl-close" onclick="MChat.closeChatPhoto()" title="Fermer">✕</button>' +
               '<span class="qcpl-counter" id="qcplCounter"></span>' +
               '<div class="qcpl-tools">' +
-                '<button class="qcpl-tool" onclick="MChat.rotateChatPhoto()" title="Pivoter de 90°">🔄</button>' +
+                '<button class="qcpl-tool" id="qcplRotate" onclick="MChat.rotateChatPhoto()" title="Pivoter de 90°">🔄</button>' +
                 '<button class="qcpl-tool" onclick="MChat.downloadChatPhotos()" title="Télécharger les photos de ce message">⬇️</button>' +
                 '<button class="qcpl-tool danger" onclick="MChat.deleteChatPhoto()" title="Supprimer cette photo">🗑️</button>' +
               '</div>' +
@@ -22833,8 +23187,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       function _renderChatPhoto() {
         var img = document.getElementById('qcplImg');
         var cnt = document.getElementById('qcplCounter');
-        if (img) img.src = _cpList[_cpIdx] || '';
+        var rot = document.getElementById('qcplRotate');
+        var src = _cpList[_cpIdx] || '';
+        if (img) img.src = src;
         if (cnt) cnt.textContent = (_cpIdx + 1) + ' / ' + _cpList.length;
+        // v1828 — une photo rangée dans Storage ne se pivote pas ici
+        // (canvas teinté) : on cache le bouton plutôt que d'échouer.
+        if (rot) rot.style.display = (String(src).indexOf('data:') === 0) ? '' : 'none';
       }
 
       function closeChatPhoto(ev) {
@@ -22883,6 +23242,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var zone = document.getElementById('qchatCompose');
         if (!zone || !zone.classList.contains('active')) openCompose(_composeType || 'conversation');
         if (typeof showToast === 'function') showToast('⏳ Préparation de la photo…', 'info');
+        // v1828 — une photo d'essayage s'en va dans Storage, pas dans la base
+        if (_composeSE) {
+          _seAddPhoto(file).then(function(ok) {
+            if (ok && typeof showToast === 'function') showToast('📸 Photo ajoutée au message', 'success');
+          });
+          return;
+        }
         _phoneChatPhotoToDataUrl(file).then(function(dataUrl) {
           if (!dataUrl) {
             if (typeof showToast === 'function') showToast('❌ Photo illisible — reprenez-la', 'error');
@@ -22929,7 +23295,12 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               if (!zone || !zone.classList.contains('active')) openCompose(_composeType || 'conversation');
               var photos = d.photos ? d.photos : [d.photo];
               var n = 0;
-              photos.forEach(function(p) { if (p) { _composeImages.push(p); n++; } });
+              photos.forEach(function(p) {
+                if (!p) return;
+                n++;
+                if (_composeSE) _seAddPhoto(p);          // v1828 — vers Storage
+                else _composeImages.push(p);
+              });
               updateComposeImagePreview();
               if (n > 0 && typeof showToast === 'function') showToast('📸 ' + n + ' photo(s) reçue(s) du téléphone!', 'success');
               _photoRequestRef.remove().catch(function(){});
@@ -23035,6 +23406,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         _composeImages = [];
         _composeFiles = [];
         _composeSE = false;                 // v1825 — plus de photo, plus de marquage
+        _composeThumbMap = {};              // v1828
         _renderSEBadge();
         updateComposeImagePreview();
       }
@@ -23091,6 +23463,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         if (_composeFiles.length > 0) msgData.files = _composeFiles.map(function(f){ return { name: f.name, dataUrl: f.dataUrl, type: f.type }; });
         if (_replyToId) msgData.replyTo = _replyToId;
         if (_composeSE) msgData.sansEssayage = true;   // v1825
+        // v1828 — adresses des miniatures, alignées sur images/image
+        var _th = _composeImages.map(function(u){ return _composeThumbMap[u] || ''; });
+        if (_th.some(function(t){ return !!t; })) msgData.thumbs = _th;
         
         // Capturer pour les notifications (closeCompose va vider _compose*)
         var _notifContent = contentDesc;
