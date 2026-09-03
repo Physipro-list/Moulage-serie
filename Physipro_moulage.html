@@ -8,6 +8,32 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1830 - DÉPLACER LES ANCIENNES PHOTOS SE_ DE LA COLONNE VERS LE CHAT
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1830 — BOUTON « ➡️ Vers le chat » DANS LA SECTION SANS ESSAYAGE
+       Un moulage comme le 292324 a encore ses photos SE_ dans la colonne
+       Photos, ce qui la coupe en deux sections. Ce bouton les envoie là
+       où elles doivent être : une bulle « sans essayage » dans le chat.
+
+       • Les fichiers sont COPIÉS de photos/moulages/<commande>/ vers
+         photos/moulages/<commande>/chat/ (et leur miniature existante
+         vers chat/thumbs/). Aucune recompression : c'est le même fichier
+         qui est déplacé, pas une deuxième passe JPEG. Si une photo n'a
+         pas de miniature (vieille photo d'avant v1726), elle est
+         fabriquée à 400 px.
+       • Une seule bulle est créée, marquée sansEssayage:true, avec
+         images[] et thumbs[]. Elle s'affiche en grille de miniatures
+         4 colonnes, comme toutes les bulles d'essayage. Aucune
+         notification n'est envoyée : c'est un rangement, pas un message.
+       • Les originaux ne sont effacés QU'APRÈS l'écriture réussie de la
+         bulle. Si un effacement échoue, la photo reste dans la colonne et
+         c'est écrit dans le message de fin — rien n'est jamais perdu.
+       • Une fois la section vidée, la colonne de gauche redevient une
+         seule section « Photo inspection ».
+       • Le bouton n'apparaît que s'il reste des photos SE_ : il
+         disparaîtra de lui-même quand le ménage sera fini.
+    ═══════════════════════════════════════════════════════════════════
+
     v1829 - MIGRATION DES ANCIENNES PHOTOS DE CHAT (base64 → Storage)
     ═══════════════════════════════════════════════════════════════════
     🆕 v1829 — OUTIL DE MIGRATION (Réglages ▸ « Photos du chat »)
@@ -1202,7 +1228,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1829</title>
+  <title>PhysiPro Moulages v1830</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -1945,6 +1971,7 @@
       cursor: pointer; white-space: nowrap;
     }
     .mobile-photos-section-dl.insp { background: linear-gradient(135deg,#3b82f6,#2563eb); }
+    .mobile-photos-section-dl.move { background: linear-gradient(135deg,#8b5cf6,#6d28d9); }   /* v1830 */
     .mobile-photos-section-dl:active { transform: scale(0.96); }
 
     /* v1824 — bouton rectangulaire « 📷 Prendre photo » dans l'entête de la
@@ -1967,6 +1994,7 @@
     .photos-section-title { font-size: 14px; font-weight: 700; color: #f1f5f9; text-align: center; text-transform: uppercase; letter-spacing: .5px; }   /* v1801 */
     .photos-section-dl { flex-shrink: 0; padding: 5px 14px; font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(135deg,#f97316,#ea580c); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
     .photos-section-dl.insp { background: linear-gradient(135deg,#3b82f6,#2563eb); }
+    .photos-section-dl.move { background: linear-gradient(135deg,#8b5cf6,#6d28d9); }   /* v1830 */
     .photos-section-dl:hover { filter: brightness(1.15); }
     .photos-section-dl:disabled { opacity: .5; cursor: not-allowed; transform: none; }
     
@@ -7204,7 +7232,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260916;
+    var APP_VERSION = 20260917;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -17550,6 +17578,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           <div class="photos-section-head se">
             <span class="photos-section-title">🚫 Sans essayage — anciennes (${se.length})</span>
             <button type="button" class="photos-section-dl" onclick="downloadSansEssayagePhotos()" title="Télécharger UNIQUEMENT les photos sans essayage, dans un sous-dossier « NOM - NUMÉRO - SANS ESSAYAGE ».">⬇️ Télécharger</button>
+            <button type="button" class="photos-section-dl move" onclick="moveSansEssayageToChat()" title="Déplacer ces photos dans une bulle « sans essayage » du chat, où elles doivent être.">➡️ Vers le chat</button>
           </div>`;
         html += se.map(({ p, i }) => vignette(p, i)).join('');
       }
@@ -17645,6 +17674,127 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
       return sidebarPhotos || window.mobileGalleryPhotos || [];
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // v1830 — DÉPLACER LES ANCIENNES PHOTOS SE_ VERS LE CHAT
+    // Elles sont déjà dans Storage : on les COPIE dans le sous-dossier
+    // « chat » (aucune recompression, c'est le même fichier), on crée UNE
+    // bulle « sans essayage » qui pointe dessus, et on n'efface les
+    // originaux qu'une fois la bulle écrite. Rien ne peut se perdre.
+    // ═══════════════════════════════════════════════════════════════════
+    let moveSeRunning = false;
+
+    async function _copyStorageObject(sourceUrl, destPath) {
+      const resp = await fetch(sourceUrl);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const blob = await resp.blob();
+      const ref = storage.ref(destPath);
+      await ref.put(blob, { contentType: 'image/jpeg' });
+      return { url: await ref.getDownloadURL(), blob: blob };
+    }
+
+    async function moveSansEssayageToChat() {
+      if (moveSeRunning) return;
+
+      const jobId = currentCardId || mobileCurrentCardId;
+      const card = jobId ? cardsData[jobId] : null;
+      if (!jobId || !card) { showToast('⚠️ Ouvrez une fiche d\'abord', 'warning'); return; }
+      const order = (card.order || '').toString().trim();
+      if (!order) { showToast('⚠️ Numéro de commande manquant', 'warning'); return; }
+
+      const se = _currentPhotoList().filter(isSansEssayage);
+      if (se.length === 0) { showToast('⚠️ Aucune photo sans essayage', 'warning'); return; }
+
+      if (!confirm(`Déplacer ${se.length} photo(s) « sans essayage » vers le chat ?\n\nElles quitteront la colonne Photos et formeront une bulle « sans essayage » dans la discussion. Les originaux ne sont effacés qu'une fois la bulle écrite.`)) return;
+
+      moveSeRunning = true;
+      showToast(`➡️ Déplacement de ${se.length} photo(s)…`, 'info');
+
+      const urls = [], thumbs = [], deplacees = [];
+      let echecs = 0;
+
+      try {
+        for (let i = 0; i < se.length; i++) {
+          const p = se[i];
+          const nom = p.name;
+          try {
+            const plein = await _copyStorageObject(p.downloadUrl, `photos/moulages/${order}/chat/${nom}`);
+            let thumbUrl = plein.url;
+            if (p.thumbnailUrl && p.thumbnailUrl !== p.downloadUrl) {
+              // La miniature existe déjà : on la copie telle quelle.
+              try {
+                const t = await _copyStorageObject(p.thumbnailUrl, `photos/moulages/${order}/chat/thumbs/${nom}`);
+                thumbUrl = t.url;
+              } catch (e) { console.warn('Miniature non copiée:', nom, e && e.message); }
+            } else {
+              // Vieille photo sans miniature : on en fabrique une à 400 px.
+              try {
+                const t = await compressPhotoThumb(plein.blob);
+                if (t) {
+                  const tref = storage.ref(`photos/moulages/${order}/chat/thumbs/${nom}`);
+                  await tref.put(t, { contentType: 'image/jpeg' });
+                  thumbUrl = await tref.getDownloadURL();
+                }
+              } catch (e) { console.warn('Miniature non fabriquée:', nom, e && e.message); }
+            }
+            urls.push(plein.url);
+            thumbs.push(thumbUrl);
+            deplacees.push(p);
+          } catch (err) {
+            console.error('❌ Copie impossible:', nom, err);
+            echecs++;
+          }
+        }
+
+        if (urls.length === 0) {
+          showToast('❌ Aucune photo n\'a pu être copiée — rien n\'a été effacé', 'error');
+          return;
+        }
+
+        // ── La bulle. Aucune notification : c'est un rangement. ──
+        const monNom = (typeof getUserDisplayName === 'function' && typeof currentUser !== 'undefined' && currentUser)
+          ? getUserDisplayName(currentUser.email) : '';
+        await firebaseDb.ref('chats/' + jobId + '/messages').push().set({
+          content: '🚫 Photos sans essayage (reprises de la colonne Photos)',
+          type: 'conversation',
+          authorEmail: (typeof currentUser !== 'undefined' && currentUser) ? (currentUser.email || '') : '',
+          authorName: monNom,
+          timestamp: Date.now(),
+          createdAt: firebase.database.ServerValue.TIMESTAMP,
+          jobId: jobId,
+          sansEssayage: true,
+          images: urls,
+          thumbs: thumbs
+        });
+
+        // ── Effacement des originaux, seulement maintenant ──
+        let restants = 0;
+        for (const p of deplacees) {
+          try {
+            await storage.ref(p.fullPath || `photos/moulages/${order}/${p.name}`).delete();
+          } catch (e) { console.warn('Original non effacé:', p.name, e && e.message); restants++; continue; }
+          try { await storage.ref(`photos/moulages/${order}/thumbs/${p.name}`).delete(); } catch (e) {}
+        }
+
+        // ── Rafraîchir la colonne ──
+        sidebarPhotosLoaded = false;
+        sidebarPhotosCardId = null;
+        if (typeof loadSidebarPhotos === 'function' && currentCardId) await loadSidebarPhotos();
+        if (window.mobilePhotosPageActive && typeof loadMobilePhotos === 'function') await loadMobilePhotos();
+
+        let fin = `✅ ${urls.length} photo(s) déplacée(s) dans le chat`;
+        if (echecs) fin += ` — ${echecs} échec(s) de copie, encore dans la colonne`;
+        if (restants) fin += ` — ${restants} original(aux) non effacé(s)`;
+        showToast(fin, echecs || restants ? 'warning' : 'success');
+
+      } catch (err) {
+        console.error('❌ Erreur déplacement sans essayage:', err);
+        showToast('❌ Erreur : ' + (err && err.message), 'error');
+      } finally {
+        moveSeRunning = false;
+      }
+    }
+    window.moveSansEssayageToChat = moveSansEssayageToChat;
 
     // ─── v1792 — Télécharger UNIQUEMENT la section « Sans essayage » ───
     function downloadSansEssayagePhotos() {
@@ -20128,6 +20278,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           <div class="mobile-photos-section se">
             <span class="mobile-photos-section-title">🚫 Sans essayage — anciennes (${se.length})</span>
             <button type="button" class="mobile-photos-section-dl" onclick="event.stopPropagation();downloadSansEssayagePhotos()">⬇️ Télécharger</button>
+            <button type="button" class="mobile-photos-section-dl move" onclick="event.stopPropagation();moveSansEssayageToChat()">➡️ Vers le chat</button>
           </div>`;
         html += se.map(({ p, i }) => vignette(p, i)).join('');
       }
