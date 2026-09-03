@@ -8,6 +8,24 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1832 - LE RANGEMENT DIT CE QU'IL FAIT (traces console)
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1832 — TRACES « [SE] » ET NUMÉRO DE VERSION AU DÉMARRAGE
+       Le rangement automatique de la v1831 pouvait ne rien faire sans
+       jamais dire pourquoi. Il écrit maintenant une ligne dans la
+       console à CHAQUE décision, toutes préfixées « [SE] » :
+         • fiche sans numéro de commande
+         • aucune photo SE_ dans la liste
+         • déjà tenté dans cette session
+         • fiche déjà rangée → on finit seulement l'effacement
+         • copie / bulle / effacement : succès ou message d'erreur exact
+       Chercher « [SE] » dans la console suffit pour savoir où ça bloque.
+
+       Une ligne « 🏷️ PhysiPro Moulages — APP_VERSION … » s'écrit aussi
+       au démarrage : elle dit quelle version le navigateur a réellement
+       chargée, ce qui règle la question du cache une fois pour toutes.
+    ═══════════════════════════════════════════════════════════════════
+
     v1831 - LE RANGEMENT SE FAIT TOUT SEUL (plus aucun bouton à chercher)
     ═══════════════════════════════════════════════════════════════════
     🆕 v1831 — LES PHOTOS SE_ SE RANGENT À L'OUVERTURE DE LA FICHE
@@ -1253,7 +1271,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1831</title>
+  <title>PhysiPro Moulages v1832</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7255,8 +7273,10 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260918;
+    var APP_VERSION = 20260919;
     var APP_MODULE = 'moulage';
+    // v1832 — dit tout de suite quelle version le navigateur a chargée
+    console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
     var _versionOK = true;
     let versionCheckInterval = null;
     
@@ -17726,7 +17746,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       for (const p of liste) {
         try {
           await storage.ref(p.fullPath || `photos/moulages/${order}/${p.name}`).delete();
-        } catch (e) { console.warn('Original non effacé:', p.name, e && e.message); restants++; continue; }
+        } catch (e) { console.warn('[SE] original non effacé : ' + p.name + ' →', e && e.message); restants++; continue; }
         try { await storage.ref(`photos/moulages/${order}/thumbs/${p.name}`).delete(); } catch (e) {}
       }
       return restants;
@@ -17739,13 +17759,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
       const jobId = jobIdArg || currentCardId || mobileCurrentCardId;
       const card = jobId ? cardsData[jobId] : null;
-      if (!jobId || !card) return;
-      if (_seMoveTried.has(jobId)) return;
+      if (!jobId || !card) { console.log('[SE] aucune fiche ouverte — rien à ranger'); return; }
+      if (_seMoveTried.has(jobId)) { console.log('[SE] déjà tenté dans cette session pour', jobId); return; }
 
       const order = (card.order || '').toString().trim();
-      if (!order) return;
+      if (!order) { console.log('[SE] fiche sans numéro de commande — rangement impossible', jobId); return; }
 
-      const se = (listeArg || _currentPhotoList() || []).filter(isSansEssayage);
+      const liste = (listeArg || _currentPhotoList() || []);
+      const se = liste.filter(isSansEssayage);
+      console.log('[SE] commande ' + order + ' — ' + liste.length + ' photo(s) au total, ' + se.length + ' avec le préfixe SE_');
       if (se.length === 0) return;
 
       _seMoveTried.add(jobId);
@@ -17756,13 +17778,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       try {
         const dejaFait = await firebaseDb.ref('chats/' + jobId + '/seMoved').once('value');
         if (dejaFait.exists()) {
+          console.log('[SE] fiche déjà rangée — on finit seulement l\'effacement des restes');
           const restes = await _effacerSeOriginaux(se, order);
+          console.log('[SE] effacement terminé — ' + restes + ' original(aux) résistent encore');
           await _rafraichirColonnePhotos();
           if (restes < se.length) showToast('🧹 Ménage terminé — photos sans essayage rangées dans le chat', 'success');
           moveSeRunning = false;
           return;
         }
-      } catch (e) { /* lecture impossible → on tente le rangement normal */ }
+      } catch (e) { console.warn('[SE] lecture du drapeau seMoved impossible :', e && e.message); }
 
       showToast(`➡️ Rangement de ${se.length} photo(s) sans essayage vers le chat…`, 'info');
 
@@ -17796,8 +17820,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             urls.push(plein.url);
             thumbs.push(thumbUrl);
             deplacees.push(p);
+            console.log('[SE] copiée : ' + nom);
           } catch (err) {
-            console.error('❌ Copie impossible:', nom, err);
+            console.error('[SE] COPIE IMPOSSIBLE : ' + nom + ' →', err && err.message, err);
             echecs++;
           }
         }
@@ -17823,11 +17848,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           thumbs: thumbs
         });
 
+        console.log('[SE] bulle écrite dans chats/' + jobId + '/messages avec ' + urls.length + ' photo(s)');
+
         // ── La bulle est écrite : on peut marquer la fiche comme rangée ──
-        try { await firebaseDb.ref('chats/' + jobId + '/seMoved').set(Date.now()); } catch (e) {}
+        try { await firebaseDb.ref('chats/' + jobId + '/seMoved').set(Date.now()); }
+        catch (e) { console.warn('[SE] drapeau seMoved non écrit :', e && e.message); }
 
         // ── Effacement des originaux, seulement maintenant ──
         const restants = await _effacerSeOriginaux(deplacees, order);
+        console.log('[SE] terminé — ' + urls.length + ' rangée(s), ' + echecs + ' échec(s) de copie, ' + restants + ' original(aux) non effacé(s)');
         await _rafraichirColonnePhotos();
 
         let fin = `✅ ${urls.length} photo(s) rangée(s) dans le chat`;
@@ -17836,7 +17865,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         showToast(fin, echecs || restants ? 'warning' : 'success');
 
       } catch (err) {
-        console.error('❌ Erreur rangement sans essayage:', err);
+        console.error('[SE] ERREUR DU RANGEMENT :', err && err.message, err);
         showToast('❌ Rangement impossible : ' + (err && err.message) + ' — réessai à la prochaine ouverture', 'error');
         _seMoveTried.delete(jobId);   // rien n'a été marqué : on pourra réessayer
       } finally {
