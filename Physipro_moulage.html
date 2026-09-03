@@ -8,6 +8,40 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1836 - UNE SEULE BULLE, TOUTES LES PHOTOS EN MINIATURE
+    ═══════════════════════════════════════════════════════════════════
+    ⚠️  CE QUI N'ALLAIT PAS DANS LA v1835
+        Le traitement automatique ne visait QUE les messages marqués
+        sansEssayage:true. Les photos envoyées par le bouton 📷 ordinaire
+        (ou collées) n'ont pas ce drapeau : elles étaient donc ignorées,
+        affichées en grand, et chaque prise formait sa propre bulle.
+        D'où « 2 bulles, photos identiques à avant ».
+
+    🆕 v1836 (1) MINIATURES DÈS QU'UNE BULLE A PLUS D'UNE PHOTO
+        La grille de vignettes (4 colonnes, clic = plein écran) ne
+        dépend plus du drapeau sansEssayage : elle s'applique à TOUTE
+        bulle qui porte plus d'une photo, et à toute bulle
+        « sans essayage » même à une seule photo.
+        Une bulle avec UNE seule photo ordinaire garde la grande image :
+        c'est là que vivent les outils d'annotation (flèche, cercle,
+        carré), qui ont besoin de l'image en grand.
+
+    🆕 v1836 (2) LES BULLES DE PHOTOS SE FUSIONNENT
+        À l'ouverture d'un fil, des bulles CONSÉCUTIVES qui ne
+        contiennent QUE des photos (aucun texte écrit à la main), du
+        MÊME auteur et à moins de 30 minutes d'écart, sont réunies en une
+        seule bulle. Les photos sont recopiées dans la première, les
+        autres bulles sont effacées après coup.
+        Prudence volontaire : une bulle qui porte un vrai message écrit
+        n'est JAMAIS fusionnée ni effacée.
+
+    🆕 v1836 (3) LA SORTIE DE LA BASE VISE TOUTES LES PHOTOS
+        Le déplacement base64 → Storage ne se limite plus aux bulles
+        « sans essayage » : toute photo encore écrite dans un message y
+        passe. Octets copiés tels quels, miniature 400 px à côté, message
+        réécrit avec les deux adresses.
+    ═══════════════════════════════════════════════════════════════════
+
     v1835 - RETOUR EN ARRIÈRE + LES PHOTOS DU CHAT SORTENT DE LA BASE SEULES
     ═══════════════════════════════════════════════════════════════════
     ↩️  v1835 (1) TOUT CE QUI AVAIT ÉTÉ AJOUTÉ DANS LA COLONNE DE GAUCHE
@@ -1350,7 +1384,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1835</title>
+  <title>PhysiPro Moulages v1836</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7352,7 +7386,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260922;
+    var APP_VERSION = 20260923;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -22150,9 +22184,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         if (msg.image) images.push(msg.image);
         if (msg.images) images = images.concat(msg.images);
         
-        if (images.length > 0 && msg.sansEssayage) {
-          // v1826 — bulle « sans essayage » : grille de vignettes, comme la
-          // colonne Photos de gauche. Clic = agrandissement.
+        if (images.length > 0 && (msg.sansEssayage || images.length > 1)) {
+          // v1836 — dès qu'il y a plus d'une photo (ou que la bulle est
+          // « sans essayage ») : grille de vignettes comme la colonne de
+          // gauche. Clic = agrandissement. Une photo seule garde la grande
+          // image, parce que l'annotation en a besoin.
           imgHtml = '<div class="qmsg-photo-grid">' + images.map(function(src, idx) {
             // v1828 — miniature 400 px si elle existe ; la pleine taille
             // n'est demandée qu'à l'ouverture du visualiseur.
@@ -23408,14 +23444,16 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         if (!order) return;
 
         var estData = function(x) { return typeof x === 'string' && x.indexOf('data:') === 0; };
+        // v1836 — TOUTE photo encore écrite dans un message, marquée
+        // « sans essayage » ou non : c'est le poids qui compte, pas l'étiquette.
         var aFaire = _messages.filter(function(e) {
           var m = e[1];
-          if (!m || !m.sansEssayage || m._legacy) return false;
+          if (!m || m._legacy) return false;
           return estData(m.image) || (Array.isArray(m.images) && m.images.some(estData));
         });
-        if (!aFaire.length) return;
 
         _seMigDone[jobId] = true;
+        if (!aFaire.length) { _fusionnerBullesPhotos(jobId, order); return; }
         console.log('[SE] ' + aFaire.length + ' message(s) à sortir de la base…');
         if (typeof showToast === 'function') showToast('🔀 Photos du chat déplacées vers le stockage…', 'info');
 
@@ -23468,6 +23506,87 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         if (total && typeof showToast === 'function') {
           showToast('✅ ' + total + ' photo(s) sortie(s) de la base — plus de retéléchargement', 'success');
         }
+        _fusionnerBullesPhotos(jobId, order);
+      }
+
+      // ═══ v1836 — RÉUNIR LES BULLES QUI NE CONTIENNENT QUE DES PHOTOS ═══
+      // Chaque prise créait sa propre bulle. Des bulles CONSÉCUTIVES, du
+      // même auteur, sans texte écrit à la main et à moins de 30 minutes
+      // d'écart sont réunies en une seule. Une bulle qui porte un vrai
+      // message n'est jamais touchée.
+      var _FUSION_DELAI = 30 * 60 * 1000;
+
+      function _estBullePhotosSeules(m) {
+        if (!m || m._legacy || m.type === 'pinned' || m.replyTo) return false;
+        var imgs = [];
+        if (m.image) imgs.push(m.image);
+        if (Array.isArray(m.images)) imgs = imgs.concat(m.images);
+        if (imgs.length === 0) return false;
+        if (m.files && m.files.length) return false;
+        var t = (m.content || '').trim();
+        // Le texte auto d'un envoi sans message : « 📷 3 photo(s) »
+        return t === '' || /^📷\s*\d+\s*photo/.test(t) || t === '🚫 Photos sans essayage (reprises de la colonne Photos)';
+      }
+
+      function _imagesDe(m) {
+        var imgs = [], ths = [], anciennes = Array.isArray(m.thumbs) ? m.thumbs : [];
+        if (m.image) { imgs.push(m.image); ths.push(anciennes[0] || ''); }
+        if (Array.isArray(m.images)) {
+          m.images.forEach(function(u, i) { imgs.push(u); ths.push(anciennes[imgs.length - 1] || ''); });
+        }
+        return { imgs: imgs, ths: ths };
+      }
+
+      async function _fusionnerBullesPhotos(jobId, order) {
+        var db = getDb();
+        if (!db) return;
+        var groupes = [], courant = null;
+
+        _messages.forEach(function(e) {
+          var id = e[0], m = e[1];
+          if (!_estBullePhotosSeules(m)) { courant = null; return; }
+          if (courant
+              && courant.auteur === (m.authorEmail || '')
+              && Math.abs((m.timestamp || 0) - courant.dernier) <= _FUSION_DELAI) {
+            courant.membres.push([id, m]);
+            courant.dernier = m.timestamp || courant.dernier;
+          } else {
+            courant = { auteur: (m.authorEmail || ''), dernier: m.timestamp || 0, membres: [[id, m]] };
+            groupes.push(courant);
+          }
+        });
+
+        var aFusionner = groupes.filter(function(g) { return g.membres.length > 1; });
+        if (!aFusionner.length) return;
+
+        console.log('[SE] fusion de ' + aFusionner.length + ' groupe(s) de bulles de photos');
+        for (var g = 0; g < aFusionner.length; g++) {
+          var membres = aFusionner[g].membres;
+          var premierId = membres[0][0];
+          var toutes = [], toutesThs = [], seTrouve = false;
+          membres.forEach(function(mm) {
+            var d = _imagesDe(mm[1]);
+            toutes = toutes.concat(d.imgs);
+            toutesThs = toutesThs.concat(d.ths);
+            if (mm[1].sansEssayage) seTrouve = true;
+          });
+          try {
+            await db.ref('chats/' + jobId + '/messages/' + premierId).update({
+              images: toutes,
+              thumbs: toutesThs.some(function(t){ return !!t; }) ? toutesThs : null,
+              image: null,
+              content: '📷 ' + toutes.length + ' photo(s)',
+              sansEssayage: seTrouve ? true : null
+            });
+            for (var k = 1; k < membres.length; k++) {
+              await db.ref('chats/' + jobId + '/messages/' + membres[k][0]).remove();
+            }
+            console.log('[SE] ' + membres.length + ' bulles réunies en une (' + toutes.length + ' photos)');
+          } catch (e) {
+            console.error('[SE] FUSION IMPOSSIBLE :', e && e.message, e);
+          }
+        }
+        if (typeof showToast === 'function') showToast('🧩 Photos réunies dans une seule bulle', 'success');
       }
 
       function handlePhoneCapture(input) {
