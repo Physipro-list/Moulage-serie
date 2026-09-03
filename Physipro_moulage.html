@@ -8,6 +8,31 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1831 - LE RANGEMENT SE FAIT TOUT SEUL (plus aucun bouton à chercher)
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1831 — LES PHOTOS SE_ SE RANGENT À L'OUVERTURE DE LA FICHE
+       Le bouton « ➡️ Vers le chat » de la v1830 est RETIRÉ (colonne de
+       gauche ET téléphone), ainsi que son CSS. À la place, le ménage se
+       fait tout seul : dès qu'une fiche s'ouvre et qu'il reste des
+       photos SE_ dans la colonne, elles partent dans le chat sans rien
+       demander à personne.
+
+       • Copie vers photos/moulages/<commande>/chat/ (+ /chat/thumbs/),
+         aucune recompression, puis UNE bulle « sans essayage », puis
+         effacement des originaux. Même mécanique que la v1830.
+       • L'auteur de la bulle est « Rangement automatique », pas la
+         personne qui a ouvert la fiche : ce n'est un message de personne.
+       • Aucune notification n'est envoyée.
+       • Un drapeau chats/<jobId>/seMoved est écrit APRÈS l'écriture
+         réussie de la bulle. Si une fiche déjà rangée montre encore des
+         SE_ (un effacement qui avait échoué), l'ouverture suivante se
+         contente de finir l'effacement — jamais de deuxième bulle.
+       • Si la copie ou la bulle échoue, rien n'est effacé et rien n'est
+         marqué : la prochaine ouverture réessaie.
+       • Une seule tentative par fiche et par session, pour ne pas
+         relancer le travail à chaque rafraîchissement.
+    ═══════════════════════════════════════════════════════════════════
+
     v1830 - DÉPLACER LES ANCIENNES PHOTOS SE_ DE LA COLONNE VERS LE CHAT
     ═══════════════════════════════════════════════════════════════════
     🆕 v1830 — BOUTON « ➡️ Vers le chat » DANS LA SECTION SANS ESSAYAGE
@@ -1228,7 +1253,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1830</title>
+  <title>PhysiPro Moulages v1831</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -1971,7 +1996,6 @@
       cursor: pointer; white-space: nowrap;
     }
     .mobile-photos-section-dl.insp { background: linear-gradient(135deg,#3b82f6,#2563eb); }
-    .mobile-photos-section-dl.move { background: linear-gradient(135deg,#8b5cf6,#6d28d9); }   /* v1830 */
     .mobile-photos-section-dl:active { transform: scale(0.96); }
 
     /* v1824 — bouton rectangulaire « 📷 Prendre photo » dans l'entête de la
@@ -1994,7 +2018,6 @@
     .photos-section-title { font-size: 14px; font-weight: 700; color: #f1f5f9; text-align: center; text-transform: uppercase; letter-spacing: .5px; }   /* v1801 */
     .photos-section-dl { flex-shrink: 0; padding: 5px 14px; font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(135deg,#f97316,#ea580c); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
     .photos-section-dl.insp { background: linear-gradient(135deg,#3b82f6,#2563eb); }
-    .photos-section-dl.move { background: linear-gradient(135deg,#8b5cf6,#6d28d9); }   /* v1830 */
     .photos-section-dl:hover { filter: brightness(1.15); }
     .photos-section-dl:disabled { opacity: .5; cursor: not-allowed; transform: none; }
     
@@ -7232,7 +7255,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260917;
+    var APP_VERSION = 20260918;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -17554,6 +17577,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       sidebarPhotosCardId = currentCardId;
 
       renderSidebarPhotosGrid();
+
+      // v1831 — s'il reste des SE_ dans la colonne, elles s'en vont dans le chat
+      moveSansEssayageToChat(currentCardId, photos);
     }
     window.loadSidebarPhotos = loadSidebarPhotos;
 
@@ -17578,7 +17604,6 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           <div class="photos-section-head se">
             <span class="photos-section-title">🚫 Sans essayage — anciennes (${se.length})</span>
             <button type="button" class="photos-section-dl" onclick="downloadSansEssayagePhotos()" title="Télécharger UNIQUEMENT les photos sans essayage, dans un sous-dossier « NOM - NUMÉRO - SANS ESSAYAGE ».">⬇️ Télécharger</button>
-            <button type="button" class="photos-section-dl move" onclick="moveSansEssayageToChat()" title="Déplacer ces photos dans une bulle « sans essayage » du chat, où elles doivent être.">➡️ Vers le chat</button>
           </div>`;
         html += se.map(({ p, i }) => vignette(p, i)).join('');
       }
@@ -17683,6 +17708,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // originaux qu'une fois la bulle écrite. Rien ne peut se perdre.
     // ═══════════════════════════════════════════════════════════════════
     let moveSeRunning = false;
+    const _seMoveTried = new Set();   // v1831 — une seule tentative par fiche et par session
 
     async function _copyStorageObject(sourceUrl, destPath) {
       const resp = await fetch(sourceUrl);
@@ -17693,22 +17719,52 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       return { url: await ref.getDownloadURL(), blob: blob };
     }
 
-    async function moveSansEssayageToChat() {
+    // Efface une liste de photos SE_ (et leurs miniatures) de la colonne.
+    // Utilisé après une copie réussie, ou pour finir un ménage interrompu.
+    async function _effacerSeOriginaux(liste, order) {
+      let restants = 0;
+      for (const p of liste) {
+        try {
+          await storage.ref(p.fullPath || `photos/moulages/${order}/${p.name}`).delete();
+        } catch (e) { console.warn('Original non effacé:', p.name, e && e.message); restants++; continue; }
+        try { await storage.ref(`photos/moulages/${order}/thumbs/${p.name}`).delete(); } catch (e) {}
+      }
+      return restants;
+    }
+
+    // v1831 — RANGEMENT AUTOMATIQUE, sans bouton et sans question.
+    // Appelé à chaque chargement de photos ; ne fait rien s'il n'y a rien à faire.
+    async function moveSansEssayageToChat(jobIdArg, listeArg) {
       if (moveSeRunning) return;
 
-      const jobId = currentCardId || mobileCurrentCardId;
+      const jobId = jobIdArg || currentCardId || mobileCurrentCardId;
       const card = jobId ? cardsData[jobId] : null;
-      if (!jobId || !card) { showToast('⚠️ Ouvrez une fiche d\'abord', 'warning'); return; }
+      if (!jobId || !card) return;
+      if (_seMoveTried.has(jobId)) return;
+
       const order = (card.order || '').toString().trim();
-      if (!order) { showToast('⚠️ Numéro de commande manquant', 'warning'); return; }
+      if (!order) return;
 
-      const se = _currentPhotoList().filter(isSansEssayage);
-      if (se.length === 0) { showToast('⚠️ Aucune photo sans essayage', 'warning'); return; }
+      const se = (listeArg || _currentPhotoList() || []).filter(isSansEssayage);
+      if (se.length === 0) return;
 
-      if (!confirm(`Déplacer ${se.length} photo(s) « sans essayage » vers le chat ?\n\nElles quitteront la colonne Photos et formeront une bulle « sans essayage » dans la discussion. Les originaux ne sont effacés qu'une fois la bulle écrite.`)) return;
-
+      _seMoveTried.add(jobId);
       moveSeRunning = true;
-      showToast(`➡️ Déplacement de ${se.length} photo(s)…`, 'info');
+
+      // Déjà rangé ? Alors ces photos ont déjà leur copie dans le chat :
+      // on finit l'effacement au lieu de créer une deuxième bulle.
+      try {
+        const dejaFait = await firebaseDb.ref('chats/' + jobId + '/seMoved').once('value');
+        if (dejaFait.exists()) {
+          const restes = await _effacerSeOriginaux(se, order);
+          await _rafraichirColonnePhotos();
+          if (restes < se.length) showToast('🧹 Ménage terminé — photos sans essayage rangées dans le chat', 'success');
+          moveSeRunning = false;
+          return;
+        }
+      } catch (e) { /* lecture impossible → on tente le rangement normal */ }
+
+      showToast(`➡️ Rangement de ${se.length} photo(s) sans essayage vers le chat…`, 'info');
 
       const urls = [], thumbs = [], deplacees = [];
       let echecs = 0;
@@ -17748,17 +17804,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
         if (urls.length === 0) {
           showToast('❌ Aucune photo n\'a pu être copiée — rien n\'a été effacé', 'error');
+          _seMoveTried.delete(jobId);   // réessai à la prochaine ouverture
           return;
         }
 
-        // ── La bulle. Aucune notification : c'est un rangement. ──
-        const monNom = (typeof getUserDisplayName === 'function' && typeof currentUser !== 'undefined' && currentUser)
-          ? getUserDisplayName(currentUser.email) : '';
+        // ── La bulle. Aucune notification : c'est un rangement, pas un message.
+        //    L'auteur est neutre : ce n'est pas la personne qui a ouvert la fiche.
         await firebaseDb.ref('chats/' + jobId + '/messages').push().set({
           content: '🚫 Photos sans essayage (reprises de la colonne Photos)',
           type: 'conversation',
-          authorEmail: (typeof currentUser !== 'undefined' && currentUser) ? (currentUser.email || '') : '',
-          authorName: monNom,
+          authorEmail: '',
+          authorName: 'Rangement automatique',
           timestamp: Date.now(),
           createdAt: firebase.database.ServerValue.TIMESTAMP,
           jobId: jobId,
@@ -17767,34 +17823,34 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           thumbs: thumbs
         });
 
+        // ── La bulle est écrite : on peut marquer la fiche comme rangée ──
+        try { await firebaseDb.ref('chats/' + jobId + '/seMoved').set(Date.now()); } catch (e) {}
+
         // ── Effacement des originaux, seulement maintenant ──
-        let restants = 0;
-        for (const p of deplacees) {
-          try {
-            await storage.ref(p.fullPath || `photos/moulages/${order}/${p.name}`).delete();
-          } catch (e) { console.warn('Original non effacé:', p.name, e && e.message); restants++; continue; }
-          try { await storage.ref(`photos/moulages/${order}/thumbs/${p.name}`).delete(); } catch (e) {}
-        }
+        const restants = await _effacerSeOriginaux(deplacees, order);
+        await _rafraichirColonnePhotos();
 
-        // ── Rafraîchir la colonne ──
-        sidebarPhotosLoaded = false;
-        sidebarPhotosCardId = null;
-        if (typeof loadSidebarPhotos === 'function' && currentCardId) await loadSidebarPhotos();
-        if (window.mobilePhotosPageActive && typeof loadMobilePhotos === 'function') await loadMobilePhotos();
-
-        let fin = `✅ ${urls.length} photo(s) déplacée(s) dans le chat`;
+        let fin = `✅ ${urls.length} photo(s) rangée(s) dans le chat`;
         if (echecs) fin += ` — ${echecs} échec(s) de copie, encore dans la colonne`;
         if (restants) fin += ` — ${restants} original(aux) non effacé(s)`;
         showToast(fin, echecs || restants ? 'warning' : 'success');
 
       } catch (err) {
-        console.error('❌ Erreur déplacement sans essayage:', err);
-        showToast('❌ Erreur : ' + (err && err.message), 'error');
+        console.error('❌ Erreur rangement sans essayage:', err);
+        showToast('❌ Rangement impossible : ' + (err && err.message) + ' — réessai à la prochaine ouverture', 'error');
+        _seMoveTried.delete(jobId);   // rien n'a été marqué : on pourra réessayer
       } finally {
         moveSeRunning = false;
       }
     }
     window.moveSansEssayageToChat = moveSansEssayageToChat;
+
+    async function _rafraichirColonnePhotos() {
+      sidebarPhotosLoaded = false;
+      sidebarPhotosCardId = null;
+      if (typeof loadSidebarPhotos === 'function' && currentCardId) await loadSidebarPhotos();
+      if (window.mobilePhotosPageActive && typeof loadMobilePhotos === 'function') await loadMobilePhotos();
+    }
 
     // ─── v1792 — Télécharger UNIQUEMENT la section « Sans essayage » ───
     function downloadSansEssayagePhotos() {
@@ -20216,6 +20272,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         }
         
         renderMobilePhotos(photos);
+
+        // v1831 — même rangement automatique qu'au poste de travail
+        moveSansEssayageToChat(mobileCurrentCardId, photos);
         
       } catch (err) {
         console.error('❌ Erreur chargement photos mobile:', err);
@@ -20278,7 +20337,6 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           <div class="mobile-photos-section se">
             <span class="mobile-photos-section-title">🚫 Sans essayage — anciennes (${se.length})</span>
             <button type="button" class="mobile-photos-section-dl" onclick="event.stopPropagation();downloadSansEssayagePhotos()">⬇️ Télécharger</button>
-            <button type="button" class="mobile-photos-section-dl move" onclick="event.stopPropagation();moveSansEssayageToChat()">➡️ Vers le chat</button>
           </div>`;
         html += se.map(({ p, i }) => vignette(p, i)).join('');
       }
