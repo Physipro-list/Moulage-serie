@@ -8,6 +8,19 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1833 - LA TRACE [SE] DIT AUSSI LES NOMS ET L'ÉTAT DU DRAPEAU
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1833 — Quand aucune photo ne porte le préfixe SE_, la console
+       écrit maintenant les NOMS des photos présentes et l'état du
+       drapeau chats/<jobId>/seMoved. Ça distingue les deux seuls cas
+       possibles :
+         • seMoved présent  → le rangement a déjà eu lieu, les photos
+           sans essayage sont dans une bulle du chat ;
+         • seMoved absent   → ces photos n'ont jamais porté le préfixe
+           SE_, donc elles n'ont jamais été classées « sans essayage ».
+       Une seule lecture d'un booléen, faite uniquement dans ce cas.
+    ═══════════════════════════════════════════════════════════════════
+
     v1832 - LE RANGEMENT DIT CE QU'IL FAIT (traces console)
     ═══════════════════════════════════════════════════════════════════
     🆕 v1832 — TRACES « [SE] » ET NUMÉRO DE VERSION AU DÉMARRAGE
@@ -1271,7 +1284,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1832</title>
+  <title>PhysiPro Moulages v1833</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7273,7 +7286,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260919;
+    var APP_VERSION = 20260920;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -17768,7 +17781,16 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       const liste = (listeArg || _currentPhotoList() || []);
       const se = liste.filter(isSansEssayage);
       console.log('[SE] commande ' + order + ' — ' + liste.length + ' photo(s) au total, ' + se.length + ' avec le préfixe SE_');
-      if (se.length === 0) return;
+      if (se.length === 0) {
+        // v1833 — rien à ranger : on dit POURQUOI, pour ne pas chercher à l'aveugle
+        console.log('[SE] noms des photos de la colonne : ' + liste.map(function(p){ return p.name; }).join(', '));
+        firebaseDb.ref('chats/' + jobId + '/seMoved').once('value').then(function(f){
+          console.log(f.exists()
+            ? '[SE] drapeau seMoved présent → le rangement a DÉJÀ eu lieu, les photos sans essayage sont dans une bulle du chat'
+            : '[SE] drapeau seMoved absent → ces photos n\'ont jamais porté le préfixe SE_');
+        }).catch(function(e){ console.warn('[SE] drapeau illisible :', e && e.message); });
+        return;
+      }
 
       _seMoveTried.add(jobId);
       moveSeRunning = true;
