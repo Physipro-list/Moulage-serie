@@ -8,6 +8,83 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1825 - « SANS ESSAYAGE » DÉMÉNAGE DANS LE CHAT + TÉLÉCHARGEMENT DES PHOTOS
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1825 (1) PAGE PHOTOS = INSPECTION SEULEMENT
+       • L'interrupteur coupé en deux (« 🚫 Sans essayage » / « 📷 Photo
+         inspection ») est RETIRÉ de la page Photos du téléphone.
+         Toute photo prise dans la page Photos est une photo d'inspection.
+       • Les anciennes photos SE_ déjà dans Storage restent visibles et
+         téléchargeables, regroupées sous « 🚫 Sans essayage — anciennes ».
+         Rien n'est effacé. Quand il n'en restera plus, la section
+         disparaîtra d'elle-même.
+       • Code retiré : choosePhotoMode(), _renderSeToggle(),
+         _disarmSansEssayage(), _seFileName(), sansEssayageArmed, le CSS
+         .photos-mode-switch / .photos-mode-half. SE_PREFIX et
+         isSansEssayage() restent : ils servent aux anciennes photos.
+
+    🆕 v1825 (2) CHAT — BOUTON « 📱 SANS ESSAYAGE »
+       • Nouveau bouton rectangulaire pleine largeur sous la barre de
+         composition. Les photos d'essayage passent maintenant par le
+         chat, là où quelqu'un les accepte.
+       • AU TÉLÉPHONE : ouvre l'appareil photo directement.
+         AU PC : envoie la demande au téléphone (PhotoSender), comme 📷.
+       • Le message part avec msgData.sansEssayage = true et s'affiche
+         avec un bandeau orange « 🚫 PHOTO SANS ESSAYAGE » : c'est la
+         « fenêtre » demandée, on repère la bulle d'un coup d'œil.
+
+    🆕 v1825 (3) CHAT — BOUTON « ⬇️ Télécharger » SUR LES BULLES À PHOTOS
+       • Toute bulle contenant des photos porte un bouton qui les
+         enregistre sur l'ordinateur, prêtes à joindre à un courriel.
+       • COÛT FIREBASE : ZÉRO lecture de plus. Les images du chat sont
+         déjà en base64 dans le message affiché à l'écran : le bouton
+         écrit ce qui est DÉJÀ dans la page, il ne redemande rien.
+       • Nom de fichier : « <commande> - <NOM> - SANS ESSAYAGE 1.jpg »
+         (ou « - photo 1.jpg »). Les téléchargements sont espacés de
+         900 ms — Chrome bloque les téléchargements simultanés.
+
+    🆕 v1825 (4) TÉLÉPHONE — MON PROPRE NOM RETIRÉ DU BAS DU CHAT
+       • La pastille du nom sous la barre de composition
+         (.qchat-name-pill) est masquée dans #mobileChatMount. Au PC elle
+         reste. Rien n'est supprimé, c'est une règle CSS.
+    ═══════════════════════════════════════════════════════════════════
+
+    v1824 - PHOTOS AU TÉLÉPHONE : BOUTON « PRENDRE PHOTO » + CAMÉRA DANS LE CHAT
+    ═══════════════════════════════════════════════════════════════════
+    🆕 v1824 (1) PAGE PHOTOS DU TÉLÉPHONE — BOUTON « 📷 Prendre photo »
+       • Dans l'entête de la page Photos (à droite du mot « Photos »), un
+         bouton RECTANGULAIRE « 📷 Prendre photo » ouvre l'appareil.
+         Avant, il fallait recliquer sur une des deux moitiés
+         « Sans essayage » / « Photo inspection » pour déclencher la
+         caméra : rien dans l'entête ne le disait.
+       • La photo va dans la section du mode ALLUMÉ (l'interrupteur du
+         dessous) : le bouton prend sa couleur — BLEU = Photo inspection,
+         ORANGE = Sans essayage — et son infobulle dit où la photo ira.
+       • Les deux moitiés continuent de choisir le mode ET d'ouvrir la
+         caméra, exactement comme avant (aucune habitude cassée).
+
+    🆕 v1824 (2) CHAT — LE TÉLÉPHONE PREND LA PHOTO LUI-MÊME
+       • Au PC, le bouton 📷 du chat continue d'envoyer une demande au
+         téléphone (photoRequests/<jobId>, PhotoSender) : rien ne change.
+       • AU TÉLÉPHONE (_isPhone()), il n'envoie plus de demande à
+         lui-même : il ouvre directement l'appareil photo et la photo
+         s'ajoute au message en cours (nouvel input #qchatPhoneCamInput,
+         capture="environment", MChat.handlePhoneCapture).
+
+    ⚖️ v1824 (3) POIDS DES PHOTOS (consommation Firebase)
+       • Page Photos : inchangé — _uploadPhotoWithThumb, donc 800 px /
+         150 Ko max + miniature 400 px (la grille ne charge que la
+         miniature).
+       • Chat du téléphone : la photo passe par compressPhotoFile AVANT
+         d'entrer dans le message → 800 px, plafond 90 Ko
+         (CHAT_PHOTO_MAX_WIDTH / CHAT_PHOTO_MAX_BYTES, deux constantes
+         dans le module MChat). Une photo de 4 Mo sortie du téléphone
+         n'atteint jamais la base : elle est réduite dans le navigateur.
+       • compressPhotoFile retourne null si l'image ne se décode pas
+         (HEIC, fichier abîmé) : on affiche l'erreur au lieu d'envoyer
+         un fichier de plusieurs Mo dans la base.
+    ═══════════════════════════════════════════════════════════════════
+
     v1823 - CASE « MESSAGE IMPORTANT / COURRIEL » MASQUÉE (NON SUPPRIMÉE)
     ═══════════════════════════════════════════════════════════════════
     ⏸️  v1823: la bande dorée « ⚠️ Ce message est IMPORTANT — l'envoyer par
@@ -985,7 +1062,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1823</title>
+  <title>PhysiPro Moulages v1825</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -1730,34 +1807,18 @@
     .mobile-photos-section-dl.insp { background: linear-gradient(135deg,#3b82f6,#2563eb); }
     .mobile-photos-section-dl:active { transform: scale(0.96); }
 
-    /* ═══ v1799 — UN SEUL bouton coupé en deux, PC et mobile ═══
-       Moitié gauche = Sans essayage (orange), moitié droite = Photos (vert).
-       La moitié allumée indique en tout temps le mode courant. */
-    .photos-mode-switch {
-      display: flex;
-      width: 100%;
-      background: rgba(0,0,0,0.30);
-      border-top: 1px solid rgba(255,255,255,0.10);
-      border-bottom: 1px solid rgba(255,255,255,0.14);
+    /* v1824 — bouton rectangulaire « 📷 Prendre photo » dans l'entête de la
+       page Photos du téléphone. Sa couleur dit où la photo ira :
+       BLEU = Photo inspection, ORANGE = Sans essayage. */
+    .mobile-photos-capture-btn {
+      flex-shrink: 0; padding: 9px 13px;
+      font-size: 13px; font-weight: 800; font-family: inherit; color: #fff;
+      background: linear-gradient(135deg,#3b82f6,#2563eb);
+      border: 1.5px solid rgba(255,255,255,0.45); border-radius: 9px;
+      cursor: pointer; white-space: nowrap; line-height: 1;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.35);
     }
-    .photos-mode-half {
-      flex: 1 1 0;                       /* les 2 moitiés sont exactement égales */
-      padding: 9px 6px;
-      background: transparent;
-      border: none;
-      color: rgba(255,255,255,0.55);
-      font-size: 11px; font-weight: 700; font-family: inherit;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center; gap: 5px;
-      white-space: nowrap; line-height: 1.1;
-      transition: all 0.18s;
-    }
-    /* Le trait qui sépare les deux moitiés */
-    .photos-mode-half + .photos-mode-half { border-left: 2px solid rgba(255,255,255,0.28); }
-    .photos-mode-half:hover { color: #fff; background: rgba(255,255,255,0.08); }
-    .photos-mode-half:active { transform: scale(0.98); }
-    .photos-mode-half.se.on { background: linear-gradient(135deg, #f97316, #ea580c); color: #fff; box-shadow: inset 0 0 14px rgba(0,0,0,0.28); }
-    .photos-mode-half.cam.on { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; box-shadow: inset 0 0 14px rgba(0,0,0,0.28); }
+    .mobile-photos-capture-btn:active { transform: scale(0.96); }
 
 
     /* Entête de section dans la grille (occupe toute la largeur) */
@@ -4766,6 +4827,52 @@
 .qchat-compose-file-pill span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .qchat-msg-file-link { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:5px; background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; font-size:11px; font-weight:700; text-decoration:none; margin-top:4px; cursor:pointer; border:1px solid rgba(0,0,0,0.2); }
 .qchat-msg-file-link:hover { filter:brightness(1.15); }
+
+/* ═══ v1825 — « SANS ESSAYAGE » DANS LE CHAT ═══ */
+/* Bouton pleine largeur sous la barre de composition : large, pas haut. */
+.qchat-se-btn {
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  width:100%; margin-top:6px; padding:10px 12px;
+  background:linear-gradient(135deg,#f97316,#ea580c);
+  color:#fff; font-family:inherit; font-size:13px; font-weight:800;
+  letter-spacing:0.3px; text-transform:uppercase;
+  border:1px solid rgba(0,0,0,0.25); border-radius:10px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.25); cursor:pointer; line-height:1;
+}
+.qchat-se-btn:hover { filter:brightness(1.1); }
+.qchat-se-btn:active { transform:scale(0.985); }
+/* Rappel que le prochain message partira marqué */
+.qchat-se-badge {
+  display:none; align-items:center; gap:6px; margin-top:6px;
+  padding:5px 10px; border-radius:8px;
+  background:rgba(249,115,22,0.16); border:1px solid rgba(249,115,22,0.65);
+  color:#c2410c; font-size:11px; font-weight:800;
+}
+.qchat-se-badge.on { display:flex; }
+.qchat-se-badge button {
+  margin-left:auto; background:rgba(239,68,68,0.18); border:1px solid rgba(239,68,68,0.5);
+  color:#b91c1c; border-radius:6px; font-size:10px; font-weight:800;
+  padding:2px 8px; cursor:pointer; font-family:inherit;
+}
+/* Bandeau de la bulle — « la fenêtre marquée photo sans essayage » */
+.qmsg-se-band {
+  display:block; margin:-2px -4px 6px; padding:4px 9px;
+  background:linear-gradient(135deg,#f97316,#ea580c); color:#fff;
+  font-size:10px; font-weight:800; letter-spacing:0.7px;
+  text-transform:uppercase; border-radius:7px; text-align:center;
+  box-shadow:0 1px 2px rgba(0,0,0,0.25);
+}
+/* Bouton de téléchargement des photos d'une bulle */
+.qmsg-dl-btn {
+  display:inline-flex; align-items:center; gap:5px; margin-top:6px;
+  padding:6px 12px; background:linear-gradient(135deg,#3b82f6,#2563eb);
+  color:#fff; font-family:inherit; font-size:11px; font-weight:800;
+  border:1px solid rgba(0,0,0,0.2); border-radius:7px; cursor:pointer;
+}
+.qmsg-dl-btn:hover { filter:brightness(1.15); }
+
+/* v1825 — au téléphone, je n'ai pas besoin de voir mon propre nom au bas du chat */
+#mobileChatMount .qchat-name-pill { display:none !important; }
 .qchat-compose-img-remove { position:absolute; top:4px; right:4px; background:#ef4444; border:none; border-radius:50%; width:18px; height:18px; color:white; cursor:pointer; font-size:10px; display:flex; align-items:center; justify-content:center; }
 .qchat-compose-footer { display:flex; justify-content:space-between; align-items:center; margin-top:3px; gap:6px; }
 .qchat-compose-hint { font-size:9px; color:#94a3b8; }
@@ -5870,11 +5977,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     <div class="mobile-photos-header">
       <button class="mobile-back-btn" onclick="goToMobileFiche()">→</button>
       <span class="mobile-photos-title">📷 Photos</span>
+      <button type="button" class="mobile-photos-capture-btn" id="mobilePhotoCaptureBtn" onclick="captureMobilePhoto()" title="Prendre une photo">📷 Prendre photo</button>
       <input type="file" id="mobilePhotoCaptureInput" accept="image/*" capture="environment" style="display:none" onchange="handleMobilePhotoCapture(this.files)">
-    </div>
-    <div class="photos-mode-switch">
-      <button type="button" class="photos-mode-half se" id="photoModeSeMobile" onclick="choosePhotoMode(true)">🚫 Sans essayage</button>
-      <button type="button" class="photos-mode-half cam" id="photoModeCamMobile" onclick="choosePhotoMode(false)">📷 Photo inspection</button>
     </div>
     <div class="mobile-photos-folder" id="mobilePhotosFolder">-</div>
     <div class="mobile-photos-grid" id="mobilePhotosGrid">
@@ -6151,6 +6255,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           <div class="qchat-compose-img-zone" id="qchatComposeImgZone"><div id="qchatComposeImgs"></div><button class="qchat-compose-img-remove" onclick="MChat.clearImages()">✕</button></div>
           <div class="qchat-compose-bar">
             <input type="file" id="qchatCameraInput" accept="image/*" style="display:none;" onchange="MChat.handleFileInput(this)">
+            <!-- v1824 — caméra du téléphone : capture directe, aucune demande envoyée -->
+            <input type="file" id="qchatPhoneCamInput" accept="image/*" capture="environment" style="display:none;" onchange="MChat.handlePhoneCapture(this)">
             <input type="file" id="qchatFileInput" accept=".pdf,.eml,.msg,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple style="display:none" onchange="MChat.handleFileAttach(this)">
             <button class="imsg-icon" onclick="MChat.editDests()" title="Ajouter / modifier les destinataires des notifications" style="font-weight:800;">+</button>
             <button class="imsg-icon" id="qchatPhotoBtnMain" onclick="MChat.openCamera()" title="Inclure une photo avec le téléphone (PhotoSender)">📷</button>
@@ -6158,6 +6264,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             <div class="imsg-field" id="qchatComposeText" contenteditable="true" data-placeholder="Message…" onpaste="MChat.handlePaste(event)" onkeydown="MChat.composeKeydown(event)"></div>
             <button class="imsg-send" id="qchatSendBtn" onclick="MChat.send()" title="Envoyer (Entrée)">↑</button>
           </div>
+          <!-- v1825 — les photos d'essayage passent par le chat -->
+          <button type="button" class="qchat-se-btn" id="qchatSeBtn" onclick="MChat.startSansEssayage()" title="Prendre une photo d'essayage : elle part dans le chat, marquée « sans essayage »">📱 Sans essayage</button>
+          <div class="qchat-se-badge" id="qchatSeBadge">🚫 Ce message partira marqué SANS ESSAYAGE<button type="button" onclick="MChat.cancelSansEssayage()">Annuler</button></div>
           <div class="qchat-name-pill" id="qchatComposeType"></div>
           <span id="qchatDestSummary" style="display:none;"></span>
         </div>
@@ -6898,7 +7007,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260910;
+    var APP_VERSION = 20260912;
     var APP_MODULE = 'moulage';
     var _versionOK = true;
     let versionCheckInterval = null;
@@ -16362,45 +16471,18 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // Firebase de plus, aucune lecture supplémentaire, aucun risque de
     // désynchronisation entre la photo et son étiquette.
     // ═══════════════════════════════════════════════════════════════════
+    // v1825 — Le préfixe ne s'écrit PLUS : les photos d'essayage passent
+    // maintenant par le chat (bouton « 📱 Sans essayage » de la barre de
+    // composition). SE_PREFIX et isSansEssayage() restent en place pour
+    // AFFICHER et TÉLÉCHARGER les anciennes photos déjà dans Storage.
     const SE_PREFIX = 'SE_';
-    let sansEssayageArmed = false;   // interrupteur de l'entête
 
     function isSansEssayage(photo) {
       return !!photo && typeof photo.name === 'string' && photo.name.indexOf(SE_PREFIX) === 0;
     }
 
-    // Applique (ou non) le préfixe selon l'état de l'interrupteur
-    function _seFileName(baseName) {
-      return sansEssayageArmed ? (SE_PREFIX + baseName) : baseName;
-    }
-
-    // v1799 — Le mode est PERSISTANT et toujours visible : la moitié allumée
-    // dit dans quel mode on est. Plus d'extinction automatique après une photo.
-    function _renderSeToggle() {
-      const paires = [['photoModeSeMobile', 'photoModeCamMobile']];   // v1800 — mobile seulement
-      paires.forEach(([idSe, idCam]) => {
-        const se = document.getElementById(idSe);
-        const cam = document.getElementById(idCam);
-        if (se) se.classList.toggle('on', sansEssayageArmed);
-        if (cam) cam.classList.toggle('on', !sansEssayageArmed);
-      });
-    }
-
-    // v1800 — Le sélecteur n'existe QU'AU TÉLÉPHONE : c'est là qu'on prend
-    // les photos. Cliquer une moitié choisit le mode puis ouvre l'appareil.
-    function choosePhotoMode(sansEssayage) {
-      sansEssayageArmed = !!sansEssayage;
-      _renderSeToggle();
-      captureMobilePhoto();
-    }
-    window.choosePhotoMode = choosePhotoMode;
-
-    // v1799 — le mode ne s'éteint plus tout seul : il reste affiché à l'écran.
-    function _disarmSansEssayage() { /* volontairement vide depuis v1799 */ }
-
     // ═══ Upload de photos depuis la sidebar ═══
     function uploadSidebarPhotos() {
-      sansEssayageArmed = false;   // v1800 — ajout PC = toujours normal
       if (!currentCardId) {
         showToast('⚠️ Ouvrez une fiche d\'abord', 'warning');
         return;
@@ -16417,7 +16499,6 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══ Capture de photo avec l'appareil photo (📷 bouton) ═══
     // v1800 — au PC il n'y a pas de sélecteur : on ajoute toujours en normal.
     function captureSidebarPhoto() {
-      sansEssayageArmed = false;
       if (!currentCardId) {
         showToast('⚠️ Ouvrez une fiche d\'abord', 'warning');
         return;
@@ -16467,7 +16548,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         
         // Nom du fichier: timestamp + "moulage_photo"
         const timestamp = Date.now();
-        const fileName = _seFileName(`${timestamp}_moulage_photo.jpg`);   // v1792
+        const fileName = `${timestamp}_moulage_photo.jpg`;   // v1825 — plus de préfixe SE_
         
         // Upload pleine taille + miniature (v1726)
         const _up = await _uploadPhotoWithThumb(file, orderNumber, fileName);
@@ -16503,7 +16584,6 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         sidebarPhotosCardId = currentCardId;
         
         showToast('✅ Photo ajoutée!', 'success');
-        _disarmSansEssayage();          // v1792 — l'interrupteur ne reste jamais allumé
         renderSidebarPhotosGrid();      // v1792 — replace la photo dans sa section
         
         // Libérer l'URL local
@@ -16561,7 +16641,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           
           const timestamp = Date.now();
           const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-          const fileName = _seFileName(`${timestamp}_${safeName}`);   // v1792
+          const fileName = `${timestamp}_${safeName}`;   // v1825 — plus de préfixe SE_
           
           // Upload pleine taille + miniature (v1726)
           const _up = await _uploadPhotoWithThumb(file, orderNumber, fileName);
@@ -16597,7 +16677,6 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         sidebarPhotosCardId = currentCardId;
         
         showToast(`✅ ${uploaded} photo${uploaded > 1 ? 's' : ''} ajoutée${uploaded > 1 ? 's' : ''}`, 'success');
-        _disarmSansEssayage();          // v1792
         renderSidebarPhotosGrid();      // v1792
         
       } catch (error) {
@@ -16972,10 +17051,6 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     async function loadSidebarPhotos() {
       if (!currentCardId) return;
 
-      // v1792 — l'interrupteur « Sans essayage » ne suit jamais d'une fiche à l'autre
-      sansEssayageArmed = false;
-      _renderSeToggle();
-      
       // Si déjà chargé pour cette carte, ne pas recharger
       if (sidebarPhotosLoaded && sidebarPhotosCardId === currentCardId) {
         return;
@@ -17068,7 +17143,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       if (se.length > 0) {
         html += `
           <div class="photos-section-head se">
-            <span class="photos-section-title">🚫 Sans essayage (${se.length})</span>
+            <span class="photos-section-title">🚫 Sans essayage — anciennes (${se.length})</span>
             <button type="button" class="photos-section-dl" onclick="downloadSansEssayagePhotos()" title="Télécharger UNIQUEMENT les photos sans essayage, dans un sous-dossier « NOM - NUMÉRO - SANS ESSAYAGE ».">⬇️ Télécharger</button>
           </div>`;
         html += se.map(({ p, i }) => vignette(p, i)).join('');
@@ -19488,7 +19563,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         
         // Nom du fichier
         const timestamp = Date.now();
-        const fileName = _seFileName(`${timestamp}_moulage_photo.jpg`);   // v1797
+        const fileName = `${timestamp}_moulage_photo.jpg`;   // v1825 — plus de préfixe SE_
         
         // Upload pleine taille + miniature (v1726)
         const _up = await _uploadPhotoWithThumb(file, orderNumber, fileName);
@@ -19523,7 +19598,6 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         sidebarPhotosCardId = mobileCurrentCardId;
         
         showToast('✅ Photo ajoutée!', 'success');
-        _disarmSansEssayage();                                        // v1797
         renderMobilePhotos(window.mobileGalleryPhotos || sidebarPhotos || []);  // v1797
         
       } catch (error) {
@@ -19546,10 +19620,6 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       const card = cardsData[mobileCurrentCardId];
       if (!card) return;
 
-      // v1797 — l'interrupteur ne suit jamais d'une fiche à l'autre
-      sansEssayageArmed = false;
-      _renderSeToggle();
-      
       const grid = document.getElementById('mobilePhotosGrid');
       const folderEl = document.getElementById('mobilePhotosFolder');
       const orderNumber = card.order || '';
@@ -19651,7 +19721,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       if (se.length > 0) {
         html += `
           <div class="mobile-photos-section se">
-            <span class="mobile-photos-section-title">🚫 Sans essayage (${se.length})</span>
+            <span class="mobile-photos-section-title">🚫 Sans essayage — anciennes (${se.length})</span>
             <button type="button" class="mobile-photos-section-dl" onclick="event.stopPropagation();downloadSansEssayagePhotos()">⬇️ Télécharger</button>
           </div>`;
         html += se.map(({ p, i }) => vignette(p, i)).join('');
@@ -21519,6 +21589,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               '<canvas class="annot-canvas"></canvas>' +
             '</div>';
           }).join('');
+          // v1825 — enregistrer les photos sur l'ordinateur (0 lecture Firebase)
+          imgHtml += '<button class="qmsg-dl-btn" onclick="event.stopPropagation();MChat.downloadMsgImages(\''+id+'\')" title="Enregistrer sur cet ordinateur, prêtes à joindre à un courriel">⬇️ Télécharger ' +
+            (images.length > 1 ? ('les ' + images.length + ' photos') : 'la photo') + '</button>';
         }
         
         var filesHtml = '';
@@ -21588,6 +21661,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             '<div class="qmsg-meta">' + metaTxt + '</div>' +
             '<div class="' + cls + '" data-msgid="' + id + '">' +
               '<div class="qmsg-actions">' + resendBtn + editBtn + delBtn + '</div>' +
+              (msg.sansEssayage ? '<div class="qmsg-se-band">🚫 Photo sans essayage</div>' : '') +   // v1825
               '<div class="qmsg-content">' + (msg.contentHtml || esc(msg.content || '').replace(/\n/g, '<br>')) + '</div>' +
               imgHtml +
               filesHtml +
@@ -22058,6 +22132,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         _composeType = type || 'conversation';
         _composeImages = [];
         _composeFiles = [];
+        _composeSE = false;                 // v1825
+        _renderSEBadge();
         var zone = document.getElementById('qchatCompose');
         var isReply = (type === 'reply');
         var isPinned = (type === 'pinned');
@@ -22466,7 +22542,145 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           cancelPhotoRequest();
           return;
         }
+        // v1824 — AU TÉLÉPHONE : on ouvre l'appareil photo directement.
+        // Envoyer une demande PhotoSender au téléphone depuis le téléphone
+        // lui-même n'avait aucun sens. Au PC, rien ne change.
+        if (_isPhone()) { capturePhoneChatPhoto(); return; }
         requestMobilePhoto();
+      }
+
+      // ═══ v1824 — CAPTURE DIRECTE DEPUIS LE TÉLÉPHONE (chat) ═══
+      // Poids : la photo est réduite DANS LE NAVIGATEUR avant d'entrer dans
+      // le message (les images du chat vivent en base64 dans la Realtime
+      // Database — chaque octet est relu à chaque ouverture du fil).
+      var CHAT_PHOTO_MAX_WIDTH = 800;          // largeur max
+      var CHAT_PHOTO_MAX_BYTES = 90 * 1024;    // plafond de poids
+
+      function capturePhoneChatPhoto() {
+        if (!_currentJobId) {
+          if (typeof showToast === 'function') showToast('❌ Ouvrez une fiche d\'abord', 'error');
+          return;
+        }
+        var input = document.getElementById('qchatPhoneCamInput');
+        if (!input) { requestMobilePhoto(); return; }   // filet de sécurité
+        input.value = '';
+        input.click();
+      }
+
+      // Réduit la photo (800 px / 90 Ko) puis la rend en dataURL.
+      // compressPhotoFile retourne null si l'image ne se décode pas (HEIC,
+      // fichier abîmé) : on refuse plutôt que d'envoyer plusieurs Mo.
+      function _phoneChatPhotoToDataUrl(file) {
+        return new Promise(function(resolve) {
+          var toDataUrl = function(blob) {
+            if (!blob) return resolve(null);
+            var r = new FileReader();
+            r.onerror = function() { resolve(null); };
+            r.onload = function(e) { resolve(e.target.result); };
+            r.readAsDataURL(blob);
+          };
+          if (typeof compressPhotoFile === 'function') {
+            compressPhotoFile(file, CHAT_PHOTO_MAX_WIDTH, 0.6, CHAT_PHOTO_MAX_BYTES)
+              .then(toDataUrl)
+              .catch(function() { resolve(null); });
+          } else {
+            toDataUrl(file);
+          }
+        });
+      }
+
+      // ═══ v1825 — PHOTO « SANS ESSAYAGE » PAR LE CHAT ═══
+      // Le marquage vit dans le message (msgData.sansEssayage), pas dans un
+      // nom de fichier : la bulle porte son bandeau, on la repère du premier
+      // coup d'œil et personne n'a besoin de lire un préfixe.
+      var _composeSE = false;
+
+      function _renderSEBadge() {
+        var b = document.getElementById('qchatSeBadge');
+        if (b) b.classList.toggle('on', !!_composeSE);
+      }
+
+      function startSansEssayage() {
+        if (!_currentJobId) {
+          if (typeof showToast === 'function') showToast('❌ Ouvrez une fiche d\'abord', 'error');
+          return;
+        }
+        // La zone doit être ouverte AVANT d'armer le drapeau : openCompose remet tout à zéro.
+        var zone = document.getElementById('qchatCompose');
+        if (!zone || !zone.classList.contains('active')) openCompose(_composeType || 'conversation');
+        _composeSE = true;
+        _renderSEBadge();
+        // Au téléphone on prend la photo ici ; au PC on la demande au téléphone.
+        if (_isPhone()) capturePhoneChatPhoto();
+        else requestMobilePhoto();
+      }
+
+      function cancelSansEssayage() {
+        _composeSE = false;
+        _renderSEBadge();
+      }
+
+      // ═══ v1825 — TÉLÉCHARGER LES PHOTOS D'UNE BULLE ═══
+      // Coût Firebase : ZÉRO. Les images sont déjà en base64 dans le message
+      // affiché — on écrit sur le disque ce qui est déjà dans la page.
+      function downloadMsgImages(msgId) {
+        var msg = null;
+        for (var i = 0; i < _messages.length; i++) {
+          if (_messages[i][0] === msgId) { msg = _messages[i][1]; break; }
+        }
+        if (!msg) {
+          if (typeof showToast === 'function') showToast('Message introuvable', 'error');
+          return;
+        }
+        var imgs = [];
+        if (msg.image) imgs.push(msg.image);
+        if (msg.images) imgs = imgs.concat(msg.images);
+        if (!imgs.length) return;
+
+        var card = (typeof cardsData !== 'undefined' && cardsData[_currentJobId]) ? cardsData[_currentJobId] : {};
+        var base = ((card.order || '') + ' - ' + (card.name || '').toUpperCase()).trim();
+        base = base.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim() || 'photo';
+        var tag = msg.sansEssayage ? ' - SANS ESSAYAGE' : ' - photo';
+
+        // Chrome bloque les téléchargements simultanés → 900 ms entre chacun.
+        imgs.forEach(function(src, i) {
+          setTimeout(function() {
+            var a = document.createElement('a');
+            a.href = src;
+            if (String(src).indexOf('data:') === 0) a.download = base + tag + ' ' + (i + 1) + '.jpg';
+            else { a.target = '_blank'; a.rel = 'noopener'; }   // URL distante : le navigateur décide
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }, i * 900);
+        });
+        if (typeof showToast === 'function') {
+          showToast('⬇️ ' + imgs.length + ' photo(s) enregistrée(s)', 'success');
+        }
+      }
+
+      function handlePhoneCapture(input) {
+        if (!input || !input.files || !input.files[0]) return;
+        var file = input.files[0];
+        input.value = '';
+        if (file.type && file.type.indexOf('image') !== 0) {
+          if (typeof showToast === 'function') showToast('⚠️ Fichier non valide', 'warning');
+          return;
+        }
+        // La zone de composition doit être ouverte AVANT d'injecter l'image
+        // (openCompose réinitialise _composeImages).
+        var zone = document.getElementById('qchatCompose');
+        if (!zone || !zone.classList.contains('active')) openCompose(_composeType || 'conversation');
+        if (typeof showToast === 'function') showToast('⏳ Préparation de la photo…', 'info');
+        _phoneChatPhotoToDataUrl(file).then(function(dataUrl) {
+          if (!dataUrl) {
+            if (typeof showToast === 'function') showToast('❌ Photo illisible — reprenez-la', 'error');
+            return;
+          }
+          _composeImages.push(dataUrl);
+          updateComposeImagePreview();
+          if (typeof showToast === 'function') showToast('📸 Photo ajoutée au message', 'success');
+        });
       }
 
       function requestMobilePhoto() {
@@ -22545,7 +22759,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         if (mainBtn) {
           mainBtn.classList.toggle('waiting', on);
           mainBtn.innerHTML = on ? '📱' : '📷';
-          mainBtn.title = on ? 'Photo demandée — cliquer pour annuler' : 'Prendre une photo via PhotoSender (téléphone)';
+          mainBtn.title = on ? 'Photo demandée — cliquer pour annuler'
+                             : (_isPhone() ? 'Prendre une photo maintenant'      // v1824
+                                           : 'Prendre une photo via PhotoSender (téléphone)');
         }
       }
 
@@ -22607,6 +22823,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       function clearImages() {
         _composeImages = [];
         _composeFiles = [];
+        _composeSE = false;                 // v1825 — plus de photo, plus de marquage
+        _renderSEBadge();
         updateComposeImagePreview();
       }
       
@@ -22661,6 +22879,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         if (_composeImages.length > 1) msgData.images = _composeImages;
         if (_composeFiles.length > 0) msgData.files = _composeFiles.map(function(f){ return { name: f.name, dataUrl: f.dataUrl, type: f.type }; });
         if (_replyToId) msgData.replyTo = _replyToId;
+        if (_composeSE) msgData.sansEssayage = true;   // v1825
         
         // Capturer pour les notifications (closeCompose va vider _compose*)
         var _notifContent = contentDesc;
@@ -23483,6 +23702,10 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         requestMobilePhoto: requestMobilePhoto,
         cancelPhotoRequest: cancelPhotoRequest,
         handleFileInput: handleFileInput,
+        handlePhoneCapture: handlePhoneCapture,   // v1824
+        startSansEssayage: startSansEssayage,     // v1825
+        cancelSansEssayage: cancelSansEssayage,   // v1825
+        downloadMsgImages: downloadMsgImages,     // v1825
         closeCompose: closeCompose,
         cancelCompose: cancelCompose,
         composeKeydown: composeKeydown,
