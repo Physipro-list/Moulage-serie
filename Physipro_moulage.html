@@ -8,6 +8,37 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1834 - CHOISIR DES PHOTOS DE LA COLONNE ET LES ENVOYER DANS LA BULLE
+    ═══════════════════════════════════════════════════════════════════
+    ⚠️  CE QUE LA TRACE [SE] A RÉVÉLÉ (292324)
+       6 photos, AUCUNE avec le préfixe SE_, drapeau seMoved absent.
+       Donc rien à ranger automatiquement — et c'était prévisible :
+       depuis la v1825, l'interrupteur « sans essayage » n'existe plus
+       dans la page Photos, donc AUCUNE photo prise depuis ce jour-là ne
+       peut porter le préfixe. Le rangement automatique ne sait traiter
+       que l'ancien marquage ; les photos d'essayage prises depuis la
+       v1825 sont indiscernables des photos d'inspection pour la machine.
+       Seul un humain sait lesquelles sont des photos d'essayage.
+
+    🆕 v1834 — SÉLECTION À LA MAIN DANS LA COLONNE PHOTOS
+       • Chaque vignette porte un carré à cocher dans son coin (colonne
+         de gauche ET page Photos du téléphone). Cliquer le carré coche
+         la photo ; cliquer ailleurs sur la vignette ouvre la loupe comme
+         avant — rien n'est cassé.
+       • Dès qu'une photo est cochée, une barre apparaît en haut de la
+         grille : « ➡️ Envoyer dans la bulle sans essayage (n) » et
+         « ✕ Annuler ».
+       • Le bouton fait exactement ce que fait le rangement automatique :
+         copie vers photos/moulages/<commande>/chat/, UNE bulle
+         « sans essayage » avec miniatures, puis effacement des
+         originaux — et seulement après l'écriture réussie de la bulle.
+       • Le code est PARTAGÉ : _envoyerPhotosDansBulle() sert au
+         rangement automatique comme à la sélection manuelle. Aucune
+         duplication.
+       • La sélection ne pose PAS le drapeau seMoved : ce drapeau ne
+         concerne que le ménage des vieilles photos SE_.
+    ═══════════════════════════════════════════════════════════════════
+
     v1833 - LA TRACE [SE] DIT AUSSI LES NOMS ET L'ÉTAT DU DRAPEAU
     ═══════════════════════════════════════════════════════════════════
     🆕 v1833 — Quand aucune photo ne porte le préfixe SE_, la console
@@ -1284,7 +1315,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1833</title>
+  <title>PhysiPro Moulages v1834</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -2138,6 +2169,34 @@
     .photos-sidebar-thumb-overlay { position: absolute; inset: 0; background: rgba(59,130,246,0.4); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
     .photos-sidebar-thumb:hover .photos-sidebar-thumb-overlay { opacity: 1; }
     .photos-sidebar-thumb-overlay span { color: #fff; font-size: 20px; }
+
+    /* v1834 — choisir des photos pour les envoyer dans la bulle sans essayage */
+    .photo-sel-box {
+      position: absolute; top: 4px; left: 4px; z-index: 4;
+      width: 24px; height: 24px; padding: 0; line-height: 1;
+      border-radius: 6px; border: 2px solid rgba(255,255,255,0.85);
+      background: rgba(0,0,0,0.45); color: #fff;
+      font-size: 14px; font-weight: 800; font-family: inherit; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .photo-sel-box.on { background: linear-gradient(135deg,#f97316,#ea580c); border-color: #fff; }
+    .photos-sidebar-thumb.selected { border-color: #f97316 !important; box-shadow: 0 0 0 2px rgba(249,115,22,0.45); }
+    .mobile-photos-thumb.selected { border-color: #f97316 !important; box-shadow: 0 0 0 2px rgba(249,115,22,0.45); }
+    .photos-selbar {
+      grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      padding: 8px 10px; margin-bottom: 2px; border-radius: 8px;
+      background: rgba(249,115,22,0.18); border: 1px solid rgba(249,115,22,0.6);
+    }
+    .photos-selbar-send {
+      flex: 1 1 auto; padding: 8px 12px; font-size: 12px; font-weight: 800; font-family: inherit;
+      color: #fff; background: linear-gradient(135deg,#f97316,#ea580c);
+      border: 1px solid rgba(0,0,0,0.2); border-radius: 7px; cursor: pointer;
+    }
+    .photos-selbar-cancel {
+      padding: 8px 12px; font-size: 12px; font-weight: 800; font-family: inherit;
+      color: #fca5a5; background: rgba(15,23,42,0.75);
+      border: 1px solid rgba(239,68,68,0.5); border-radius: 7px; cursor: pointer;
+    }
     
     /* Zoom inline pour photos OneDrive - PHOTO REMPLIT EXACTEMENT LA ZONE */
     .photo-inline-zoom {
@@ -7286,7 +7345,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260920;
+    var APP_VERSION = 20260921;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -17622,16 +17681,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       if (!gridEl || !sidebarPhotos) return;
 
       const vignette = (photo, index) => `
-        <div class="photos-sidebar-thumb" onclick="openInlineZoom(${index})">
+        <div class="photos-sidebar-thumb${photoSelection.has(photo.name) ? ' selected' : ''}" onclick="openInlineZoom(${index})">
           <img src="${photo.thumbnailUrl || photo.downloadUrl}" alt="${photo.name}" loading="lazy">
           <div class="photos-sidebar-thumb-overlay"><span>🔍</span></div>
+          <button type="button" class="photo-sel-box${photoSelection.has(photo.name) ? ' on' : ''}" onclick="event.stopPropagation();togglePhotoSelection('${photo.name}')" title="Choisir cette photo">${photoSelection.has(photo.name) ? '✓' : ''}</button>
         </div>`;
 
       // On garde l'index RÉEL dans sidebarPhotos pour que le zoom reste juste
       const se = [], normales = [];
       sidebarPhotos.forEach((p, i) => (isSansEssayage(p) ? se : normales).push({ p, i }));
 
-      let html = '';
+      let html = _selBarHtml();      // v1834 — barre de sélection, si des photos sont cochées
       if (se.length > 0) {
         html += `
           <div class="photos-section-head se">
@@ -17767,129 +17827,191 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
     // v1831 — RANGEMENT AUTOMATIQUE, sans bouton et sans question.
     // Appelé à chaque chargement de photos ; ne fait rien s'il n'y a rien à faire.
+    // ═══════════════════════════════════════════════════════════════════
+    // v1834 — CHOISIR DES PHOTOS ET LES ENVOYER DANS LA BULLE SANS ESSAYAGE
+    // Depuis la v1825 aucune photo ne porte plus le préfixe SE_ : la
+    // machine ne peut pas deviner laquelle est une photo d'essayage.
+    // C'est donc la personne qui coche.
+    // ═══════════════════════════════════════════════════════════════════
+    const photoSelection = new Set();     // noms de fichiers cochés
+
+    function _selBarHtml() {
+      if (photoSelection.size === 0) return '';
+      return `
+        <div class="photos-selbar">
+          <button type="button" class="photos-selbar-send" onclick="envoyerSelectionVersChat()">➡️ Envoyer dans la bulle sans essayage (${photoSelection.size})</button>
+          <button type="button" class="photos-selbar-cancel" onclick="viderSelectionPhotos()">✕ Annuler</button>
+        </div>`;
+    }
+
+    function _redessinerGrillesPhotos() {
+      if (typeof renderSidebarPhotosGrid === 'function') renderSidebarPhotosGrid();
+      if (window.mobilePhotosPageActive && typeof renderMobilePhotos === 'function') {
+        renderMobilePhotos(window.mobileGalleryPhotos || sidebarPhotos || []);
+      }
+    }
+
+    function togglePhotoSelection(name) {
+      if (photoSelection.has(name)) photoSelection.delete(name);
+      else photoSelection.add(name);
+      _redessinerGrillesPhotos();
+    }
+    window.togglePhotoSelection = togglePhotoSelection;
+
+    function viderSelectionPhotos() {
+      photoSelection.clear();
+      _redessinerGrillesPhotos();
+    }
+    window.viderSelectionPhotos = viderSelectionPhotos;
+
+    async function envoyerSelectionVersChat() {
+      if (moveSeRunning) return;
+      const jobId = currentCardId || mobileCurrentCardId;
+      const card = jobId ? cardsData[jobId] : null;
+      if (!jobId || !card) { showToast('⚠️ Ouvrez une fiche d\'abord', 'warning'); return; }
+      const order = (card.order || '').toString().trim();
+      if (!order) { showToast('⚠️ Numéro de commande manquant', 'warning'); return; }
+
+      const choisies = (_currentPhotoList() || []).filter(p => photoSelection.has(p.name));
+      if (choisies.length === 0) { showToast('⚠️ Aucune photo choisie', 'warning'); return; }
+
+      if (!confirm(`Envoyer ${choisies.length} photo(s) dans une bulle « sans essayage » du chat ?\n\nElles quitteront la colonne Photos. Les originaux ne sont effacés qu'une fois la bulle écrite.`)) return;
+
+      moveSeRunning = true;
+      showToast(`➡️ Envoi de ${choisies.length} photo(s) vers le chat…`, 'info');
+      try {
+        const r = await _envoyerPhotosDansBulle(jobId, order, choisies, false);
+        if (r.copiees === 0) {
+          showToast('❌ Aucune photo n\'a pu être copiée — rien n\'a été effacé', 'error');
+          return;
+        }
+        photoSelection.clear();
+        await _rafraichirColonnePhotos();
+        let fin = `✅ ${r.copiees} photo(s) envoyée(s) dans le chat`;
+        if (r.echecs) fin += ` — ${r.echecs} échec(s) de copie`;
+        if (r.restants) fin += ` — ${r.restants} original(aux) non effacé(s)`;
+        showToast(fin, (r.echecs || r.restants) ? 'warning' : 'success');
+      } catch (err) {
+        console.error('[SE] ERREUR ENVOI SÉLECTION :', err && err.message, err);
+        showToast('❌ Envoi impossible : ' + (err && err.message), 'error');
+      } finally {
+        moveSeRunning = false;
+      }
+    }
+    window.envoyerSelectionVersChat = envoyerSelectionVersChat;
+
+    // ═══ Cœur partagé : copie les photos dans chat/, crée UNE bulle
+    //     « sans essayage », puis efface les originaux — dans cet ordre.
+    //     N'affiche aucun toast : l'appelant décide quoi dire.
+    async function _envoyerPhotosDansBulle(jobId, order, liste, marquerSeMoved) {
+      const urls = [], thumbs = [], deplacees = [];
+      let echecs = 0;
+
+      for (const p of liste) {
+        const nom = p.name;
+        try {
+          const plein = await _copyStorageObject(p.downloadUrl, `photos/moulages/${order}/chat/${nom}`);
+          let thumbUrl = plein.url;
+          if (p.thumbnailUrl && p.thumbnailUrl !== p.downloadUrl) {
+            try {
+              const t = await _copyStorageObject(p.thumbnailUrl, `photos/moulages/${order}/chat/thumbs/${nom}`);
+              thumbUrl = t.url;
+            } catch (e) { console.warn('[SE] miniature non copiée :', nom, e && e.message); }
+          } else {
+            try {
+              const t = await compressPhotoThumb(plein.blob);      // vieille photo sans miniature
+              if (t) {
+                const tref = storage.ref(`photos/moulages/${order}/chat/thumbs/${nom}`);
+                await tref.put(t, { contentType: 'image/jpeg' });
+                thumbUrl = await tref.getDownloadURL();
+              }
+            } catch (e) { console.warn('[SE] miniature non fabriquée :', nom, e && e.message); }
+          }
+          urls.push(plein.url);
+          thumbs.push(thumbUrl);
+          deplacees.push(p);
+          console.log('[SE] copiée : ' + nom);
+        } catch (err) {
+          console.error('[SE] COPIE IMPOSSIBLE : ' + nom + ' →', err && err.message, err);
+          echecs++;
+        }
+      }
+
+      if (urls.length === 0) return { copiees: 0, echecs: echecs, restants: 0 };
+
+      // La bulle. Auteur neutre, aucune notification : c'est un rangement.
+      await firebaseDb.ref('chats/' + jobId + '/messages').push().set({
+        content: '🚫 Photos sans essayage (reprises de la colonne Photos)',
+        type: 'conversation',
+        authorEmail: '',
+        authorName: 'Rangement automatique',
+        timestamp: Date.now(),
+        createdAt: firebase.database.ServerValue.TIMESTAMP,
+        jobId: jobId,
+        sansEssayage: true,
+        images: urls,
+        thumbs: thumbs
+      });
+      console.log('[SE] bulle écrite dans chats/' + jobId + '/messages avec ' + urls.length + ' photo(s)');
+
+      if (marquerSeMoved) {
+        try { await firebaseDb.ref('chats/' + jobId + '/seMoved').set(Date.now()); }
+        catch (e) { console.warn('[SE] drapeau seMoved non écrit :', e && e.message); }
+      }
+
+      const restants = await _effacerSeOriginaux(deplacees, order);
+      return { copiees: urls.length, echecs: echecs, restants: restants };
+    }
+
+    // ═══ v1831 — RANGEMENT AUTOMATIQUE des vieilles photos SE_ ═══
+    // Ne concerne que les photos dont le NOM commence par SE_ (marquage
+    // d'avant la v1825). Rien à faire sur une fiche qui n'en a pas.
     async function moveSansEssayageToChat(jobIdArg, listeArg) {
       if (moveSeRunning) return;
 
       const jobId = jobIdArg || currentCardId || mobileCurrentCardId;
       const card = jobId ? cardsData[jobId] : null;
       if (!jobId || !card) { console.log('[SE] aucune fiche ouverte — rien à ranger'); return; }
-      if (_seMoveTried.has(jobId)) { console.log('[SE] déjà tenté dans cette session pour', jobId); return; }
+      if (_seMoveTried.has(jobId)) return;
 
       const order = (card.order || '').toString().trim();
       if (!order) { console.log('[SE] fiche sans numéro de commande — rangement impossible', jobId); return; }
 
       const liste = (listeArg || _currentPhotoList() || []);
       const se = liste.filter(isSansEssayage);
-      console.log('[SE] commande ' + order + ' — ' + liste.length + ' photo(s) au total, ' + se.length + ' avec le préfixe SE_');
-      if (se.length === 0) {
-        // v1833 — rien à ranger : on dit POURQUOI, pour ne pas chercher à l'aveugle
-        console.log('[SE] noms des photos de la colonne : ' + liste.map(function(p){ return p.name; }).join(', '));
-        firebaseDb.ref('chats/' + jobId + '/seMoved').once('value').then(function(f){
-          console.log(f.exists()
-            ? '[SE] drapeau seMoved présent → le rangement a DÉJÀ eu lieu, les photos sans essayage sont dans une bulle du chat'
-            : '[SE] drapeau seMoved absent → ces photos n\'ont jamais porté le préfixe SE_');
-        }).catch(function(e){ console.warn('[SE] drapeau illisible :', e && e.message); });
-        return;
-      }
+      if (se.length === 0) return;      // cas courant : plus aucune photo SE_
 
+      console.log('[SE] commande ' + order + ' — ' + se.length + ' photo(s) SE_ à ranger');
       _seMoveTried.add(jobId);
       moveSeRunning = true;
 
-      // Déjà rangé ? Alors ces photos ont déjà leur copie dans le chat :
-      // on finit l'effacement au lieu de créer une deuxième bulle.
       try {
+        // Déjà rangé ? Alors ces photos ont déjà leur copie dans le chat :
+        // on finit l'effacement au lieu de créer une deuxième bulle.
         const dejaFait = await firebaseDb.ref('chats/' + jobId + '/seMoved').once('value');
         if (dejaFait.exists()) {
-          console.log('[SE] fiche déjà rangée — on finit seulement l\'effacement des restes');
-          const restes = await _effacerSeOriginaux(se, order);
-          console.log('[SE] effacement terminé — ' + restes + ' original(aux) résistent encore');
+          console.log('[SE] fiche déjà rangée — on finit seulement l\'effacement');
+          await _effacerSeOriginaux(se, order);
           await _rafraichirColonnePhotos();
-          if (restes < se.length) showToast('🧹 Ménage terminé — photos sans essayage rangées dans le chat', 'success');
-          moveSeRunning = false;
           return;
         }
-      } catch (e) { console.warn('[SE] lecture du drapeau seMoved impossible :', e && e.message); }
 
-      showToast(`➡️ Rangement de ${se.length} photo(s) sans essayage vers le chat…`, 'info');
-
-      const urls = [], thumbs = [], deplacees = [];
-      let echecs = 0;
-
-      try {
-        for (let i = 0; i < se.length; i++) {
-          const p = se[i];
-          const nom = p.name;
-          try {
-            const plein = await _copyStorageObject(p.downloadUrl, `photos/moulages/${order}/chat/${nom}`);
-            let thumbUrl = plein.url;
-            if (p.thumbnailUrl && p.thumbnailUrl !== p.downloadUrl) {
-              // La miniature existe déjà : on la copie telle quelle.
-              try {
-                const t = await _copyStorageObject(p.thumbnailUrl, `photos/moulages/${order}/chat/thumbs/${nom}`);
-                thumbUrl = t.url;
-              } catch (e) { console.warn('Miniature non copiée:', nom, e && e.message); }
-            } else {
-              // Vieille photo sans miniature : on en fabrique une à 400 px.
-              try {
-                const t = await compressPhotoThumb(plein.blob);
-                if (t) {
-                  const tref = storage.ref(`photos/moulages/${order}/chat/thumbs/${nom}`);
-                  await tref.put(t, { contentType: 'image/jpeg' });
-                  thumbUrl = await tref.getDownloadURL();
-                }
-              } catch (e) { console.warn('Miniature non fabriquée:', nom, e && e.message); }
-            }
-            urls.push(plein.url);
-            thumbs.push(thumbUrl);
-            deplacees.push(p);
-            console.log('[SE] copiée : ' + nom);
-          } catch (err) {
-            console.error('[SE] COPIE IMPOSSIBLE : ' + nom + ' →', err && err.message, err);
-            echecs++;
-          }
-        }
-
-        if (urls.length === 0) {
+        showToast(`➡️ Rangement de ${se.length} photo(s) sans essayage…`, 'info');
+        const r = await _envoyerPhotosDansBulle(jobId, order, se, true);
+        if (r.copiees === 0) {
           showToast('❌ Aucune photo n\'a pu être copiée — rien n\'a été effacé', 'error');
-          _seMoveTried.delete(jobId);   // réessai à la prochaine ouverture
+          _seMoveTried.delete(jobId);
           return;
         }
-
-        // ── La bulle. Aucune notification : c'est un rangement, pas un message.
-        //    L'auteur est neutre : ce n'est pas la personne qui a ouvert la fiche.
-        await firebaseDb.ref('chats/' + jobId + '/messages').push().set({
-          content: '🚫 Photos sans essayage (reprises de la colonne Photos)',
-          type: 'conversation',
-          authorEmail: '',
-          authorName: 'Rangement automatique',
-          timestamp: Date.now(),
-          createdAt: firebase.database.ServerValue.TIMESTAMP,
-          jobId: jobId,
-          sansEssayage: true,
-          images: urls,
-          thumbs: thumbs
-        });
-
-        console.log('[SE] bulle écrite dans chats/' + jobId + '/messages avec ' + urls.length + ' photo(s)');
-
-        // ── La bulle est écrite : on peut marquer la fiche comme rangée ──
-        try { await firebaseDb.ref('chats/' + jobId + '/seMoved').set(Date.now()); }
-        catch (e) { console.warn('[SE] drapeau seMoved non écrit :', e && e.message); }
-
-        // ── Effacement des originaux, seulement maintenant ──
-        const restants = await _effacerSeOriginaux(deplacees, order);
-        console.log('[SE] terminé — ' + urls.length + ' rangée(s), ' + echecs + ' échec(s) de copie, ' + restants + ' original(aux) non effacé(s)');
         await _rafraichirColonnePhotos();
-
-        let fin = `✅ ${urls.length} photo(s) rangée(s) dans le chat`;
-        if (echecs) fin += ` — ${echecs} échec(s) de copie, encore dans la colonne`;
-        if (restants) fin += ` — ${restants} original(aux) non effacé(s)`;
-        showToast(fin, echecs || restants ? 'warning' : 'success');
-
+        let fin = `✅ ${r.copiees} photo(s) rangée(s) dans le chat`;
+        if (r.echecs) fin += ` — ${r.echecs} échec(s) de copie`;
+        if (r.restants) fin += ` — ${r.restants} original(aux) non effacé(s)`;
+        showToast(fin, (r.echecs || r.restants) ? 'warning' : 'success');
       } catch (err) {
         console.error('[SE] ERREUR DU RANGEMENT :', err && err.message, err);
-        showToast('❌ Rangement impossible : ' + (err && err.message) + ' — réessai à la prochaine ouverture', 'error');
-        _seMoveTried.delete(jobId);   // rien n'a été marqué : on pourra réessayer
+        showToast('❌ Rangement impossible : ' + (err && err.message), 'error');
+        _seMoveTried.delete(jobId);
       } finally {
         moveSeRunning = false;
       }
@@ -20371,8 +20493,10 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
       const vignette = (photo, index) => {
         const imgUrl = photo.thumbnailUrl || photo.downloadUrl || '';
+        const coche = photoSelection.has(photo.name);
         return `
-          <div class="mobile-photos-thumb" onclick="openMobilePhotoGallery(${index})">
+          <div class="mobile-photos-thumb${coche ? ' selected' : ''}" style="position:relative;" onclick="openMobilePhotoGallery(${index})">
+            <button type="button" class="photo-sel-box${coche ? ' on' : ''}" onclick="event.stopPropagation();togglePhotoSelection('${photo.name}')">${coche ? '✓' : ''}</button>
             <img src="${imgUrl}" alt="${photo.name || 'Photo'}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📷</text></svg>'">
           </div>
         `;
@@ -20382,7 +20506,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       const se = [], normales = [];
       photos.forEach((p, i) => (isSansEssayage(p) ? se : normales).push({ p, i }));
 
-      let html = '';
+      let html = _selBarHtml();      // v1834
       if (se.length > 0) {
         html += `
           <div class="mobile-photos-section se">
