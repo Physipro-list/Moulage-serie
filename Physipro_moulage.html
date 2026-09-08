@@ -1384,7 +1384,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1836</title>
+  <title>PhysiPro Moulages v1841</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -6446,6 +6446,20 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       </div>
     </div>
     <div class="tb-create-btn"><button class="btn-pill" onclick="openCreateModal()"><span>+</span><span>Créer moulage</span></button><button class="btn-pill btn-fauteuil-pill" id="btnFauteuil" onclick="event.stopPropagation(); openFauteuilModal()"><span>🦽</span><span>Ajouter fauteuil roulant</span></button></div>
+    <!-- ═══ DÉBUT BLOC TEMPORAIRE « CACHE PHOTOS » (v1838) ═══════════════
+         Bouton d'entretien à usage unique. Pour l'enlever quand la passe est
+         terminée : supprimer ce bloc HTML (de DÉBUT à FIN) — le reste du code
+         (fonction lancerPassePhotoCache) peut rester, il ne s'exécute jamais
+         tout seul. Rien d'autre ne dépend de ce bloc.
+    ────────────────────────────────────────────────────────────────── -->
+    <div class="tb-cachefix" id="tbCacheFix" style="position:absolute;top:7px;left:calc(8px + ((100vw - 44px) / 8) + 4px);z-index:4;display:flex;align-items:center;gap:6px;">
+      <button class="btn-pill" id="btnPhotoCache" onclick="lancerPassePhotoCache()"
+              title="Passe d'entretien : ajoute l'en-tête de cache aux photos déjà en ligne. Aucune photo n'est téléchargée ni modifiée — seules leurs métadonnées changent."
+              style="background:linear-gradient(135deg,#C9A14A,#a8842f);border-color:rgba(201,161,74,0.6);">
+        <span>🚀</span><span id="btnPhotoCacheLabel">Cache photos</span>
+      </button>
+    </div>
+    <!-- ═══ FIN BLOC TEMPORAIRE « CACHE PHOTOS » ═══════════════════════ -->
     <div class="tb-center"><span class="top-title">Outil de gestion des moulages</span></div>
     <div class="tb-repbtn" id="tbRepBlock" style="display:none;"><button class="btn-pill btn-rep-pill" id="btnRepRep" onclick="openReponsesRep()" title="Réponses des représentantes non vues"><span>Réponse</span><span>représentante</span></button><button class="btn-rep-count" id="btnRepCount" onclick="event.stopPropagation(); openReponsesRep()" title="Nombre de réponses non vues">0</button></div>
     <div class="tb-right" style="flex-direction:row;align-items:center;gap:6px;">
@@ -7364,6 +7378,14 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     const firebaseDb = firebase.database();
     const storage = firebase.storage();
     const auth = firebase.auth();
+
+    // v1837 - CACHE NAVIGATEUR DES PHOTOS.
+    // Sans en-tete Cache-Control, Firebase Storage fait RE-TELECHARGER chaque
+    // photo et chaque miniature a CHAQUE ouverture de fiche, sur chaque poste.
+    // Les noms de fichiers contiennent un timestamp et ne sont jamais reutilises
+    // -> le contenu est immuable, donc on peut le garder un an en cache local.
+    // A ajouter dans TOUS les .put() de photos.
+    var PHOTO_CACHE = 'public, max-age=31536000, immutable';
     
     // Variables d'authentification
     let currentUser = null;
@@ -7386,7 +7408,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260923;
+    var APP_VERSION = 20260928;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -7412,23 +7434,94 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       });
     }
     
+    // ═══════════════════════════════════════════════════════════════════
+    // v1841 — RAFRAÎCHISSEMENT QUI RAFRAÎCHIT POUR VRAI
+    //
+    // L'étampe appelait location.reload(true). L'argument « true » (forceGet)
+    // est IGNORÉ par tous les navigateurs modernes depuis ~2015 : sur iPhone et
+    // Android, ça refaisait un rechargement ordinaire, qui reprenait le même
+    // HTML en cache. D'où l'étampe qui revenait indéfiniment après chaque
+    // rafraîchissement.
+    //
+    // La seule façon fiable de forcer un navigateur mobile à redemander le
+    // fichier au serveur : changer l'URL. On ajoute donc un paramètre unique,
+    // après avoir vidé le service worker et les caches de l'application.
+    // ═══════════════════════════════════════════════════════════════════
+    async function forcerVraieMiseAJour() {
+      try { sessionStorage.setItem('physipro_majForcee', String(APP_VERSION)); } catch (e) {}
+
+      // 1) Retirer le service worker (il peut resservir une vieille page)
+      try {
+        if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const r of regs) { try { await r.unregister(); } catch (e) {} }
+        }
+      } catch (e) {}
+
+      // 2) Vider les caches de l'application
+      try {
+        if (window.caches && caches.keys) {
+          const noms = await caches.keys();
+          for (const n of noms) { try { await caches.delete(n); } catch (e) {} }
+        }
+      } catch (e) {}
+
+      // 3) Recharger sur une URL neuve (les paramètres existants sont gardés)
+      try {
+        const u = new URL(location.href);
+        u.searchParams.set('maj', String(Date.now()));
+        location.replace(u.toString());
+      } catch (e) {
+        location.href = location.pathname + '?maj=' + Date.now();
+      }
+    }
+    window.forcerVraieMiseAJour = forcerVraieMiseAJour;
+
     function showVersionWarning(required) {
       // v1786 — Petite étampe discrète en bas à droite (ne recouvre ni la barre
-      //   du haut ni la recherche). Cliquable → recharge la page.
+      //   du haut ni la recherche). Cliquable → force une vraie mise à jour.
       var stamp = document.getElementById('versionStamp');
       if (!stamp) {
         stamp = document.createElement('div');
         stamp.id = 'versionStamp';
-        stamp.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:99990;background:linear-gradient(to bottom,#f59e0b,#b45309);color:#fff;padding:8px 12px;border-radius:10px;font-size:11px;font-weight:700;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,0.35);cursor:pointer;line-height:1.35;max-width:230px;border:1px solid rgba(0,0,0,0.4);';
-        stamp.onclick = function() { location.reload(true); };
+        stamp.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:99990;background:linear-gradient(to bottom,#f59e0b,#b45309);color:#fff;padding:8px 12px;border-radius:10px;font-size:11px;font-weight:700;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,0.35);cursor:pointer;line-height:1.35;max-width:250px;border:1px solid rgba(0,0,0,0.4);';
+        stamp.onclick = function() { forcerVraieMiseAJour(); };
         document.body.appendChild(stamp);
       }
-      stamp.innerHTML = '⚠️ Pas la dernière version — <u>Rafraîchir</u><br><span style="font-weight:500;font-size:10px;opacity:0.95;">Si le rafraîchissement ne fonctionne pas, avisez Daniel.</span>';
+
+      // v1841 — a-t-on DÉJÀ forcé une vraie mise à jour dans cette session ?
+      // Si oui et que la version est encore en retard, le problème n'est plus
+      // le cache du téléphone : c'est le fichier sur le serveur qui n'est pas
+      // le bon. On le dit clairement au lieu de redemander un rafraîchissement.
+      var dejaForce = null;
+      try { dejaForce = sessionStorage.getItem('physipro_majForcee'); } catch (e) {}
+
+      var detail = '<span style="font-weight:500;font-size:10px;opacity:0.95;">Cet appareil : ' +
+                   APP_VERSION + ' · attendue : ' + required + '</span>';
+
+      if (dejaForce) {
+        stamp.innerHTML = '⚠️ Toujours pas la dernière version<br>' + detail +
+          '<br><span style="font-weight:500;font-size:10px;opacity:0.95;">Le rafraîchissement a été fait : c\'est le fichier sur le serveur qui est en retard. Avisez Daniel.</span>';
+      } else {
+        stamp.innerHTML = '⚠️ Pas la dernière version — <u>Rafraîchir</u><br>' + detail;
+      }
     }
     
+    var _dernierAvisVersion = 0;
     function writeBlocked(silent) {
       if (!_versionOK) {
-        if (!silent) showToast('🔒 Version obsolète — modifications bloquées. Rafraîchissez la page.', 'error');
+        var maintenant = Date.now();
+        if (!silent) {
+          showToast('🔒 Version obsolète — modifications bloquées. Rafraîchissez la page.', 'error');
+          _dernierAvisVersion = maintenant;
+        } else if (maintenant - _dernierAvisVersion > 60000) {
+          // v1841 — AVANT, ce chemin repartait sans un mot : quand l'étampe
+          // « pas la dernière version » était affichée, les modifications de
+          // cartes étaient abandonnées EN SILENCE. On prévient au moins une
+          // fois par minute, sans noyer l'écran de messages.
+          showToast('🔒 Version obsolète — vos modifications ne sont PAS enregistrées. Rafraîchissez.', 'error');
+          _dernierAvisVersion = maintenant;
+        }
         return true;
       }
       return false;
@@ -8163,7 +8256,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       const imageRef = storage.ref(`images/${cardId}/msg_${messageIndex}_${Date.now()}.jpg`);
       const response = await fetch(base64Data);
       const blob = await response.blob();
-      const snapshot = await imageRef.put(blob);
+      const snapshot = await imageRef.put(blob, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE });
       return await snapshot.ref.getDownloadURL();
     }
 
@@ -8172,7 +8265,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       const ref = storage.ref(path);
       const response = await fetch(base64Data);
       const blob = await response.blob();
-      const snap = await ref.put(blob);
+      const snap = await ref.put(blob, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE });
       return await snap.ref.getDownloadURL();
     }
     // Génère une miniature (~300px) à partir d'un dataURL base64
@@ -8648,59 +8741,119 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
     }
     
-    async function loadFromFirebase() {
+    // ═══════════════════════════════════════════════════════════════════
+    // v1839 — CHARGEMENT INITIAL DU NŒUD « moulages »
+    //
+    // AVANT : loadFromFirebase() faisait once('value') sur « moulages », PUIS
+    //   startRealtimeSync() posait on('value') sur le MÊME chemin. Le once()
+    //   ne laisse rien en cache, donc le nœud descendait DEUX FOIS complet à
+    //   chaque ouverture de page, sur chaque poste.
+    //
+    // MAINTENANT : le listener temps réel est posé en premier et sa PREMIÈRE
+    //   remontée sert de chargement initial. Une seule descente du nœud.
+    //   Le comportement reste identique : cette 1re remontée REMPLACE les
+    //   données (avec la même validation qu'avant), elle ne les fusionne pas —
+    //   sinon une carte supprimée par quelqu'un d'autre ressusciterait depuis
+    //   le cache local. Les remontées SUIVANTES fusionnent, comme avant.
+    // ═══════════════════════════════════════════════════════════════════
+    let _moulagesInitialFait = false;      // la 1re remontée a-t-elle déjà servi de chargement ?
+    let _moulagesPremiereRemontee = null;  // promesse résolue par cette 1re remontée
+    let _resoudrePremiereRemontee = null;
+    let _rejeterPremiereRemontee = null;
+
+    // Validation d'un instantané complet de « moulages » → remplace cardsData.
+    // C'est EXACTEMENT la validation qui était dans loadFromFirebase.
+    function appliquerSnapshotMoulagesInitial(snapshot) {
+      if (!snapshot || !snapshot.exists()) return;
+      const loadedData = snapshot.val() || {};
+
+      let validatedData = {};
+      let invalidCount = 0;
+
+      for (const [cardId, card] of Object.entries(loadedData)) {
+        // Vérifier que c'est un objet valide
+        if (!card || typeof card !== 'object' || Array.isArray(card)) {
+          console.warn(`⚠️ Carte ${cardId} ignorée: données invalides`);
+          invalidCount++;
+          continue;
+        }
+
+        // Vérifier les champs minimaux requis
+        if (!card.name && !card.order) {
+          console.warn(`⚠️ Carte ${cardId} ignorée: nom et ordre manquants`);
+          invalidCount++;
+          continue;
+        }
+
+        // Corriger la colonne si invalide
+        if (!card.colonne || !COLONNES.find(c => c.id === card.colonne)) {
+          card.colonne = 'colAttente';
+        }
+
+        // S'assurer que messages est un tableau
+        if (card.messages && !Array.isArray(card.messages)) {
+          card.messages = [];
+        }
+
+        // S'assurer que tracking est un objet
+        if (card.tracking && (typeof card.tracking !== 'object' || Array.isArray(card.tracking))) {
+          card.tracking = {};
+        }
+
+        validatedData[cardId] = card;
+      }
+
+      if (invalidCount > 0) {
+        console.warn(`⚠️ ${invalidCount} carte(s) invalide(s) ignorée(s) lors du chargement`);
+      }
+
+      cardsData = validatedData;
+
+      // Même état qu'avant : startRealtimeSync() posait ces deux repères juste
+      // après le chargement serveur. On les repose ici, au même moment logique.
+      lastLocalCardCount = Object.keys(cardsData).length;
+      lastDataHash = getDataHash();
+    }
+
+    // Démarre le listener si besoin et attend sa première remontée.
+    // Filet de sécurité : si rien n'arrive en 20 s (réseau coupé), on rend la
+    // main en signalant l'échec plutôt que de laisser la page bloquée sur
+    // « Chargement… ». Le listener, lui, reste posé et rattrapera les données.
+    function attendrePremiereRemonteeMoulages() {
+      if (_moulagesInitialFait) return Promise.resolve(true);
+      if (!_moulagesPremiereRemontee) {
+        _moulagesPremiereRemontee = new Promise((resolve, reject) => {
+          _resoudrePremiereRemontee = resolve;
+          _rejeterPremiereRemontee = reject;
+          setTimeout(() => { if (!_moulagesInitialFait) resolve(false); }, 20000);
+        });
+        startRealtimeSync();
+      }
+      return _moulagesPremiereRemontee;
+    }
+
+    // Force la prochaine remontée à REMPLACER les données au lieu de les
+    // fusionner (utilisé après une restauration de backup : les cartes
+    // supprimées par la restauration ne doivent pas revenir du cache local).
+    function forcerRechargementAutoritaire() {
+      _moulagesInitialFait = false;
+      _moulagesPremiereRemontee = null;
+      _resoudrePremiereRemontee = null;
+      _rejeterPremiereRemontee = null;
+    }
+
+    async function loadFromFirebase(autoritaire) {
       try {
         updateSyncIndicator('syncing', 'Chargement...');
-        
-        const snapshot = await firebaseDb.ref(DB_PATHS.moulages).once('value');
-        
-        if (snapshot.exists()) {
-          const loadedData = snapshot.val() || {};
-          
-          // ═══════════════════════════════════════════════════════════════════
-          // VALIDATION DES DONNÉES REÇUES DE FIREBASE
-          // ═══════════════════════════════════════════════════════════════════
-          let validatedData = {};
-          let invalidCount = 0;
-          
-          for (const [cardId, card] of Object.entries(loadedData)) {
-            // Vérifier que c'est un objet valide
-            if (!card || typeof card !== 'object' || Array.isArray(card)) {
-              console.warn(`⚠️ Carte ${cardId} ignorée: données invalides`);
-              invalidCount++;
-              continue;
-            }
-            
-            // Vérifier les champs minimaux requis
-            if (!card.name && !card.order) {
-              console.warn(`⚠️ Carte ${cardId} ignorée: nom et ordre manquants`);
-              invalidCount++;
-              continue;
-            }
-            
-            // Corriger la colonne si invalide
-            if (!card.colonne || !COLONNES.find(c => c.id === card.colonne)) {
-              card.colonne = 'colAttente';
-            }
-            
-            // S'assurer que messages est un tableau
-            if (card.messages && !Array.isArray(card.messages)) {
-              card.messages = [];
-            }
-            
-            // S'assurer que tracking est un objet
-            if (card.tracking && (typeof card.tracking !== 'object' || Array.isArray(card.tracking))) {
-              card.tracking = {};
-            }
-            
-            validatedData[cardId] = card;
-          }
-          
-          if (invalidCount > 0) {
-            console.warn(`⚠️ ${invalidCount} carte(s) invalide(s) ignorée(s) lors du chargement`);
-          }
-          
-          cardsData = validatedData;
+
+        // v1839 — le listener temps réel fournit le chargement initial.
+        if (autoritaire) forcerRechargementAutoritaire();
+        const recu = await attendrePremiereRemonteeMoulages();
+        if (!recu) {
+          console.warn('⏱️ Aucune donnée reçue de Firebase après 20 s');
+          updateSyncIndicator('offline', 'Hors-ligne');
+          showToast('📴 Firebase ne répond pas — données locales utilisées', 'warning');
+          return false;
         }
         
         const assocSnapshot = await firebaseDb.ref(DB_PATHS.associations).once('value');
@@ -8763,6 +8916,23 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
     }
     
+    // v1840 — DÉTACHER LE LISTENER POUR VRAI.
+    // .on() renvoie le callback lui-même, PAS une fonction de désinscription.
+    // Faire « unsubscribeSnapshot() » exécutait donc le callback sans données
+    // au lieu de détacher quoi que ce soit : le listener restait branché après
+    // une déconnexion ou une coupure réseau, et continuait à recevoir — donc à
+    // faire payer — tout le nœud « moulages » à chaque changement.
+    // La bonne façon est off('value', callback).
+    function arreterRealtimeSync() {
+      if (!unsubscribeSnapshot) return;
+      try {
+        firebaseDb.ref(DB_PATHS.moulages).off('value', unsubscribeSnapshot);
+      } catch (e) {
+        console.warn('Détachement du listener impossible:', e && e.message);
+      }
+      unsubscribeSnapshot = null;
+    }
+
     function startRealtimeSync() {
       // Annuler l'ancien listener si existant
       if (unsubscribeSnapshot) {
@@ -8775,6 +8945,23 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       
       // Écouter les changements en temps réel
       unsubscribeSnapshot = firebaseDb.ref(DB_PATHS.moulages).on('value', (snapshot) => {
+        // ═══ v1839 — PREMIÈRE REMONTÉE = CHARGEMENT INITIAL ═══
+        // Elle REMPLACE les données (avec validation), elle ne fusionne pas :
+        // c'est ce que faisait le once('value') supprimé. Placé AVANT les
+        // gardes ci-dessous, sinon la promesse attendue par loadFromFirebase
+        // ne serait jamais résolue et la page resterait sur « Chargement… ».
+        if (!_moulagesInitialFait) {
+          _moulagesInitialFait = true;
+          try {
+            appliquerSnapshotMoulagesInitial(snapshot);
+          } catch (e) {
+            console.error('Erreur chargement initial moulages:', e);
+          }
+          lastSyncTime = new Date();
+          if (_resoudrePremiereRemontee) { _resoudrePremiereRemontee(true); _resoudrePremiereRemontee = null; }
+          return;
+        }
+
         // Ne pas sync si on est en train d'importer ou si sync est en pause
         if (isImporting || syncPaused) {
           return;
@@ -8885,6 +9072,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }, (error) => {
         console.error('Erreur realtime sync:', error);
         updateSyncIndicator('offline', 'Connexion perdue');
+        // v1839 — si l'erreur survient AVANT la 1re remontée (permission
+        // refusée, par exemple), on la fait remonter à loadFromFirebase pour
+        // que son catch affiche le bon message au lieu d'attendre 20 s.
+        if (!_moulagesInitialFait && _rejeterPremiereRemontee) {
+          const rejeter = _rejeterPremiereRemontee;
+          _rejeterPremiereRemontee = null;
+          _resoudrePremiereRemontee = null;
+          rejeter(error);
+        }
       });
     }
     
@@ -9176,20 +9372,51 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
     }
     
+    // v1837 - Noms des backups SANS telecharger le noeud (~19 Mo).
+    // Meme technique que cleanOldBackups (v1728) : ?shallow=true ne renvoie
+    // que les cles, donc quelques centaines d'octets au lieu de tout le noeud.
+    async function _listBackupKeysShallow() {
+      const user = firebase.auth().currentUser;
+      if (!user) return [];
+      const token = await user.getIdToken();
+      const url = firebase.app().options.databaseURL + '/' + DB_PATHS.backups + '.json?shallow=true&auth=' + token;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const obj = await res.json();
+      if (!obj) return [];
+      return Object.keys(obj);
+    }
+
+    // v1837 - AVANT : ref('moulageBackups').once('value') telechargeait les 40
+    // backups au COMPLET (~19 Mo) a chaque ouverture des Reglages, a chaque
+    // backup manuel ET a chaque demarrage de l'application.
+    // MAINTENANT : cles en shallow + un seul entier (cardsCount) par backup
+    // affiche. La date vient du timestamp contenu dans la cle backup_<ms>.
     async function loadBackupsList() {
       try {
-        const snapshot = await firebaseDb.ref(DB_PATHS.backups).once('value');
-        if (!snapshot.exists()) return [];
-        
-        const backups = [];
-        snapshot.forEach(child => {
-          const data = child.val();
-          backups.push({ id: child.key, date: data.date, cardsCount: data.cardsCount, timestamp: data.timestamp || 0 });
+        const keys = await _listBackupKeysShallow();
+        if (keys.length === 0) return [];
+
+        const backups = keys.map(id => {
+          const ts = parseInt(String(id).split('_')[1], 10) || 0;
+          return { id: id, timestamp: ts, date: new Date(ts).toISOString(), cardsCount: '?' };
         });
-        
-        // Trier par timestamp décroissant et limiter à 40
         backups.sort((a, b) => b.timestamp - a.timestamp);
-        return backups.slice(0, 40);
+        const top = backups.slice(0, 40);
+
+        // Nombre de cartes : lecture d'UN entier par backup (quelques octets chacun)
+        try {
+          const token = await firebase.auth().currentUser.getIdToken();
+          const base = firebase.app().options.databaseURL + '/' + DB_PATHS.backups + '/';
+          await Promise.all(top.map(async b => {
+            try {
+              const r = await fetch(base + b.id + '/cardsCount.json?auth=' + token);
+              if (r.ok) { const v = await r.json(); if (v !== null) b.cardsCount = v; }
+            } catch (e) {}
+          }));
+        } catch (e) {}
+
+        return top;
       } catch (error) {
         console.error('Erreur liste backups:', error);
         return [];
@@ -9241,16 +9468,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       try {
         showToast('🧹 Nettoyage...', 'info');
         
-        const snapshot = await firebaseDb.ref(DB_PATHS.backups).once('value');
-        if (!snapshot.exists()) {
+        // v1838 — lecture SHALLOW : on n'a besoin que des NOMS pour savoir
+        // lesquels effacer. Avant, ce bouton téléchargeait les 40 backups au
+        // complet (~19 Mo) juste pour lire leur date.
+        const keys = await _listBackupKeysShallow();
+        if (keys.length === 0) {
           showToast('✅ Rien à nettoyer', 'success');
           return;
         }
         
-        const backups = [];
-        snapshot.forEach(child => {
-          backups.push({ id: child.key, timestamp: child.val().timestamp || 0 });
-        });
+        // La clé « backup_<ms> » porte déjà la date : tri texte = tri chronologique
+        const backups = keys.map(id => ({ id: id, timestamp: parseInt(String(id).split('_')[1], 10) || 0 }));
         
         // Trier et garder les IDs à supprimer
         backups.sort((a, b) => b.timestamp - a.timestamp);
@@ -9298,7 +9526,10 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           associationGroups = backupData.associations.associationGroups || {};
         }
         
-        await loadFromFirebase();
+        // v1839 — « true » = rechargement autoritaire : la restauration doit
+        // REMPLACER les données, pas les fusionner avec le cache local (sinon
+        // les cartes que le backup ne contient pas reviendraient).
+        await loadFromFirebase(true);
         renderKanban();
         
         updateSyncIndicator('online', 'En ligne');
@@ -13478,7 +13709,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
                     const response = await fetch(originalUrl);
                     const blob = await response.blob();
                     const archivePhotoRef = storage.ref('photos/archives/' + orderNumber + '/' + item.name);
-                    await archivePhotoRef.put(blob, { contentType: blob.type || 'image/jpeg' });
+                    await archivePhotoRef.put(blob, { contentType: blob.type || 'image/jpeg', cacheControl: PHOTO_CACHE });
                     const archiveUrl = await archivePhotoRef.getDownloadURL();
                     
                     photosList.push({
@@ -15378,35 +15609,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     window.compareBackups = compareBackups;
     
     // Fonction pour lister tous les backups disponibles
+    // v1838 — c'etait une copie conforme de loadBackupsList(), avec la meme
+    // lecture du noeud complet (~19 Mo). On delegue : une seule implementation,
+    // en lecture shallow.
     async function listAllBackups() {
-      
-      try {
-        const snapshot = await firebaseDb.ref(DB_PATHS.backups).once('value');
-        if (!snapshot.exists()) {
-          return [];
-        }
-        
-        const backups = [];
-        snapshot.forEach(child => {
-          const data = child.val();
-          backups.push({
-            id: child.key,
-            date: data.date,
-            cardsCount: data.cardsCount,
-            timestamp: data.timestamp || 0
-          });
-        });
-        
-        backups.sort((a, b) => b.timestamp - a.timestamp);
-        
-        backups.forEach((b, i) => {
-        });
-        
-        return backups;
-      } catch (error) {
-        console.error('❌ Erreur:', error);
-        return [];
-      }
+      return await loadBackupsList();
     }
     window.listAllBackups = listAllBackups;
     
@@ -16123,11 +16330,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           // Log de déconnexion (avant de perdre currentUser)
           addLog(LOG_TYPES.AUTH, `Déconnexion: ${userEmail}`, { email: userEmail });
           
-          // Arrêter la sync en temps réel
-          if (unsubscribeSnapshot) {
-            unsubscribeSnapshot();
-            unsubscribeSnapshot = null;
-          }
+          // Arrêter la sync en temps réel (v1840 — détachement réel)
+          arreterRealtimeSync();
           
           await auth.signOut();
           
@@ -16215,8 +16419,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           // Charger les listes personnalisées
           loadListsFromFirebase();
           
-          // Démarrer la sync en temps réel seulement si Firebase a réussi
-          startRealtimeSync();
+          // v1839 — la sync temps réel est DÉJÀ démarrée : c'est elle qui a
+          // fourni le chargement initial dans loadFromFirebase(). La relancer
+          // ici détacherait puis rattacherait le listener, ce qui referait
+          // descendre tout le nœud « moulages » une deuxième fois — c'était
+          // exactement le gaspillage qu'on corrige.
           
           // Démarrer la vérification de version
           startVersionCheck();
@@ -16229,8 +16436,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           
           // Créer un backup initial si aucun n'existe
           try {
-            const backups = await loadBackupsList();
-            if (backups.length === 0 && Object.keys(cardsData).length > 0) {
+            // v1837 - on a seulement besoin de SAVOIR s'il existe deja un backup.
+            // Lecture shallow (noms de cles) : ~19 Mo evites a CHAQUE demarrage,
+            // sur chaque poste, a chaque rechargement de page.
+            const backupKeys = await _listBackupKeysShallow();
+            if (backupKeys.length === 0 && Object.keys(cardsData).length > 0) {
               await createBackup();
             }
           } catch (e) {
@@ -16415,11 +16625,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           // Afficher l'écran de connexion
           showLoginScreen();
           
-          // Arrêter la sync si elle était active
-          if (unsubscribeSnapshot) {
-            unsubscribeSnapshot();
-            unsubscribeSnapshot = null;
-          }
+          // Arrêter la sync si elle était active (v1840 — détachement réel)
+          arreterRealtimeSync();
         }
       });
       
@@ -16436,7 +16643,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       window.addEventListener('offline', () => {
         isOnline = false;
         updateSyncIndicator('offline', 'Hors-ligne');
-        if (unsubscribeSnapshot) unsubscribeSnapshot();
+        arreterRealtimeSync();   // v1840 — détachement réel ; l'événement « online » le repose
       });
     });
     
@@ -16622,14 +16829,14 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     async function _uploadPhotoWithThumb(file, orderNumber, fileName) {
       const compressed = await compressPhotoFile(file) || file;    // v1793 — repli si non décodable
       const ref = storage.ref(`photos/moulages/${orderNumber}/${fileName}`);
-      await ref.put(compressed, { contentType: 'image/jpeg', customMetadata: { opt: 'v1791' } });
+      await ref.put(compressed, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE, customMetadata: { opt: 'v1791' } });
       const downloadUrl = await ref.getDownloadURL();
       let thumbnailUrl = downloadUrl;
       try {
         const thumb = await compressPhotoThumb(file);              // miniature (400px)
         if (!thumb) throw new Error('image non décodable');
         const tref = storage.ref(`photos/moulages/${orderNumber}/thumbs/${fileName}`);
-        await tref.put(thumb, { contentType: 'image/jpeg' });
+        await tref.put(thumb, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE });
         thumbnailUrl = await tref.getDownloadURL();
       } catch (e) { console.warn('Miniature non générée, pleine taille utilisée:', e && e.message); }
       return { downloadUrl, thumbnailUrl, fullPath: `photos/moulages/${orderNumber}/${fileName}` };
@@ -16642,14 +16849,14 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     async function _uploadChatPhoto(file, orderNumber, fileName) {
       const compressed = await compressPhotoFile(file, CHAT_PHOTO_W, CHAT_PHOTO_Q, CHAT_PHOTO_B) || file;
       const ref = storage.ref(`photos/moulages/${orderNumber}/chat/${fileName}`);
-      await ref.put(compressed, { contentType: 'image/jpeg', customMetadata: { opt: 'v1828-chat' } });
+      await ref.put(compressed, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE, customMetadata: { opt: 'v1828-chat' } });
       const downloadUrl = await ref.getDownloadURL();
       let thumbnailUrl = downloadUrl;
       try {
         const thumb = await compressPhotoThumb(file);            // 400 px
         if (!thumb) throw new Error('image non décodable');
         const tref = storage.ref(`photos/moulages/${orderNumber}/chat/thumbs/${fileName}`);
-        await tref.put(thumb, { contentType: 'image/jpeg' });
+        await tref.put(thumb, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE });
         thumbnailUrl = await tref.getDownloadURL();
       } catch (e) { console.warn('Miniature de chat non générée:', e && e.message); }
       return { downloadUrl, thumbnailUrl, fullPath: `photos/moulages/${orderNumber}/chat/${fileName}` };
@@ -16870,7 +17077,33 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
     // Liste tous les fichiers pleine taille de tous les moulages (sans les thumbs).
     // Retourne [{ ref, size }] — une lecture de métadonnées par fichier, pas d'egress.
+    //
+    // v1838 — RÉSULTAT GARDÉ EN MÉMOIRE 10 MINUTES.
+    // Ce recensement fait un listAll() par commande PLUS un getMetadata() par
+    // photo : des milliers d'opérations. Avant, cliquer « Analyser » puis
+    // « Optimiser » le refaisait deux fois de suite pour un résultat identique.
+    // Le cache est vidé dès qu'une photo est recompressée (les tailles changent).
+    let _scanPhotosCache = null;
+    let _scanPhotosCacheTime = 0;
+    const SCAN_PHOTOS_TTL = 10 * 60 * 1000;
+
+    function _viderScanPhotosCache() {
+      _scanPhotosCache = null;
+      _scanPhotosCacheTime = 0;
+    }
+
     async function _scanAllMoulagePhotos(onProgress) {
+      if (_scanPhotosCache && (Date.now() - _scanPhotosCacheTime) < SCAN_PHOTOS_TTL) {
+        if (onProgress) onProgress(1, 1, _scanPhotosCache.length);
+        return _scanPhotosCache;
+      }
+      const r = await _scanAllMoulagePhotosBrut(onProgress);
+      // Un scan interrompu est partiel : on ne le garde pas en cache
+      if (!photoOptCancel) { _scanPhotosCache = r; _scanPhotosCacheTime = Date.now(); }
+      return r;
+    }
+
+    async function _scanAllMoulagePhotosBrut(onProgress) {
       const root = storage.ref('photos/moulages');
       const top = await root.listAll();
       const folders = top.prefixes;   // un dossier par numéro de commande
@@ -16963,18 +17196,157 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         return { saved: 0, skipped: true };
       }
 
-      await ref.put(small, { contentType: 'image/jpeg', customMetadata: { opt: 'v1793' } });
+      await ref.put(small, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE, customMetadata: { opt: 'v1793' } });
+      _viderScanPhotosCache();   // v1838 — la taille du fichier vient de changer
 
       // Miniature : chemin <dossier>/thumbs/<nom>
       try {
         const parent = ref.parent;                       // dossier de la commande
         const tref = parent.child('thumbs/' + ref.name);
         const thumb = await compressPhotoThumb(small);
-        if (thumb) await tref.put(thumb, { contentType: 'image/jpeg', customMetadata: { opt: 'v1793' } });
+        if (thumb) await tref.put(thumb, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE, customMetadata: { opt: 'v1793' } });
       } catch (e) { console.warn('Miniature non régénérée pour', ref.fullPath, e && e.message); }
 
       return { saved: raw.size - small.size, skipped: false };
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // v1838 — PASSE D'ENTRETIEN : CACHE-CONTROL SUR LES PHOTOS EXISTANTES
+    //
+    // La v1837 pose l'en-tête de cache sur les NOUVELLES photos. Les photos
+    // déjà en ligne, elles, sont encore re-téléchargées à chaque ouverture de
+    // fiche. Cette passe corrige l'existant.
+    //
+    // ⚠️ Elle NE TÉLÉCHARGE AUCUNE PHOTO et n'en modifie aucune : elle ne
+    //    touche qu'aux métadonnées (updateMetadata). Zéro octet d'egress.
+    // Elle est interruptible et reprenable : chaque dossier terminé est noté
+    // dans le navigateur, un 2e lancement repart où le 1er s'est arrêté.
+    // ═══════════════════════════════════════════════════════════════════
+    const PHOTO_CACHE_DONE_KEY = 'physipro_photoCacheDone';
+    let _passeCacheEnCours = false;
+    let _passeCacheAnnule  = false;
+
+    function _cacheDejaFait() {
+      try { return JSON.parse(localStorage.getItem(PHOTO_CACHE_DONE_KEY) || '[]'); }
+      catch (e) { return []; }
+    }
+    function _marquerDossierFait(chemin) {
+      try {
+        const l = _cacheDejaFait();
+        if (l.indexOf(chemin) === -1) { l.push(chemin); localStorage.setItem(PHOTO_CACHE_DONE_KEY, JSON.stringify(l)); }
+      } catch (e) {}
+    }
+    function _cacheLabel(txt) {
+      const el = document.getElementById('btnPhotoCacheLabel');
+      if (el) el.textContent = txt;
+    }
+
+    // Traite un dossier : pose l'en-tête sur ses fichiers, puis descend dans
+    // ses sous-dossiers (thumbs, chat, chat/thumbs).
+    async function _passeCacheDossier(dossierRef, compteur, dejaFaits) {
+      if (_passeCacheAnnule) return;
+      const chemin = dossierRef.fullPath;
+      const sauter = dejaFaits.indexOf(chemin) !== -1;
+
+      let res;
+      try { res = await dossierRef.listAll(); }
+      catch (e) { console.warn('Dossier illisible:', chemin, e && e.message); return; }
+
+      if (!sauter) {
+        for (const item of res.items) {
+          if (_passeCacheAnnule) return;
+          try {
+            const meta = await item.getMetadata();
+            if ((meta.cacheControl || '').indexOf('31536000') !== -1) {
+              compteur.deja++;
+            } else {
+              await item.updateMetadata({ cacheControl: PHOTO_CACHE });
+              compteur.faits++;
+            }
+          } catch (e) {
+            compteur.echecs++;
+            console.warn('Métadonnée non posée:', item.fullPath, e && e.message);
+          }
+          compteur.vus++;
+          if (compteur.vus % 10 === 0) _cacheLabel(compteur.faits + ' corrigées…');
+        }
+        _marquerDossierFait(chemin);
+      } else {
+        compteur.sautes += res.items.length;
+      }
+
+      for (const sous of res.prefixes) {
+        await _passeCacheDossier(sous, compteur, dejaFaits);
+      }
+    }
+
+    async function lancerPassePhotoCache() {
+      if (_passeCacheEnCours) {
+        _passeCacheAnnule = true;
+        _cacheLabel('Arrêt…');
+        return;
+      }
+      if (!confirm(
+        'Passe d\'entretien du cache des photos\n\n' +
+        'Ajoute aux photos DÉJÀ en ligne l\'en-tête qui autorise le navigateur à les garder en mémoire. ' +
+        'Sans cet en-tête, chaque miniature est retéléchargée à chaque ouverture de fiche, sur chaque poste.\n\n' +
+        '• Aucune photo n\'est téléchargée, déplacée ni modifiée — seules leurs métadonnées changent.\n' +
+        '• L\'opération est longue (quelques minutes) mais ne se fait qu\'une fois.\n' +
+        '• Recliquer sur le bouton l\'arrête ; un nouveau lancement reprend où elle s\'est arrêtée.\n\n' +
+        'Lancer maintenant ?'
+      )) return;
+
+      _passeCacheEnCours = true;
+      _passeCacheAnnule = false;
+      const compteur = { vus: 0, faits: 0, deja: 0, sautes: 0, echecs: 0 };
+      const dejaFaits = _cacheDejaFait();
+      _cacheLabel('Démarrage…');
+
+      try {
+        const racines = ['photos/moulages', 'photos/corbeille'];
+        for (const r of racines) {
+          if (_passeCacheAnnule) break;
+          let haut;
+          try { haut = await storage.ref(r).listAll(); }
+          catch (e) { console.warn('Racine illisible:', r, e && e.message); continue; }
+          // fichiers posés directement à la racine (rare) + un dossier par commande
+          for (const item of haut.items) {
+            if (_passeCacheAnnule) break;
+            try {
+              const meta = await item.getMetadata();
+              if ((meta.cacheControl || '').indexOf('31536000') !== -1) compteur.deja++;
+              else { await item.updateMetadata({ cacheControl: PHOTO_CACHE }); compteur.faits++; }
+            } catch (e) { compteur.echecs++; }
+            compteur.vus++;
+          }
+          for (let i = 0; i < haut.prefixes.length; i++) {
+            if (_passeCacheAnnule) break;
+            _cacheLabel('Dossier ' + (i + 1) + '/' + haut.prefixes.length + ' — ' + compteur.faits + ' corrigées');
+            await _passeCacheDossier(haut.prefixes[i], compteur, dejaFaits);
+          }
+        }
+
+        const resume = compteur.faits + ' photo(s) corrigée(s), ' + compteur.deja + ' déjà correcte(s)' +
+                       (compteur.sautes ? ', ' + compteur.sautes + ' sautée(s) (dossier déjà traité)' : '') +
+                       (compteur.echecs ? ', ' + compteur.echecs + ' échec(s)' : '');
+        if (_passeCacheAnnule) {
+          _cacheLabel('Arrêtée');
+          showToast('⏸️ Passe arrêtée — ' + resume + '. Reprenable.', 'warning');
+        } else {
+          _cacheLabel('✅ Terminé');
+          showToast('✅ Cache photos — ' + resume, 'success');
+        }
+        console.log('🚀 Passe cache photos :', compteur);
+      } catch (err) {
+        console.error('❌ Passe cache photos:', err);
+        _cacheLabel('❌ Erreur');
+        showToast('❌ Passe interrompue : ' + (err && err.message), 'error');
+      } finally {
+        _passeCacheEnCours = false;
+        setTimeout(function () { _cacheLabel('Cache photos'); }, 8000);
+      }
+    }
+    window.lancerPassePhotoCache = lancerPassePhotoCache;
 
     // ─── Bouton « Optimiser » ───
     async function optimizeOldPhotos() {
@@ -17326,6 +17698,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         const cible = storage.ref(`photos/corbeille/${commande}/${Date.now()}__${nom}`);
         await cible.put(blob, {
           contentType: 'image/jpeg',
+          cacheControl: PHOTO_CACHE,
           customMetadata: { origPath: fullPath, deletedAt: String(Date.now()), commande }
         });
       } catch (e) {
@@ -17431,13 +17804,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const blob = await resp.blob();
 
-        await storage.ref(orig).put(blob, { contentType: 'image/jpeg', customMetadata: { opt: 'v1793' } });
+        await storage.ref(orig).put(blob, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE, customMetadata: { opt: 'v1793' } });
 
         // Régénérer la miniature
         try {
           const i = orig.lastIndexOf('/');
           const thumb = await compressPhotoThumb(blob);
-          if (thumb) await storage.ref(`${orig.slice(0, i)}/thumbs/${orig.slice(i + 1)}`).put(thumb, { contentType: 'image/jpeg' });
+          if (thumb) await storage.ref(`${orig.slice(0, i)}/thumbs/${orig.slice(i + 1)}`).put(thumb, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE });
         } catch (e) { console.warn('Miniature non régénérée:', e && e.message); }
 
         await ref.delete();
@@ -17838,7 +18211,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const blob = await resp.blob();
       const ref = storage.ref(destPath);
-      await ref.put(blob, { contentType: 'image/jpeg' });
+      await ref.put(blob, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE });
       return { url: await ref.getDownloadURL(), blob: blob };
     }
 
@@ -19629,7 +20002,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     function mobileRefresh() {
       const btn = document.getElementById('mobileRefreshBtn');
       btn.classList.add('rotating');
-      setTimeout(() => location.reload(true), 500);
+      // v1841 — si la version est en retard, ce bouton doit faire une VRAIE
+      // mise à jour (vider le cache et changer l'URL), sinon il rechargeait la
+      // même vieille page en cache et l'étampe revenait aussitôt. Sur une
+      // version à jour, il reste un simple rechargement (pas de re-téléchargement
+      // inutile du fichier).
+      setTimeout(function () {
+        if (typeof _versionOK !== 'undefined' && !_versionOK) forcerVraieMiseAJour();
+        else location.reload();
+      }, 500);
     }
     window.mobileRefresh = mobileRefresh;
     
@@ -21771,6 +22152,12 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ===== QUEST CHAT MODULE (Firebase Realtime) =====
     var MChat = (function() {
       var _listener = null;
+      // v1840 — on garde la REQUÊTE ayant servi au on(), pas seulement le
+      // callback : off() n'enlève un écouteur que s'il est appelé sur la même
+      // requête (une ref nue et la même ref triée par orderByChild sont deux
+      // requêtes différentes pour Firebase).
+      var _listenerQuery = null;
+      var _psmListenerQuery = null;
       var _currentJobId = null;
       var _messages = [];
       var _composeType = 'conversation';
@@ -21932,7 +22319,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         }).catch(function(){});
 
         // Listen to questChat messages (normal questionnement chat)
-        _listener = database.ref('chats/' + jobId + '/messages').orderByChild('timestamp').on('value', function(snap) {
+        _listenerQuery = database.ref('chats/' + jobId + '/messages').orderByChild('timestamp');
+        _listener = _listenerQuery.on('value', function(snap) {
           var data = snap.val() || {};
           var v2 = Object.entries(data).sort(function(a,b){ return (a[1].timestamp||0)-(b[1].timestamp||0); });
           // Fusionner les ANCIENS messages (card.messages) en lecture seule, sans rien réécrire
@@ -21949,7 +22337,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         // If this job came from PSM, also listen to psmChat messages
         if (job && job.fromPSM && job.psmCardId) {
           _psmCardId = job.psmCardId;
-          _psmListener = database.ref('psmChat/' + job.psmCardId + '/messages').orderByChild('timestamp').on('value', function(snap) {
+          _psmListenerQuery = database.ref('psmChat/' + job.psmCardId + '/messages').orderByChild('timestamp');
+          _psmListener = _psmListenerQuery.on('value', function(snap) {
             var data = snap.val() || {};
             _psmMessages = Object.entries(data).sort(function(a,b){ return (a[1].timestamp||0)-(b[1].timestamp||0); });
             render();
@@ -22005,11 +22394,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       
       function detach() {
         var database = getDb();
-        if (_listener && _currentJobId && database) {
-          database.ref('chats/' + _currentJobId + '/messages').off('value', _listener);
+        // v1840 — détacher sur la requête d'origine (voir _listenerQuery).
+        // Avant, ces deux écouteurs n'étaient JAMAIS enlevés : chaque fiche
+        // ouverte laissait un écouteur vivant sur son fil de discussion pour
+        // le reste de la session.
+        if (_listener && _listenerQuery) {
+          try { _listenerQuery.off('value', _listener); } catch (e) { console.warn('Détachement chat:', e && e.message); }
         }
-        if (_psmListener && _psmCardId && database) {
-          database.ref('psmChat/' + _psmCardId + '/messages').off('value', _psmListener);
+        if (_psmListener && _psmListenerQuery) {
+          try { _psmListenerQuery.off('value', _psmListener); } catch (e) { console.warn('Détachement chat PSM:', e && e.message); }
         }
         if (_seenListener && _currentJobId && database) {
           database.ref('chats/' + _currentJobId + '/seen').off('value', _seenListener);
@@ -22017,6 +22410,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         _seenListener = null;
         _listener = null;
         _psmListener = null;
+        _listenerQuery = null;
+        _psmListenerQuery = null;
         if (typeof MChat !== 'undefined' && MChat.cancelPhotoRequest) MChat.cancelPhotoRequest(true);
         _currentJobId = null;
         _psmCardId = null;
@@ -23478,7 +23873,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
                 var t = await compressPhotoThumb(plein.blob);          // miniature 400 px
                 if (t) {
                   var tref = storage.ref('photos/moulages/' + order + '/chat/thumbs/' + nom);
-                  await tref.put(t, { contentType: 'image/jpeg' });
+                  await tref.put(t, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE });
                   tUrl = await tref.getDownloadURL();
                 }
               } catch (e) { console.warn('[SE] miniature non fabriquée :', e && e.message); }
