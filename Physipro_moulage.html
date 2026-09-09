@@ -1384,7 +1384,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1846</title>
+  <title>PhysiPro Moulages v1847</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -6648,8 +6648,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             <input type="file" id="qchatPhoneCamInput" accept="image/*" capture="environment" style="display:none;" onchange="MChat.handlePhoneCapture(this)">
             <input type="file" id="qchatFileInput" accept=".pdf,.eml,.msg,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple style="display:none" onchange="MChat.handleFileAttach(this)">
             <button class="imsg-icon" onclick="MChat.editDests()" title="Ajouter / modifier les destinataires des notifications" style="font-weight:800;">+</button>
-            <!-- v1846 — dictée vocale, téléphone seulement (voir _majBoutonMicro) -->
-            <button class="imsg-icon" id="qchatMicBtn" onclick="MChat.toggleDictee()" title="Dicter le message à voix haute" style="display:none;">🎤</button>
+            <!-- v1847 — ouvre le clavier du téléphone, prêt pour sa touche micro -->
+            <button class="imsg-icon" id="qchatMicBtn" onclick="MChat.toggleDictee()" title="Ouvrir le clavier pour dicter (utilisez ensuite le micro du clavier)" style="display:none;">🎤</button>
             <button class="imsg-icon" id="qchatPhotoBtnMain" onclick="MChat.openCamera()" title="Inclure une photo avec le téléphone (PhotoSender)">📷</button>
             <button class="imsg-icon" onclick="document.getElementById('qchatFileInput').click()" title="Joindre un fichier (PDF, image, courriel...)">📎</button>
             <div class="imsg-field" id="qchatComposeText" contenteditable="true" data-placeholder="Message…" onpaste="MChat.handlePaste(event)" onkeydown="MChat.composeKeydown(event)"></div>
@@ -7425,7 +7425,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261003;
+    var APP_VERSION = 20261004;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -23572,95 +23572,55 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
 
       // ═══════════════════════════════════════════════════════════════
-      // v1846 — DICTÉE VOCALE (téléphone seulement)
+      // v1847 — LE MICRO PASSE PAR LE CLAVIER DU TÉLÉPHONE
       //
-      // Le micro écrit dans le champ du message, à la suite de ce qui s'y
-      // trouve déjà. Il n'envoie rien : c'est à l'utilisateur d'appuyer sur ↑
-      // comme d'habitude. Le brouillon est enregistré après chaque phrase,
-      // donc rien n'est perdu si le téléphone se verrouille.
+      // La v1846 utilisait la reconnaissance vocale du navigateur
+      // (webkitSpeechRecognition). Elle exige une autorisation micro
+      // distincte, envoie l'audio à Google, et se faisait refuser.
       //
-      // Le bouton n'apparaît qu'au téléphone (_isPhone) et seulement si
-      // l'appareil sait faire de la reconnaissance vocale. Sur un appareil
-      // qui ne la gère pas, il reste caché plutôt que d'afficher un bouton
-      // qui ne ferait rien.
+      // AUCUN SITE WEB NE PEUT APPUYER SUR LA TOUCHE MICRO DU CLAVIER : c'est
+      // une fonction du système, hors d'atteinte d'une page. Ce que le bouton
+      // PEUT faire — et c'est ce qu'il fait maintenant — c'est placer le
+      // curseur dans le champ du message et faire monter le clavier, prêt à
+      // dicter. Il reste une touche à appuyer : le 🎤 du clavier.
+      //
+      // Avantage : aucune autorisation à donner, aucun refus possible, et la
+      // dictée est celle du téléphone — la même qu'ailleurs, et l'audio ne
+      // passe pas par un service tiers ajouté par nous.
       // ═══════════════════════════════════════════════════════════════
-      var _dictee = null;         // instance de reconnaissance en cours
-      var _dicteeActive = false;
-
-      function _dicteeDisponible() {
-        return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-      }
-
       function _majBoutonMicro() {
         var b = document.getElementById('qchatMicBtn');
         if (!b) return;
-        b.style.display = (_isPhone() && _dicteeDisponible()) ? '' : 'none';
+        b.style.display = _isPhone() ? '' : 'none';
       }
 
-      function _dicteeVisuel(actif) {
-        _dicteeActive = actif;
-        var b = document.getElementById('qchatMicBtn');
-        if (!b) return;
-        b.innerHTML = actif ? '⏹️' : '🎤';
-        b.title = actif ? 'Arrêter la dictée' : 'Dicter le message à voix haute';
-        b.style.background = actif ? 'rgba(239,68,68,0.35)' : '';
-      }
-
-      function _ajouterTexteDicte(texte) {
-        var ce = document.getElementById('qchatComposeText');
-        if (!ce || !texte) return;
-        var actuel = (ce.tagName === 'TEXTAREA') ? ce.value : ce.innerText;
-        var separateur = (actuel && !/\s$/.test(actuel)) ? ' ' : '';
-        var nouveau = actuel + separateur + texte;
-        if (ce.tagName === 'TEXTAREA') ce.value = nouveau; else ce.innerText = nouveau;
-        try { _saveDraft(); } catch (e) {}
+      // Place le curseur À LA FIN du texte déjà écrit, pour que la dictée
+      // s'ajoute à la suite au lieu d'écraser ou de s'insérer au début.
+      function _curseurALaFin(ce) {
+        try {
+          if (ce.tagName === 'TEXTAREA') {
+            ce.selectionStart = ce.selectionEnd = ce.value.length;
+            return;
+          }
+          var plage = document.createRange();
+          plage.selectNodeContents(ce);
+          plage.collapse(false);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(plage);
+        } catch (e) {}
       }
 
       function toggleDictee() {
-        if (_dicteeActive) { _arreterDictee(); return; }
-        if (!_dicteeDisponible()) {
-          if (typeof showToast === 'function') showToast('🎤 Cet appareil ne gère pas la dictée', 'warning');
-          return;
+        var ce = document.getElementById('qchatComposeText');
+        if (!ce) return;
+        // focus() doit rester DANS le geste de l'utilisateur, sinon iOS
+        // refuse de faire monter le clavier. Donc pas de setTimeout ici.
+        ce.focus();
+        _curseurALaFin(ce);
+        if (typeof showToast === 'function') {
+          showToast('🎤 Appuyez sur le micro de votre clavier pour dicter', 'info', 4000);
         }
-        try {
-          var Moteur = window.SpeechRecognition || window.webkitSpeechRecognition;
-          _dictee = new Moteur();
-          _dictee.lang = 'fr-CA';
-          _dictee.continuous = true;      // ne s'arrête pas à la première pause
-          _dictee.interimResults = false; // on n'écrit que du texte confirmé
-
-          _dictee.onresult = function (ev) {
-            for (var i = ev.resultIndex; i < ev.results.length; i++) {
-              if (ev.results[i].isFinal) {
-                _ajouterTexteDicte((ev.results[i][0].transcript || '').trim());
-              }
-            }
-          };
-          _dictee.onerror = function (ev) {
-            var m = (ev && ev.error) || '';
-            if (m === 'not-allowed' || m === 'service-not-allowed') {
-              if (typeof showToast === 'function') showToast('🎤 Micro refusé — autorisez le microphone dans les réglages du navigateur', 'error');
-            } else if (m !== 'aborted' && m !== 'no-speech') {
-              if (typeof showToast === 'function') showToast('🎤 Dictée interrompue : ' + m, 'warning');
-            }
-            _dicteeVisuel(false);
-          };
-          _dictee.onend = function () { _dicteeVisuel(false); };
-
-          _dictee.start();
-          _dicteeVisuel(true);
-          if (typeof showToast === 'function') showToast('🎤 Parlez — retouchez au besoin avant d\'envoyer', 'info');
-        } catch (e) {
-          console.error('Dictée:', e);
-          _dicteeVisuel(false);
-          if (typeof showToast === 'function') showToast('🎤 Dictée impossible sur cet appareil', 'error');
-        }
-      }
-
-      function _arreterDictee() {
-        try { if (_dictee) _dictee.stop(); } catch (e) {}
-        _dictee = null;
-        _dicteeVisuel(false);
       }
 
       function openCompose(type) {
@@ -23669,7 +23629,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var access = (typeof getHubAccess === 'function') ? getHubAccess(myEmail) : [];
         var camBtn = document.getElementById('qchatCameraBtn');
         if (camBtn) camBtn.style.display = (access.indexOf('jobs') !== -1) ? '' : 'none';
-        _majBoutonMicro();                  // v1846 — micro : téléphone seulement
+        _majBoutonMicro();                  // v1847 — micro : téléphone seulement
         _composeType = type || 'conversation';
         _composeImages = [];
         _composeFiles = [];
