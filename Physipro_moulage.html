@@ -1384,7 +1384,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1841</title>
+  <title>PhysiPro Moulages v1845</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -6458,6 +6458,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               style="background:linear-gradient(135deg,#C9A14A,#a8842f);border-color:rgba(201,161,74,0.6);">
         <span>🚀</span><span id="btnPhotoCacheLabel">Cache photos</span>
       </button>
+      <!-- ═══ DÉBUT BLOC TEMPORAIRE « ARCHIVE & MÉNAGE » (v1843) ═══════
+           Outil d'entretien réservé à Daniel. Pour l'enlever : supprimer le
+           bouton ci-dessous (de DÉBUT à FIN). Les fonctions restent dans le
+           JS mais ne s'exécutent JAMAIS d'elles-mêmes — aucune minuterie.
+      ──────────────────────────────────────────────────────────────── -->
+      <button class="btn-pill" id="btnMenage" onclick="lancerArchiveMenage()"
+              title="Archive dans un fichier ce qui a dépassé sa durée de conservation, puis — et seulement après confirmation du dépôt dans OneDrive — le supprime de Firebase."
+              style="background:linear-gradient(135deg,#4A8EF5,#2f6bd0);border-color:rgba(74,142,245,0.6);">
+        <span>🗄️</span><span id="btnMenageLabel">Archive &amp; ménage</span>
+      </button>
+      <!-- ═══ FIN BLOC TEMPORAIRE « ARCHIVE & MÉNAGE » ═══════════════ -->
     </div>
     <!-- ═══ FIN BLOC TEMPORAIRE « CACHE PHOTOS » ═══════════════════════ -->
     <div class="tb-center"><span class="top-title">Outil de gestion des moulages</span></div>
@@ -7385,7 +7396,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // Les noms de fichiers contiennent un timestamp et ne sont jamais reutilises
     // -> le contenu est immuable, donc on peut le garder un an en cache local.
     // A ajouter dans TOUS les .put() de photos.
-    var PHOTO_CACHE = 'public, max-age=31536000, immutable';
+    // v1842 — « private » et non « public » : ce sont des photos de
+    // bénéficiaires. Le cache du NAVIGATEUR de la personne fonctionne pareil
+    // (c'est tout le gain de la v1837), mais aucun cache partagé — proxy,
+    // pare-feu filtrant, CDN d'entreprise — n'a le droit d'en garder copie.
+    var PHOTO_CACHE = 'private, max-age=31536000, immutable';
     
     // Variables d'authentification
     let currentUser = null;
@@ -7408,7 +7423,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20260928;
+    var APP_VERSION = 20261002;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -17347,6 +17362,422 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
     }
     window.lancerPassePhotoCache = lancerPassePhotoCache;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // v1843 — ARCHIVE ET MÉNAGE  (conservation limitée)
+    //
+    // RÈGLE ABSOLUE DEMANDÉE PAR DANIEL : rien n'est effacé de la base tant
+    // qu'un fichier d'archive n'a pas été produit et déposé dans OneDrive.
+    // OneDrive garde tout, éternellement ; la base ne garde que le récent.
+    //
+    // Le mécanisme est donc VOLONTAIREMENT MANUEL et en deux temps :
+    //   1. On recense ce qui a dépassé sa durée, on le télécharge dans UN
+    //      fichier JSON. Aucune suppression à cette étape.
+    //   2. Seulement après confirmation que le fichier est dans OneDrive, la
+    //      suppression est proposée. Sans l'étape 1, l'étape 2 est impossible :
+    //      _archivePrete reste à false et le bouton de suppression n'apparaît
+    //      même pas.
+    //
+    // AUCUNE MINUTERIE, AUCUNE PURGE AUTOMATIQUE. Une suppression déclenchée
+    // toute seule par un minuteur ne pourrait jamais vérifier qu'une copie
+    // existe dans OneDrive — c'est exactement ce qu'il faut éviter.
+    //
+    // v1844 — DEUXIÈME CONDITION, CUMULATIVE AVEC L'ÂGE : le moulage
+    // concerné doit avoir suivi tout son cours jusqu'à l'expédition. Voir
+    // _estIssuDUnExpedie() plus bas. Un élément ancien rattaché à un dossier
+    // encore en cours n'est JAMAIS proposé à la suppression.
+    //
+    // DURÉES RETENUES ET POURQUOI :
+    //   • Notifications : 90 jours. Ce sont des accusés de lecture, pas des
+    //     documents d'affaires. Passé trois mois, plus personne ne les ouvre.
+    //     Elles contiennent le nom du bénéficiaire et un extrait de message.
+    //   • Journal d'activité : 12 mois. Assez long pour retracer un incident
+    //     ou répondre à une question de vérification, pas éternel.
+    //
+    // CE QUE JE N'AI PAS TOUCHÉ, ET C'EST VOULU :
+    //   • Les backups (40) : c'est le filet de sécurité lui-même. Le gain
+    //     serait faible et le risque, lui, réel.
+    //   • Les dossiers expédiés : ce sont de vrais documents d'affaires. Leur
+    //     durée dépend des garanties sur les appareils et des obligations
+    //     envers la RAMQ et les centres. Cette décision-là appartient à la
+    //     direction, pas à moi.
+    // ═══════════════════════════════════════════════════════════════════
+    const RETENTION_JOURS = { notifications: 90, journal: 365 };
+
+    let _archivePrete = null;   // contenu recensé, en attente de suppression
+
+    function _dateLisible(ms) {
+      try { return new Date(ms).toLocaleDateString('fr-CA'); } catch (e) { return '?'; }
+    }
+
+    // ═══ v1844 — DEUXIÈME CONDITION : LE MOULAGE DOIT AVOIR ÉTÉ EXPÉDIÉ ═══
+    //
+    // Règle posée par Daniel : rien n'est supprimé automatiquement si le
+    // moulage concerné n'a pas suivi tout son cours jusqu'à l'expédition.
+    // L'ancienneté ne suffit PLUS : un dossier bloqué en attente depuis deux
+    // ans garde l'intégralité de ses notifications et de son journal.
+    //
+    // Le critère réutilise _isExpedieArchive(), déjà présent dans le code :
+    //   card.expedie ET card.oneDrive.archived
+    // C'est-à-dire « envoyé au shipping » ET « archivé dans OneDrive ». Ça
+    // recouvre exactement la consigne : expédié, et déjà sauvegardé ailleurs.
+    //
+    // Une fiche qui a quitté le tableau est acceptée si sa fiche-trace existe
+    // dans « moulagesExpediees » avec expedie = true : elle est allée au bout.
+    //
+    // Tout le reste est CONSERVÉ, et c'est volontaire :
+    //   • ce qui n'est rattaché à aucun moulage (connexions, imports, exports,
+    //     erreurs de synchronisation) ;
+    //   • ce qui est rattaché à un moulage encore en cours ;
+    //   • ce qui est rattaché à une fiche supprimée à la main, dont il ne
+    //     reste aucune trace d'expédition.
+    // Le compte de ce qui est retenu est affiché : rien n'est écarté en douce.
+    function _estIssuDUnExpedie(cardId, fichesTraces) {
+      if (!cardId) return false;                       // pas lié à un moulage
+      const carte = cardsData && cardsData[cardId];
+      if (carte) return _isExpedieArchive(carte);      // encore au tableau
+      const trace = fichesTraces && fichesTraces[cardId];
+      return !!(trace && trace.expedie);               // fiche-trace d'expédié
+    }
+
+    // Étape 1 — recenser ce qui a dépassé sa durée ET provient d'un moulage
+    // expédié. Lecture ciblée : les requêtes sont bornées par endAt(), donc on
+    // ne télécharge QUE le vieux, jamais tout le nœud. Les index « timestamp »
+    // nécessaires existent déjà dans rules_physipro.json.
+    async function _recenserPerimes() {
+      const maintenant = Date.now();
+      const limiteNotif = maintenant - RETENTION_JOURS.notifications * 86400000;
+      const limiteJournal = new Date(maintenant - RETENTION_JOURS.journal * 86400000).toISOString();
+
+      // Fiches-trace des moulages sortis du tableau (nœud léger, sans photos)
+      let fichesTraces = {};
+      try {
+        const g = await firebaseDb.ref('moulagesExpediees').once('value');
+        fichesTraces = g.val() || {};
+      } catch (e) { console.warn('Fiches-trace illisibles:', e && e.message); }
+
+      const notifications = {};
+      const journal = {};
+      let notifRetenues = 0, journalRetenu = 0, authConserves = 0;
+
+      try {
+        const snap = await firebaseDb.ref('moulageNotifications')
+          .orderByChild('timestamp').endAt(limiteNotif).once('value');
+        snap.forEach(function (c) {
+          const v = c.val() || {};
+          if (_estIssuDUnExpedie(v.cardId, fichesTraces)) notifications[c.key] = v;
+          else notifRetenues++;
+        });
+      } catch (e) { console.error('Recensement notifications:', e); throw e; }
+
+      try {
+        // Les horodatages du journal sont des chaînes ISO : le tri texte est
+        // chronologique, endAt() fonctionne donc tel quel.
+        const snap = await firebaseDb.ref('moulageLogs')
+          .orderByChild('timestamp').endAt(limiteJournal).once('value');
+        snap.forEach(function (c) {
+          const v = c.val() || {};
+          // v1845 — LES CONNEXIONS ET DÉCONNEXIONS NE SONT JAMAIS SUPPRIMÉES.
+          // C'est la trace de qui est entré dans le système : en cas
+          // d'intrusion, c'est la seule chose qui permet de savoir quel compte
+          // a servi et quand. Elle ne s'efface pas avec l'âge.
+          if (v.type === LOG_TYPES.AUTH) { authConserves++; return; }
+          const cardId = v.details && v.details.cardId;
+          if (_estIssuDUnExpedie(cardId, fichesTraces)) journal[c.key] = v;
+          else journalRetenu++;
+        });
+      } catch (e) { console.error('Recensement journal:', e); throw e; }
+
+      // ═══ v1845 — MÉNAGE TECHNIQUE ═══
+      // Ces nœuds ne concernent aucun moulage en particulier : ce sont des
+      // rouages internes qui s'accumulent sans jamais être relus. La règle
+      // « expédié » ne s'y applique donc pas. Ils passent quand même par le
+      // fichier d'archive avant d'être supprimés.
+      const technique = { photoRequests: {}, listesHistory: {}, annonceSeen: {} };
+      const limiteTechnique = maintenant - 90 * 86400000;
+
+      // a) Demandes de photo déjà satisfaites ou annulées, de plus de 90 jours.
+      //    Une demande « waiting » est en cours : jamais touchée.
+      try {
+        const snap = await firebaseDb.ref('photoRequests').once('value');
+        snap.forEach(function (c) {
+          const v = c.val() || {};
+          const fini = v.status === 'done' || v.status === 'fulfilled' || v.status === 'cancelled';
+          const quand = v.timestamp || v.requestedAt || 0;
+          if (fini && quand && quand < limiteTechnique) technique.photoRequests[c.key] = v;
+        });
+      } catch (e) { console.warn('photoRequests:', e && e.message); }
+
+      // b) Historique des listes : le code n'en lit JAMAIS que les 20 dernières
+      //    (limitToLast(20)). Tout ce qui est au-delà est inatteignable.
+      try {
+        const snap = await firebaseDb.ref('listes_history').once('value');
+        const tout = snap.val() || {};
+        const cles = Object.keys(tout).sort();           // clés = horodatages
+        cles.slice(0, Math.max(0, cles.length - 20)).forEach(function (k) {
+          technique.listesHistory[k] = tout[k];
+        });
+      } catch (e) { console.warn('listes_history:', e && e.message); }
+
+      // c) « Annonce vue » des annonces qui ne sont plus affichées.
+      try {
+        const courante = (typeof ANNONCE_ID !== 'undefined') ? ANNONCE_ID : null;
+        if (courante) {
+          const snap = await firebaseDb.ref('moulageAnnonceSeen').once('value');
+          const tout = snap.val() || {};
+          Object.keys(tout).forEach(function (utilisateur) {
+            Object.keys(tout[utilisateur] || {}).forEach(function (annonce) {
+              // La clé utilisateur vient de btoa(courriel), qui peut contenir
+              // un « / » — Firebase le lit alors comme un niveau de plus. On
+              // n'efface donc QUE ce qui ressemble vraiment à un identifiant
+              // d'annonce, jamais un fragment de clé mal découpée.
+              if (annonce !== courante && annonce.indexOf('annonce-') === 0) {
+                technique.annonceSeen[utilisateur + '/' + annonce] = tout[utilisateur][annonce];
+              }
+            });
+          });
+        }
+      } catch (e) { console.warn('moulageAnnonceSeen:', e && e.message); }
+
+      const nbTechnique = Object.keys(technique.photoRequests).length
+                        + Object.keys(technique.listesHistory).length
+                        + Object.keys(technique.annonceSeen).length;
+
+      return {
+        genereLe: new Date().toISOString(),
+        genereePar: (currentUser && currentUser.email) || 'inconnu',
+        application: 'PhysiPro Moulages v' + APP_VERSION,
+        technique: technique,
+        nbTechnique: nbTechnique,
+        nbAuthConserves: authConserves,
+        regles: {
+          notifications: RETENTION_JOURS.notifications + ' jours',
+          journal: RETENTION_JOURS.journal + ' jours',
+          condition: 'Le moulage doit avoir ete expedie ET archive dans OneDrive',
+          connexions: 'JAMAIS supprimees (tracabilite securite)',
+          technique: 'Rouages internes jamais relus, plus de 90 jours'
+        },
+        limites: {
+          notificationsAvantLe: _dateLisible(limiteNotif),
+          journalAvantLe: limiteJournal.slice(0, 10)
+        },
+        nbNotifications: Object.keys(notifications).length,
+        nbJournal: Object.keys(journal).length,
+        nbRetenuNonExpedie: notifRetenues + journalRetenu,
+        detailRetenu: { notifications: notifRetenues, journal: journalRetenu },
+        notifications: notifications,
+        journal: journal
+      };
+    }
+
+    // ═══ v1845 — « photoResponses » : ÉCRIT, JAMAIS RELU ═══
+    // L'ancien circuit photo a été retiré en v1675, mais sendCapturedPhoto()
+    // pousse TOUJOURS dans photoResponses/<id> un objet contenant « data » :
+    // la photo complète, en base64. Plus aucune ligne du programme ne lit ce
+    // nœud. Ce sont donc des photos de bénéficiaires qui s'empilent dans la
+    // base, invisibles, sans utilité, et jamais nettoyées.
+    //
+    // C'est probablement le plus gros gisement de place inutile du système —
+    // et, accessoirement, des renseignements de santé dans un recoin oublié.
+    //
+    // Il est archivé DANS SON PROPRE FICHIER : mélangé au reste, le JSON
+    // deviendrait trop lourd pour être construit dans le navigateur.
+    async function _recenserPhotoResponses() {
+      try {
+        const snap = await firebaseDb.ref('photoResponses').once('value');
+        const tout = snap.val();
+        if (!tout) return null;
+        const cles = Object.keys(tout);
+        if (cles.length === 0) return null;
+        return { cles: cles, contenu: tout };
+      } catch (e) {
+        console.warn('photoResponses illisible:', e && e.message);
+        return null;
+      }
+    }
+
+    function _telechargerArchive(archive) {
+      const nom = 'PhysiPro_Moulages_Archive_' + new Date().toISOString().slice(0, 10) + '.json';
+      const blob = new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = nom;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      return nom;
+    }
+
+    // ÉTAPE 1 — recenser + télécharger. Ne supprime RIEN.
+    async function archiverAvantMenage() {
+      const btn = document.getElementById('btnMenageLabel');
+      try {
+        if (btn) btn.textContent = 'Recensement…';
+        const archive = await _recenserPerimes();
+        archive._photoResponses = await _recenserPhotoResponses();
+        archive.nbPhotosOrphelines = archive._photoResponses ? archive._photoResponses.cles.length : 0;
+
+        if (archive.nbNotifications === 0 && archive.nbJournal === 0
+            && archive.nbTechnique === 0 && archive.nbPhotosOrphelines === 0) {
+          _archivePrete = null;
+          if (archive.nbRetenuNonExpedie > 0) {
+            // v1844 — il y a bien du vieux, mais il appartient à des moulages
+            // qui ne sont pas encore allés jusqu'à l'expédition. On le garde.
+            showToast('✅ Rien à supprimer — ' + archive.nbRetenuNonExpedie +
+                      ' élément(s) ancien(s) conservé(s) : moulages non expédiés', 'success');
+          } else {
+            showToast('✅ Rien à archiver — tout est à l\'intérieur des durées', 'success');
+          }
+          return;
+        }
+
+        const nom = _telechargerArchive(archive);
+        archive._fichier = nom;
+
+        // Fichier séparé pour les photos orphelines (voir _recenserPhotoResponses)
+        let nomPhotos = null;
+        if (archive._photoResponses) {
+          const poids = JSON.stringify(archive._photoResponses.contenu).length;
+          if (poids > 300 * 1024 * 1024) {
+            alert('⚠️ Le nœud « photoResponses » pèse plus de 300 Mo.\n\n' +
+                  'Trop lourd pour être archivé par le navigateur en une fois. ' +
+                  'Il sera laissé intact — écrivez-moi pour qu\'on le traite autrement.');
+            archive._photoResponses = null;
+          } else {
+            const b = new Blob([JSON.stringify(archive._photoResponses.contenu, null, 2)], { type: 'application/json' });
+            const u = URL.createObjectURL(b);
+            const a2 = document.createElement('a');
+            nomPhotos = 'PhysiPro_Moulages_PhotosOrphelines_' + new Date().toISOString().slice(0, 10) + '.json';
+            a2.href = u; a2.download = nomPhotos;
+            document.body.appendChild(a2); a2.click(); document.body.removeChild(a2);
+            setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+            archive._fichierPhotos = nomPhotos;
+            archive._poidsPhotosMo = Math.round(poids / 1048576 * 10) / 10;
+          }
+        }
+
+        _archivePrete = archive;
+
+        alert(
+          'ARCHIVE TÉLÉCHARGÉE — étape 1 sur 2\n\n' +
+          'Fichier : ' + nom + '\n' +
+          (nomPhotos ? 'Fichier photos : ' + nomPhotos + '  (' + archive._poidsPhotosMo + ' Mo)\n' : '') + '\n' +
+          'LIÉ À DES MOULAGES EXPÉDIÉS ET ARCHIVÉS DANS ONEDRIVE\n' +
+          '• ' + archive.nbNotifications + ' notification(s) antérieure(s) au ' + archive.limites.notificationsAvantLe + '\n' +
+          '• ' + archive.nbJournal + ' entrée(s) de journal antérieure(s) au ' + archive.limites.journalAvantLe + '\n\n' +
+          'MÉNAGE TECHNIQUE (aucun lien avec un moulage)\n' +
+          '• ' + archive.nbTechnique + ' rouage(s) interne(s) jamais relu(s)\n' +
+          '• ' + archive.nbPhotosOrphelines + ' photo(s) orpheline(s) dans photoResponses\n\n' +
+          'CONSERVÉ QUOI QU\'IL ARRIVE\n' +
+          '• ' + (archive.nbAuthConserves || 0) + ' connexion(s)/déconnexion(s) — traçabilité sécurité\n' +
+          (archive.nbRetenuNonExpedie > 0
+            ? '• ' + archive.nbRetenuNonExpedie + ' élément(s) de moulages non expédiés\n\n'
+            : '\n') +
+          'RIEN N\'A ÉTÉ SUPPRIMÉ.\n\n' +
+          'Déposez maintenant ce fichier dans OneDrive. Quand ce sera fait, ' +
+          'recliquez sur le bouton pour passer à l\'étape 2 (suppression).'
+        );
+        if (btn) btn.textContent = 'Étape 2 : supprimer';
+      } catch (err) {
+        console.error('Archive:', err);
+        _archivePrete = null;
+        showToast('❌ Archivage impossible : ' + (err && err.message) + ' — rien n\'a été supprimé', 'error');
+        if (btn) btn.textContent = 'Archive & ménage';
+      }
+    }
+
+    // ÉTAPE 2 — supprimer, uniquement ce qui figure dans l'archive produite.
+    async function supprimerApresArchive() {
+      if (!_archivePrete) {
+        showToast('⚠️ Aucune archive en attente — faites l\'étape 1 d\'abord', 'warning');
+        return;
+      }
+      const a = _archivePrete;
+
+      if (!confirm(
+        'SUPPRESSION DÉFINITIVE — étape 2 sur 2\n\n' +
+        'Va être supprimé de Firebase :\n' +
+        '• ' + a.nbNotifications + ' notification(s)\n' +
+        '• ' + a.nbJournal + ' entrée(s) de journal\n' +
+        '• ' + (a.nbTechnique || 0) + ' rouage(s) interne(s)\n' +
+        '• ' + (a.nbPhotosOrphelines || 0) + ' photo(s) orpheline(s)\n\n' +
+        'Ces données restent dans le(s) fichier(s) :\n« ' + a._fichier + ' »' +
+        (a._fichierPhotos ? '\n« ' + a._fichierPhotos + ' »' : '') + '\n\n' +
+        'Confirmez-vous que ce fichier est BIEN DÉPOSÉ DANS ONEDRIVE ?'
+      )) return;
+
+      const reponse = prompt(
+        'Dernière vérification.\n\n' +
+        'Tapez ONEDRIVE (en majuscules) pour confirmer que le fichier\n« ' +
+        a._fichier +' »\nest déposé et accessible dans OneDrive.'
+      );
+      if (reponse !== 'ONEDRIVE') {
+        showToast('⏸️ Suppression annulée — rien n\'a été touché', 'warning');
+        return;
+      }
+
+      const btn = document.getElementById('btnMenageLabel');
+      let effNotif = 0, effJournal = 0;
+      try {
+        if (btn) btn.textContent = 'Suppression…';
+
+        // Suppression par lots de 200, nœud par nœud.
+        async function effacerLot(chemin, cles) {
+          for (let i = 0; i < cles.length; i += 200) {
+            const paquet = {};
+            cles.slice(i, i + 200).forEach(function (k) { paquet[k] = null; });
+            await firebaseDb.ref(chemin).update(paquet);
+            if (btn) btn.textContent = 'Suppression ' + Math.min(i + 200, cles.length) + '/' + cles.length + '…';
+          }
+          return cles.length;
+        }
+
+        effNotif = await effacerLot('moulageNotifications', Object.keys(a.notifications));
+        effJournal = await effacerLot('moulageLogs', Object.keys(a.journal));
+
+        // v1845 — ménage technique + photos orphelines
+        if (a.technique) {
+          await effacerLot('photoRequests', Object.keys(a.technique.photoRequests || {}));
+          await effacerLot('listes_history', Object.keys(a.technique.listesHistory || {}));
+          await effacerLot('moulageAnnonceSeen', Object.keys(a.technique.annonceSeen || {}));
+        }
+        if (a._photoResponses && a._fichierPhotos) {
+          await effacerLot('photoResponses', a._photoResponses.cles);
+        }
+
+        // Trace du ménage, dans un nœud déjà autorisé par les règles.
+        try {
+          await firebaseDb.ref('moulageSettings/dernierMenage').set({
+            date: new Date().toISOString(),
+            par: (currentUser && currentUser.email) || 'inconnu',
+            fichierArchive: a._fichier,
+            notificationsSupprimees: effNotif,
+            journalSupprime: effJournal,
+            conserveNonExpedie: a.nbRetenuNonExpedie || 0,
+            techniqueSupprime: a.nbTechnique || 0,
+            photosOrphelinesSupprimees: a.nbPhotosOrphelines || 0,
+            connexionsConservees: a.nbAuthConserves || 0,
+            fichierPhotos: a._fichierPhotos || null,
+            condition: 'moulage expedie et archive OneDrive ; connexions jamais supprimees'
+          });
+        } catch (e) { console.warn('Trace du ménage non écrite:', e && e.message); }
+
+        _archivePrete = null;
+        showToast('✅ Ménage terminé — ' + effNotif + ' notification(s) et ' + effJournal + ' entrée(s) de journal supprimées', 'success');
+        if (btn) btn.textContent = '✅ Terminé';
+        setTimeout(function () { if (btn) btn.textContent = 'Archive & ménage'; }, 8000);
+      } catch (err) {
+        console.error('Suppression:', err);
+        showToast('❌ Suppression interrompue : ' + (err && err.message) + ' — l\'archive reste valide, vous pouvez relancer', 'error');
+        if (btn) btn.textContent = 'Étape 2 : supprimer';
+      }
+    }
+
+    // Point d'entrée du bouton : aiguille vers l'étape 1 ou l'étape 2.
+    function lancerArchiveMenage() {
+      if (_archivePrete) supprimerApresArchive();
+      else archiverAvantMenage();
+    }
+    window.lancerArchiveMenage = lancerArchiveMenage;
 
     // ─── Bouton « Optimiser » ───
     async function optimizeOldPhotos() {
