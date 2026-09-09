@@ -1384,7 +1384,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1847</title>
+  <title>PhysiPro Moulages v1850</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7425,7 +7425,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261004;
+    var APP_VERSION = 20261007;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -9697,6 +9697,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
       
       // Rendre les logs
+      loadLogs();      // v1849 — démarre l'écoute au premier affichage
       renderLogs();
     }
     
@@ -15732,9 +15733,29 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     
     const logsRef = firebaseDb ? firebaseDb.ref('moulageLogs') : null;
     
+    // ═══════════════════════════════════════════════════════════════════
+    // v1849 — L'ÉCOUTE DES JOURNAUX NE DÉMARRE PLUS À LA CONNEXION.
+    //
+    // Avant : à CHAQUE ouverture de session, sur CHAQUE poste, on téléchargeait
+    // les 500 dernières entrées du journal et on gardait l'écoute ouverte pour
+    // toute la session. Chaque déplacement de carte fait par n'importe lequel
+    // des employés était donc renvoyé à tout le monde, en continu — pour un
+    // panneau que presque personne n'ouvre jamais.
+    //
+    // Maintenant : l'écoute démarre à la PREMIÈRE ouverture des Réglages, là
+    // où le journal s'affiche réellement. Rien d'autre ne dépend de
+    // « activityLogs » — vérifié : il ne sert qu'à l'affichage, au filtre, au
+    // compteur, à l'export du journal et au bouton d'effacement.
+    //
+    // L'écriture des entrées (addLog) est indépendante et continue comme
+    // avant : elle pousse directement dans Firebase, sans passer par l'écoute.
+    // ═══════════════════════════════════════════════════════════════════
+    let logsListenerActive = false;
+
     // Charger les logs depuis Firebase (temps réel)
     function loadLogs() {
-      if (!logsRef) return;
+      if (!logsRef || logsListenerActive) return;
+      logsListenerActive = true;
       logsRef.orderByChild('timestamp').limitToLast(500).on('value', function(snap) {
         var data = snap.val();
         if (data) {
@@ -16422,6 +16443,19 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       // Charger d'abord depuis le cache local (pour affichage rapide)
       loadFromLocalStorage();
       renderKanban();
+      // v1848 — AU TÉLÉPHONE AUSSI.
+      // renderKanban() ne dessine que le tableau du poste de travail. Au
+      // téléphone, la liste des cartes n'était peinte QU'APRÈS la réponse de
+      // Firebase : tant que le réseau tardait, l'écran restait vide alors que
+      // les cartes étaient déjà en mémoire, dans le cache local.
+      if (isMobileView() && typeof renderMobileCards === 'function'
+          && Object.keys(cardsData).length > 0) {
+        renderMobileCards();
+        // On NE marque PAS mobileInitDone : initMobileView() a d'autres
+        // choses à faire (démarrer l'écoute des demandes de photo). Elle
+        // repassera et redessinera — c'est peu coûteux, et entretemps
+        // l'écran n'est plus vide.
+      }
       
       // Puis charger depuis Firebase
       let firebaseSuccess = false;
@@ -16578,8 +16612,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           currentUser = user;
           isAuthenticated = true;
           
-          // Charger les logs depuis le localStorage
-          loadLogs();
+          // v1849 — loadLogs() n'est PLUS appelé ici : l'écoute du journal
+          // démarre à la première ouverture des Réglages (voir loadLogs).
           
           // Log de connexion
           addLog(LOG_TYPES.AUTH, `Connexion: ${user.email}`, { 
@@ -16859,6 +16893,36 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       return { downloadUrl, thumbnailUrl, fullPath: `photos/moulages/${orderNumber}/${fileName}` };
     }
     
+    // ═══════════════════════════════════════════════════════════════════
+    // v1850 — PIÈCE JOINTE DU CHAT → STORAGE (et non plus en base64)
+    //
+    // AVANT : un fichier joint était écrit EN ENTIER dans le message, encodé
+    // en base64, dans chats/<jobId>/messages. Un bon de commande de 2 Mo
+    // devenait ~2,7 Mo dans la base, retéléchargés à chaque ouverture du fil.
+    // C'est aussi ce qu'il y a de plus sensible dans le chat : un bon de
+    // commande porte le nom, l'adresse et parfois le numéro d'assurance
+    // maladie du bénéficiaire.
+    //
+    // MAINTENANT : le fichier part dans Storage et le message ne garde que
+    // son adresse. Même approche que les photos du chat en v1828.
+    //
+    // Rangé dans « chat/files/ », un SOUS-sous-dossier : listAll() ne renvoie
+    // que les enfants directs, donc ni la colonne de gauche ni la liste des
+    // photos du chat ne le voient. Et il reste sous photos/moulages/**, que
+    // les règles Storage couvrent déjà — aucune règle à modifier.
+    // ═══════════════════════════════════════════════════════════════════
+    async function _uploadChatFile(file, orderNumber, fileName) {
+      const ref = storage.ref(`photos/moulages/${orderNumber}/chat/files/${fileName}`);
+      await ref.put(file, {
+        contentType: file.type || 'application/octet-stream',
+        cacheControl: PHOTO_CACHE
+      });
+      return {
+        url: await ref.getDownloadURL(),
+        fullPath: `photos/moulages/${orderNumber}/chat/files/${fileName}`
+      };
+    }
+
     // v1828 — PHOTO DU CHAT → STORAGE (et non plus en base64 dans le message).
     // Rangée dans un SOUS-dossier « chat » : listAll() ne renvoie que les
     // enfants directs, donc la colonne de gauche ne la voit pas, et les
@@ -22253,11 +22317,24 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════
     
     // v1588: initMobileView appelé seulement si pas déjà initialisé (fallback de sécurité)
-    setTimeout(() => {
-      if (!mobileInitDone && isMobileView() && isAuthenticated) {
-        initMobileView();
-      }
-    }, 2000);
+    // v1848 — le filet réessaie au lieu d'abandonner.
+    // Avant : UN seul essai à 2 secondes, et si la connexion n'était pas encore
+    // confirmée (isAuthenticated encore faux), il ne se passait plus jamais
+    // rien. Sur un téléphone en réseau lent, c'est exactement ce qui arrivait :
+    // écran vide jusqu'à ce que Firebase réponde de lui-même.
+    // Maintenant : un essai par seconde pendant 20 secondes, et on arrête dès
+    // que les cartes sont affichées.
+    (function _filetVueMobile() {
+      var essais = 0;
+      var minuterie = setInterval(function () {
+        essais++;
+        if (mobileInitDone || !isMobileView() || essais > 20) {
+          clearInterval(minuterie);
+          return;
+        }
+        if (isAuthenticated) initMobileView();
+      }, 1000);
+    })();
     
     // IMPORTANT: Détecter le changement de taille d'écran (pour DevTools responsive)
     let wasDesktop = !isMobileView();
@@ -23047,6 +23124,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           filesHtml = msg.files.map(function(f) {
             var icon = (f.type === 'application/pdf') ? '📄 PDF' : '📎';
             var fname = f.name || 'Fichier';
+            // v1850 — « url » (Storage) pour les nouvelles, « dataUrl » pour
+            // les anciennes. L'attribut « download » est ignoré par les
+            // navigateurs pour une adresse d'un autre domaine : les fichiers
+            // de Storage s'ouvrent donc dans un onglet, d'où le target.
+            if (f.url) {
+              return '<a class="qchat-msg-file-link" href="'+f.url+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">'+icon+' '+esc(fname)+'</a>';
+            }
             return '<a class="qchat-msg-file-link" href="'+f.dataUrl+'" download="'+esc(fname)+'" onclick="event.stopPropagation()">'+icon+' '+esc(fname)+'</a>';
           }).join(' ');
           filesHtml = '<div style="margin-top:4px;">' + filesHtml + '</div>';
@@ -23716,7 +23800,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               '</span>';
           }).join('');
           html += _composeFiles.map(function(f, i){
-            var icon = f.type === 'application/pdf' ? '📄' : (f.type.indexOf('image') === 0 ? '🖼️' : '📎');
+            var icon = f.enCours ? '⏳' :                       // v1850 — téléversement en cours
+                       (f.type === 'application/pdf' ? '📄' : ((f.type || '').indexOf('image') === 0 ? '🖼️' : '📎'));
             return '<span class="qchat-compose-file-pill" style="position:relative;">' + icon + ' <span>' + esc(f.name) + '</span>' +
               '<button onclick="event.stopPropagation();MChat.removeComposeFile('+i+')" title="Supprimer" style="margin-left:6px;border:none;background:rgba(220,38,38,0.85);color:#fff;width:18px;height:18px;border-radius:50%;font-size:12px;font-weight:700;cursor:pointer;line-height:1;padding:0;">✕</button>' +
               '</span>';
@@ -24631,18 +24716,56 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             };
             reader.readAsDataURL(file);
           } else {
-            // PDF, email, docs → _composeFiles as base64
-            var reader = new FileReader();
-            reader.onload = function(ev) {
-              _composeFiles.push({ name: file.name, dataUrl: ev.target.result, type: file.type || 'application/octet-stream' });
-              updateComposeImagePreview();
-            };
-            reader.readAsDataURL(file);
+            // v1850 — PDF, courriel, document : vers Storage, plus en base64.
+            // Le téléversement se fait ICI, à l'ajout, comme pour les photos
+            // du chat (_seAddPhoto). Au moment d'envoyer, _composeFiles ne
+            // contient déjà que des adresses : rien à changer dans _doSend
+            // à part la forme de l'objet.
+            _attacherFichier(file);
           }
         });
         input.value = '';
       }
     
+      // v1850 — téléverse une pièce jointe, avec repli sur l'ancien format.
+      // Si Storage refuse (règle, réseau, numéro de commande manquant), on
+      // retombe sur le base64 dans le message : l'utilisateur n'est jamais
+      // bloqué, il perd seulement le bénéfice de l'allègement.
+      async function _attacherFichier(file) {
+        var card = (typeof cardsData !== 'undefined' && cardsData[_currentJobId]) ? cardsData[_currentJobId] : {};
+        var order = (card.order || '').toString().trim();
+        var type = file.type || 'application/octet-stream';
+
+        if (order && typeof _uploadChatFile === 'function') {
+          var jeton = { name: file.name, type: type, enCours: true };
+          _composeFiles.push(jeton);
+          updateComposeImagePreview();
+          try {
+            // Nom unique : jamais d'écrasement entre deux fichiers homonymes
+            var nomSur = Date.now() + '__' + String(file.name).replace(/[^\w.\- ]+/g, '_');
+            var up = await _uploadChatFile(file, order, nomSur);
+            jeton.url = up.url;
+            jeton.fullPath = up.fullPath;
+            delete jeton.enCours;
+            updateComposeImagePreview();
+            return;
+          } catch (e) {
+            console.warn('Storage refusé pour la pièce jointe:', e && e.message);
+            var i = _composeFiles.indexOf(jeton);
+            if (i !== -1) _composeFiles.splice(i, 1);
+            if (typeof showToast === 'function') showToast('⚠️ Stockage refusé — fichier gardé dans le message', 'warning');
+          }
+        }
+
+        // ── Repli : base64 dans le message (comportement d'avant v1850) ──
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          _composeFiles.push({ name: file.name, dataUrl: ev.target.result, type: type });
+          updateComposeImagePreview();
+        };
+        reader.readAsDataURL(file);
+      }
+
       function clearImages() {
         _composeImages = [];
         _composeFiles = [];
@@ -24660,6 +24783,12 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var text = _rawText.trim();
         if (text === '<br>' || text === '&nbsp;' || text === '<div><br></div>') text = '';
         if (!text && _composeImages.length === 0 && _composeFiles.length === 0) return;
+        // v1850 — ne pas envoyer pendant qu'une pièce jointe monte encore,
+        // sinon elle serait silencieusement laissée de côté.
+        if (_composeFiles.some(function(f){ return f.enCours; })) {
+          if (typeof showToast === 'function') showToast('⏳ Pièce jointe en cours d\'envoi — un instant', 'warning');
+          return;
+        }
         // v1808: on demande À CHAQUE MESSAGE à qui envoyer.
         // Les destinataires du message précédent restent cochés → 2 clics.
         _openNotifModal('send');
@@ -24701,7 +24830,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         
         if (_composeImages.length === 1) msgData.image = _composeImages[0];
         if (_composeImages.length > 1) msgData.images = _composeImages;
-        if (_composeFiles.length > 0) msgData.files = _composeFiles.map(function(f){ return { name: f.name, dataUrl: f.dataUrl, type: f.type }; });
+        // v1850 — « url » pour les nouvelles pièces jointes, « dataUrl » pour
+        // le repli. Un téléversement encore en cours n'est jamais envoyé.
+        if (_composeFiles.length > 0) {
+          msgData.files = _composeFiles
+            .filter(function(f){ return !f.enCours; })
+            .map(function(f){
+              return f.url ? { name: f.name, url: f.url, type: f.type }
+                           : { name: f.name, dataUrl: f.dataUrl, type: f.type };
+            });
+          if (msgData.files.length === 0) delete msgData.files;
+        }
         if (_replyToId) msgData.replyTo = _replyToId;
         if (_composeSE) msgData.sansEssayage = true;   // v1825
         // v1828 — adresses des miniatures, alignées sur images/image
