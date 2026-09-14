@@ -6,8 +6,14 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>PhysiPro 📷 Photos v7</title>
-<!-- PhotoSender v5 : DEUX qualités selon la demande.
+<title>PhysiPro 📷 Photos v9</title>
+<!-- PhotoSender v8 : TROIS qualités selon la demande (voir PHOTO_MODES).
+     - « atelier » (demandes venues de PSM, source:'psm_simple' ou qualite:'atelier') :
+       max 2000 px / qualité 82 % / plafond 500 Ko. Ces photos sont vues en grand,
+       annotées et zoomées au bureau puis imprimées dans le PDF — 1200 px / 60 %
+       était trop juste. Elles ne dorment PAS dans Firebase : PSM efface la demande
+       dès qu'il l'a reçue. Aucun cadre de visée : la photo n'est jamais rognée.
+     Rappel v5 : DEUX qualités selon la demande.
      - Photos normales (moulages, questionnements) : max 1200 px / qualité 60 % / ~90 Ko,
        comme avant — l'économie Firebase reste la règle.
      - Photos de DEVIS à lire (demande marquée « hires ») : max 2400 px / qualité 88 %
@@ -604,6 +610,12 @@
       📄 Devis à lire — pleine résolution<br>
       <span style="font-weight:500;opacity:.9">Cadre le HAUT du bon en remplissant l'écran, feuille à plat et bien éclairée.</span>
     </div>
+    <!-- v8 : demande venue de PSM — photo d'atelier en haute définition -->
+    <div id="badgeAtelier" style="display:none;background:#1d4ed8;color:#fff;border-radius:8px;
+         padding:8px 12px;font-size:13px;font-weight:700;margin:6px 0;text-align:center;line-height:1.35">
+      🔧 Photo PSM — haute définition<br>
+      <span style="font-weight:500;opacity:.9">Approche-toi et remplis l'écran avec la pièce : la photo sera agrandie et annotée au bureau.</span>
+    </div>
     <div class="cam-status" id="camStatus">Touchez « Prendre une photo »</div>
     <div class="cam-status" id="camDef" style="font-size:11px;opacity:.6;min-height:0"></div>
   </div>
@@ -710,14 +722,41 @@ let selectedJob = null;
 
 /* v5 : la demande venue du bureau peut réclamer la pleine résolution
    (lecture d'un devis). On garde le réglage courant ici. */
-var PHOTO_REGLAGE = { taille: 1200, qualite: 0.60, plafond: 120000, hires: false };
+/* v8 : TROIS modes au lieu de deux. Le champ « mode » porte l'information ;
+   « hires » est conservé et veut dire EXACTEMENT ce qu'il voulait dire avant
+   (devis à lire) — c'est lui qui déclenche le cadre de visée rectangulaire,
+   donc il ne doit PAS passer à true pour l'atelier, sinon on rognerait la photo.
+
+     normal  1200 px / 60 % / 120 Ko  — moulages, questionnements (photos CONSERVÉES)
+     atelier 2000 px / 82 % / 500 Ko  — PSM : photo vue en grand, annotée, zoomée,
+                                        puis imprimée dans le PDF. Elle ne dort pas
+                                        dans Firebase : PSM efface la demande dès
+                                        qu'il l'a reçue.
+     devis   2400 px / 88 % / 900 Ko  — bon de commande à lire (OCR), cadre de visée */
+var PHOTO_MODES = {
+  normal:  { taille: 1200, qualite: 0.60, plafond: 120000, plancher: 0.45, hires: false, mode: 'normal'  },
+  atelier: { taille: 2000, qualite: 0.82, plafond: 500000, plancher: 0.65, hires: false, mode: 'atelier' },
+  devis:   { taille: 2400, qualite: 0.88, plafond: 900000, plancher: 0.72, hires: true,  mode: 'devis'   }
+};
+var PHOTO_REGLAGE = PHOTO_MODES.normal;
+
+/* Quel mode pour cette demande ? On accepte l'ancienne écriture (hires /
+   qualite:'haute') pour ne rien casser des demandes déjà en place. */
+function _modeDeLaDemande(req){
+  if (!req) return 'normal';
+  var q = (req.qualite || '').toString().toLowerCase();
+  if (req.hires === true || q === 'haute' || q === 'devis') return 'devis';
+  if (q === 'atelier' || req.source === 'psm_simple') return 'atelier';
+  return 'normal';
+}
+
 function _majReglagePhoto(req){
-  var hi = !!(req && (req.hires === true || req.qualite === 'haute'));
-  PHOTO_REGLAGE = hi
-    ? { taille: 2400, qualite: 0.88, plafond: 900000, hires: true }
-    : { taille: 1200, qualite: 0.60, plafond: 120000, hires: false };
+  var m = _modeDeLaDemande(req);
+  PHOTO_REGLAGE = PHOTO_MODES[m] || PHOTO_MODES.normal;
   var b = document.getElementById('badgeHires');
-  if (b) b.style.display = hi ? '' : 'none';
+  var a = document.getElementById('badgeAtelier');
+  if (b) b.style.display = (m === 'devis')   ? '' : 'none';
+  if (a) a.style.display = (m === 'atelier') ? '' : 'none';
   if (typeof _majGuide === 'function') setTimeout(_majGuide, 60);
 }
 let pendingPhotos = []; // { dataUrl, name }
@@ -835,6 +874,7 @@ function listenForRequests() {
 
     if (mine.length === 0) {
       _pendingRequest = null;
+      _majReglagePhoto(null);   // v9 : retour à la qualité normale (1200 px / 60 %)
       // Ne pas déranger si on est déjà sur la caméra (ex. juste après un envoi)
       if (!onPhoto) showScreen('screenNoReq');
     } else {
@@ -842,8 +882,7 @@ function listenForRequests() {
       var reqKey = found.jobId + '_' + found.timestamp;
       if (reqKey !== _lastHandledRequestId || !onPhoto) {
         _lastHandledRequestId = reqKey;
-        _pendingRequest = found;
-        _majReglagePhoto(found);          // v5 : qualité selon la demande
+        _pendingRequest = found;   // v9 : c'est selectJob, plus bas, qui pose la qualité
         db.ref('photoRequests/' + found.jobId).update({ status: 'answering' }).catch(function(){});
         selectJob(found.jobId);
       }
@@ -899,7 +938,8 @@ function renderPendingList() {
 function selectPendingRequest(jobId) {
   var found = _activePendingRequests.find(function(r) { return r.jobId === jobId; });
   if (!found) return;
-  _pendingRequest = found;
+  _pendingRequest = found;   // v9 : selectJob lira ceci et posera la bonne qualité
+
   db.ref('photoRequests/' + jobId).update({ status: 'answering' }).catch(function(){});
   selectJob(jobId);
 }
@@ -945,6 +985,13 @@ function renderJobs() {
 }
 
 function selectJob(id) {
+  /* v9 : SEUL ENDROIT qui décide de la qualité. Le réglage est recalculé à
+     CHAQUE fois qu'on entre dans un job, à partir de la demande qui vise
+     CE job précis. S'il n'y en a pas (job choisi à la main dans la liste,
+     ou demande déjà répondue et effacée), on retombe sur « normal ».
+     Sans ça le réglage restait collé : après une photo PSM, les photos
+     suivantes — moulage, questionnement — seraient parties en 2000 px. */
+  _majReglagePhoto((_pendingRequest && _pendingRequest.jobId === id) ? _pendingRequest : null);
   var jobEntry = jobsData[id];
   if (!jobEntry && id) {
     // Job not loaded yet — fetch directly
@@ -1191,7 +1238,7 @@ function captureFrame() {
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(v, sx, sy, sw, sh, 0, 0, w, h);
   var quality = PHOTO_REGLAGE.qualite;
-  var plancher = PHOTO_REGLAGE.hires ? 0.72 : 0.45;   // v5 : on ne descend pas plus bas pour un devis
+  var plancher = PHOTO_REGLAGE.plancher;   // v8 : le plancher appartient au mode
   var result = canvas.toDataURL('image/jpeg', quality);
   while (result.length > PHOTO_REGLAGE.plafond && quality > plancher) {
     quality -= 0.05; result = canvas.toDataURL('image/jpeg', quality);
@@ -1247,7 +1294,7 @@ function readAndCompress(file) {
         img.onload = function() {
           var canvas = _drawWithOrientation(img, orientation, PHOTO_REGLAGE.taille);
           var quality = PHOTO_REGLAGE.qualite;
-          var plancher = PHOTO_REGLAGE.hires ? 0.72 : 0.45;
+          var plancher = PHOTO_REGLAGE.plancher;   // v8
           var result = canvas.toDataURL('image/jpeg', quality);
           while (result.length > PHOTO_REGLAGE.plafond && quality > plancher) {
             quality -= 0.05;
