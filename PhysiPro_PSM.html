@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1054-pdf-seul]</title>
+<title>PhysiPro — Liste des matériaux [v1057-pdf-seul]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -1147,6 +1147,36 @@ label.footer-btn-label{
 .col-code{ flex:0 0 56px; font-size:9px; }
 .col-name{ flex:1; min-width:0; font-size:9px; text-align:left; }
 .col-mesures{ flex:0 0 78px; text-align:right; font-size:9px; padding-right:4px; }
+/* v1057 : colonne Coût, incompressible comme les mesures */
+.col-prix{ flex:0 0 58px; text-align:right; font-size:9px; padding-right:2px; }
+.cat-cell-prix{
+  flex:0 0 58px;
+  flex-shrink:0;
+  text-align:right;
+  font-size:9.5px;
+  font-weight:700;
+  color:#86efac;
+  white-space:nowrap;
+  display:flex; align-items:center; justify-content:flex-end;
+  padding-right:2px;
+}
+.cat-prix-vide{ color:rgba(226,232,240,0.28); font-weight:400; }
+.cat-dept-row{ display:flex; gap:4px; margin-bottom:3px; }
+.cat-dept-btn{
+  flex:1 1 50%;
+  height:22px;
+  border:1.5px solid #1e3a5f;
+  border-radius:5px;
+  background:rgba(0,0,0,0.28);
+  color:#94a3b8;
+  font-family:inherit;
+  font-size:10.5px;
+  font-weight:700;
+  cursor:pointer;
+  transition:all .12s;
+}
+.cat-dept-btn:hover{ background:rgba(59,130,246,0.18); color:#dbeafe; }
+.cat-dept-btn.active{ background:rgba(96,165,250,0.22); border-color:#60a5fa; color:#fff; }
 .col-cat-qty{ flex:0 0 54px; text-align:center; font-size:8px; }
 .col-cat-act{ flex:0 0 38px; text-align:center; font-size:10px; display:flex; align-items:center; justify-content:flex-end; padding-right:3px; }
 /* Groupe ✏️ + ➕ dans la barre d'en-tête catalogue (v972) */
@@ -1652,6 +1682,7 @@ label.footer-btn-label{
   font-size:10px;
 }
 .photo-cards-stack.solo .photo-card-mat-mes{ font-size:10px; }   /* v1052 */
+.photo-cards-stack.solo .photo-card-mat-prix{ font-size:10px; }  /* v1057 */
 .photo-cards-stack.solo .photo-card-mat-del{ font-size:11px; padding:0 4px; }
 .photo-cards-stack.solo .photo-card-mat-calc{ font-size:10px; }
 .photo-cards-stack.solo .photo-card-mats-empty{
@@ -2127,6 +2158,15 @@ label.footer-btn-label{
   color:#bae6fd;
   font-size:7px;
 }
+/* v1057 : coût unitaire dans la liste de la soumission */
+.photo-card-mat-prix{
+  flex:0 0 auto;
+  flex-shrink:0;
+  white-space:nowrap;
+  font-weight:700;
+  color:#86efac;
+  font-size:7px;
+}
 .photo-card-mat-qty{
   width:30px;
   flex-shrink:0;
@@ -2570,6 +2610,21 @@ label.item-img-btn{ user-select:none; }
 .sheet-calc-qty-row strong{
   color:#86efac; font-size:18px;
 }
+/* v1056 : bouton d'unité de saisie du calculateur */
+.sheet-calc-unit{
+  min-width:38px;
+  padding:3px 7px;
+  border:1px solid #3b6db5;
+  border-radius:5px;
+  background:rgba(59,130,246,0.18);
+  color:#bae6fd;
+  font-family:inherit;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+  transition:all .12s;
+}
+.sheet-calc-unit:hover{ background:rgba(59,130,246,0.40); color:#fff; }
 .sheet-calc-toggle-row{
   display:flex; align-items:center; justify-content:center;
   gap:10px;
@@ -2739,12 +2794,18 @@ label.item-img-btn{ user-select:none; }
               <button class="dept-edit-btn-inline" id="btnEditMats" onclick="openEditMatsModal()" title="Gérer les matériaux">➕</button>
             </div>
 
-            <!-- Liste des matériaux (3 colonnes : Code | Matériel | Mesures à droite) -->
+            <!-- v1057 : bascule Atelier / Couture -->
+            <div class="cat-dept-row">
+              <button class="cat-dept-btn active" id="catDeptAtelier" onclick="setCatDept('atelier')">🔨 Atelier</button>
+              <button class="cat-dept-btn" id="catDeptCouture" onclick="setCatDept('couture')">🧵 Couture</button>
+            </div>
+            <!-- Liste des matériaux : Code | Matériel | Mesures | Coût -->
             <div class="cat-list-wrap">
               <div class="mat-header">
                 <div class="col-code">Code</div>
                 <div class="col-name">Matériel</div>
                 <div class="col-mesures">Mesures</div>
+                <div class="col-prix">Coût</div>
               </div>
               <div id="catBrowserList"></div>
             </div>
@@ -3093,9 +3154,366 @@ var MATERIAUX_ATELIER_BASE = [
   'GEL-PEBA03 - GEL PEBBLE ½ BLEU AQUA 20x20','GEL-SIBA02 - GEL SILICONE ½ BLEU AQUA ERGO 12.5x7'
 ];
 
-// Couture et Métal retirés (v956) — listes vides conservées pour compat
+// Couture et Métal retirés (v956) — Couture reconstituée en v1057
 var MATERIAUX_COUTURE_BASE = [];
 var MATERIAUX_METAL_BASE = [];
+
+/* v1057 — COÛT UNITAIRE par code, colonne « LISTE DE PRIX COST » de la liste
+   fournisseur. C'est la colonne de COÛT (le prix plancher en est le produit
+   par 1,4923, et la liste France le produit du plancher par 1,05) : c'est donc
+   celle qui va dans le coût de revient. 306 codes tarifés. */
+var PRIX_MATERIAUX_BASE = {
+  '1QUFOU051':0.46,'1QUFOU052':0.46,'1QUFOU053':0.4,'1QUFOU054':0.46,'1QUFOU055':0.46,
+  '1QUFOU056':0.46,'1QUFOU057':0.46,'1QUFOU058':0.4,'1QUFOU062':0.46,'1QUFOU066':2.34,
+  '1QUFOU068':1.07,'1QUFOU069':0.13,'1QUFOU130':0.55,'1QUFOU131':0.4,'1QUFOU146':0.4,
+  '1QUFOU172':0.46,'1QUFOU173':0.46,'1QUFOU174':0.46,'1QUFOU175':0.46,'1QUFOU176':0.46,
+  '1TIVEL016':0.47,'1TIVEL027':0.19,'1TIVEL040':0.28,'5300':51.49,'5301':90.88,'5302':73.38,
+  '5303':73.38,'531818':93.72,'541014':64.32,'541015':65.6,'541016':65.6,'541018':64.37,
+  '541019':66.95,'561616':66.04,'561818':47.37,'6500':105.79,'CU1515':82,'CU1818':113.6,
+  'CU2020':159.75,'FO-00118':28.68,'FO-00422':22.82,'FO-01047':8.99,'FO-01048':8.99,
+  'FO-01049':8.99,'GEL-BMD04':161,'GEL-CABA01':22.79,'GEL-CABA02':37.23,'GEL-DG12125':49,
+  'GEL-DG12855':41,'GEL-DG14145':52,'GEL-DG18185':68,'GEL-DG20205':79,'GEL-PEBA01':14.57,
+  'GEL-PEBA02':16.77,'GEL-PEBA03':56.1,'GEL-SIBA02':34.94,'P1616-1/2':163.44,'P1818-1/2':173.96,
+  'P1818-1/4':129.34,'P2222-1/4':185.02,'P222205':131.67,'S4140':57.44,'S4141':70.74,
+  'ST-02665':0.08,'VR10001':2.98,'VR10002':2.98,'VR10003':1.42,'VR10004':2.98,'VR10005':1.42,
+  'VR10006':1.42,'VR10007':1.34,'VR10008':1.34,'VR10009':2.98,'VR10010':1.34,'VR10011':1.34,
+  'VR10012':1.34,'VR10013':1.34,'VR10014':1.42,'VR10015':2.98,'VR10065':33.97,'VR10073':8.54,
+  'VR10076':4.03,'VR10077':6.53,'VR10078':8.9,'VR10084C':3.39,'VR10085C':12.12,'VR10086C':20.88,
+  'VR10087':13.05,'VR10088':9.78,'VR10090':166.32,'VR10091C':23.4,'VR10092C':23.4,'VR10093C':58,
+  'VR10095C':58,'VR10097':15.26,'VR10099C':10.68,'VR10110C':11.68,'VR10111C':24.4,'VR10112C':27,
+  'VR10123':1.03,'VR10124':1.15,'VR10125':5.59,'VR10137':10.79,'VR10140':35,'VR10144':1,
+  'VR10147':0.24,'VR10148':0.24,'VR10151C':6.92,'VR10152':55.33,'VR10152-VN':34.67,
+  'VR10159':10.83,'VR10164':6.77,'VR10225':9.99,'VR10227':45.47,'VR10240':78.32,'VR10241':90.93,
+  'VR10257':9.9,'VR10258':6.53,'VR10262':18.37,'VR10268':14.23,'VR10278':10.83,'VR10279':18.37,
+  'VR10295':0.81,'VR10296':0.79,'VR10297':59.1,'VR10302':62.64,'VR10307C':11.19,'VR10308C':7.76,
+  'VR10309C':15.79,'VR10342':2.94,'VR10343':4.68,'VR10344':8.69,'VR10360':214,'VR10361':6.53,
+  'VR10365':33.53,'VR10366':67.05,'VR5075':12.78,'VR5200':14.11,'VR5205':11.78,'VR5207':16.81,
+  'VR5215':14.17,'VR9000C':2.81,'VR9005':22.5,'VR9006':36.65,'VR9007':10.06,'VR9010C':4.3,
+  'VR9015':34.43,'VR9015-VN':24.13,'VR9017C':18.1,'VR9018C':18.1,'VR9019C':18.1,'VR9020C':9.23,
+  'VR9025':73.82,'VR9025-VN':43.24,'VR9030C':13.33,'VR9035':106.67,'VR9053C':12.29,
+  'VR9054':221.25,'VR9070C':0.5,'VR9077':11.11,'VR9077-VN':9.03,'VR9077-VNC':1.15,'VR9079':39.95,
+  'VR9080C':0.8,'VR9085':17.97,'VR9085-VN':15.76,'VR9085-VNC':1.85,'VR9090C':1.41,'VR9097':31.53,
+  'VR9097-VN':35.7,'VR9097-VNC':4.18,'VR9111C':1.94,'VR9113':1940.25,'VR9215C':0.44,
+  'VR9220':13.05,'VR9225C':0.89,'VR9230':26.11,'VR9235C':1.78,'VR9240':52.21,'VR9245C':3.56,
+  'VR9250':104.43,'VR9256C':3.03,'VR9257':101,'VR9263C':5.22,'VR9264':132,'VR9265':193.77,
+  'VR9270':174.4,'VR9280':118.94,'VR9290':261.35,'VR9295':234.79,'VR9305':132.07,'VR9340':287.76,
+  'VR9345':268.61,'VR9355':143.95,'VR9386C':2.8,'VR9387':59.81,'VR9388C':5.68,'VR9389':119.61,
+  'VR9390C':2.92,'VR9391C':22.72,'VR9395':65,'VR9400C':5.85,'VR9405':129.99,'VR9410C':2.67,
+  'VR9415':59.81,'VR9420C':5.85,'VR9425':129.99,'VR9426C':1.84,'VR9427':32.5,'VR9430C':6.1,
+  'VR9435':122,'VR9440C':14.5,'VR9445':290,'VR9450C':25,'VR9455':500,'VR9460C':6.75,
+  'VR9470C':14.5,'VR9475':290,'VR9480C':25,'VR9485':500,'VR9490C':13.38,'VR9495':267.5,
+  'VR9500C':1.48,'VR9505':23.75,'VR9510C':4.53,'VR9515':72.5,'VR9520C':7.81,'VR9525':124.98,
+  'VR9530C':3.25,'VR9535':51.98,'VR9540C':6.56,'VR9545':104.98,'VR9550C':12.47,'VR9555':199.5,
+  'VR9560C':5.56,'VR9565':90.77,'VR9570C':6.9,'VR9575':112.72,'VR9580C':5.96,'VR9585':97.28,
+  'VR9596':22.06,'VR9605':2.3,'VR9609':18.29,'VR9610-1618':12.23,'VR9611-1616':12.23,
+  'VR9611-1616-L':12.23,'VR9612-1515':12.23,'VR9615-1818':12.23,'VR9615-1818-L':12.23,
+  'VR9619-2020':12.23,'VR9620-1620':12.23,'VR9624':20.02,'VR9625-1820':12.23,'VR9626':20.02,
+  'VR9627':20.02,'VR9628':20.02,'VR9629':20.02,'VR9630':2.21,'VR9645':7.75,'VR9660':0.51,
+  'VR9675':1.13,'VR9690':0.72,'VR9705':1.18,'VR9710':0.95,'VR9725':0.91,'VR9740':1.23,
+  'VR9755':0.36,'VR9770':0.39,'VR9785':2.23,'VR9800':0.09,'VR9815':0.16,'VR9830':0.31,
+  'VR9845':0.64,'VR9860':0.79,'VR9875':0.48,'VR9890':1.09,'VR9915':1.25,'VR9941':1.82,
+  'VR9944':1.56,'VR9947':1.36,'VR9952':17.6,'VR9953':9.96,'VR9954':19.82,'VR9955':8.04,
+  'VR9956':7.62,'VR9958':9.95,'VR9959':10.88,'VR9963':0.19,'VR9965':0.49,'VR9967':0.19,
+  'VR9969':0.41,'VR9971':0.23,'VR9973':0.29,'VR9975':0.23,'VR9977':0.72,'VR9978':52.13,
+  'VR9979':23.46,'VR9983C':1.32,'VR9984C':3.5,'VR9985C':8.25,'VR9986':44,'VR9987':116.55,
+  'VR9988':275,'VR9991':59.62,'VR9993':72.42,'VR9995':90.46
+};
+
+/* v1057 : dimensions des nouveaux codes, lues dans leur description.
+   Object.assign plutôt qu'une réécriture du littéral : rien n'est touché
+   dans les 104 entrées déjà présentes. */
+Object.assign(SHEET_SIZES_BASE, {
+  '541014':{w:10,h:14},'541015':{w:10,h:15},'541016':{w:10,h:16},'541018':{w:10,h:18},
+  '541019':{w:10,h:19},'CU1515':{w:15,h:15},'CU1818':{w:18,h:18},'CU2020':{w:20,h:20},
+  'GEL-BMD02-2428':{w:24,h:28},'GEL-BMD04':{w:24,h:28},'P1616-1/2':{w:16,h:16},
+  'P1818-1/2':{w:18,h:18},'P1818-1/4':{w:18,h:18},'P2222-1/4':{w:22,h:22},'P222205':{w:22,h:22},
+  'VR10076':{w:20,h:22},'VR10078':{w:24,h:30},'VR10084C':{w:22,h:24},'VR10087':{w:22,h:24},
+  'VR10090':{w:37,h:82},'VR10093C':{w:22,h:24},'VR10095C':{w:22,h:24},'VR10111C':{w:22,h:24},
+  'VR10112C':{w:22,h:24},'VR10227':{w:48,h:88},'VR10240':{w:48,h:88},'VR10241':{w:48,h:88},
+  'VR10297':{w:50,h:130},'VR10302':{w:4,h:42},'VR9005':{w:24,h:48},'VR9077-VN':{w:48,h:94},
+  'VR9077-VNC':{w:22,h:24},'VR9079':{w:24,h:37},'VR9085-VN':{w:48,h:94},'VR9097-VN':{w:48,h:94},
+  'VR9113':{w:8,h:60},'VR9250':{w:48,h:88},'VR9264':{w:40,h:80},'VR9265':{w:22,h:36},
+  'VR9270':{w:18,h:40},'VR9280':{w:20,h:20},'VR9290':{w:22,h:36},'VR9295':{w:18,h:40},
+  'VR9305':{w:20,h:20},'VR9340':{w:22,h:36},'VR9345':{w:18,h:40},'VR9355':{w:20,h:20},
+  'VR9455':{w:36,h:80},'VR9485':{w:36,h:80},'VR9495':{w:36,h:80},'VR9610-1618':{w:16,h:18},
+  'VR9611-1616':{w:16,h:16},'VR9611-1616-L':{w:16,h:16},'VR9612-1515':{w:15,h:15},
+  'VR9615-1818':{w:18,h:18},'VR9615-1818-L':{w:18,h:18},'VR9619-2020':{w:20,h:20},
+  'VR9620-1620':{w:16,h:20},'VR9624':{w:16,h:16},'VR9625-1820':{w:18,h:20},'VR9626':{w:16,h:18},
+  'VR9627':{w:18,h:18},'VR9628':{w:16,h:20},'VR9629':{w:18,h:20},'VR9632':{w:16,h:18},
+  'VR9633':{w:16,h:16},'VR9634':{w:18,h:18},'VR9636':{w:16,h:20},'VR9637':{w:18,h:20},
+  'VR9993':{w:128,h:50},'VR9995':{w:128,h:50}
+});
+
+/* v1057 : 117 codes ATELIER de la liste fournisseur qui n'étaient pas au
+   catalogue. Les 104 entrées d'origine sont conservées telles quelles. */
+MATERIAUX_ATELIER_BASE = MATERIAUX_ATELIER_BASE.concat([
+  'GCP050-PZ-1 - GEL AU NIVEAU DE LA CUVETTE - PLAT - ÉPAISSEUR 0,5" - PETIT',
+  'GCP050-PZ-2 - GEL AU NIVEAU DE LA CUVETTE - PLAT - ÉPAISSEUR 0,5" - MOYEN',
+  'GCP050-PZ-3 - GEL AU NIVEAU DE LA CUVETTE - PLAT - ÉPAISSEUR 0,5" - GRAND',
+  'GCP050-UL-1 - GEL AU NIVEAU DE LA CUVETTE - PLAT - ÉPAISSEUR 0,5" - PETIT UL',
+  'GCP050-UL-2 - GEL AU NIVEAU DE LA CUVETTE - PLAT - ÉPAISSEUR 0,5" - MOYEN UL',
+  'GCP050-UL-3 - GEL AU NIVEAU DE LA CUVETTE - PLAT - ÉPAISSEUR 0,5" - GRAND UL',
+  'VR10090 - Sunmate ferme 1 po — 37 po x 82',
+  'VR10091C - SUNMATE MOU 1 po X 22 X 24',
+  'VR10093C - Temper foam T-36 mou 1 po 22 po x24 po',
+  'VR10095C - Temper foam T-38 medium 1 po 22 po x24 po',
+  'VR10110C - SUNMATE MOU 1/2 po X 22 X 24',
+  'VR10111C - Temper foam T-36 mou 1/2 po 22 po x24 po',
+  'VR10112C - Temper foam T-38 medium 1/2 po 22 po x24 po',
+  'VR10308C - SUNMATE EXTRA-MOU 1/2\'\' X 20" X 20"',
+  'VR10309C - SUNMATE EXTRA-MOU 1\'\' X 20" X 20"',
+  'VR9265 - Pudgee 1/2 po (22 po X 36 po )',
+  'VR9270 - Pudgee 1/2 po (18 po X 40 po )',
+  'VR9280 - Pudgee 1/2 po (20 po X 20 po )',
+  'VR9290 - Pudgee 1 po (22 po X 36 po )',
+  'VR9295 - Pudgee 1 po (18 po X 40 po )',
+  'VR9305 - Pudgee 1 po (20 po X 20 po )',
+  'VR9340 - Pudgee 2 po (22 po X 36 po )',
+  'VR9345 - Pudgee 2 po (18 po X 40 po )',
+  'VR9355 - Pudgee 2 po (20 po X 20 po )',
+  'VR9386C - Sunmate extra-mou 1/2 po',
+  'VR9388C - Sunmate extra-mou 1 po',
+  'VR9390C - Sunmate mou 1/2 po',
+  'VR9400C - Sunmate mou 1 po',
+  'VR9410C - Sunmate medium 1/2 po',
+  'VR9420C - Sunmate medium 1 po',
+  'VR9426C - Sunmate mou 1/4 po',
+  'VR9430C - Temper foam T-36 mou 1/2 po',
+  'VR9440C - Temper foam T-36 mou 1 po',
+  'VR9450C - Temper foam T-36 mou 2 po',
+  'VR9455 - Temper foam T-36 mou 2 po — 36 po x 80 po',
+  'VR9460C - Temper foam T-38 medium 1/2 po',
+  'VR9470C - Temper foam T-38 medium 1 po',
+  'VR9480C - Temper foam T-38 medium 2 po',
+  'VR9485 - Temper foam T-38 medium 2 po — 36 po x 80 po',
+  'VR9490C - Temper foam T-41 ferme 1 po',
+  'VR9495 - Temper foam T-41 ferme 1 po — 36 po x 80 po',
+  'VR10076 - VF-40 Velva foam med/ferme 1 po — 20 po x 22 po',
+  'VR10078 - VF-40 Velva foam med/ferme 1 po — 24 po x 30 po',
+  'VR10084C - VF-40 Velva foam med/ferme 1/2 po — 22 po x 24 po',
+  'VR10087 - VF-40 Velva foam med/ferme 2 po — 22 po x 24 po',
+  'VR10227 - VF-60 Velva foam ferme 1"-48" x 88"',
+  'VR10240 - VF-60 Velva foam ferme 1 1/2"-48" x 88"',
+  'VR10241 - VF-60 Velva foam ferme 2"-48" x 88"',
+  'VR9215C - VF-40 Velva foam med/ferme 1/4 po',
+  'VR9225C - VF-40 Velva foam med/ferme 1/2 po',
+  'VR9235C - VF-40 Velva foam med/ferme 1 po',
+  'VR9245C - VF-40 Velva foam med/ferme 2 po',
+  'VR9250 - VF-40 Velva foam med/ferme 2 po — 48 po x 88 po',
+  'VR9256C - LATEX 1" (1 PIED CARRÉ)',
+  'VR9263C - Latex 2 po',
+  'VR9264 - Latex 2 po — 40 po x 80 po',
+  'VR10151C - Constructa foam 1-1/2 po',
+  'VR9000C - Constructa foam 1/2 po',
+  'VR9005 - Constructa foam 1/2 po — 24 po X 48 po',
+  'VR9010C - Constructa foam 1 po',
+  'VR9020C - Constructa foam 2 po',
+  'VR9030C - Constructa foam 3 po',
+  'VR9053C - Ethafoam (6 lb) 1-1/2 po',
+  'VR9070C - Plastazote 1/8 po noir',
+  'VR9077-VN - EVA FOAM 1/8" - 48" X 94\'\' GRIS',
+  'VR9077-VNC - EVA FOAM 1/8" - 22" X 24\'\' GRIS',
+  'VR9080C - Plastazote 1/4 po noir',
+  'VR9085-VN - EVA FOAM 1/4" - 48" X 94" GRIS',
+  'VR9090C - Plastazote 1/2 po noir',
+  'VR9097-VN - EVA FOAM 1/2\'\' - 48" X 94" Gris',
+  'VR9111C - Aérolite 3/8 po noir',
+  'VR9113 - Aérolite 3/8 po x60 po x200 verges noir',
+  'FO-00422 - PEINTURE LIQUIDE VINYL PLASTIQUE',
+  'VR10302 - Forma foam 1/4 po x 42 x 56',
+  'VR9560C - Forma foam 1/2 po',
+  'VR9565 - Forma foam 1/2 po x 42 x 56',
+  'VR9570C - Forma foam 1 po',
+  'VR9580C - Forma foam 1 1/2 po',
+  'VR9585 - Forma foam 1 1/2 po x 42 x 56',
+  'VR10065 - Coquille coussin LXA 70',
+  'VR9017C - Mousse LXA 1 po x 20 po x 20 po',
+  'VR9018C - Mousse LXA 1-1/2 po x 20 po x 20 po',
+  'VR9019C - Mousse LXA 2 po x 20 po x 20 po',
+  'VR10365 - VISCOSE 8010 TURQUOISE - 1/2" X 80" X 60" (LJ Solutions)',
+  'VR9983C - Viscose 5010 (med/ferme) 1/2 po',
+  'VR9984C - Viscose 5010 (med/ferme) 1 po',
+  'VR9985C - Viscose 5010 (med/ferme) 2 po',
+  'VR9988 - Viscose 5010 (méd./ferme) 2 po x 60 po x 80 po (Vitacare)',
+  'FO-01047 - CRAYON RETOUCHES FEUTRES COULEUR BLEU SÉCURE',
+  'FO-01048 - CRAYON RETOUCHES FEUTRES COULEUR NOIR LUSTRÉ',
+  'FO-01049 - CRAYON RETOUCHES FEUTRES COULEUR ROUGE ÉCARLATE',
+  'VR9596 - Canette de colle aérosol',
+  'VR9605 - Pellicule isolante (transparente)',
+  'CU1515 - Plaque de gel carrelé 15 po x 15 po x 9/16 po',
+  'CU1818 - Plaque de gel carrelé 18 po x 18 po x 9/16 po',
+  'CU2020 - Plaque de gel carrelé 20 po x 20 po x 9/16 po',
+  'P1616-1/2 - Plaque de gel Pebble 16x16x1/2',
+  'P1818-1/2 - Plaque de gel Pebble 18x18x1/2',
+  'P1818-1/4 - Plaque de gel Pebble 18x18x1/4',
+  'P2222-1/4 - Plaque de gel Pebble 22x22x1/4',
+  'P222205 - PLAQUE DE GEL PEBBLE 22" X 22" X 1/2"',
+  'GEL-BMD02-2428 - GEL GEOMATRIX 24" X 28" X ½" CELLULES OUVERTES ENDOS TISSU',
+  'GEL-BMD04 - GEL GEOMATRIX 24" X 28" X ¾" CELLULES FERMÉES ENDOS TISSU',
+  '541014 - Plaque de Gel 10" x 14" x 1/2"',
+  '541015 - Plaque de Gel 10" x 15" x 1/2"',
+  '541016 - Plaque de Gel 10" x 16" x 1/2"',
+  '541018 - Plaque de Gel 10" x 18" x 1/2"',
+  '541019 - Plaque de Gel 10" x 19" x 1/2"',
+  'VR9500C - ABS noir 1/8 po',
+  'VR9510C - ABS noir 1/4 po',
+  'VR9520C - ABS noir 3/8 po',
+  'VR9530C - LEXAN clair 1/8 po',
+  'VR9540C - LEXAN clair 1/4 po',
+  'VR9550C - LEXAN clair 3/8 po',
+  'VR9941 - Poignée de serrage marguerite 1/4-20 x 3/4 po',
+  'VR9944 - Poignée de serrage marguerite 1/4-20 x 1/2 po',
+  'VR9947 - Poignée de serrage marguerite 1/4-20 x 1 po'
+]);
+
+/* v1057 : la liste COUTURE, vidée en v956, est reconstituée à partir de la
+   liste fournisseur : enveloppes d'incontinence, housses de transition,
+   boucles, barrettes, courroies, tissus, néoprène, velcro et zips. 142 codes. */
+MATERIAUX_COUTURE_BASE = [
+  'VR9630 - Boucle métal Auto 1 1/2 po',
+  'VR9645 - Boucle métal auto 2 po',
+  'VR9660 - Boucle plastique 1 po',
+  'VR9675 - Boucle plastique 1 1/2 po',
+  'VR9690 - Boucle plastique 2 po',
+  'VR9705 - Boucle plastique double réglage 2 po',
+  'ST-02665 - OEILLET',
+  'VR9710 - Boucle plastique type avion 1 po',
+  'VR9725 - Boucle plastique type avion 1 1/2 po',
+  'VR9740 - Boucle plastique type avion 2 po',
+  'VR9755 - Barrette de métal 1 po',
+  'VR9770 - Barrette de métal 1 1/2 po',
+  'VR9785 - Barrette de métal 2 po',
+  'VR9800 - Barrette de plastique 1 po',
+  'VR9815 - Barrette de plastique 1 1/2 po',
+  'VR9830 - Barrette de plastique 2 po',
+  'VR9845 - Courroie nylon 1 po',
+  'VR9860 - Courroie nylon 1 1/2 po',
+  'VR9875 - Courroie nylon 2 po',
+  'VR9890 - Courroie Auto 1 1/2 po',
+  'VR9915 - Courroie Auto 2 po - 50 verges',
+  'VR9609 - Enveloppe imperméable personnalisée (pellicule transparente)',
+  'VR9610-1618 - ENVELOPPE D\'INCONTINENCE 16" X 18" (40 CM X 45 CM) (PELLICULE TRANSPARENTE)',
+  'VR9611-1616 - ENVELOPPE D\'INCONTINENCE 16" X 16" (40 CM X 40 CM) (PELLICULE TRANSPARENTE)',
+  'VR9611-1616-L - ENVELOPPE D\'INCONTINENCE LARGE 16" X 16" (40 CM X 40 CM) (PELLICULE TRANSPARENTE)',
+  'VR9612-1515 - ENVELOPPE D\'INCONTINENCE 15" X 15" (38 CM X 38 CM) (PELLICULE TRANSPARENTE)',
+  'VR9615-1818 - ENVELOPPE D\'INCONTINENCE 18" X 18" (45 CM X 45 CM)(PELLICULE TRANSPARENTE)',
+  'VR9615-1818-L - ENVELOPPE D\'INCONTINENCE LARGE 18" X 18" (45 CM X 45 CM) (PELLICULE TRANSPARENTE)',
+  'VR9619-2020 - ENVELOPPE D\'INCONTINENCE 20" X 20" (50 CM X 50 CM) (PELLICULE TRANSPARENTE)',
+  'VR9620-1620 - ENVELOPPE D\'INCONTINENCE 16" X 20" (40 CM x 50 CM) (PELLICULE TRANSPARENTE)',
+  'VR9625-1820 - ENVELOPPE D\'INCONTINENCE 18" X 20" (45 CM X 50 CM) (PELLICULE TRANSPARENTE)',
+  'VR9631 - Enveloppe imperméable personnalisée (triptex tpu)',
+  'VR9632 - Enveloppe imperméable 16 po x 18 po (triptex tpu)',
+  'VR9633 - Enveloppe imperméable 16 po x 16 po (triptex tpu)',
+  'VR9634 - Enveloppe imperméable 18 po x 18 po (triptex tpu)',
+  'VR9636 - Enveloppe imperméable 16 po x 20 po (triptex tpu)',
+  'VR9637 - Enveloppe imperméable 18 po x 20 po (triptex tpu)',
+  'S4140 - TOP COVER (HOUSSE DE TRANSITION) COMPLEXE AVEC ÉLÉMENTS DE FORME LATÉRAUX',
+  'S4141 - TOP COVER (HOUSSE DE TRANSITION) COMPLEXE AVEC ÉLÉMENTS DE FORME LATÉRAUX AVEC GABARIT',
+  'VR10140 - Housse de transition personnalisée',
+  'VR9624 - Housse de transition 16 x 16',
+  'VR9626 - Housse de transition 16 x 18',
+  'VR9627 - Housse de transition 18 x 18',
+  'VR9628 - Housse de transition 16 x 20',
+  'VR9629 - Housse de transition 18 x 20',
+  'VR10097 - KEVLAR',
+  'VR10125 - Tissus coton noirs (Bounty)',
+  'VR10137 - TISSUS BAMBOU BLANC (CRÈME)',
+  'VR10159 - Star Tex gris',
+  'VR10164 - FILET NOIR',
+  'VR10225 - TISSU SATIN NOIR',
+  'VR10257 - Star Tex TPU',
+  'VR10262 - Triptex-U',
+  'VR10278 - STARTEX RR NOIR',
+  'VR10279 - SUPPLEX NOIR',
+  'VR9006 - Cuirette de po Ski-Doo po',
+  'VR9007 - Tissus Air Knit Noir',
+  'VR9079 - Feuille antidérapant Topy Paris noir 1.5MM x 24 x 37 1/2"',
+  'VR9952 - Lycra noir',
+  'VR9953 - Lycra noir imperméable (M5B)(TRIPTEX VIRGIN)',
+  'VR9954 - Lycra noir imperméable résistant (TRIPTEX)',
+  'VR9955 - Tissus Defender noir',
+  'VR9956 - Tissus Oxford noir',
+  'VR9958 - Tissus antidérapants',
+  'VR9959 - Cuirette noire',
+  'VR10297 - TISSU PREMIUM NEOPRENE 1.5 MM 50" X 130" (ANTIGLISSEMENT)',
+  'VR9991 - Néoprène 1/16 po - LARGEUR 125 CM',
+  'VR9993 - Néoprène 1/8 po — 128 po x 50 po',
+  'VR9995 - Néoprène 1/4 po — 128 po x 50 po',
+  '1TIVEL016 - Velcro mousse 1’’ Adhésif blanc',
+  '1TIVEL027 - Velcro crochet 1’’ Adhésif blanc',
+  '1TIVEL040 - Velcro mousse 2’’ blanc',
+  'VR10123 - Velcro mousse 2’’ Adhésif blanc',
+  'VR10124 - Velcro crochet 2’’ Adhésif blanc',
+  'VR10144 - VELCRO MOUSSE 3" NOIR',
+  'VR10147 - Velcro crochet 1 1/2 po',
+  'VR10148 - Velcro mousse 1 1/2 po',
+  'VR10268 - Velcro dual lock 2\'\' x 50 verges',
+  'VR9963 - Velcro adhésif crochet 1 po',
+  'VR9965 - Velcro adhésif crochet 2 po',
+  'VR9967 - Velcro adhésif mousse 1 po',
+  'VR9969 - Velcro adhésif mousse 2 po',
+  'VR9971 - Velcro crochet 1 po',
+  'VR9973 - Velcro crochet 2 po',
+  'VR9975 - Velcro mousse 1 po',
+  'VR9977 - Velcro mousse 2 po',
+  'VR9978 - VELCRO CROCHET',
+  'VR9979 - VELCRO MOUSSE 130 cm',
+  '1QUFOU051 - ZIP MYELIN 6MM SÉPARABLE RÉG. 12" (1 CURSEUR)',
+  '1QUFOU052 - ZIP MYELIN 6MM SÉPARABLE RÉG. 13" (1 CURSEUR)',
+  '1QUFOU053 - ZIP MYELIN 6MM SÉPARABLE RÉG. 14" (1 CURSEUR)',
+  '1QUFOU054 - ZIP MYELIN 6MM SÉPARABLE RÉG. 15" (1 CURSEUR)',
+  '1QUFOU055 - ZIP MYELIN 6MM SÉPARABLE RÉG. 16" (1 CURSEUR)',
+  '1QUFOU056 - ZIP MYELIN 6MM SÉPARABLE RÉG. 17" (1 CURSEUR)',
+  '1QUFOU057 - ZIP MYELIN 6MM SÉPARABLE RÉG. 18" (1 CURSEUR)',
+  '1QUFOU058 - ZIP MYELIN 6MM SÉPARABLE RÉG. 19" (1 CURSEUR)',
+  '1QUFOU062 - ZIP MYELIN 6MM SÉPARABLE RÉG. 11" (1 CURSEUR)',
+  '1QUFOU066 - ROULEAUX ZIP NOIR #7 roul. 200 vrgs',
+  '1QUFOU068 - ROULEAUX ZIP #RT10 IMPERMÉABLE',
+  '1QUFOU069 - CURSEUR #5',
+  '1QUFOU130 - ZIP MYELIN 6MM SÉPARABLE RÉG. 9" (1 CURSEUR)',
+  '1QUFOU131 - ZIP MYELIN 6MM SÉPARABLE RÉG. 10" (1 CURSEUR)',
+  '1QUFOU146 - ZIP MYELIN 6MM SÉPARABLE RÉG. 20" (1 CURSEUR)',
+  '1QUFOU172 - ZIP MYELIN 6MM SÉPARABLE RÉG. 8" (1 CURSEUR)',
+  '1QUFOU173 - ZIP MYELIN 6MM SÉPARABLE RÉG. 7" (1 CURSEUR)',
+  '1QUFOU174 - ZIP MYELIN 6MM SÉPARABLE RÉG. 6" (1 CURSEUR)',
+  '1QUFOU175 - ZIP MYELIN 6MM SÉPARABLE RÉG. 5" (1 CURSEUR)',
+  '1QUFOU176 - ZIP MYELIN 6MM SÉPARABLE RÉG. 4" (1 CURSEUR)',
+  'VR10000 - ZIP 3 CURSEURS 7"',
+  'VR10001 - ZIP 3 CURSEURS 8"',
+  'VR10002 - ZIP 3 CURSEURS 9"',
+  'VR10003 - ZIP 3 CURSEURS 10"',
+  'VR10004 - ZIP 3 CURSEURS 11"',
+  'VR10005 - ZIP 3 CURSEURS 12"',
+  'VR10006 - ZIP 3 CURSEURS 13"',
+  'VR10007 - ZIP 3 CURSEURS 14"',
+  'VR10008 - ZIP 3 CURSEURS 15"',
+  'VR10009 - ZIP 3 CURSEURS 16"',
+  'VR10010 - ZIP 3 CURSEURS 17"',
+  'VR10011 - ZIP 3 CURSEURS 18"',
+  'VR10012 - ZIP 3 CURSEURS 19"',
+  'VR10013 - ZIP 3 CURSEURS 20"',
+  'VR10014 - ZIP 3 CURSEURS 21"',
+  'VR10015 - ZIP 3 CURSEURS 22"',
+  'VR10023 - ZIP 3 CURSEURS 23"',
+  'VR10024 - ZIP 3 CURSEURS 24"',
+  'VR10284 - ZIP IMPERMÉABLE 2 CURSEURS - 61\'\' LONG.',
+  'VR10285 - ZIP IMPERMÉABLE 2 CURSEURS - 63\'\' LONG.',
+  'VR10286 - ZIP IMPERMÉABLE 2 CURSEURS - 65\'\' LONG.',
+  'VR10287 - ZIP IMPERMÉABLE 2 CURSEURS - 67\'\' LONG.',
+  'VR10288 - ZIP IMPERMÉABLE 2 CURSEURS - 69\'\' LONG.',
+  'VR10289 - ZIP IMPERMÉABLE 2 CURSEURS - 71\'\' LONG.',
+  'VR10290 - ZIP IMPERMÉABLE 2 CURSEURS - 73\'\' LONG.',
+  'VR10291 - ZIP IMPERMÉABLE 2 CURSEURS - 75\'\' LONG.',
+  'VR10292 - ZIP IMPERMÉABLE 2 CURSEURS - 77\'\' LONG.',
+  'VR10295 - ZIP MYELIN 6MM SÉPARABLE RÉG. 22" (1 CURSEUR)',
+  'VR10296 - ZIP MYELIN 6MM SÉPARABLE RÉG. 21" (1 CURSEUR)',
+  'VR10298 - ZIP MYELIN 6MM SÉPARABLE RÉG. 26" (1 CURSEUR)',
+  'VR10328 - ZIP MYELIN 6MM SÉPARABLE RÉG. 23" (1 CURSEUR)',
+  'VR10329 - ZIP MYELIN 6MM SÉPARABLE RÉG. 24" (1 CURSEUR)',
+  'VR10330 - ZIP MYELIN 6MM SÉPARABLE RÉG. 25" (1 CURSEUR)',
+  'VR10348 - ZIP 3 CURSEURS 6"'
+];
+
 
 // Catalogue personnalisé (chargé depuis Firebase)
 var customCatalog = [];
@@ -3110,7 +3528,8 @@ function esc(s) {
 
 // Extrait le code matériau (préfixe alphanumérique)
 function getMatCode(str) {
-  var m = (str || '').match(/^([A-Z0-9][A-Z0-9\-]*)/i);
+  // v1057 : « / » accepté — les plaques Pebble portent des codes comme P1616-1/2
+  var m = (str || '').match(/^([A-Z0-9][A-Z0-9\-\/]*)/i);
   return m ? m[1].trim().toUpperCase() : '';
 }
 
@@ -3273,7 +3692,7 @@ function renderCatalogBrowser() {
   if (!listEl) return;
   var query = ((document.getElementById('catBrowserSearch') || {}).value || '').trim().toLowerCase();
   var base;
-  base = MATERIAUX_ATELIER_BASE;
+  base = (currentDept === 'couture') ? MATERIAUX_COUTURE_BASE : MATERIAUX_ATELIER_BASE;   // v1057
 
   // Construire entrées unifiées
   var entries = [];
@@ -3329,6 +3748,7 @@ function renderCatalogBrowser() {
       '<div class="col-code cat-cell-code">' + esc(e.code) + '</div>' +
       '<div class="col-name cat-cell-name">' + esc(nameClean) + '</div>' +
       '<div class="col-mesures cat-cell-mesures">' + esc(mesures || '') + '</div>' +
+      '<div class="cat-cell-prix">' + _fmtPrix(e.prix) + '</div>' +   /* v1057 */
       '</div>';
   }).join('');
   listEl.innerHTML = html;
@@ -3429,9 +3849,26 @@ function _parseBaseEntry(s) {
 }
 
 // Récupère la liste UNIFIÉE des matériaux pour le dépt courant, avec overrides appliqués
+/* v1057 : « 12,34 $ », ou un tiret quand le fournisseur n'a pas coté l'article. */
+function _fmtPrix(v) {
+  if (v == null || isNaN(v) || v <= 0) return '<span class="cat-prix-vide">—</span>';
+  return (Math.round(v * 100) / 100).toFixed(2).replace('.', ',') + ' $';
+}
+
+/* v1057 : bascule Atelier / Couture du catalogue. */
+function setCatDept(dept) {
+  currentDept = (dept === 'couture') ? 'couture' : 'atelier';
+  var a = document.getElementById('catDeptAtelier');
+  var c = document.getElementById('catDeptCouture');
+  if (a) a.classList.toggle('active', currentDept === 'atelier');
+  if (c) c.classList.toggle('active', currentDept === 'couture');
+  if (typeof renderCatalogBrowser === 'function') renderCatalogBrowser();
+  if (typeof _syncCatRowsInSoumission === 'function') _syncCatRowsInSoumission();
+}
+
 function _getUnifiedMatList(dept) {
-  var base;
-  base = MATERIAUX_ATELIER_BASE;
+  // v1057 : deux bases selon le département (Couture rétablie)
+  var base = (dept === 'couture') ? MATERIAUX_COUTURE_BASE : MATERIAUX_ATELIER_BASE;
 
   var entries = [];
   base.forEach(function(s){
@@ -3444,6 +3881,8 @@ function _getUnifiedMatList(dept) {
       w: override && override.w != null ? override.w : parsed.w,
       h: override && override.h != null ? override.h : parsed.h,
       thickness: parsed.thickness,
+      prix: (override && override.prix != null) ? override.prix
+            : (PRIX_MATERIAUX_BASE[parsed.code] != null ? PRIX_MATERIAUX_BASE[parsed.code] : null),
       isCustom: false,
       isEdited: !!override,
       isDeleted: deleted
@@ -3456,6 +3895,7 @@ function _getUnifiedMatList(dept) {
       name: c.name || '',
       w: c.w != null ? c.w : null,
       h: c.h != null ? c.h : null,
+      prix: (c.prix != null) ? c.prix : null,   // v1057
       isCustom: true,
       isEdited: false,
       isDeleted: false,
@@ -3714,6 +4154,7 @@ renderCatalogBrowser = function() {
       '<div class="cat-cell-code">' + esc(e.code) + '</div>' +
       '<div class="cat-cell-name">' + esc(_displayName(e.name) || '—') + '</div>' +
       '<div class="cat-cell-mesures">' + esc(mesures || '') + '</div>' +
+      '<div class="cat-cell-prix">' + _fmtPrix(e.prix) + '</div>' +   /* v1057 */
       '</div>';
   }).join('');
   listEl.innerHTML = html;
@@ -3856,9 +4297,10 @@ function renderSoumission() {
   var html = list.map(function(m, idx){
     var mes = (m.w && m.h) ? (m.w + '\u2033\u00d7' + m.h + '\u2033') : '—';
     var safeCode = esc(m.code);
-    // Le calculateur s'applique seulement aux feuilles dont la surface > 24×24 = 576 po²
-    // (donc on regarde si w*h > 576 ; si pas de dim ou trop petit, bouton désactivé)
-    var canCalc = (m.w && m.h && (m.w * m.h) > 576);
+    /* v1056 : le seuil de 24×24 (576 po²) est retiré. La règle 📐 apparaît
+       sur TOUT matériau qui a des mesures — gels, Geomatrix, LX-A, silicone,
+       inserts. Ce sont justement les petites pièces où le calcul est utile. */
+    var canCalc = !!(m.w && m.h);
     var qtyVal = (m.qty == null) ? 1 : m.qty;
     var displayName = _displayName(m.name) || '—';
     // Récupérer thickness + w/h : depuis l'item soumission, ou fallback depuis le catalogue
@@ -3878,7 +4320,7 @@ function renderSoumission() {
     }
     // Recalcule mes au cas où on a complété w/h via fallback
     mes = (m.w && m.h) ? (m.w + '\u2033\u00d7' + m.h + '\u2033') : '—';
-    canCalc = (m.w && m.h && (m.w * m.h) > 576);
+    canCalc = !!(m.w && m.h);   // v1056 : plus de seuil de surface
     // Si le matériau a une épaisseur (thickness), afficher un bouton 📐 pour calcul partiel
     var thickBtnHtml = '';
     if (thickness != null && !isNaN(thickness)) {
@@ -3965,7 +4407,7 @@ renderCatalogBrowser = function() {
 
 // ============================================================
 // CALCULATEUR DE FEUILLE (📐) — pi² → fraction/décimal
-// Disponible pour toutes les feuilles dont la surface > 24×24 (576 po²)
+// v1056 : disponible pour tout matériau qui a des mesures (plus de seuil)
 // ============================================================
 var sheetCalcData = null;
 var sheetCalcFractionMode = false;
@@ -3995,8 +4437,8 @@ function openSheetCalcByCode(code, cardIdx) {
   var idx = list.findIndex(function(m){ return m.code === code; });
   if (idx === -1) return;
   var mat = list[idx];
-  // Vérifier la dimension (>24x24 = >576 po²)
-  if (!mat.w || !mat.h || (mat.w * mat.h) <= 576) {
+  // v1056 : il suffit d'avoir des mesures — le seuil de 576 po² est retiré
+  if (!mat.w || !mat.h) {
     return;
   }
   // Détecter l'épaisseur depuis le nom
@@ -4016,6 +4458,11 @@ function openSheetCalcByCode(code, cardIdx) {
   document.getElementById('sheetCalcTotalArea').textContent =
     'Surface totale : ' + sheetCalcData.sqin + ' po² (' + (sheetCalcData.sqin/144).toFixed(2) + ' pi²)';
   document.getElementById('sheetCalcInput').value = 0;
+  /* v1056 : sous 24×24 (576 po²) on propose les pouces carrés — c'est l'unité
+     naturelle pour un gel, un insert ou une pièce de silicone. Au-dessus, on
+     garde les pieds carrés. Le bouton permet de changer d'avis. */
+  sheetCalcUnitPo = (sheetCalcData.sqin <= 576);
+  _majCalcUnitBtn();
   document.getElementById('sheetCalcToggle').classList.toggle('active', sheetCalcFractionMode);
   document.getElementById('sheetCalcToggleLabel').textContent = sheetCalcFractionMode ? 'Fraction' : 'Décimal';
   calcSheet();
@@ -4119,6 +4566,33 @@ function applyThicknessCalc() {
   }
 }
 
+/* v1056 : unité de saisie. false = pi² (feuilles), true = po² (petites pièces).
+   L'unité proposée à l'ouverture suit la taille du matériau, mais le choix
+   reste celui de l'utilisateur tant que le calculateur est ouvert. */
+var sheetCalcUnitPo = false;
+
+function _majCalcUnitBtn() {
+  var b = document.getElementById('sheetCalcUnitBtn');
+  if (b) b.textContent = sheetCalcUnitPo ? 'po\u00b2' : 'pi\u00b2';
+  var inp = document.getElementById('sheetCalcInput');
+  if (inp) inp.step = sheetCalcUnitPo ? '1' : '0.25';
+  var lbl = document.getElementById('sheetCalcQtyLabel');
+  if (lbl) lbl.textContent = 'Quantit\u00e9 (fraction de feuille) :';
+}
+
+function toggleCalcUnit() {
+  /* On convertit la valeur déjà tapée pour ne pas la perdre au changement. */
+  var inp = document.getElementById('sheetCalcInput');
+  var v = inp ? (parseFloat(inp.value) || 0) : 0;
+  sheetCalcUnitPo = !sheetCalcUnitPo;
+  if (inp && v > 0) {
+    var conv = sheetCalcUnitPo ? (v * 144) : (v / 144);
+    inp.value = Math.round(conv * 10000) / 10000;
+  }
+  _majCalcUnitBtn();
+  calcSheet();
+}
+
 function toggleCalcMode() {
   sheetCalcFractionMode = !sheetCalcFractionMode;
   document.getElementById('sheetCalcToggle').classList.toggle('active', sheetCalcFractionMode);
@@ -4128,8 +4602,9 @@ function toggleCalcMode() {
 
 function calcSheet() {
   if (!sheetCalcData) return;
-  var sqft = parseFloat(document.getElementById('sheetCalcInput').value) || 0;
-  var usedSqIn = sqft * 144;
+  /* v1056 : la saisie est en po² ou en pi² selon le bouton d'unité. */
+  var saisie = parseFloat(document.getElementById('sheetCalcInput').value) || 0;
+  var usedSqIn = sheetCalcUnitPo ? saisie : (saisie * 144);
   var totalSqIn = sheetCalcData.sqin;
   var nbFeuilles = 1;
   sheetCalcData.nbFeuilles = nbFeuilles;
@@ -4149,17 +4624,17 @@ function calcSheet() {
   document.getElementById('sheetCalcRemain').textContent = Math.max(0, Math.round(totalSqInEffectif - usedSqIn)) + ' po²';
 }
 
-function toFraction(dec) {
-  if (dec >= 1) {
-    var whole = Math.floor(dec);
-    var rest = dec - whole;
-    if (rest < 0.01) return String(whole);
-    return whole + ' ' + simpleFraction(rest);
-  }
-  return simpleFraction(dec);
-}
-
-function simpleFraction(dec) {
+/* v1055 — Conversion décimal -> fraction, réécrite.
+   Deux défauts de l'ancienne version :
+   1) un reste proche de 1 (0,97) produisait « 2/2 » ou « 16/16 », une
+      fraction qui vaut 1 — « 1,97 » s'écrivait « 1 2/2 » ;
+   2) un reste plus fin que la dernière graduation (moins de 1/32)
+      produisait la chaîne « 0 », qui vaut zéro et faisait disparaître
+      la quantité.
+   Maintenant : si le reste arrondit à 1, on incrémente l'entier ; si
+   aucune fraction ne convient, on renvoie la valeur décimale, petite
+   mais jamais nulle. Toute sortie est relisible par _qteNum. */
+function _bestFraction(dec) {
   var dens = [2, 3, 4, 5, 6, 8, 10, 12, 16];
   var best = null, bestErr = Infinity;
   for (var i = 0; i < dens.length; i++) {
@@ -4167,9 +4642,24 @@ function simpleFraction(dec) {
     var n = Math.round(dec * d);
     if (n === 0) continue;
     var err = Math.abs(dec - n / d);
-    if (err < bestErr) { bestErr = err; best = n + '/' + d; }
+    if (err < bestErr) { bestErr = err; best = { n: n, d: d }; }
   }
-  return best || '0';
+  return best;
+}
+
+function toFraction(dec) {
+  if (!(dec > 0)) return '0';
+  var whole = Math.floor(dec);
+  var fr = _bestFraction(dec - whole);
+  if (fr && fr.n >= fr.d) { whole += 1; fr = null; }   // le reste arrondit à 1
+  if (!fr) return whole > 0 ? String(whole) : String(Math.round(dec * 10000) / 10000);
+  return whole > 0 ? (whole + ' ' + fr.n + '/' + fr.d) : (fr.n + '/' + fr.d);
+}
+
+// Conservée : même signature qu'avant pour tout appelant existant
+function simpleFraction(dec) {
+  var f = _bestFraction(dec);
+  return f ? (f.n + '/' + f.d) : '0';
 }
 
 function applySheetCalc() {
@@ -5045,6 +5535,7 @@ function addMatToCard(entry, cardIdx) {
     w: entry.w,
     h: entry.h,
     thickness: entry.thickness,
+    prix: (entry.prix != null) ? entry.prix : null,   // v1057 : coût unitaire
     qty: 1
   });
   _renderCardMats(idx);
@@ -5111,8 +5602,8 @@ function _renderCardMats(idx) {
       } catch(e) {}
     }
     var safeCode = esc(m.code || '');
-    // 📐 feuille : seulement pour les feuilles > 24×24 (576 po²)
-    var canCalc = (m.w && m.h && (m.w * m.h) > 576);
+    // v1056 : 📐 dès qu'un matériau a des mesures, quelle que soit sa taille
+    var canCalc = !!(m.w && m.h);
     // 📐 épaisseur : pour les blocs qui ont une épaisseur connue
     var hasThick = (m.thickness != null && !isNaN(m.thickness));
     var calcHtml = '';
@@ -5132,11 +5623,20 @@ function _renderCardMats(idx) {
     var mesHtml = mesTxt
       ? '<span class="photo-card-mat-mes" title="Mesure du matériau">' + esc(mesTxt) + '</span>'
       : '';
+    /* v1057 : coût unitaire. Complété depuis le catalogue pour les matériaux
+       ajoutés avant que le champ existe, comme on le fait déjà pour w/h. */
+    if (m.prix == null) {
+      if (PRIX_MATERIAUX_BASE[m.code] != null) m.prix = PRIX_MATERIAUX_BASE[m.code];
+    }
+    var prixHtml = (m.prix != null && m.prix > 0)
+      ? '<span class="photo-card-mat-prix" title="Coût unitaire">' + _fmtPrix(m.prix) + '</span>'
+      : '';
 
     return '<div class="photo-card-mat-row">'
       + '<span class="photo-card-mat-code">' + safeCode + '</span>'
       + '<span class="photo-card-mat-name" title="' + esc(m.name || '') + '">' + esc(m.name || '') + '</span>'
       + mesHtml
+      + prixHtml
       + calcHtml
       + '<input type="text" class="photo-card-mat-qty" value="' + esc(String(m.qty == null ? 1 : m.qty)) + '" '
       +        'oninput="updateCardMatQty(' + idx + ', \'' + esc(m.code || '') + '\', this.value)" '
@@ -7368,8 +7868,12 @@ function exportCostXlsm() {
     if (!m || (!m.code && !m.name)) return;
     var cle = m.code || m.name;
     var existing = allMats.find(function(x){ return (x.code || x.name) === cle; });
-    var q = _qteNum(m.qty);
-    if (q === 0) q = 1;
+    /* v1055 : avant, TOUTE quantité nulle devenait 1 — y compris une fraction
+       si petite que le calculateur l'avait arrondie à « 0 ». Un bout de mousse
+       se facturait alors comme une feuille complète. Le repli à 1 ne sert
+       plus que quand la quantité est absente ou vide. */
+    var brut = (m.qty == null) ? '' : String(m.qty).trim();
+    var q = (brut === '') ? 1 : _qteNum(m.qty);
     if (existing) {
       existing.qty = (existing.qty || 0) + q;
     } else {
@@ -7378,6 +7882,9 @@ function exportCostXlsm() {
         name: m.name || '',
         w: m.w, h: m.h,
         thickness: m.thickness,
+        /* v1057 : coût unitaire — celui du matériau, sinon celui du catalogue */
+        prix: (m.prix != null && !isNaN(m.prix)) ? m.prix
+              : (PRIX_MATERIAUX_BASE[m.code] != null ? PRIX_MATERIAUX_BASE[m.code] : null),
         qty: q
       });
     }
@@ -7443,6 +7950,15 @@ function exportCostXlsm() {
       return '<c r="' + ref + '"' + attrs + ' t="inlineStr"><is><t>' + safe + '</t></is></c>';
     });
   }
+  /* v1055 : écrit une FORMULE dans une cellule, sans valeur en cache, pour
+     qu'Excel la calcule à l'ouverture (fullCalcOnLoad est posé plus bas). */
+  function _patchCellFormula(xml, ref, formula) {
+    var re = new RegExp('<c r="' + ref + '"([^>]*?)(\\/>|>[\\s\\S]*?<\\/c>)');
+    return xml.replace(re, function(_full, attrs){
+      attrs = attrs.replace(/\s*t="[^"]*"/g, '');
+      return '<c r="' + ref + '"' + attrs + '><f>' + formula + '</f></c>';
+    });
+  }
   function _patchCellNum(xml, ref, num) {
     if (num == null || isNaN(num)) return xml;
     var re = new RegExp('<c r="' + ref + '"([^>]*?)(\\/>|>[\\s\\S]*?<\\/c>)');
@@ -7468,7 +7984,11 @@ function exportCostXlsm() {
     return zip.file('xl/worksheets/sheet12.xml').async('string').then(function(sheetXml){
 
       // === SECTION 1 : MATÉRIAUX (rows 8-18, max 11 lignes) ===
-      var MAT_START = 8, MAT_END = 18;
+      /* v1055 : 8-20 au lieu de 8-18. Le total de la ligne 21 est
+         =SUM(H8:H20) — les lignes 19 et 20 étaient donc déjà comptées par
+         le gabarit, elles étaient juste laissées vides par l'export.
+         13 lignes de matériaux au lieu de 11. */
+      var MAT_START = 8, MAT_END = 20;
       /* v1046 : le gabarit n'a que 11 lignes de matériaux. Au-delà, elles
          étaient coupées en silence — on le dit maintenant. */
       var MAT_MAX = MAT_END - MAT_START + 1;
@@ -7489,6 +8009,20 @@ function exportCostXlsm() {
         // Col E = quantité (numérique, fractions de feuille comprises — v1046)
         var qty = Math.round((parseFloat(m.qty) || 0) * 10000) / 10000;
         if (qty > 0) sheetXml = _patchCellNum(sheetXml, 'E' + rowNum, qty);
+        /* v1057 : Col G = coût unitaire. C'était la dernière case que tu devais
+           remplir à la main dans Excel — avec la formule H=E*G reposée en v1055,
+           le total de la ligne se calcule maintenant tout seul. */
+        var pu = (m.prix != null && !isNaN(m.prix)) ? Math.round(m.prix * 100) / 100 : null;
+        if (pu != null && pu > 0) sheetXml = _patchCellNum(sheetXml, 'G' + rowNum, pu);
+      }
+      /* v1055 — LE BOGUE PRINCIPAL. Dans le gabarit, seules H8 et H9 portent
+         la formule « =E*G ». H10 à H20 sont des ZÉROS EN DUR. Résultat : dès
+         le 3e matériau, le Total de la ligne restait à 0 même avec la quantité
+         et le coût unitaire remplis, et la somme H21 =SUM(H8:H20) n'additionnait
+         que les deux premiers matériaux. On repose la formule sur TOUTES les
+         lignes de la section. */
+      for (var hr = MAT_START; hr <= MAT_END; hr++) {
+        sheetXml = _patchCellFormula(sheetXml, 'H' + hr, 'E' + hr + '*G' + hr);
       }
 
       // === SECTION 2 : TEMPS DE PRODUCTION (heures) ===
@@ -7496,6 +8030,14 @@ function exportCostXlsm() {
       if (hCouture > 0) sheetXml = _patchCellNum(sheetXml, 'E25', Math.round(hCouture * 100) / 100);
       if (hAtelier > 0) sheetXml = _patchCellNum(sheetXml, 'E26', Math.round(hAtelier * 100) / 100);
       if (hMetal > 0)   sheetXml = _patchCellNum(sheetXml, 'E27', Math.round(hMetal * 100) / 100);
+      /* v1055 : même bogue dans la section Temps. H25, H26 et H28 ont la
+         formule ; H27 (Usinage et soudure), H29 (CNC-ROBOT), H30 (Assemblage)
+         et H32 (R&D) sont des zéros en dur, alors que H33 =SUM(H25:H32) les
+         additionne. On repose la formule partout pour que les heures entrées
+         plus tard dans n'importe quelle ligne se rendent au total. */
+      [25, 26, 27, 28, 29, 30, 32].forEach(function(r){
+        sheetXml = _patchCellFormula(sheetXml, 'H' + r, 'E' + r + '*G' + r);
+      });
 
       // === Mettre à jour le titre B2 (Analyse du produit : <nom>) ===
       // B2 contient une shared string dans le template — on la remplace par notre texte inline
@@ -7734,7 +8276,10 @@ document.addEventListener('keydown', function(e){
         <input type="number" id="sheetCalcInput" min="0" step="0.25" value="0"
                oninput="calcSheet()"
                onkeydown="if(event.key==='Enter'){event.preventDefault();applySheetCalc();}">
-        <span>pi²</span>
+        <!-- v1056 : l'unité se change d'un clic. Sur un gel ou un insert,
+             taper « 18 » po² est naturel ; « 0,125 » pi² ne l'est pas. -->
+        <button type="button" class="sheet-calc-unit" id="sheetCalcUnitBtn"
+                onclick="toggleCalcUnit()" title="Changer l'unité de saisie (po² ↔ pi²)">pi²</button>
       </div>
       <div class="sheet-calc-enter-hint">Appuyer sur Entrée pour appliquer</div>
       <div class="sheet-calc-results">
