@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PhysiPro — Questionnements actifs v45</title>
+<title>PhysiPro — Questionnements actifs v46</title>
 
 <!-- ============================================================
      SECTION 1 — RESET / BASE
@@ -113,6 +113,9 @@ body{
 .btn-navy:hover{background:#0a2748}
 .btn-or{background:var(--or); color:#2b2107}
 .btn-or:hover{background:#d8b158}
+/* v46 : le bouton du tableau des non facturés */
+.btn-nf{background:#e8f1ff; color:#14508f; border:1px solid #c6ddfa}
+.btn-nf:hover{background:#d8e8ff}
 .btn-sup{background:#fdf0ef; color:var(--rouge); border:1px solid #eec3c0}
 .btn-sup:hover{background:#fbe2e0}
 
@@ -597,6 +600,48 @@ body{
 .loginBoite button:hover{background:#0a2748}
 .loginErr{color:var(--rouge); font-size:13px; font-weight:600; min-height:18px; margin-bottom:6px}
 .loginRappel{display:flex; align-items:center; gap:7px; font-size:13px; color:var(--gris); margin-bottom:10px}
+/* ============================================================
+   SECTION 7 — TABLEAU DES NON FACTURÉS (v46)
+   Une feuille qui se pose par-dessus la page, comme l'agrandissement
+   d'une photo : en-tête marine, tableau dessous, et une croix rouge au
+   bout de chaque ligne. Rien n'est imprimé ni envoyé d'ici — c'est une
+   liste de travail, pour Daniel seul.
+   ============================================================ */
+.nfOverlay{position:fixed; inset:0; background:rgba(4,21,44,.62); z-index:200;
+  display:none; align-items:center; justify-content:center; padding:18px}
+.nfOverlay.ouvert{display:flex}
+.nfBoite{background:#fff; border-radius:12px; width:100%; max-width:1000px; max-height:88vh;
+  display:flex; flex-direction:column; overflow:hidden; box-shadow:0 14px 44px rgba(0,0,0,.35)}
+.nfTete{display:flex; align-items:center; gap:12px; padding:11px 14px;
+  background:linear-gradient(90deg,#04152c 0%, #4a8ef5 100%)}
+.nfTete .t{flex:1; color:#fff; font-size:16px; font-weight:800; letter-spacing:.4px}
+.nfTete .n{color:#dbe8fb; font-size:12.5px; font-weight:700; white-space:nowrap}
+.nfTete button{background:rgba(255,255,255,.2); color:#fff; border:0; width:32px; height:32px;
+  border-radius:50%; font-size:19px; line-height:1; cursor:pointer; font-family:inherit}
+.nfTete button:hover{background:rgba(255,255,255,.34)}
+.nfCorps{overflow:auto; -webkit-overflow-scrolling:touch; padding:0 0 10px}
+.nfVide{padding:26px 18px; text-align:center; color:var(--gris); font-size:14px}
+.nfTable{width:100%; border-collapse:collapse; font-size:13px}
+.nfTable th{position:sticky; top:0; z-index:1; background:#eef3f8; color:#5d6f83;
+  font-size:10.5px; font-weight:800; letter-spacing:.6px; text-transform:uppercase;
+  text-align:left; padding:7px 10px; border-bottom:2px solid #4a8ef5; white-space:nowrap}
+.nfTable td{padding:6px 10px; border-bottom:1px solid #eef2f6; vertical-align:top}
+.nfTable tr:hover td{background:#f7fbff}
+.nfCmd td{background:#04152c !important; color:#fff; font-weight:800; font-size:12.5px;
+  letter-spacing:.5px; padding:5px 10px; border-bottom:2px solid #4a8ef5}
+.nfCmd .sec{color:#9fc3f6; font-weight:600; letter-spacing:0}
+.nfType{display:inline-block; font-size:10px; font-weight:800; letter-spacing:.4px;
+  text-transform:uppercase; padding:1px 7px; border-radius:20px; white-space:nowrap}
+.nfType.item{background:#e0edf6; color:#0d4f75}
+.nfType.mat{background:#e6f6ec; color:#116b3a}
+.nfCode{font-weight:800; color:#04152c; white-space:nowrap}
+.nfPrix{font-weight:800; color:#14508f; white-space:nowrap; text-align:right}
+.nfX{border:0; background:transparent; color:var(--rouge); font-size:17px; line-height:1;
+  cursor:pointer; font-family:inherit; padding:0 4px}
+.nfX:hover{color:#7d1a14}
+@media(max-width:620px){
+  .nfTable th:nth-child(3), .nfTable td:nth-child(3){display:none}   /* description */
+}
 </style>
 </head>
 <body>
@@ -615,7 +660,7 @@ body{
     </div>
   </div>
   <div class="tb-center"><span class="top-title">Questionnements actifs</span></div>
-  <div class="tb-right"><span class="ver">v13</span></div>
+  <div class="tb-right"><span class="ver">v46</span></div>
 </header>
 
 <div class="wrap">
@@ -628,6 +673,9 @@ body{
   <input type="text" class="rech" id="rech" placeholder="Rechercher une commande, un centre, une agente…" autocomplete="off">
   <button class="btn btn-gris" type="button" id="btnMaj">↻ Actualiser</button>
   <button class="btn btn-navy" type="button" id="btnImpr" title="Imprimer les trois sections">🖨 Imprimer</button>
+  <!-- v46 : réservé à Daniel — le tableau de tout ce qui n'a pas été facturé -->
+  <button class="btn btn-nf" type="button" id="btnNonFact" style="display:none"
+          title="Tout ce qui n'a pas été facturé, commande par commande">🧾 Non facturés</button>
   <!-- v43 : n'apparaît que s'il y a des dates à réparer -->
   <button class="btn btnReparer" type="button" id="btnReparerDates" style="display:none"
           title="Remettre les dates d'envoi écrasées par les anciennes relances">⟲ Réparer les dates</button>
@@ -824,6 +872,20 @@ body{
 <div class="zoom" id="zoom"><img id="zoomImg" src="" alt=""></div>
 
 <!-- ============================================================
+     SECTION 14f — TABLEAU DES NON FACTURÉS (v46)
+     ============================================================ -->
+<div class="nfOverlay" id="nfOverlay">
+  <div class="nfBoite">
+    <div class="nfTete">
+      <span class="t">Non facturés</span>
+      <span class="n" id="nfCompte">—</span>
+      <button type="button" id="nfFermer" title="Fermer">×</button>
+    </div>
+    <div class="nfCorps" id="nfCorps"></div>
+  </div>
+</div>
+
+<!-- ============================================================
      SECTION 15 — CONNEXION
      ============================================================ -->
 <div class="loginOverlay" id="loginOverlay">
@@ -879,6 +941,15 @@ function estAdmin(email){
   return ADMINS.indexOf(String(email || '').trim().toLowerCase()) !== -1;
 }
 
+/* v46 : le tableau des non facturés n'est ouvert qu'à Daniel. Personne
+   d'autre ne voit le bouton, et la lecture du nœud « questNonFactures »
+   peut être restreinte à la même adresse dans les règles Firebase. */
+var DANIEL = _nf('YXRlbGllcmF0cEBwaHlzaXByby5jb20=');
+function _nf(b){ try { return atob(b); } catch(e){ return ''; } }
+function estDaniel(email){
+  return String(email || '').trim().toLowerCase() === DANIEL;
+}
+
 function doLogin(){
   var email = $('loginEmail').value.trim();
   var pass  = $('loginPassword').value;
@@ -924,6 +995,7 @@ if (fbAuth){
       $('btnAjout').style.display = ADMIN ? '' : 'none';
       $('btnAjoutMag').style.display = ADMIN ? '' : 'none';   // v19
       $('btnAjoutMatos').style.display = ADMIN ? '' : 'none'; // v26
+      $('btnNonFact').style.display = estDaniel(user.email) ? '' : 'none';   // v46
       if (typeof chargerRaisons === 'function') chargerRaisons();
       try {
         if (typeof initPhysiProNav === 'function') initPhysiProNav('questactifs', user.email);
@@ -2964,6 +3036,132 @@ $('boiteOK').addEventListener('click', function(){
     b.disabled = false; b.textContent = 'Enregistrer';
     $('fErr').textContent = 'Erreur : ' + err.message;
   });
+});
+
+/* ============================================================
+   SECTION 25b — TABLEAU DES NON FACTURÉS (v46)
+   Réservé à Daniel. Le bouton « 🧾 Non facturés » lit le nœud
+   « questNonFactures » — écrit par PhysiPro_Questionnements.html à
+   chaque envoi fait du côté « Facture » — et en dresse un tableau :
+   une bande marine par commande, puis une ligne par code manquant,
+   avec son code, sa description et son prix.
+   Le nœud ne contient que du texte (quelques centaines d'octets par
+   questionnement) : l'ouvrir ne coûte pratiquement rien, et rien
+   n'est lu tant qu'on ne clique pas sur le bouton.
+   La croix rouge retire une ligne du tableau — et donc du nœud. Elle
+   ne touche ni au questionnement, ni à sa fiche de suivi, ni au PDF
+   déjà enregistré : c'est une liste de travail, rien d'autre.
+   ============================================================ */
+var NF = {};
+
+function nfPrixTexte(l){
+  if (!l || l.prix == null || isNaN(l.prix)) return '';
+  var v = (Math.round(l.prix * 100) / 100).toFixed(2).replace('.', ',');
+  return v + ' $' + (l.unite ? ' / ' + l.unite : '');
+}
+
+function ouvrirNonFact(){
+  if (!fbDb || !USER || !estDaniel(USER.email)) return;
+  $('nfCorps').innerHTML = '<div class="nfVide">Lecture…</div>';
+  $('nfCompte').textContent = '—';
+  $('nfOverlay').classList.add('ouvert');
+  fbDb.ref('questNonFactures').once('value').then(function(snap){
+    NF = snap.val() || {};
+    rendreNonFact();
+  }).catch(function(e){
+    $('nfCorps').innerHTML = '<div class="nfVide">Lecture impossible — ' + ech(e.message) +
+      '<br>Vérifie les règles Firebase du nœud <b>questNonFactures</b>.</div>';
+  });
+}
+
+function rendreNonFact(){
+  var cles = Object.keys(NF).filter(function(k){
+    var f = NF[k];
+    return f && f.lignes && f.lignes.length;
+  });
+  /* la plus récente en haut */
+  cles.sort(function(a, b){ return (NF[b].ts || 0) - (NF[a].ts || 0); });
+
+  if (!cles.length){
+    $('nfCompte').textContent = 'rien pour le moment';
+    $('nfCorps').innerHTML = '<div class="nfVide">Aucun item ni matériau non facturé.<br>' +
+      'Le tableau se remplit tout seul à chaque courriel envoyé du côté « Facture ».</div>';
+    return;
+  }
+
+  var nbL = 0;
+  cles.forEach(function(k){ nbL += NF[k].lignes.length; });
+  $('nfCompte').textContent = nbL + (nbL > 1 ? ' lignes' : ' ligne') + ' \u00b7 ' +
+    cles.length + (cles.length > 1 ? ' commandes' : ' commande');
+
+  var H = '<table class="nfTable"><thead><tr>' +
+    '<th style="width:78px">Type</th><th style="width:120px">Code</th>' +
+    '<th>Description</th><th style="width:110px;text-align:right">Prix</th>' +
+    '<th style="width:34px"></th></tr></thead><tbody>';
+
+  cles.forEach(function(k){
+    var f = NF[k];
+    H += '<tr class="nfCmd"><td colspan="5">' + ech(f.commande || '—') +
+         '<span class="sec">' +
+         (f.date   ? '&nbsp;&nbsp;\u00b7&nbsp;&nbsp;' + ech(f.date) : '') +
+         (f.centre ? '&nbsp;&nbsp;\u00b7&nbsp;&nbsp;' + ech(f.centre) : '') +
+         (f.po     ? '&nbsp;&nbsp;\u00b7&nbsp;&nbsp;PO ' + ech(f.po) : '') +
+         '</span></td></tr>';
+    f.lignes.forEach(function(l, i){
+      var t = (l.t === 'mat') ? 'mat' : 'item';
+      H += '<tr>' +
+        '<td><span class="nfType ' + t + '">' + (t === 'mat' ? 'Matériau' : 'Item') + '</span></td>' +
+        '<td class="nfCode">' + ech(l.code || '—') + '</td>' +
+        '<td>' + ech(l.desc || '') + '</td>' +
+        '<td class="nfPrix">' + (nfPrixTexte(l) || '<span style="color:#9fb2c0">—</span>') + '</td>' +
+        '<td><button class="nfX" type="button" data-cle="' + ech(k) + '" data-i="' + i +
+            '" title="Retirer cette ligne">\u00d7</button></td>' +
+      '</tr>';
+    });
+  });
+  H += '</tbody></table>';
+  $('nfCorps').innerHTML = H;
+
+  var xs = $('nfCorps').querySelectorAll('.nfX');
+  for (var n = 0; n < xs.length; n++){
+    xs[n].onclick = function(){
+      retirerNonFact(this.getAttribute('data-cle'), parseInt(this.getAttribute('data-i'), 10));
+    };
+  }
+}
+
+function retirerNonFact(cle, i){
+  var f = NF[cle];
+  if (!f || !f.lignes || !f.lignes[i]) return;
+  var l = f.lignes[i];
+  var quoi = (l.code ? l.code + ' — ' : '') + (l.desc || '');
+  if (!confirm('Retirer « ' + quoi + ' » de la liste des non facturés ?\n\n' +
+               'Le questionnement, lui, n\'est pas touché.')) return;
+
+  var reste = f.lignes.slice();
+  reste.splice(i, 1);
+
+  var p = reste.length
+    ? fbDb.ref('questNonFactures/' + cle + '/lignes').set(reste)
+    : fbDb.ref('questNonFactures/' + cle).remove();
+
+  p.then(function(){
+    if (reste.length) NF[cle].lignes = reste; else delete NF[cle];
+    rendreNonFact();
+  }).catch(function(e){
+    alert('Impossible de retirer la ligne : ' + e.message);
+  });
+}
+
+$('btnNonFact').addEventListener('click', ouvrirNonFact);
+$('nfFermer').addEventListener('click', function(){ $('nfOverlay').classList.remove('ouvert'); });
+$('nfOverlay').addEventListener('click', function(e){
+  if (e.target === this) this.classList.remove('ouvert');
+});
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape' && $('nfOverlay').classList.contains('ouvert')){
+    $('nfOverlay').classList.remove('ouvert');
+  }
 });
 
 /* ============================================================
