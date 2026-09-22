@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PhysiPro — Questionnements actifs v46</title>
+<title>PhysiPro — Questionnements actifs v47</title>
 
 <!-- ============================================================
      SECTION 1 — RESET / BASE
@@ -618,6 +618,8 @@ body{
 .nfTete .n{color:#dbe8fb; font-size:12.5px; font-weight:700; white-space:nowrap}
 .nfTete button{background:rgba(255,255,255,.2); color:#fff; border:0; width:32px; height:32px;
   border-radius:50%; font-size:19px; line-height:1; cursor:pointer; font-family:inherit}
+/* v47 : le bouton d'impression, un peu plus large que la croix */
+.nfTete button.nfImpr{width:auto; padding:0 12px; height:30px; border-radius:16px; font-size:15px}
 .nfTete button:hover{background:rgba(255,255,255,.34)}
 .nfCorps{overflow:auto; -webkit-overflow-scrolling:touch; padding:0 0 10px}
 .nfVide{padding:26px 18px; text-align:center; color:var(--gris); font-size:14px}
@@ -660,7 +662,7 @@ body{
     </div>
   </div>
   <div class="tb-center"><span class="top-title">Questionnements actifs</span></div>
-  <div class="tb-right"><span class="ver">v46</span></div>
+  <div class="tb-right"><span class="ver">v47</span></div>
 </header>
 
 <div class="wrap">
@@ -879,6 +881,8 @@ body{
     <div class="nfTete">
       <span class="t">Non facturés</span>
       <span class="n" id="nfCompte">—</span>
+      <!-- v47 : impression du tableau, réservée au même compte que la fenêtre -->
+      <button type="button" class="nfImpr" id="nfImpr" title="Imprimer le tableau">🖨</button>
       <button type="button" id="nfFermer" title="Fermer">×</button>
     </div>
     <div class="nfCorps" id="nfCorps"></div>
@@ -3153,6 +3157,72 @@ function retirerNonFact(cle, i){
   });
 }
 
+/* v47 — IMPRESSION DU TABLEAU
+   Une feuille sobre, en noir et blanc, dans le même esprit que l'impression
+   des suivis : un en-tête par commande, puis une ligne par code. Elle sort
+   telle qu'elle est à l'écran — ce qui a été retiré par la croix n'y est
+   plus. Réservée au même compte que la fenêtre elle-même. */
+function imprimerNonFact(){
+  if (!USER || !estDaniel(USER.email)) return;
+  var cles = Object.keys(NF).filter(function(k){
+    var f = NF[k]; return f && f.lignes && f.lignes.length;
+  });
+  cles.sort(function(a, b){ return (NF[b].ts || 0) - (NF[a].ts || 0); });
+  if (!cles.length){ alert('Rien à imprimer — le tableau est vide.'); return; }
+
+  var nbL = 0;
+  cles.forEach(function(k){ nbL += NF[k].lignes.length; });
+
+  var H = '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
+    '<title>Non facturés PhysiPro</title><style>' +
+    '*{box-sizing:border-box}' +
+    'body{font-family:"Segoe UI",Arial,sans-serif; color:#1c2b36; margin:16px; font-size:11px}' +
+    'h1{font-size:17px; margin:0 0 2px; color:#04152c; letter-spacing:.5px}' +
+    '.sous{font-size:10px; color:#6a7c89; margin-bottom:12px}' +
+    'table{width:100%; border-collapse:collapse}' +
+    'th{text-align:left; font-size:9px; text-transform:uppercase; letter-spacing:.4px;' +
+      ' color:#6a7c89; border-bottom:1px solid #d3dde5; padding:3px 5px}' +
+    'td{padding:3px 5px; border-bottom:1px solid #eef2f6; vertical-align:top}' +
+    'td.p{text-align:right; white-space:nowrap; font-weight:700}' +
+    'tr.cmd td{background:#eef3f8; border-bottom:1px solid #9fc3f6; font-weight:800;' +
+      ' color:#04152c; padding:4px 5px}' +
+    'tr.cmd .sec{font-weight:600; color:#6a7c89}' +
+    '.t{font-size:9px; font-weight:700; text-transform:uppercase; color:#6a7c89}' +
+    '@media print{tr{break-inside:avoid} tr.cmd{break-after:avoid}}' +
+    '</style></head><body>' +
+    '<h1>Items et matériaux non facturés</h1>' +
+    '<div class="sous">Imprimé le ' + aujourdhui() + ' \u00b7 ' +
+      nbL + (nbL > 1 ? ' lignes' : ' ligne') + ' \u00b7 ' +
+      cles.length + (cles.length > 1 ? ' commandes' : ' commande') + '</div>' +
+    '<table><thead><tr><th style="width:70px">Type</th><th style="width:110px">Code</th>' +
+    '<th>Description</th><th style="width:95px;text-align:right">Prix</th></tr></thead><tbody>';
+
+  cles.forEach(function(k){
+    var f = NF[k];
+    H += '<tr class="cmd"><td colspan="4">' + ech(f.commande || '\u2014') + '<span class="sec">' +
+         (f.date   ? ' \u00b7 ' + ech(f.date) : '') +
+         (f.centre ? ' \u00b7 ' + ech(f.centre) : '') +
+         (f.po     ? ' \u00b7 PO ' + ech(f.po) : '') +
+         '</span></td></tr>';
+    f.lignes.forEach(function(l){
+      H += '<tr><td class="t">' + (l.t === 'mat' ? 'Matériau' : 'Item') + '</td>' +
+           '<td><b>' + (ech(l.code) || '\u2014') + '</b></td>' +
+           '<td>' + ech(l.desc || '') + '</td>' +
+           '<td class="p">' + (nfPrixTexte(l) || '\u2014') + '</td></tr>';
+    });
+  });
+
+  H += '</tbody></table>' +
+       '<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script>' +
+       '</body></html>';
+
+  var w = window.open('', 'imprNonFact', 'width=1000,height=760');
+  if (!w){ alert('Le popup a été bloqué. Autorise les popups pour ce site.'); return; }
+  w.document.write(H);
+  w.document.close();
+}
+
+$('nfImpr').addEventListener('click', imprimerNonFact);
 $('btnNonFact').addEventListener('click', ouvrirNonFact);
 $('nfFermer').addEventListener('click', function(){ $('nfOverlay').classList.remove('ouvert'); });
 $('nfOverlay').addEventListener('click', function(e){
