@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PhysiPro — Questionnements actifs v47</title>
+<title>PhysiPro — Questionnements actifs v48</title>
 
 <!-- ============================================================
      SECTION 1 — RESET / BASE
@@ -113,6 +113,25 @@ body{
 .btn-navy:hover{background:#0a2748}
 .btn-or{background:var(--or); color:#2b2107}
 .btn-or:hover{background:#d8b158}
+/* ============================================================
+   v48 — LA DATE DE LA RELANCE
+   Le délai d'attente continue de courir depuis l'envoi d'origine — c'est
+   un fait, et il doit rester visible. Mais une fiche à 20 jours qui a été
+   relancée il y a deux jours ne raconte pas la même histoire qu'une fiche
+   à 20 jours dont personne ne s'est occupé. La date de la dernière relance
+   se lit donc maintenant à côté du délai, sans ouvrir la carte.
+   Le champ « relanceLe » est écrit depuis la v42 ; il n'était affiché
+   nulle part.
+   ============================================================ */
+.frelance{
+  flex:0 0 auto; display:inline-flex; align-items:center; gap:3px;
+  background:#e8f1ff; border:1px solid #c6ddfa; color:#14508f;
+  font-size:10px; font-weight:800; letter-spacing:.2px;
+  padding:1px 7px; border-radius:20px; white-space:nowrap; margin-right:5px;
+}
+.frelance i{font-style:normal; font-weight:700; color:#5b86c4}
+@media(max-width:620px){ .frelance i{display:none} }
+
 /* v46 : le bouton du tableau des non facturés */
 .btn-nf{background:#e8f1ff; color:#14508f; border:1px solid #c6ddfa}
 .btn-nf:hover{background:#d8e8ff}
@@ -662,7 +681,7 @@ body{
     </div>
   </div>
   <div class="tb-center"><span class="top-title">Questionnements actifs</span></div>
-  <div class="tb-right"><span class="ver">v47</span></div>
+  <div class="tb-right"><span class="ver">v48</span></div>
 </header>
 
 <div class="wrap">
@@ -1557,6 +1576,14 @@ function ecartJours(dateISO){
   return Math.round((au - d0) / 86400000);   /* positif = en retard */
 }
 
+/* v48 : « 2026-09-20 » devient « 09-20 » quand c'est l'année courante --
+   la rangée du haut d'une carte est étroite, et l'année n'y apprend rien.
+   La date complète reste dans l'infobulle et à l'impression. */
+function dateCourte(d){
+  d = String(d || '');
+  return (d.length === 10 && d.slice(0, 4) === aujourdhui().slice(0, 4)) ? d.slice(5) : d;
+}
+
 function delaiFiche(f){
   if (f && f.matos && f.arrivee){
     var e = ecartJours(f.arrivee);
@@ -1666,11 +1693,15 @@ function rendre(){
     var badge = (ADMIN && !f.magasin && !f.matos)
       ? '<button class="btnRelance' + (f.rafraich ? ' deja' : '') + '" type="button" '
         + 'data-act="relancer" data-cle="' + ech(f._cle) + '" '
-        + 'title="' + (f.rafraich ? 'D\u00e9j\u00e0 relanc\u00e9 \u2014 relancer de nouveau'
-                                  : 'Relancer ce questionnement : la date repart d\u2019aujourd\u2019hui')
+        + 'title="' + (f.rafraich
+              ? 'D\u00e9j\u00e0 relanc\u00e9' + (f.relanceLe ? ' le ' + ech(f.relanceLe) : '') +
+                ' \u2014 relancer de nouveau'
+              : 'Relancer ce questionnement \u2014 le d\u00e9lai continue de courir depuis l\u2019envoi')
         + '">Relancer questionnement</button>'
       : (f.rafraich && !f.magasin && !f.matos
-          ? '<span class="rafrR" title="Questionnement d\u00e9j\u00e0 relanc\u00e9">questionnement relanc\u00e9</span>'
+          ? '<span class="rafrR" title="Questionnement d\u00e9j\u00e0 relanc\u00e9' +
+            (f.relanceLe ? ' le ' + ech(f.relanceLe) : '') + '">questionnement relanc\u00e9' +
+            (f.relanceLe ? ' le ' + ech(f.relanceLe) : '') + '</span>'
           : '');
 
     return '<div class="fiche ' + niv + (f.magasin ? ' enMagasin' : '') +
@@ -1709,6 +1740,12 @@ function rendre(){
            largeur du milieu — c'est elle qui en manquait. */
         (f.agente && !f.matos
           ? '<span class="fagente" title="Agente du service client">' + ech(f.agente) + '</span>'
+          : '') +
+        /* v48 : la dernière relance, juste avant le délai */
+        (f.relanceLe && !f.magasin && !f.matos
+          ? '<span class="frelance" title="Derni\u00e8re relance : ' + ech(f.relanceLe) +
+            ' \u2014 il y a ' + joursDepuis(f.relanceLe) + ' jour(s)">' +
+            '\u21bb <i>relanc\u00e9</i> ' + ech(dateCourte(f.relanceLe)) + '</span>'
           : '') +
         '<span class="delai ' + niv + '">' + texteDelai + '</span>' +
         croix +
@@ -1800,11 +1837,14 @@ function imprimerSuivis(){
     '<div class="sous">Imprim\u00e9 le ' + aujourdhui() +
       (q ? ' \u00b7 filtre : \u00ab ' + ech($('rech').value.trim()) + ' \u00bb' : '') + '</div>';
 
+  /* v48 : « Relancé le » entre la date d'envoi et le centre — on voit d'un
+     coup d'oeil qu'une fiche de 20 jours a été suivie en cours de route. */
   H += tableau('Questionnements atelier', atelier,
-    ['Commande', 'Envoy\u00e9 le', 'Centre', 'PO', 'Soum.', 'Agente', 'Jours'],
+    ['Commande', 'Envoy\u00e9 le', 'Relanc\u00e9 le', 'Centre', 'PO', 'Soum.', 'Agente', 'Jours'],
     function(f){
       return '<tr><td><b>' + (ech(f.commande) || '\u2014') + '</b>' + (f.rafraich ? ' (R)' : '') + '</td>' +
              '<td class="c">' + ech(f.date || '') + '</td>' +
+             '<td class="c">' + (ech(f.relanceLe) || '\u2014') + '</td>' +
              '<td>' + ech(f.centre || '') + '</td>' +
              '<td>' + ech(f.po || '') + '</td>' +
              '<td>' + ech(f.soum || '') + '</td>' +
