@@ -1473,7 +1473,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1856</title>
+  <title>PhysiPro Moulages v1857</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7494,7 +7494,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261013;
+    var APP_VERSION = 20261014;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -10237,8 +10237,21 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         vues.forEach(function(c){
           if (cols.hasOwnProperty(c.colonne)) cols[c.colonne]++; else autres++;
         });
-        var stats = { cols: cols, autres: autres, total: vues.length, ts: Date.now() };
-        var sig = JSON.stringify(cols) + '|' + autres + '|' + vues.length;
+        // v1857 — les numéros de commande de l'ESSAYAGE, et rien d'autre.
+        // Ce sont de courtes chaînes : dix moulages en essayage pèsent une
+        // centaine d'octets. Aucun nom, aucune fiche, aucune photo.
+        var essayage = [];
+        vues.forEach(function(c){
+          if (c.colonne !== 'colEssayage') return;
+          var o = (c.order === undefined || c.order === null) ? '' : String(c.order).trim();
+          if (o) essayage.push(o);
+        });
+        essayage.sort(function(a, b){ return a.localeCompare(b, 'fr', { numeric: true }); });
+        if (essayage.length > 60) essayage = essayage.slice(0, 60);   // garde-fou
+
+        var stats = { cols: cols, autres: autres, total: vues.length,
+                      essayage: essayage, ts: Date.now() };
+        var sig = JSON.stringify(cols) + '|' + autres + '|' + vues.length + '|' + essayage.join(',');
         if (sig === _writeMoulageStats._sig) return;   // rien changé → pas de réécriture
         _writeMoulageStats._sig = sig;
         if (typeof firebaseDb !== 'undefined' && firebaseDb) {

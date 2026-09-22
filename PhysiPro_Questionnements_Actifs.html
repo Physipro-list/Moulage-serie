@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PhysiPro — Questionnements actifs v55</title>
+<title>PhysiPro — Questionnements actifs v57</title>
 
 <!-- ============================================================
      SECTION 1 — RESET / BASE
@@ -185,6 +185,14 @@ body{
 .moulTot span{font-size:8.5px; font-weight:700; color:var(--gris); text-transform:uppercase;
   letter-spacing:.4px}
 .moulQuand{padding:3px 6px 0; font-size:9.5px; color:var(--gris); font-style:italic; text-align:right}
+/* v57 : les num\u00e9ros de commande des moulages en essayage */
+.moulEss{margin:4px 3px 0; padding:5px 6px 6px; background:#f7fafc;
+  border:1px solid #dfe7f2; border-radius:8px}
+.moulEss .t{font-size:9.5px; font-weight:800; color:#8d9cb0; letter-spacing:.5px;
+  text-transform:uppercase; margin-bottom:3px}
+.moulEss .no{display:inline-block; font-size:11.5px; font-weight:800; color:#123a78;
+  background:#eef4ff; border:1px solid #c6ddfa; border-radius:10px;
+  padding:1px 7px; margin:2px 4px 0 0}
 .btnColVert{background:#e8f5ec; color:var(--vert2); border-color:#bfe0ca}
 .btnColVert:hover{background:#d6ecdd}
 .fiche.enMatos{border-left-color:var(--vert2)}
@@ -750,7 +758,7 @@ body{
     </div>
   </div>
   <div class="tb-center"><span class="top-title">Questionnements actifs</span></div>
-  <div class="tb-right"><span class="ver">v55</span></div>
+  <div class="tb-right"><span class="ver">v57</span></div>
 </header>
 
 <div class="wrap">
@@ -1153,6 +1161,24 @@ function charger(){
    notes et les fauteuils n'y sont pas.
    ============================================================ */
 var MOUL = null;                   // v55 : derniers chiffres lus
+
+/* v56 : L'EXPÉDITION NE COMPTE PLUS.
+   Un moulage rendu à l'expédition est fini : il n'est plus en circulation
+   dans l'atelier, et le voir dans les totaux faussait la lecture. La
+   colonne « Expédition » est retirée de la liste, et les totaux sont
+   recalculés ici à partir des départements qui restent — plutôt que de
+   prendre le total écrit par le module Moulage, qui, lui, compte tout.
+   Les chiffres de l'expédition restent dans Firebase : rien n'est perdu,
+   ils ne sont simplement plus affichés. */
+function moulTotaux(st){
+  var att = (st && st.cols && st.cols.colAttente) || 0;
+  var tot = 0;
+  if (st && st.cols){
+    MOUL_COLS.forEach(function(c){ tot += st.cols[c[0]] || 0; });
+    tot += st.autres || 0;
+  }
+  return { tot: tot, att: att, circ: Math.max(0, tot - att) };
+}
 var MOUL_COLS = [
   ['colRobot',      '\u2699\ufe0f Robot (CNC)'],
   ['colDegauchage', '\ud83e\ude9a D\u00e9gauchage'],
@@ -1160,7 +1186,6 @@ var MOUL_COLS = [
   ['colAtelier',    '\ud83d\udd27 Atelier'],
   ['colCouture',    '\ud83e\uddf5 Couture'],
   ['colPeinture',   '\ud83c\udfa8 Peinture'],
-  ['colExpedition', '\ud83d\udce6 Exp\u00e9dition'],
   ['colAttente',    '\u23f3 En attente']
 ];
 
@@ -1192,15 +1217,13 @@ function rendreMoulages(st){
       'd\u00e8s que le module Moulage a \u00e9t\u00e9 ouvert une fois.</div>';
     return;
   }
-  var att   = st.cols.colAttente || 0;
-  var total = st.total || 0;
-  var circ  = Math.max(0, total - att);
-  $('nbMoul').textContent = total;
+  var t = moulTotaux(st);
+  $('nbMoul').textContent = t.tot;
 
   var H = '<div class="moulTot">' +
-            '<div><b>' + circ  + '</b><span>en circulation</span></div>' +
-            '<div><b>' + att   + '</b><span>en attente</span></div>' +
-            '<div><b>' + total + '</b><span>au total</span></div>' +
+            '<div><b>' + t.circ + '</b><span>en circulation</span></div>' +
+            '<div><b>' + t.att  + '</b><span>en attente</span></div>' +
+            '<div><b>' + t.tot  + '</b><span>au total</span></div>' +
           '</div>';
   H += '<div class="moulDeux">';
   MOUL_COLS.forEach(function(c){
@@ -1213,6 +1236,15 @@ function rendreMoulages(st){
          '<span class="v">' + st.autres + '</span></div>';
   }
   H += '</div>';
+  /* v57 : les num\u00e9ros de commande partis en essayage. Ils voyagent dans
+     le m\u00eame petit n\u0153ud que les totaux — aucune lecture de plus. */
+  var ess = Array.isArray(st.essayage) ? st.essayage : [];
+  if (ess.length){
+    H += '<div class="moulEss"><div class="t">\ud83d\udc54 En essayage \u2014 ' + ess.length +
+         ' commande' + (ess.length > 1 ? 's' : '') + '</div>';
+    ess.forEach(function(n){ H += '<span class="no">' + ech(n) + '</span>'; });
+    H += '</div>';
+  }
   H += '<div class="moulQuand">chiffres du module Moulage \u00b7 ' + ech(momentTexte(st.ts)) + '</div>';
   z.innerHTML = H;
 }
@@ -2162,11 +2194,11 @@ function imprimerSuivis(){
   if (!MOUL || !MOUL.cols){
     H += '<p class="rien">Chiffres non disponibles \u2014 le module Moulage n\'a pas encore \u00e9crit ses totaux.</p>';
   } else {
-    var att = MOUL.cols.colAttente || 0, tot = MOUL.total || 0;
+    var t = moulTotaux(MOUL);
     H += '<table class="mtot"><tr>' +
-           '<td><b>' + Math.max(0, tot - att) + '</b><span>en circulation</span></td>' +
-           '<td><b>' + att + '</b><span>en attente</span></td>' +
-           '<td><b>' + tot + '</b><span>au total</span></td>' +
+           '<td><b>' + t.circ + '</b><span>en circulation</span></td>' +
+           '<td><b>' + t.att  + '</b><span>en attente</span></td>' +
+           '<td><b>' + t.tot  + '</b><span>au total</span></td>' +
          '</tr></table><table class="mdep"><tbody>';
     for (var i = 0; i < MOUL_COLS.length; i += 2){
       H += '<tr>';
@@ -2177,8 +2209,13 @@ function imprimerSuivis(){
       }
       H += '</tr>';
     }
-    H += '</tbody></table>' +
-         '<div class="pc">chiffres du module Moulage \u00b7 ' + ech(momentTexte(MOUL.ts)) + '</div>';
+    H += '</tbody></table>';
+    var ess = Array.isArray(MOUL.essayage) ? MOUL.essayage : [];
+    if (ess.length){
+      H += '<div class="pc" style="margin-top:6px"><b>En essayage (' + ess.length + ')</b> \u00b7 ' +
+           ess.map(function(n){ return ech(n); }).join(' \u00b7 ') + '</div>';
+    }
+    H += '<div class="pc">chiffres du module Moulage \u00b7 ' + ech(momentTexte(MOUL.ts)) + '</div>';
   }
 
   H += '<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script>' +
