@@ -1473,7 +1473,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1855</title>
+  <title>PhysiPro Moulages v1856</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7494,7 +7494,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261012;
+    var APP_VERSION = 20261013;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -10218,8 +10218,38 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       } catch (e) { /* best-effort : ne jamais bloquer le rendu */ }
     }
 
+    // v1856 — TOTAUX PAR DÉPARTEMENT, pour l'écran « Questionnements actifs ».
+    // Un nœud minuscule : huit nombres et un horodatage, moins de 300 octets.
+    // Aucune fiche, aucune photo, aucun nom — QUE les chiffres. Il n'est
+    // réécrit que lorsqu'un total change (même garde-fou que l'index léger),
+    // donc déplacer une carte d'une colonne à l'autre écrit une fois, et
+    // ouvrir le kanban dix fois n'écrit rien.
+    // Le décompte est EXACTEMENT celui des en-têtes de colonnes ci-dessous :
+    // les notes et les fauteuils n'y sont pas.
+    function _writeMoulageStats() {
+      try {
+        if (typeof cardsData !== 'object' || !cardsData) return;
+        var vues = Object.keys(cardsData).map(function(k){ return cardsData[k]; })
+                     .filter(function(c){ return c && typeof c === 'object' && !c.isNote && !c.isFauteuil; });
+        var cols = {};
+        COLONNES.forEach(function(col){ cols[col.id] = 0; });
+        var autres = 0;
+        vues.forEach(function(c){
+          if (cols.hasOwnProperty(c.colonne)) cols[c.colonne]++; else autres++;
+        });
+        var stats = { cols: cols, autres: autres, total: vues.length, ts: Date.now() };
+        var sig = JSON.stringify(cols) + '|' + autres + '|' + vues.length;
+        if (sig === _writeMoulageStats._sig) return;   // rien changé → pas de réécriture
+        _writeMoulageStats._sig = sig;
+        if (typeof firebaseDb !== 'undefined' && firebaseDb) {
+          firebaseDb.ref('moulageStats').set(stats).catch(function(){});
+        }
+      } catch (e) { /* best-effort : ne jamais bloquer le rendu */ }
+    }
+
     function renderKanban() {
       try { _writeMoulagesIndex(); } catch(e) {}
+      try { _writeMoulageStats(); } catch(e) {}
       try {
         const container = document.getElementById('kanbanView');
         if (!container) {

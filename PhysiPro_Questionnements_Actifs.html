@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PhysiPro — Questionnements actifs v51</title>
+<title>PhysiPro — Questionnements actifs v52</title>
 
 <!-- ============================================================
      SECTION 1 — RESET / BASE
@@ -155,6 +155,34 @@ body{
 .colTitre.colAtelier{background:#eef4ff; border-color:var(--azur);  color:#123a78}
 .colTitre.colMagasin{background:#fdf6e6; border-color:var(--or);    color:#6b520f}
 .colTitre.colMatos  {background:#e8f5ec; border-color:var(--vert2); color:#145c2f}
+/* v52 : les moulages, sous les commandes du magasin */
+.colTitre.colMoul   {background:#eceaf8; border-color:#7a6cc4;        color:#3b2f80}
+
+/* ============================================================
+   v52 — MOULAGES PAR DÉPARTEMENT
+   Rien que des chiffres : le module Moulage tient à jour un petit
+   nœud « moulageStats » (moins de 300 octets, huit nombres), et
+   cette page ne lit que celui-là. Aucune fiche, aucune photo, aucun
+   nom ne descend ici.
+   ============================================================ */
+.moulBloc{background:var(--carte); border:1px solid var(--trait); border-radius:10px;
+  padding:4px 4px 6px; box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.moulL{display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:7px}
+.moulL + .moulL{border-top:1px solid #eef2f6}
+.moulL .n{flex:1 1 auto; min-width:0; font-size:13px; font-weight:700; color:var(--texte);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.moulL .v{flex:0 0 auto; min-width:34px; text-align:center; font-size:14px; font-weight:800;
+  color:#3b2f80; background:#eceaf8; border-radius:9px; padding:1px 8px}
+.moulL.zero .n{color:#9fb2c0; font-weight:600}
+.moulL.zero .v{color:#9fb2c0; background:#f2f5f8}
+.moulL.att .v{color:#8a5a00; background:#fdf1d8}
+.moulTot{display:flex; gap:8px; padding:6px 4px 2px}
+.moulTot div{flex:1; text-align:center; background:#f4f7fb; border:1px solid #dfe7f2;
+  border-radius:9px; padding:6px 4px}
+.moulTot b{display:block; font-size:20px; font-weight:800; color:var(--navy); line-height:1.1}
+.moulTot span{font-size:9.5px; font-weight:700; color:var(--gris); text-transform:uppercase;
+  letter-spacing:.5px}
+.moulQuand{padding:5px 8px 0; font-size:10px; color:var(--gris); font-style:italic; text-align:right}
 .btnColVert{background:#e8f5ec; color:var(--vert2); border-color:#bfe0ca}
 .btnColVert:hover{background:#d6ecdd}
 .fiche.enMatos{border-left-color:var(--vert2)}
@@ -683,7 +711,7 @@ body{
     </div>
   </div>
   <div class="tb-center"><span class="top-title">Questionnements actifs</span></div>
-  <div class="tb-right"><span class="ver">v51</span></div>
+  <div class="tb-right"><span class="ver">v52</span></div>
 </header>
 
 <div class="wrap">
@@ -738,6 +766,15 @@ body{
               title="Mettre une commande en attente au magasin">+ Ajouter</button>
     </h3>
     <div class="liste" id="listeMagasin"></div>
+
+    <!-- v52 : MOULAGES PAR DÉPARTEMENT, sous les commandes du magasin.
+         Lecture seule : les chiffres viennent du module Moulage. -->
+    <h3 class="colTitre colMoul" style="margin-top:16px">🗿 Moulages par département
+      <span class="colNb" id="nbMoul">0</span>
+    </h3>
+    <div class="moulBloc" id="moulBloc">
+      <div class="moulQuand">lecture…</div>
+    </div>
   </section>
 </div>
 
@@ -1059,6 +1096,7 @@ function charger(){
       return String(a.date || '').localeCompare(String(b2.date || ''));   // le plus vieux en premier
     });
     rendre();
+    chargerMoulages();                 // v52 : les chiffres des moulages suivent
     b.disabled = false; b.textContent = '↻ Actualiser';
   }).catch(function(e){
     console.error(e);
@@ -1066,6 +1104,77 @@ function charger(){
       'Vérifie la connexion, ou les règles Firebase du nœud questSuivis.</div>';
     b.disabled = false; b.textContent = '↻ Actualiser';
   });
+}
+
+/* ============================================================
+   SECTION 22b — MOULAGES PAR DÉPARTEMENT (v52)
+   Le module Moulage (v1856) tient à jour « moulageStats » : huit
+   nombres et un horodatage, moins de 300 octets, réécrits seulement
+   quand un total change. Cette page ne lit QUE ce n\u0153ud — jamais
+   « moulages », qui pèse plusieurs mégaoctets. Un rafraîchissement
+   coûte donc autant qu'une ligne de texte.
+   Le décompte est celui des en-têtes de colonnes du kanban : les
+   notes et les fauteuils n'y sont pas.
+   ============================================================ */
+var MOUL_COLS = [
+  ['colRobot',      '\u2699\ufe0f Robot (CNC)'],
+  ['colDegauchage', '\ud83e\ude9a D\u00e9gauchage'],
+  ['colEssayage',   '\ud83d\udc54 Essayage'],
+  ['colAtelier',    '\ud83d\udd27 Atelier'],
+  ['colCouture',    '\ud83e\uddf5 Couture'],
+  ['colPeinture',   '\ud83c\udfa8 Peinture'],
+  ['colExpedition', '\ud83d\udce6 Exp\u00e9dition'],
+  ['colAttente',    '\u23f3 En attente']
+];
+
+function momentTexte(ts){
+  if (!ts) return '';
+  var d = new Date(ts);
+  function n2(v){ return (v < 10 ? '0' : '') + v; }
+  return d.getFullYear() + '-' + n2(d.getMonth() + 1) + '-' + n2(d.getDate()) +
+         ' \u00e0 ' + n2(d.getHours()) + ':' + n2(d.getMinutes());
+}
+
+function chargerMoulages(){
+  if (!fbDb) return;
+  fbDb.ref('moulageStats').once('value').then(function(snap){
+    rendreMoulages(snap.val());
+  }).catch(function(err){
+    $('nbMoul').textContent = '\u2014';
+    $('moulBloc').innerHTML = '<div class="moulQuand">Lecture impossible : ' + ech(err.message) +
+      '<br>V\u00e9rifie la r\u00e8gle Firebase du n\u0153ud moulageStats.</div>';
+  });
+}
+
+function rendreMoulages(st){
+  var z = $('moulBloc');
+  if (!st || !st.cols){
+    $('nbMoul').textContent = '0';
+    z.innerHTML = '<div class="moulQuand">Aucun chiffre pour le moment \u2014 ils apparaissent ' +
+      'd\u00e8s que le module Moulage a \u00e9t\u00e9 ouvert une fois.</div>';
+    return;
+  }
+  var att   = st.cols.colAttente || 0;
+  var total = st.total || 0;
+  var circ  = Math.max(0, total - att);
+  $('nbMoul').textContent = total;
+
+  var H = '<div class="moulTot">' +
+            '<div><b>' + circ  + '</b><span>en circulation</span></div>' +
+            '<div><b>' + att   + '</b><span>en attente</span></div>' +
+            '<div><b>' + total + '</b><span>au total</span></div>' +
+          '</div>';
+  MOUL_COLS.forEach(function(c){
+    var n = st.cols[c[0]] || 0;
+    H += '<div class="moulL' + (n ? '' : ' zero') + (c[0] === 'colAttente' ? ' att' : '') + '">' +
+           '<span class="n">' + c[1] + '</span><span class="v">' + n + '</span></div>';
+  });
+  if (st.autres) {
+    H += '<div class="moulL"><span class="n">ailleurs / sans colonne</span>' +
+         '<span class="v">' + st.autres + '</span></div>';
+  }
+  H += '<div class="moulQuand">chiffres du module Moulage \u00b7 ' + ech(momentTexte(st.ts)) + '</div>';
+  z.innerHTML = H;
 }
 
 /* ============================================================
