@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PhysiPro — Questionnements actifs v48</title>
+<title>PhysiPro — Questionnements actifs v49</title>
 
 <!-- ============================================================
      SECTION 1 — RESET / BASE
@@ -113,25 +113,6 @@ body{
 .btn-navy:hover{background:#0a2748}
 .btn-or{background:var(--or); color:#2b2107}
 .btn-or:hover{background:#d8b158}
-/* ============================================================
-   v48 — LA DATE DE LA RELANCE
-   Le délai d'attente continue de courir depuis l'envoi d'origine — c'est
-   un fait, et il doit rester visible. Mais une fiche à 20 jours qui a été
-   relancée il y a deux jours ne raconte pas la même histoire qu'une fiche
-   à 20 jours dont personne ne s'est occupé. La date de la dernière relance
-   se lit donc maintenant à côté du délai, sans ouvrir la carte.
-   Le champ « relanceLe » est écrit depuis la v42 ; il n'était affiché
-   nulle part.
-   ============================================================ */
-.frelance{
-  flex:0 0 auto; display:inline-flex; align-items:center; gap:3px;
-  background:#e8f1ff; border:1px solid #c6ddfa; color:#14508f;
-  font-size:10px; font-weight:800; letter-spacing:.2px;
-  padding:1px 7px; border-radius:20px; white-space:nowrap; margin-right:5px;
-}
-.frelance i{font-style:normal; font-weight:700; color:#5b86c4}
-@media(max-width:620px){ .frelance i{display:none} }
-
 /* v46 : le bouton du tableau des non facturés */
 .btn-nf{background:#e8f1ff; color:#14508f; border:1px solid #c6ddfa}
 .btn-nf:hover{background:#d8e8ff}
@@ -681,7 +662,7 @@ body{
     </div>
   </div>
   <div class="tb-center"><span class="top-title">Questionnements actifs</span></div>
-  <div class="tb-right"><span class="ver">v48</span></div>
+  <div class="tb-right"><span class="ver">v49</span></div>
 </header>
 
 <div class="wrap">
@@ -1576,14 +1557,6 @@ function ecartJours(dateISO){
   return Math.round((au - d0) / 86400000);   /* positif = en retard */
 }
 
-/* v48 : « 2026-09-20 » devient « 09-20 » quand c'est l'année courante --
-   la rangée du haut d'une carte est étroite, et l'année n'y apprend rien.
-   La date complète reste dans l'infobulle et à l'impression. */
-function dateCourte(d){
-  d = String(d || '');
-  return (d.length === 10 && d.slice(0, 4) === aujourdhui().slice(0, 4)) ? d.slice(5) : d;
-}
-
 function delaiFiche(f){
   if (f && f.matos && f.arrivee){
     var e = ecartJours(f.arrivee);
@@ -1673,7 +1646,29 @@ function rendre(){
        matériaux à part. On écrase n et niv posés plus haut. */
     var _d = delaiFiche(f);
     var texteDelai = _d.txt;
+    var titreDelai = '';
     niv = _d.niv;
+
+    /* ============================================================
+       v49 — UNE FICHE RELANCÉE COMPTE À PARTIR DE SA RELANCE
+       Le délai affiché ne dit plus « 20 jours d'attente » sur une fiche
+       relancée il y a deux jours : il dit « relancé depuis 2 jours », et
+       la couleur suit ce nouveau compte. Le service client n'est plus
+       montré du doigt pour un délai dont l'atelier s'est déjà occupé.
+       La date d'envoi et le délai TOTAL ne sont pas perdus : ils sont
+       dans l'infobulle de la pastille, dans le détail de la carte et à
+       l'impression, qui garde sa colonne « Relancé le » à côté du
+       nombre de jours depuis l'envoi.
+       ============================================================ */
+    if (f.relanceLe && !f.magasin && !f.matos){
+      var _nr = joursDepuis(f.relanceLe);
+      texteDelai = (_nr === 0) ? 'relanc\u00e9 aujourd\u2019hui'
+                               : 'relanc\u00e9 depuis ' + _nr + ' ' + (_nr === 1 ? 'jour' : 'jours');
+      niv = niveau(_nr);
+      titreDelai = ' title="Relanc\u00e9 le ' + ech(f.relanceLe) +
+                   ' \u2014 envoy\u00e9 le ' + ech(f.date || '?') +
+                   ', ' + _d.n + ' ' + (_d.n === 1 ? 'jour' : 'jours') + ' en tout"';
+    }
 
     /* v9 : badge du rafraichissement, chevron d'ouverture et zone de detail
        v17 : la pastille « ↻ Rafraîchissement » prenait toute la place au
@@ -1741,13 +1736,7 @@ function rendre(){
         (f.agente && !f.matos
           ? '<span class="fagente" title="Agente du service client">' + ech(f.agente) + '</span>'
           : '') +
-        /* v48 : la dernière relance, juste avant le délai */
-        (f.relanceLe && !f.magasin && !f.matos
-          ? '<span class="frelance" title="Derni\u00e8re relance : ' + ech(f.relanceLe) +
-            ' \u2014 il y a ' + joursDepuis(f.relanceLe) + ' jour(s)">' +
-            '\u21bb <i>relanc\u00e9</i> ' + ech(dateCourte(f.relanceLe)) + '</span>'
-          : '') +
-        '<span class="delai ' + niv + '">' + texteDelai + '</span>' +
+        '<span class="delai ' + niv + '"' + titreDelai + '>' + texteDelai + '</span>' +
         croix +
       '</div>' +
       (puces.length ? '<div class="finfos">' + puces.join('') + '</div>' : '') +
