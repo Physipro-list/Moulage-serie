@@ -585,6 +585,18 @@ body.col-resizing *{cursor:col-resize!important;}
 .sn-a:hover{background:rgba(255,255,255,.28);}
 .sn-print{background:#fff;color:#04152c;}
 .sn-print:hover{background:#e0edff;}
+.sn-filtres{padding:8px 16px 4px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.1);}
+.sn-f-rang{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+.sn-f-lbl{font-size:11px;font-weight:700;color:rgba(255,255,255,.65);}
+.sn-f-sep{margin-left:10px;}
+.sn-filtres select,.sn-filtres input[type=date]{background:#0f2748;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;color-scheme:dark;}
+.sn-filtres select#snClient{max-width:230px;}
+.sn-rapide{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:3px 10px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;}
+.sn-rapide:hover{background:rgba(255,255,255,.2);}
+.sn-rapide.on{background:#f97316;border-color:#f97316;}
+.sn-coche{display:flex;align-items:center;gap:5px;font-size:12px;color:#e2e8f0;cursor:pointer;margin-right:12px;}
+.sn-coche input{accent-color:#f97316;}
+.sn-reset{padding:4px 10px!important;font-size:11px!important;}
 .sn-sous{padding:8px 16px;font-size:11.5px;color:rgba(255,255,255,.6);border-bottom:1px solid rgba(255,255,255,.1);}
 .sn-corps{padding:10px 16px 16px;}
 .sn-msg{padding:30px;text-align:center;color:rgba(255,255,255,.55);font-size:13px;}
@@ -606,7 +618,7 @@ body.col-resizing *{cursor:col-resize!important;}
   body.sn-imprime .sn-head{background:#fff!important;border-bottom:2px solid #000!important;padding:0 0 6px!important;}
   body.sn-imprime .sn-titre{color:#000!important;font-size:16pt!important;}
   body.sn-imprime .sn-compte{background:#000!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  body.sn-imprime .sn-actions{display:none!important;}
+  body.sn-imprime .sn-actions,body.sn-imprime .sn-filtres{display:none!important;}
   body.sn-imprime .sn-sous{color:#333!important;border:0!important;padding:4px 0 8px!important;}
   body.sn-imprime .sn-corps{padding:0!important;}
   body.sn-imprime .sn-mois{color:#000!important;border-bottom:1px solid #000;padding-bottom:2px;}
@@ -713,14 +725,44 @@ body.col-resizing *{cursor:col-resize!important;}
 <div id="snOverlay" class="sn-overlay" onclick="if(event.target===this)fermerSansNom()">
   <div class="sn-box">
     <div class="sn-head">
-      <div class="sn-titre">🧵 Commandes sans nom ni date de sortie <span class="sn-compte" id="snCompte"></span></div>
+      <div class="sn-titre"><span id="snTitreTxt">🧵 Commandes sans nom ni date de sortie</span> <span class="sn-compte" id="snCompte"></span></div>
       <div class="sn-actions">
         <button class="sn-a" onclick="chargerSansNom()" title="Relire toutes les commandes">🔄 Actualiser</button>
         <button class="sn-a sn-print" onclick="imprimerSansNom()" title="Imprimer cette liste">🖨️ Imprimer</button>
         <button class="sn-a sn-x" onclick="fermerSansNom()" title="Fermer">✕</button>
       </div>
     </div>
-    <div class="sn-sous" id="snSous">Tous les mois · aucune couturière assignée et aucune date de sortie</div>
+    <div class="sn-filtres" id="snFiltres">
+      <div class="sn-f-rang">
+        <span class="sn-f-lbl">Période</span>
+        <button class="sn-rapide" data-p="1" onclick="snRapide(1)">Mois courant</button>
+        <button class="sn-rapide" data-p="3" onclick="snRapide(3)">3 derniers mois</button>
+        <button class="sn-rapide" data-p="6" onclick="snRapide(6)">6 derniers mois</button>
+        <button class="sn-rapide" data-p="12" onclick="snRapide(12)">12 derniers mois</button>
+        <button class="sn-rapide" data-p="0" onclick="snRapide(0)">Tout</button>
+        <span class="sn-f-lbl sn-f-sep">du mois</span><select id="snMoisDe" onchange="snChange()"></select>
+        <span class="sn-f-lbl">au</span><select id="snMoisA" onchange="snChange()"></select>
+      </div>
+      <div class="sn-f-rang">
+        <span class="sn-f-lbl">Afficher</span>
+        <select id="snCritere" onchange="snChange()">
+          <option value="les2">Sans nom ET sans sortie</option>
+          <option value="nom">Sans nom seulement</option>
+          <option value="sortie">Sans date de sortie seulement</option>
+        </select>
+        <span class="sn-f-lbl sn-f-sep">Livraison du</span><input type="date" id="snLivDe" onchange="snChange()">
+        <span class="sn-f-lbl">au</span><input type="date" id="snLivA" onchange="snChange()">
+        <span class="sn-f-lbl sn-f-sep">Client</span><select id="snClient" onchange="snChange()"></select>
+      </div>
+      <div class="sn-f-rang">
+        <label class="sn-coche"><input type="checkbox" id="snRetard" onchange="snChange()"> En retard seulement (livraison dépassée)</label>
+        <label class="sn-coche"><input type="checkbox" id="snRush" onchange="snChange()"> 🚩 Rush seulement</label>
+        <label class="sn-coche"><input type="checkbox" id="snSansLiv" onchange="snChange()"> Sans date de livraison seulement</label>
+        <span style="flex:1"></span>
+        <button class="sn-a sn-reset" onclick="snReinit()">↺ Réinitialiser les filtres</button>
+      </div>
+    </div>
+    <div class="sn-sous" id="snSous"></div>
     <div class="sn-corps" id="snCorps"></div>
   </div>
 </div>
@@ -2057,39 +2099,38 @@ function checkOldMonths(){
     }).catch(function(e){console.error('[Couture] checkOldMonths:',e);});
   }).catch(function(e){console.error('[Couture] checkOldMonths token:',e);});
 }
-/* ═══ SANS NOM NI SORTIE ═══
-   Toutes les commandes, TOUS LES MOIS confondus, qui n'ont ni couturière
-   (NOM) ni date de SORTIE. Lecture seule : on les voit ensemble, groupées
-   par mois, triées par date de livraison, et on peut imprimer la liste.
-   Les mois sont lus d'un coup dans Firebase (inspectionCoutureData), comme
-   le fait déjà la recherche « Classeur » -- seulement quand on ouvre le
-   panneau ou qu'on clique « Actualiser », jamais au chargement de la page.
-   Sans Firebase, on se rabat sur les mois gardés dans ce navigateur. */
-var _snLignes=[], _snSource='';
+/* ═══ SANS NOM NI SORTIE (v2) ═══
+   Commandes sans couturière (NOM) et/ou sans date de SORTIE, tous mois
+   confondus, avec une barre de filtres : période par mois (raccourcis ou
+   du mois X au mois Y), critère, plage de dates de livraison, client,
+   retard, rush, sans date de livraison. Lecture seule, imprimable.
+   Les mois sont lus d'un coup dans Firebase (inspectionCoutureData),
+   seulement à l'ouverture du panneau ou sur « Actualiser ». Les filtres
+   s'appliquent ensuite sur place, sans relire Firebase. Les derniers
+   filtres choisis sont retenus dans ce navigateur. */
+var _snTous=[], _snLignes=[], _snSource='', _snMoisDispo=[];
+var SN_CLE='physipro_couture_snFiltres';
+var SN_DEFAUT={periode:0, de:'', a:'', critere:'les2', livDe:'', livA:'', client:'', retard:false, rush:false, sansLiv:false};
+var SN_F=(function(){try{var v=JSON.parse(localStorage.getItem(SN_CLE));if(v)return Object.assign({},SN_DEFAUT,v);}catch(e){}return Object.assign({},SN_DEFAUT);})();
+function _snSauver(){try{localStorage.setItem(SN_CLE,JSON.stringify(SN_F));}catch(e){}}
 
-function _snGarder(r){
+function _snLigneValide(r){
   if(!r||r._empty)return false;
   if(r.id&&typeof isCoutureIdDeleted==='function'&&isCoutureIdDeleted(r.id)&&!(r.permanent||r.serieLinked||r.serieSnapshot))return false;
-  if(!((r.bonCmd||'').trim()||(r.client||'').trim()||(r.items||'').trim()))return false;   // ligne vide
-  return !(r.nom||'').trim() && !(r.dateSortie||'').trim();
+  return !!((r.bonCmd||'').trim()||(r.client||'').trim()||(r.items||'').trim());   // pas une ligne vide
 }
 
+/* toutes les lignes valides, avec leur mois -- les filtres viennent après */
 function _snRecueillir(tous){
   var out=[];
-  Object.keys(tous).forEach(function(m){
-    /* le mois affiché : on prend la version à l'écran, la plus fraîche */
-    var rows=(m===currentMonth&&Array.isArray(data[currentMonth]))?data[currentMonth]:tous[m];
+  function ajouter(m,rows){
     if(!Array.isArray(rows)){ if(rows&&typeof rows==='object')rows=Object.keys(rows).map(function(k){return rows[k];}); else return; }
-    rows.forEach(function(r){ if(_snGarder(r)) out.push({mois:m,row:r}); });
-  });
-  if(!tous[currentMonth]&&Array.isArray(data[currentMonth])){
-    data[currentMonth].forEach(function(r){ if(_snGarder(r)) out.push({mois:currentMonth,row:r}); });
+    rows.forEach(function(r){ if(_snLigneValide(r)) out.push({mois:m,row:r}); });
   }
-  out.sort(function(a,b){
-    if(a.mois!==b.mois)return a.mois<b.mois?-1:1;
-    var da=a.row.dateLiv||'9999', db=b.row.dateLiv||'9999';
-    return da<db?-1:da>db?1:0;
+  Object.keys(tous).forEach(function(m){
+    ajouter(m,(m===currentMonth&&Array.isArray(data[currentMonth]))?data[currentMonth]:tous[m]);
   });
+  if(!tous[currentMonth]&&Array.isArray(data[currentMonth]))ajouter(currentMonth,data[currentMonth]);
   return out;
 }
 
@@ -2104,7 +2145,94 @@ function _snLocal(){
   return tous;
 }
 
+function _snMoisMoins(n){   // « aaaa-mm » d'il y a n-1 mois (n=1 : ce mois-ci)
+  var d=new Date(); d=new Date(d.getFullYear(), d.getMonth()-(n-1), 1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+
+/* bornes de mois effectives, selon le raccourci ou le choix « du / au » */
+function _snBornes(){
+  if(SN_F.periode>0)return {de:_snMoisMoins(SN_F.periode), a:'9999-99'};
+  return {de:SN_F.de||'0000-00', a:SN_F.a||'9999-99'};
+}
+
+function _snFiltrer(liste){
+  var bo=_snBornes(), auj=todayStr(), f=SN_F;
+  var out=liste.filter(function(e){
+    var r=e.row, sansNom=!(r.nom||'').trim(), sansSortie=!(r.dateSortie||'').trim();
+    if(f.critere==='les2'&&!(sansNom&&sansSortie))return false;
+    if(f.critere==='nom'&&!sansNom)return false;
+    if(f.critere==='sortie'&&!sansSortie)return false;
+    if(e.mois<bo.de||e.mois>bo.a)return false;
+    var liv=(r.dateLiv||'').trim();
+    if(f.sansLiv&&liv)return false;
+    if(f.livDe&&(!liv||liv<f.livDe))return false;
+    if(f.livA&&(!liv||liv>f.livA))return false;
+    if(f.retard&&!(liv&&liv<auj))return false;
+    if(f.rush&&!r.rush)return false;
+    if(f.client&&(r.client||'').trim()!==f.client)return false;
+    return true;
+  });
+  out.sort(function(a,b){
+    if(a.mois!==b.mois)return a.mois<b.mois?-1:1;
+    var da=a.row.dateLiv||'9999', db=b.row.dateLiv||'9999';
+    return da<db?-1:da>db?1:0;
+  });
+  return out;
+}
+
 function _snBadge(n){var b=document.getElementById('snBadge');if(b)b.textContent=(n>0?n:'');}
+
+/* remplit les menus « du mois / au mois » et « client » avec ce qui existe */
+function _snRemplirMenus(){
+  var mois={}, clients={};
+  _snTous.forEach(function(e){mois[e.mois]=1; var c=(e.row.client||'').trim(); if(c)clients[c]=1;});
+  _snMoisDispo=Object.keys(mois).sort();
+  function opts(sel,val,vide){
+    var h='<option value="">'+vide+'</option>';
+    _snMoisDispo.forEach(function(m){h+='<option value="'+m+'"'+(m===val?' selected':'')+'>'+esc(_monthLabel(m))+'</option>';});
+    document.getElementById(sel).innerHTML=h;
+  }
+  opts('snMoisDe',SN_F.periode?'':SN_F.de,'(le plus ancien)');
+  opts('snMoisA', SN_F.periode?'':SN_F.a, '(le plus récent)');
+  var hc='<option value="">Tous les clients</option>';
+  Object.keys(clients).sort(function(x,y){return x.localeCompare(y,'fr');}).forEach(function(c){
+    hc+='<option value="'+esc(c)+'"'+(c===SN_F.client?' selected':'')+'>'+esc(c)+'</option>';
+  });
+  document.getElementById('snClient').innerHTML=hc;
+}
+
+/* reporte SN_F dans les contrôles */
+function _snAfficherFiltres(){
+  document.querySelectorAll('.sn-rapide').forEach(function(b){
+    var p=parseInt(b.getAttribute('data-p'),10);
+    b.classList.toggle('on', p===SN_F.periode && !(p===0&&(SN_F.de||SN_F.a)));
+  });
+  document.getElementById('snCritere').value=SN_F.critere;
+  document.getElementById('snLivDe').value=SN_F.livDe;
+  document.getElementById('snLivA').value=SN_F.livA;
+  document.getElementById('snRetard').checked=SN_F.retard;
+  document.getElementById('snRush').checked=SN_F.rush;
+  document.getElementById('snSansLiv').checked=SN_F.sansLiv;
+}
+
+function snRapide(n){ SN_F.periode=n; SN_F.de=''; SN_F.a=''; _snSauver(); _snRemplirMenus(); _snAfficherFiltres(); _snAppliquer(); }
+function snChange(){
+  var de=document.getElementById('snMoisDe').value, a=document.getElementById('snMoisA').value;
+  if(de!==(SN_F.periode?'':SN_F.de)||a!==(SN_F.periode?'':SN_F.a)){ SN_F.periode=0; SN_F.de=de; SN_F.a=a; }
+  if(SN_F.de&&SN_F.a&&SN_F.de>SN_F.a){ var t=SN_F.de; SN_F.de=SN_F.a; SN_F.a=t; _snRemplirMenus(); }
+  SN_F.critere=document.getElementById('snCritere').value;
+  SN_F.livDe=document.getElementById('snLivDe').value;
+  SN_F.livA=document.getElementById('snLivA').value;
+  SN_F.client=document.getElementById('snClient').value;
+  SN_F.retard=document.getElementById('snRetard').checked;
+  SN_F.rush=document.getElementById('snRush').checked;
+  SN_F.sansLiv=document.getElementById('snSansLiv').checked;
+  _snSauver(); _snAfficherFiltres(); _snAppliquer();
+}
+function snReinit(){ SN_F=Object.assign({},SN_DEFAUT); _snSauver(); _snRemplirMenus(); _snAfficherFiltres(); _snAppliquer(); }
+
+function _snAppliquer(){ _snLignes=_snFiltrer(_snTous); _snBadge(_snLignes.length); rendreSansNom(); }
 
 function ouvrirSansNom(){
   document.getElementById('snOverlay').classList.add('active');
@@ -2118,9 +2246,8 @@ function chargerSansNom(){
   document.getElementById('snCompte').textContent='';
   function fini(tous,source){
     _snSource=source;
-    _snLignes=_snRecueillir(tous);
-    _snBadge(_snLignes.length);
-    rendreSansNom();
+    _snTous=_snRecueillir(tous);
+    _snRemplirMenus(); _snAfficherFiltres(); _snAppliquer();
   }
   if(fbDb&&fbUser){
     fbDb.ref('inspectionCoutureData').once('value').then(function(snap){
@@ -2135,15 +2262,33 @@ function chargerSansNom(){
   }
 }
 
+/* phrase qui résume les filtres actifs -- elle est aussi imprimée */
+function _snResume(){
+  var f=SN_F, p=[];
+  var bo=_snBornes();
+  var premier=_snMoisDispo[0], dernier=_snMoisDispo[_snMoisDispo.length-1];
+  var de=(bo.de==='0000-00')?premier:bo.de, a=(bo.a==='9999-99')?dernier:bo.a;
+  if(de&&a) p.push(de===a?_monthLabel(de):'de '+_monthLabel(de)+' à '+_monthLabel(a));
+  if(f.livDe||f.livA) p.push('livraison '+(f.livDe?'du '+formatDateDisplay(f.livDe)+' ':'')+(f.livA?'au '+formatDateDisplay(f.livA):''));
+  if(f.sansLiv) p.push('sans date de livraison');
+  if(f.client) p.push('client : '+f.client);
+  if(f.retard) p.push('en retard');
+  if(f.rush) p.push('rush');
+  return p.join(' · ');
+}
+
 function rendreSansNom(){
   var corps=document.getElementById('snCorps');
   var n=_snLignes.length;
+  var titres={les2:'🧵 Commandes sans nom ni date de sortie', nom:'🧵 Commandes sans nom (couturière)', sortie:'🧵 Commandes sans date de sortie'};
+  document.getElementById('snTitreTxt').textContent=titres[SN_F.critere]||titres.les2;
   document.getElementById('snCompte').textContent=n;
   var auj=todayStr();
-  document.getElementById('snSous').textContent=
-    'Tous les mois · aucune couturière assignée et aucune date de sortie · liste du '+auj+
-    (_snSource==='local'?' · ⚠️ hors ligne : seulement les mois gardés sur cet ordinateur':'');
-  if(!n){corps.innerHTML='<div class="sn-msg">✅ Aucune commande sans nom ni date de sortie.</div>';return;}
+  var dispo=_snMoisDispo.length?('Données disponibles : de '+_monthLabel(_snMoisDispo[0])+' à '+_monthLabel(_snMoisDispo[_snMoisDispo.length-1])+' · '):'';
+  document.getElementById('snSous').innerHTML=
+    '<b>'+esc(_snResume())+'</b> · liste du '+auj+'<br><span style="opacity:.75">'+dispo+'</span>'+
+    (_snSource==='local'?'<span style="color:#fbbf24">⚠️ hors ligne : seulement les mois gardés sur cet ordinateur</span>':'');
+  if(!n){corps.innerHTML='<div class="sn-msg">✅ Aucune commande ne correspond à ces filtres.</div>';return;}
   var h='', moisCourant='';
   function fermerTable(){ if(moisCourant) h+='</tbody></table>'; }
   _snLignes.forEach(function(e){
@@ -2153,10 +2298,11 @@ function rendreSansNom(){
       moisCourant=e.mois;
       var nbMois=_snLignes.filter(function(x){return x.mois===e.mois;}).length;
       h+='<div class="sn-mois">'+esc(_monthLabel(e.mois))+' — '+nbMois+'</div>';
-      h+='<table class="sn-table"><colgroup><col style="width:11%"><col style="width:10%"><col style="width:20%"><col style="width:9%"><col style="width:9%"><col style="width:31%"><col style="width:10%"></colgroup><thead><tr><th># Bon cmd</th><th># Fauteuil</th><th>Client</th><th>Date liv.</th><th>Entrée</th><th>Items</th><th>Autre no</th></tr></thead><tbody>';
+      h+='<table class="sn-table"><colgroup><col style="width:11%"><col style="width:10%"><col style="width:20%"><col style="width:9%"><col style="width:9%"><col style="width:31%"><col style="width:10%"></colgroup><thead><tr><th># Bon cmd</th><th># Fauteuil</th><th>Client</th><th>Date liv.</th><th>Entrée</th><th>Items</th><th>'+(SN_F.critere==='les2'?'Autre no':(SN_F.critere==='nom'?'Sortie':'Nom'))+'</th></tr></thead><tbody>';
     }
     var items=(r.items||'').split('\n').map(function(x){return x.trim();}).filter(Boolean).join(', ');
     var retard=r.dateLiv&&r.dateLiv<auj;
+    var derniere=SN_F.critere==='les2'?esc(r.autreNo||''):(SN_F.critere==='nom'?(r.dateSortie?esc(formatDateDisplay(r.dateSortie)):'—'):esc(r.nom||'—'));
     h+='<tr>'+
       '<td class="sn-bon">'+esc(r.bonCmd||'—')+(r.rush?' 🚩':'')+'</td>'+
       '<td>'+esc(r.fauteuil||'')+'</td>'+
@@ -2164,7 +2310,7 @@ function rendreSansNom(){
       '<td class="sn-d'+(retard?' sn-retard':'')+'" title="'+(retard?'Date de livraison dépassée':'')+'">'+(r.dateLiv?esc(formatDateDisplay(r.dateLiv)):'—')+'</td>'+
       '<td class="sn-d">'+(r.dateEntree?esc(formatDateDisplay(r.dateEntree)):'—')+'</td>'+
       '<td>'+esc(items)+'</td>'+
-      '<td>'+esc(r.autreNo||'')+'</td>'+
+      '<td>'+derniere+'</td>'+
     '</tr>';
   });
   fermerTable();
@@ -2183,10 +2329,9 @@ document.addEventListener('keydown',function(e){
   if(e.key==='Escape'){var o=document.getElementById('snOverlay');if(o&&o.classList.contains('active'))fermerSansNom();}
 });
 
-/* le chiffre sur le bouton, dès l'ouverture de la page : calculé sur les
-   mois déjà gardés dans ce navigateur (aucune lecture Firebase). Il est
-   remis à jour avec le vrai total chaque fois qu'on ouvre le panneau. */
-setTimeout(function(){try{_snBadge(_snRecueillir(_snLocal()).length);}catch(e){}},1500);
+/* le chiffre sur le bouton au chargement : mois gardés dans ce navigateur,
+   avec les derniers filtres choisis. Remis à jour à l'ouverture du panneau. */
+setTimeout(function(){try{_snTous=_snRecueillir(_snLocal());_snMoisDispo=[];_snBadge(_snFiltrer(_snTous).length);}catch(e){}},1500);
 
 /* ═══ ARCHIVAGE ═══ */
 /* ═══ STATISTIQUES ═══ */
