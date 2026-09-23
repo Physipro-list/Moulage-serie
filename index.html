@@ -907,8 +907,9 @@ auth.onAuthStateChanged(function(user){
      Pour les adresses de LAYOUT_DANIEL, et SUR ORDINATEUR SEULEMENT :
        gauche  : Moulage, avec PSM en dessous
        droite  : Questionnements, avec Questionnements actifs en dessous
-       en bas  : petits boutons — Insp. Atelier, Insp. Finale,
-                 Prod. Couture (et Codes)
+       en bas  : une flèche « Autres outils » qui affiche ou cache les
+                 petits boutons Insp. Atelier, Insp. Finale, Prod. Couture
+                 et Codes (v_hub24)
      Tout le monde d'autre garde exactement l'accueil ci-dessous (v_hub18),
      et le téléphone de Daniel garde l'accueil mobile habituel.
      Les accès ne changent pas : une tuile n'apparaît que si la personne y a
@@ -940,31 +941,77 @@ auth.onAuthStateChanged(function(user){
     if (colonnes.children.length === 1) colonnes.style.gridTemplateColumns = '1fr';
     if (colonnes.children.length) grid.appendChild(colonnes);
 
-    /* petits boutons : une rangée, icône à gauche du nom */
+    /* v_hub24 : petits boutons CACHÉS derrière une flèche. Quand on les
+       ouvre, les quatre grandes tuiles rapetissent en hauteur pour que tout
+       tienne à l'écran sans défilement. Le choix (ouvert / fermé) est
+       retenu dans ce navigateur. */
+    var grandes = [].slice.call(colonnes.querySelectorAll('.hub-tile'));
     var petits = _dispo(['inspection','inspfinale','inspcouture','codes']);
-    if (petits.length) {
-      var r = document.createElement('div');
-      r.style.display = 'grid';
-      r.style.gridTemplateColumns = 'repeat(' + petits.length + ', 1fr)';
-      r.style.gap = '10px';
-      r.style.marginTop = '4px';
-      petits.forEach(function(k){
-        makeTile(k, r, n++);
-        var t = r.lastChild;
-        t.style.minHeight = '58px';
-        t.style.padding = '10px 14px';
-        t.style.flexDirection = 'row';
-        t.style.gap = '10px';
-        t.style.borderRadius = '14px';
+    if (!petits.length) return;
+
+    var bascule = document.createElement('button');
+    bascule.type = 'button';
+    bascule.style.cssText = 'align-self:center;display:flex;align-items:center;gap:8px;margin-top:2px;'
+      + 'padding:6px 16px;border-radius:20px;border:1px solid rgba(148,180,222,.28);'
+      + 'background:rgba(148,180,222,.08);color:rgba(255,255,255,.75);font-family:Outfit,sans-serif;'
+      + 'font-size:12.5px;font-weight:600;cursor:pointer;letter-spacing:.3px;transition:background .2s;';
+    bascule.onmouseenter = function(){ bascule.style.background = 'rgba(148,180,222,.18)'; };
+    bascule.onmouseleave = function(){ bascule.style.background = 'rgba(148,180,222,.08)'; };
+    grid.appendChild(bascule);
+
+    var r = document.createElement('div');
+    r.style.display = 'grid';
+    r.style.gridTemplateColumns = 'repeat(' + petits.length + ', 1fr)';
+    r.style.gap = '10px';
+    petits.forEach(function(k){
+      makeTile(k, r, n++);
+      var t = r.lastChild;
+      t.style.minHeight = '54px';
+      t.style.padding = '9px 14px';
+      t.style.flexDirection = 'row';
+      t.style.gap = '10px';
+      t.style.borderRadius = '14px';
+      t.style.animationDelay = '0s';
+      var ic = t.querySelector('.hub-tile-icon');
+      if (ic){ ic.style.width = '34px'; ic.style.height = '34px'; ic.style.fontSize = '18px'; ic.style.borderRadius = '10px'; }
+      var lb = t.querySelector('.hub-tile-label');
+      if (lb){ lb.style.fontSize = '13.5px'; lb.style.marginTop = '0'; }
+      var ds = t.querySelector('.hub-tile-desc');
+      if (ds) ds.style.display = 'none';
+    });
+    grid.appendChild(r);
+
+    /* grandes tuiles : taille normale, ou compactes quand les petits
+       boutons sont ouverts */
+    function tailleGrandes(compact){
+      grandes.forEach(function(t){
+        t.style.transition = 'min-height .25s, padding .25s';
+        t.style.minHeight = compact ? '92px' : '132px';
+        t.style.padding   = compact ? '10px 12px 9px' : '18px 12px 15px';
         var ic = t.querySelector('.hub-tile-icon');
-        if (ic){ ic.style.width = '36px'; ic.style.height = '36px'; ic.style.fontSize = '19px'; ic.style.borderRadius = '10px'; }
+        if (ic){ ic.style.width = compact ? '42px' : '56px'; ic.style.height = compact ? '42px' : '56px';
+                 ic.style.fontSize = compact ? '22px' : '29px'; ic.style.borderRadius = compact ? '12px' : '16px'; }
         var lb = t.querySelector('.hub-tile-label');
-        if (lb){ lb.style.fontSize = '13.5px'; lb.style.marginTop = '0'; }
+        if (lb) lb.style.marginTop = compact ? '2px' : '7px';
         var ds = t.querySelector('.hub-tile-desc');
-        if (ds) ds.style.display = 'none';
+        if (ds) ds.style.display = compact ? 'none' : '';
       });
-      grid.appendChild(r);
     }
+
+    var CLE_OUVERT = 'physipro_hub_petits_ouverts';
+    function poser(ouvert){
+      r.style.display = ouvert ? 'grid' : 'none';
+      tailleGrandes(ouvert);
+      bascule.innerHTML = (ouvert ? '▴' : '▾') + '<span>' + (ouvert ? 'Masquer les autres outils' : 'Autres outils')
+        + '</span><span style="opacity:.55;font-weight:400;">(' + petits.length + ')</span>';
+      bascule.title = ouvert ? 'Cacher Insp. Atelier, Insp. Finale, Prod. Couture et Codes'
+                             : 'Afficher Insp. Atelier, Insp. Finale, Prod. Couture et Codes';
+      try { localStorage.setItem(CLE_OUVERT, ouvert ? '1' : '0'); } catch(e){}
+    }
+    var ouvert = false;
+    try { ouvert = localStorage.getItem(CLE_OUVERT) === '1'; } catch(e){}
+    bascule.onclick = function(){ ouvert = !ouvert; poser(ouvert); };
+    poser(ouvert);
   }
 
   // Deux rangées, rien de plus (v_hub18)
