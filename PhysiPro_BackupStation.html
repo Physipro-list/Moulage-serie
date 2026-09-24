@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🛡️ Sauvegarde v28</title>
+<title>🛡️ Sauvegarde v29</title>
 <!-- v27 : horaires des passes ajustés → Ouverture + 12h00 + 15h25 (au lieu de 11h/14h/16h). 15h25 visé à la minute près (fenêtre m 25-26). -->
 <!-- v26 : FIX COÛT FIREBASE (P2) — suppression de la boucle HORAIRE (ckT) qui re-téléchargeait tout chaque heure. Cadence ramenée aux passes ciblées : Ouverture + 11h + 14h + 16h (fin de journée ajoutée). ~4 passes légères/jour au lieu de ~10. -->
 <!-- v25 : FIX COÛT FIREBASE (P1) — suppression de la DOUBLE lecture de 'moulages' et 'photoArchives'. runC les charge déjà (boucle modules) ; archiveMoulages réutilise ces données au lieu de les relire. Économie : 2 lectures complètes (photos comprises) par cycle. -->
@@ -27,6 +27,8 @@
 <!-- v3 : 4 modules seulement (Moulage, Insp.Atelier, Prod.Couture, Insp.Finale) -->
 <!-- v2 : archivage Moulage par dossier OneDrive (Fiche.html + Photos) -->
 
+<!-- v29 : compteur de téléchargement Firebase (avant les scripts Firebase) -->
+<script src="PhysiPro_Conso.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -160,9 +162,17 @@ function toggleDetails(){
    serieCommandes = base centrale des commandes de production, partagée
    par Atelier/Couture/Finale → sauvegardée une fois sous Inspection_Atelier. */
 var M={
-  Moulages:{i:'🏭',c:'#3b82f6',p:{a:{r:'moulages'},b:{r:'moulageAssociations'},c:{r:'listes'},d:{r:'listes_history'},e:{r:'moulageLogs'},f:{r:'moulageNotifications'},g:{r:'photoArchives'}}},
+  /* v29 — FRAIS FIREBASE : Moulages ne lit plus que ce qui sert. Aucun JSON
+     n'est écrit pour ce module (voir runC) : associations, listes,
+     listes_history, moulageLogs et moulageNotifications étaient téléchargés
+     à chaque passe... puis jetés. photoArchives est lu à part, en
+     incrémental (lirePhotoArchives). */
+  Moulages:{i:'🏭',c:'#3b82f6',p:{a:{r:'moulages'}}},
   Inspection_Atelier:{i:'☑️',c:'#22c55e',p:{a:{r:'inspectionData'},b:{r:'coutureData'},c:{r:'inspectionLists'},d:{r:'inspectionColCfg'},e:{r:'inspectionColWidths'},f:{r:'inspectionDeletedIds'},g:{r:'serieCommandes'},h:{r:'serieDeletedCards'}}},
-  Production_Couture:{i:'🧵',c:'#f59e0b',p:{a:{r:'inspectionCoutureData'},b:{r:'coutureLists'},c:{r:'coutureBackups'}}},
+  /* v29 : coutureBackups retiré -- ce sont des COPIES de inspectionCoutureData
+     (jusqu'à 30), déjà sauvegardé juste à côté. Les relire à chaque passe
+     multipliait le téléchargement de ce module sans rien protéger de plus. */
+  Production_Couture:{i:'🧵',c:'#f59e0b',p:{a:{r:'inspectionCoutureData'},b:{r:'coutureLists'}}},
   Inspection_Finale:{i:'🔍',c:'#a855f7',p:{a:{r:'inspectionFinaleData'},b:{r:'inspFinaleDeletedIds'}}}
 };
 var isOn=false,dirH=null,ckT=null,scT=null,lastH={},mS={},mZ={},logs=[],hasError=false;
@@ -195,21 +205,21 @@ async function vP(){if(!dirH)return false;try{var q=await dirH.queryPermission({
 
 async function toggleBkp(){if(isOn){stopB();}else{if(!dirH){if(!await pickFolder())return;}if(!await vP()){if(!await pickFolder())return;}await startB();}}
 async function tryAuto(){try{var s=await lDir();if(s)dirH=s;}catch(e){}if(localStorage.getItem('bk')==='1'&&dirH){try{if(await vP()){await startB();return;}}catch(e){}lg('⚠️ Permission expirée','warn');}upUI();}
-async function startB(){isOn=true;hasError=false;localStorage.setItem('bk','1');document.getElementById('bF').disabled=false;lg('🛡️ ON','ok');toast('🛡️ ON','ok');setTimeout(function(){runC('Ouverture');},800);if(ckT){clearInterval(ckT);ckT=null;}/* v26: plus de boucle horaire — passes ciblées seulement */if(scT)clearInterval(scT);scT=setInterval(function(){if(!isOn)return;var n=new Date(),h=n.getHours(),m=n.getMinutes(),d=n.toISOString().substring(0,10);if((h===12&&m<2)||(h===15&&m>=25&&m<27)){var k='bk_'+d+'_'+h;if(!localStorage.getItem(k)){localStorage.setItem(k,'1');runC(h===15?'15h25':'12h');}}},60*1000);upUI();upS();}
+async function startB(){isOn=true;hasError=false;localStorage.setItem('bk','1');document.getElementById('bF').disabled=false;lg('🛡️ ON','ok');toast('🛡️ ON','ok');setTimeout(function(){var _dp=parseInt(localStorage.getItem('bk_lastrun')||'0',10);if(_dp&&Date.now()-_dp<3*3600000){lg('⏭️ Ouverture : dernière passe il y a '+Math.round((Date.now()-_dp)/60000)+' min — sautée (v29)','t');upUI();upS();return;}runC('Ouverture');},800);if(ckT){clearInterval(ckT);ckT=null;}/* v26: plus de boucle horaire — passes ciblées seulement */if(scT)clearInterval(scT);scT=setInterval(function(){if(!isOn)return;var n=new Date(),h=n.getHours(),m=n.getMinutes(),d=n.toISOString().substring(0,10);if((h===12&&m<2)||(h===15&&m>=25&&m<27)){var k='bk_'+d+'_'+h;if(!localStorage.getItem(k)){localStorage.setItem(k,'1');runC(h===15?'15h25':'12h');}}},60*1000);upUI();upS();}
 function stopB(){isOn=false;localStorage.setItem('bk','0');if(ckT){clearInterval(ckT);ckT=null;}if(scT){clearInterval(scT);scT=null;}document.getElementById('bF').disabled=true;lg('⏸️ OFF','warn');upUI();}
 function forceBackup(){if(!isOn)return;lastH={};lg('🔄 Forcée','info');runC('Forcée');}
 
 async function runC(trig){
   if(!dirH||!isOn)return;if(!await vP()){lg('⚠️ Perm','err');hasError=true;upUI();return;}
   var day=new Date().toISOString().substring(0,10),ts=new Date().toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}).replace(':','h');
-  lg('═ ['+trig+'] ═','info');hasError=false;
+  lg('═ ['+trig+'] ═','info');hasError=false;localStorage.setItem('bk_lastrun',String(Date.now())); // v29
   var root=dirH; // les modules vont directement dans le dossier choisi (ex: "Back up logiciel")
   var tf=0,tb=0,mk=Object.keys(M);
   var _mlgCache=null,_pArchCache=null; // v25: données déjà chargées ici → évite la 2e lecture complète dans archiveMoulages
   for(var i=0;i<mk.length;i++){
     var n=mk[i],mod=M[n],md={},pk=Object.keys(mod.p);mS[n]='run';renderM();
     for(var j=0;j<pk.length;j++){try{var s=await fbDb.ref(mod.p[pk[j]].r).once('value');var v=s.val();if(v!==null)md[pk[j]]=v;}catch(e){}}
-    if(n==='Moulages'){_mlgCache=md.a||null;_pArchCache=md.g||null;} // v25: réutilisé par archiveMoulages (pas de re-lecture)
+    if(n==='Moulages'){_mlgCache=md.a||null;try{_pArchCache=await lirePhotoArchives();md.g=_pArchCache;}catch(_pa){_pArchCache=null;}} // v29: photoArchives en incrémental
     var h=sH(JSON.stringify(md));if(h===lastH[n]&&trig!=='Forcée'){mS[n]='ok';renderM();continue;}lastH[n]=h;
     try{if(n==='Moulages'){/* Pas de JSON pour Moulages: l'archive Fiche.html (archiveMoulages) fait le travail */mS[n]='ok';mZ[n]='fiches';lg('  ✅ Moulages → fiches seulement (pas de JSON)','ok');}else{var mf=await root.getDirectoryHandle(n,{create:true});var fn=day+'_'+ts+'.json';var c=JSON.stringify({module:n,backup:{date:day,heure:ts,trigger:trig,user:fbUser?fbUser.email:'?'},data:md},null,2);var fh=await mf.getFileHandle(fn,{create:true});var w=await fh.createWritable();await w.write(new Blob([c],{type:'application/json'}));await w.close();try{await xlsWriteModule(mf,n,md);}catch(_x){console.error('xlsx '+n,_x);}var mb=(c.length/(1024*1024)).toFixed(1);tf++;tb+=c.length;mS[n]='ok';mZ[n]=mb+'M';lg('  ✅ '+n+' '+mb+'M','ok');}}catch(e){mS[n]='err';hasError=true;lg('  ❌ '+n,'err');}renderM();
   }
@@ -217,6 +227,27 @@ async function runC(trig){
   try{await archiveMoulages(trig,_mlgCache,_pArchCache);}catch(e){lg('  ⚠️ Archive Moulage: '+e.message,'err');hasError=true;}
   try{await archiveQuestionnements(trig);}catch(e){lg('  ⚠️ Archive Questionnements: '+e.message,'err');hasError=true;}
   upUI();upS();
+}
+/* v29 — photoArchives EN INCRÉMENTAL
+   Les anciennes entrées contiennent les photos en base64 : relire tout le
+   nœud à chaque passe re-téléchargeait toutes ces photos, trois fois par jour.
+   Maintenant : lecture « shallow » des CLÉS seulement (quelques octets par
+   entrée), puis on ne télécharge QUE les entrées jamais vues ; les autres
+   viennent du cache local (IndexedDB, le même que celui des photos). Une clé
+   disparue de Firebase disparaît aussi du résultat. */
+async function lirePhotoArchives(){
+  var base=String(firebase.app().options.databaseURL||'').replace(/\/$/,'');
+  var jeton=await fbUser.getIdToken();
+  var r=await fetch(base+'/photoArchives.json?shallow=true&auth='+encodeURIComponent(jeton));
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  var cles=Object.keys((await r.json())||{}),out={},neuves=0;
+  for(var i=0;i<cles.length;i++){
+    var k=cles[i],v=await _idbGet('pa:'+k);
+    if(!v){try{v=(await fbDb.ref('photoArchives/'+k).once('value')).val();if(v){await _idbSet('pa:'+k,v);neuves++;}}catch(e){}}
+    if(v)out[k]=v;
+  }
+  lg('  📦 photoArchives : '+cles.length+' entrée(s), '+neuves+' nouvelle(s) téléchargée(s)','t');
+  return out;
 }
 function sH(s){var h=0;for(var i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}return h.toString(36);}
 

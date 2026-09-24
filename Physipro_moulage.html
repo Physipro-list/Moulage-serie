@@ -8,6 +8,19 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1859 - FRAIS FIREBASE : COMPTEUR + DEMANDES PHOTO CIBLÉES
+    ════════════════════════════════════════════════════════════════════
+    • PhysiPro_Conso.js est chargé avant Firebase : il compte ce que la
+      page télécharge, l'additionne au total du jour de tous les postes,
+      avertit à 270 Mo et met Firebase en pause à 330 Mo (quota 360 Mo/j),
+      total mis à jour aux 15 minutes.
+    • startPhotoRequestsListener (vue mobile) n'écoute plus TOUT
+      « photoRequests » -- ce nœud porte les photos en base64 des
+      téléphones. Requête orderByChild('status').equalTo('pending') :
+      seules les demandes en attente descendent. Index « status » ajouté
+      dans rules_physipro.json (sans l'index, ça marche quand même, mais
+      Firebase filtre alors chez le client).
+
     v1855 - DÉLAI DE CONSERVATION ARRONDI À 3 MOIS
     ════════════════════════════════════════════════════════════════════
     🆕 v1855 — EXP_MIN_JOURS PASSE DE 105 À 90 JOURS
@@ -1473,7 +1486,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1858</title>
+  <title>PhysiPro Moulages v1859</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -1513,6 +1526,8 @@
     document.head.appendChild(manifestLink);
   </script>
   
+  <!-- v1859 : compteur de téléchargement Firebase (AVANT le SDK) -->
+  <script src="PhysiPro_Conso.js"></script>
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -7561,7 +7576,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261015;
+    var APP_VERSION = 20261016;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -22395,7 +22410,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       if (photoRequestsListenerActive || !firebaseDb) return;
       photoRequestsListenerActive = true;
       
-      const ref = firebaseDb.ref('photoRequests');
+      // v1859 — seulement les demandes en attente : le nœud porte des photos en base64
+      const ref = firebaseDb.ref('photoRequests').orderByChild('status').equalTo('pending');
       
       ref.on('child_added', (snap) => {
         const req = snap.val();
