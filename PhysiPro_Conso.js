@@ -1,5 +1,5 @@
 /* ================================================================
-   PhysiPro_Conso.js \u2014 v1 (2026-09-24)
+   PhysiPro_Conso.js \u2014 v1.1 (2026-09-24)
    COMPTEUR DE T\u00c9L\u00c9CHARGEMENT FIREBASE, PARTAG\u00c9 PAR TOUTES LES PAGES
 
    \u00c0 inclure AVANT les scripts Firebase de chaque page :
@@ -269,6 +269,15 @@
     }
     if (essais > 600) clearInterval(attente);   // 5 min sans connexion : on abandonne
   }, deja ? 20 : 500);
+  /* v1.1 : une page laissee ouverte toute la nuit reprend TOUTE SEULE au
+     changement de jour Firebase (3 h du matin) -- pas besoin de recharger. */
+  setInterval(function () {
+    if (!C.arrete || lsGet('pcArret') === jour()) return;
+    C.arrete = false; C.total = null;
+    var o = el('pcArret'); if (o) o.parentNode.removeChild(o);
+    try { (window.firebase && firebase.apps || []).forEach(function (a) { try { a.database().goOnline(); } catch (e) {} }); } catch (e) {}
+    location.reload();          // recharge proprement pour repartir avec des donnees a jour
+  }, 60000);
   window.addEventListener('pagehide', function () { try { envoyer(); } catch (e) {} });
   C.envoyerMaintenant = envoyer;
 })();
