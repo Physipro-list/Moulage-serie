@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Inspection Atelier v20260926</title>
+<title>PhysiPro — Inspection Atelier v20260928</title>
 <style>
 :root{--bg-main:#0f172a;--bg-card:#1e293b;--bg-input:#0f172a;--border:#334155;--gold:#c9a227;--gold-light:#fbbf24;--text:#e2e8f0;--text-muted:#94a3b8;--success:#22c55e;--danger:#ef4444;--info:#3b82f6;--purple:#a855f7;--teal:#14b8a6;--tbl-zoom:11px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -747,7 +747,7 @@ function safeFbUpdate(ref, data, callback) {
 }
 
 // === VERSION PROTECTION ===
-var APP_VERSION=20260926;var APP_MODULE='inspection';var _versionOK=true;
+var APP_VERSION=20260928;var APP_MODULE='inspection';var _versionOK=true;
 function checkAppVersion(){if(!fbDb)return;fbDb.ref('appSettings/versions/'+APP_MODULE).once('value').then(function(s){var r=s.val();if(r&&typeof r==='number'&&APP_VERSION<r){_versionOK=false;var b=document.createElement('div');b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;background:#dc2626;color:white;padding:12px 20px;font-weight:700;text-align:center;font-size:14px;';b.innerHTML='⚠️ VERSION OBSOLÈTE. <button onclick="location.reload(true)" style="margin-left:15px;background:white;color:#dc2626;border:none;padding:6px 16px;border-radius:6px;font-weight:bold;cursor:pointer;">🔄 Rafraîchir</button>';document.body.prepend(b);}else{fbDb.ref('appSettings/versions/'+APP_MODULE).set(APP_VERSION);_versionOK=true;}});}
 function writeBlocked(s){if(!_versionOK){if(!s)alert('🔒 Version obsolète');return true;}return false;}
 
@@ -914,6 +914,7 @@ function restoreSerieFromFB() {
     if (!confirm('🛡️ Firebase contient ' + count + ' cartes Série+.\n\nRestaurer dans localStorage?')) return;
     // Écrire dans les deux clés (Inspection + Série+)
     localStorage.setItem(SK, JSON.stringify(fbCards));
+    invalidateSerieCards();
     localStorage.setItem('physipro_serie_data', JSON.stringify(fbCards));
     // Vider les IDs supprimés pour éviter le re-nettoyage
     localStorage.removeItem('physipro_serie_deleted_cards');
@@ -994,6 +995,7 @@ function _safeMerge(fbData, localData) {
 
 /* ─── safeLSSet: localStorage write with protection ─── */
 function safeLSSet(k, v) {
+  if (k === SK) invalidateSerieCards(); // v20260927 : la mémoire des cartes Série+ se reconstruira au prochain appel
   try {
     // Protection: never allow a write that drastically reduces data
     if (k === IK || k === CK) {
@@ -2605,7 +2607,14 @@ md.data[md.month]=md.rows;saveD(d,md.data);showToast('📅 Date modifiée','succ
 
 
 /* ═══ SÉRIE+ ═══ */
-function getSerieCards(){try{return JSON.parse(localStorage.getItem(SK))||{};}catch(e){return {};}}
+/* v20260927 — RÉACTIVITÉ : getSerieCards() ne refait plus JSON.parse de TOUTES les cartes
+   Série+ à chaque appel (avant : un parse complet par ligne du tableau à chaque renderTable,
+   à chaque frappe de recherche, à chaque scan). Le résultat est gardé en mémoire et jeté
+   dès qu'on écrit la clé SK (safeLSSet / restoreSerieFromFB) ou qu'un autre onglet la modifie. */
+var _serieCardsMemo=null;
+function invalidateSerieCards(){_serieCardsMemo=null;}
+function getSerieCards(){if(_serieCardsMemo)return _serieCardsMemo;try{_serieCardsMemo=JSON.parse(localStorage.getItem(SK))||{};}catch(e){_serieCardsMemo={};}return _serieCardsMemo;}
+window.addEventListener('storage',function(e){if(!e||e.key===null||e.key===SK)invalidateSerieCards();});
 function findSerie(num){var cards=getSerieCards();var n=String(num).trim();if(!n)return null;var nStrip=n.replace(/^0+/,'');var nLast6=nStrip.slice(-6);for(var id in cards){var o=String(cards[id].order||'').trim();var p=String(cards[id].numeroPO||'').trim();var oStrip=o.replace(/^0+/,'');var pStrip=p.replace(/^0+/,'');if(o===n||p===n)return{cardId:id,card:cards[id]};if(oStrip===nStrip||pStrip===nStrip)return{cardId:id,card:cards[id]};if(oStrip.slice(-6)===nLast6&&nLast6.length>=4)return{cardId:id,card:cards[id]};if(pStrip.slice(-6)===nLast6&&nLast6.length>=4)return{cardId:id,card:cards[id]};}return null;}
 function getUnfinished(card,dept){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){if(dept==='inspection'){var done=(g.atelier&&g.atelier.inspected)||false;var inInv=(g.atelier&&g.atelier.sentToInventaire)||false;var qf=parseInt(g.atelier&&g.atelier.qtyFait)||0;var isP=(g.atelier&&g.atelier.partiel)||false;var tQ=parseInt(g.qty)||0;if(!done){var rem=isP?(tQ-qf):tQ;pend.push({gi:gi,name:g.name,qty:tQ,qtyFait:qf,remaining:rem,inInventaire:inInv,wasPartial:isP});}}else{var done2=(g.couture&&g.couture.inspected)||false;var inInv2=(g.couture&&g.couture.sentToInventaire)||false;var qf2=parseInt(g.couture&&g.couture.qtyFait)||0;var isP2=(g.couture&&g.couture.partiel)||false;var tQ2=parseInt(g.qty)||0;if(!done2){var rem2=isP2?(tQ2-qf2):tQ2;pend.push({gi:gi,name:g.name,qty:tQ2,qtyFait:qf2,remaining:rem2,inInventaire:inInv2,wasPartial:isP2});}}});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
 function getCompleted(card,dept){var res=[];(card.items||[]).forEach(function(item,ii){var done=[];(item.grandeurs||[]).forEach(function(g,gi){if(dept==='inspection'){var isDone=(g.atelier&&g.atelier.inspected)||false;if(isDone)done.push({gi:gi,name:g.name,qty:parseInt(g.qty)||0});}else{var isDone2=(g.couture&&g.couture.inspected)||false;if(isDone2)done.push({gi:gi,name:g.name,qty:parseInt(g.qty)||0});}});if(done.length)res.push({ii:ii,name:item.name,completed:done});});return res;}
@@ -2918,52 +2927,79 @@ function _handleSerieMatch(bon, match, dept) {
   }
 }
 
+/* ═══ v20260927 — SÉRIE+ : LOCAL D'ABORD, FIREBASE EN SECOURS ═══
+   Avant : scanBon(), reopenSerieModal() et reopenSerieModalByBon() retéléchargeaient TOUT le nœud
+   `serieCommandes` (toutes les cartes, tous les items, toutes les grandeurs) à CHAQUE bon saisi,
+   et attendaient la réponse réseau avant de réagir → plusieurs secondes de délai à chaque Entrée,
+   et des frais Firebase inutiles. Le cache local est déjà tenu à jour en temps réel par
+   listenSerieCards(), donc :
+     1. on cherche la carte en LOCAL → réponse immédiate ;
+     2. si trouvée, on rafraîchit seulement CETTE carte en arrière-plan (petite lecture, non bloquante) ;
+     3. si introuvable localement (carte toute neuve), on fait le fetch complet comme avant.
+   Comportement visible identique, sauf que ça répond tout de suite. */
+function _mergeSerieCardsFromFB(fbCards){
+  // Fusion « structure » : on prend client/order/PO/colonne/type/items/grandeurs de Firebase,
+  // on garde le progrès local atelier/couture (identique aux anciennes fusions de scanBon & co.)
+  if(!fbCards||typeof fbCards!=='object')return false;
+  var local=getSerieCards();var changed=false;
+  Object.keys(fbCards).forEach(function(cid){
+    var fbCard=fbCards[cid];if(!fbCard||typeof fbCard!=='object')return;
+    if(!local[cid]){local[cid]=fbCard;changed=true;return;}
+    var lCard=local[cid];
+    if(fbCard.client&&fbCard.client!==lCard.client){lCard.client=fbCard.client;changed=true;}
+    if(fbCard.order&&fbCard.order!==lCard.order){lCard.order=fbCard.order;changed=true;}
+    if(fbCard.numeroPO&&fbCard.numeroPO!==lCard.numeroPO){lCard.numeroPO=fbCard.numeroPO;changed=true;}
+    if(fbCard.targetColumn&&fbCard.targetColumn!==lCard.targetColumn){lCard.targetColumn=fbCard.targetColumn;changed=true;}
+    if(fbCard._typeManuel!==undefined&&fbCard._typeManuel!==lCard._typeManuel){lCard._typeManuel=fbCard._typeManuel;changed=true;}
+    if(fbCard.items){
+      if(!lCard.items){lCard.items=[];changed=true;}
+      fbCard.items.forEach(function(fItem,ii){
+        if(!lCard.items[ii]){lCard.items[ii]=fItem;changed=true;return;}
+        if(fItem.name&&fItem.name!==lCard.items[ii].name){lCard.items[ii].name=fItem.name;changed=true;}
+        if(!lCard.items[ii].grandeurs)lCard.items[ii].grandeurs=[];
+        (fItem.grandeurs||[]).forEach(function(fG,gi){
+          if(!lCard.items[ii].grandeurs[gi]){lCard.items[ii].grandeurs[gi]=fG;changed=true;return;}
+          var lG=lCard.items[ii].grandeurs[gi];
+          if(fG.qty&&fG.qty!==lG.qty){lG.qty=fG.qty;changed=true;}
+          if(fG.name&&fG.name!==lG.name){lG.name=fG.name;changed=true;}
+        });
+      });
+    }
+  });
+  if(changed)safeLSSet(SK,JSON.stringify(local));
+  return changed;
+}
+// Secours : lecture complète de serieCommandes (seulement quand un bon est introuvable localement)
+function _fetchAllSerieFromFB(){
+  if(!fbDb)return Promise.resolve(false);
+  return fbDb.ref('serieCommandes').once('value').then(function(snap){return _mergeSerieCardsFromFB(snap.val()||{});});
+}
+// Arrière-plan : rafraîchit UNE carte (quelques Ko) sans bloquer l'interface
+function _refreshOneSerieCard(cardId){
+  if(!fbDb||!cardId)return;
+  try{
+    fbDb.ref('serieCommandes/'+cardId).once('value').then(function(snap){
+      var c=snap.val();if(!c)return;var o={};o[cardId]=c;_mergeSerieCardsFromFB(o);
+    }).catch(function(){});
+  }catch(e){}
+}
+// Chemin commun : local d'abord, Firebase en secours. onMiss = quoi faire si vraiment introuvable.
+function _resolveSerieThen(bon,dept,onMiss){
+  var m=findSerie(bon);
+  if(m){_handleSerieMatch(bon,m,dept);_refreshOneSerieCard(m.cardId);return;}
+  _fetchAllSerieFromFB().then(function(){
+    var m2=findSerie(bon);
+    if(m2)_handleSerieMatch(bon,m2,dept);else onMiss();
+  }).catch(function(){
+    var m3=findSerie(bon);
+    if(m3)_handleSerieMatch(bon,m3,dept);else onMiss();
+  });
+}
+
 function reopenSerieModal(dept,idx){
   var md=gmd(dept);var row=md.rows[idx];if(!row)return;var bon=(row.bon||'').trim();if(!bon)return;
   window._reopenRowIdx=idx;window._reopenDept=dept;
-  // Force re-fetch from Firebase to get freshest card data
-  if(fbDb){
-    fbDb.ref('serieCommandes').once('value').then(function(snap){
-      var fbCards=snap.val()||{};
-      // Merge FB into local (don't overwrite local inspection/couture progress)
-      var local=getSerieCards();
-      Object.keys(fbCards).forEach(function(cid){
-        if(!local[cid]){local[cid]=fbCards[cid];return;}
-        var lCard=local[cid],fbCard=fbCards[cid];
-        if(fbCard.client)lCard.client=fbCard.client;
-        if(fbCard.order)lCard.order=fbCard.order;
-        if(fbCard.numeroPO)lCard.numeroPO=fbCard.numeroPO;
-        if(fbCard.targetColumn)lCard.targetColumn=fbCard.targetColumn;
-        if(fbCard._typeManuel!==undefined)lCard._typeManuel=fbCard._typeManuel;
-        if(fbCard.items){
-          if(!lCard.items)lCard.items=[];
-          fbCard.items.forEach(function(fItem,ii){
-            if(!lCard.items[ii]){lCard.items[ii]=fItem;return;}
-            if(fItem.name)lCard.items[ii].name=fItem.name;
-            if(!lCard.items[ii].grandeurs)lCard.items[ii].grandeurs=[];
-            (fItem.grandeurs||[]).forEach(function(fG,gi){
-              if(!lCard.items[ii].grandeurs[gi]){lCard.items[ii].grandeurs[gi]=fG;return;}
-              var lG=lCard.items[ii].grandeurs[gi];
-              if(fG.qty)lG.qty=fG.qty;if(fG.name)lG.name=fG.name;
-            });
-          });
-        }
-      });
-      safeLSSet(SK,JSON.stringify(local));
-      // Use flexible matching
-      var found=findSerie(bon);
-      if(found){_handleSerieMatch(bon,found,dept);}
-      else{showToast('Carte Série+ introuvable pour '+bon,'error');}
-    }).catch(function(){
-      var m=findSerie(bon);
-      if(m){_handleSerieMatch(bon,m,dept);}
-      else{showToast('Carte Série+ introuvable pour '+bon,'error');}
-    });
-  }else{
-    var m=findSerie(bon);
-    if(m){_handleSerieMatch(bon,m,dept);}
-    else{showToast('Carte Série+ introuvable pour '+bon,'error');}
-  }
+  _resolveSerieThen(bon,dept,function(){showToast('Carte Série+ introuvable pour '+bon,'error');});
 }
 // Ouvre le modal Série+ directement par numéro de bon (utilisé en mode favoris multi-mois)
 function reopenSerieModalByBon(bon,dept){
@@ -2984,98 +3020,16 @@ function reopenSerieModalByBon(bon,dept){
   }
   window._reopenRowIdx=realIdx>=0?realIdx:null;
   window._reopenDept=dept;
-  if(fbDb){
-    fbDb.ref('serieCommandes').once('value').then(function(snap){
-      var fbCards=snap.val()||{};
-      var local=getSerieCards();
-      Object.keys(fbCards).forEach(function(cid){
-        if(!local[cid]){local[cid]=fbCards[cid];return;}
-        var lCard=local[cid],fbCard=fbCards[cid];
-        if(fbCard.client)lCard.client=fbCard.client;
-        if(fbCard.order)lCard.order=fbCard.order;
-        if(fbCard.numeroPO)lCard.numeroPO=fbCard.numeroPO;
-        if(fbCard.targetColumn)lCard.targetColumn=fbCard.targetColumn;
-        if(fbCard._typeManuel!==undefined)lCard._typeManuel=fbCard._typeManuel;
-        if(fbCard.items){
-          if(!lCard.items)lCard.items=[];
-          fbCard.items.forEach(function(fItem,ii){
-            if(!lCard.items[ii]){lCard.items[ii]=fItem;return;}
-            if(fItem.name)lCard.items[ii].name=fItem.name;
-            if(!lCard.items[ii].grandeurs)lCard.items[ii].grandeurs=[];
-            (fItem.grandeurs||[]).forEach(function(fG,gi){
-              if(!lCard.items[ii].grandeurs[gi]){lCard.items[ii].grandeurs[gi]=fG;return;}
-              var lG=lCard.items[ii].grandeurs[gi];
-              if(fG.qty)lG.qty=fG.qty;if(fG.name)lG.name=fG.name;
-            });
-          });
-        }
-      });
-      safeLSSet(SK,JSON.stringify(local));
-      var found=findSerie(bon);
-      if(found){_handleSerieMatch(bon,found,dept);}
-      else{showToast('Carte Série+ introuvable pour '+bon,'error');}
-    }).catch(function(){
-      var m=findSerie(bon);
-      if(m){_handleSerieMatch(bon,m,dept);}
-      else{showToast('Carte Série+ introuvable pour '+bon,'error');}
-    });
-  }else{
-    var m=findSerie(bon);
-    if(m){_handleSerieMatch(bon,m,dept);}
-    else{showToast('Carte Série+ introuvable pour '+bon,'error');}
-  }
+  _resolveSerieThen(bon,dept,function(){showToast('Carte Série+ introuvable pour '+bon,'error');});
 }
-function scanBon(dept){window._reopenRowIdx=null;window._reopenDept=null;var id='insp-bon';var bon=document.getElementById(id).value.trim();if(!bon){showToast('#?','error');return;}
+function scanBon(dept){window._reopenRowIdx=null;window._reopenDept=null;var id='insp-bon';var inp=document.getElementById(id);var bon=inp.value.trim();if(!bon){showToast('#?','error');return;}
 // FIX #15: Clear global search before scan so new entries are visible
 var gs=document.getElementById('global-search');if(gs&&gs.value){gs.value='';clearTimeout(_searchTimer);renderTable('inspection');}
-// ALWAYS fetch fresh from Firebase to get latest items/grandeurs
-if(fbDb){
-  fbDb.ref('serieCommandes').once('value').then(function(snap){
-    var fbCards=snap.val()||{};
-    // Merge: keep local atelier/couture data, take FB structure
-    var local=getSerieCards();
-    Object.keys(fbCards).forEach(function(cid){
-      if(!local[cid]){local[cid]=fbCards[cid];return;}
-      var lCard=local[cid],fbCard=fbCards[cid];
-      if(fbCard.client)lCard.client=fbCard.client;
-      if(fbCard.order)lCard.order=fbCard.order;
-      if(fbCard.numeroPO)lCard.numeroPO=fbCard.numeroPO;
-      if(fbCard.targetColumn)lCard.targetColumn=fbCard.targetColumn;
-      if(fbCard._typeManuel!==undefined)lCard._typeManuel=fbCard._typeManuel;
-      if(fbCard.items){
-        if(!lCard.items)lCard.items=[];
-        fbCard.items.forEach(function(fItem,ii){
-          if(!lCard.items[ii]){lCard.items[ii]=fItem;return;}
-          if(fItem.name)lCard.items[ii].name=fItem.name;
-          if(!lCard.items[ii].grandeurs)lCard.items[ii].grandeurs=[];
-          (fItem.grandeurs||[]).forEach(function(fG,gi){
-            if(!lCard.items[ii].grandeurs[gi]){lCard.items[ii].grandeurs[gi]=fG;return;}
-            var lG=lCard.items[ii].grandeurs[gi];
-            if(fG.qty)lG.qty=fG.qty;
-            if(fG.name)lG.name=fG.name;
-          });
-        });
-      }
-    });
-    safeLSSet(SK,JSON.stringify(local));
-    // Now search
-    var n=String(bon).trim();
-    var found=null;
-    var nStrip=n.replace(/^0+/,'');var nL6=nStrip.slice(-6);
-    for(var cid in local){var o=String(local[cid].order||'');var p=String(local[cid].numeroPO||'');var os=o.replace(/^0+/,'');var ps=p.replace(/^0+/,'');if(o===n||p===n||os===nStrip||ps===nStrip||(os.slice(-6)===nL6&&nL6.length>=4)||(ps.slice(-6)===nL6&&nL6.length>=4)){found={cardId:cid,card:local[cid]};break;}}
-    document.getElementById(id).value='';document.getElementById(id).focus();
-    if(found){_handleSerieMatch(bon,found,dept);}else{openManualModal(bon,dept);}
-  }).catch(function(){
-    // Fallback: try local
-    var m=findSerie(bon);
-    document.getElementById(id).value='';document.getElementById(id).focus();
-    if(m){_handleSerieMatch(bon,m,dept);}else{openManualModal(bon,dept);}
-  });
-}else{
-  var m=findSerie(bon);
-  document.getElementById(id).value='';document.getElementById(id).focus();
-  if(m){_handleSerieMatch(bon,m,dept);}else{openManualModal(bon,dept);}
-}}
+// v20260927 : le champ se vide et reprend le focus TOUT DE SUITE (plus d'attente réseau) ;
+// la carte Série+ est cherchée en local d'abord, Firebase seulement si introuvable.
+inp.value='';inp.focus();
+_resolveSerieThen(bon,dept,function(){openManualModal(bon,dept);});
+}
 function openSerieModal(bon,match,dept){var cid=match.cardId;
 var freshCards=getSerieCards();var card=freshCards[cid]||match.card;
 var items=getUnfinished(card,dept);var completed=getCompleted(card,dept);
@@ -4443,66 +4397,72 @@ function _checkJobsAttente(bon){
   if(!bon || !fbDb) return;
   var numStr = String(bon).trim();
   if(!numStr) return;
-  
-  fbDb.ref('jobsEnAttente').once('value', function(snap){
+
+  /* v20260928 — FRAIS FIREBASE : avant, chaque ligne ajoutée relisait TOUT `jobsEnAttente`,
+     puis TOUT `serieCommandes` si le bon y était. Maintenant :
+       • jobsEnAttente : requête ciblée sur `numero` (avec la règle ".indexOn": ["numero"]
+         sur ce nœud, Firebase ne renvoie que la ou les entrées du bon ; sans la règle,
+         ça marche pareil qu'avant — tout est lu — avec un avertissement en console) ;
+       • serieCommandes : plus aucune lecture — la carte est cherchée dans le cache local
+         (mêmes critères qu'avant : exact ou zéros de tête ignorés) et seule cette carte est mise à jour. */
+  fbDb.ref('jobsEnAttente').orderByChild('numero').equalTo(numStr).once('value', function(snap){
     var entries = snap.val() || {};
     var found = false;
     Object.keys(entries).forEach(function(jaId){
       var e = entries[jaId];
       if(!e || e.resolved) return;
-      if(String(e.numero||'').trim() === numStr){
-        found = true;
-        console.log('[InspAtelier→JA] 🔍 Détecté #'+numStr+' dans Jobs Attente, nettoyage...');
-        
-        // 1. Marquer comme résolu dans Jobs Attente
-        fbDb.ref('jobsEnAttente/' + jaId).update({
-          resolved: true,
-          resolvedAt: Date.now(),
-          resolvedBy: fbUser ? fbUser.email : 'inspection_atelier',
-          _resolvedByApp: 'inspection_atelier'
-        }).then(function(){
-          console.log('[InspAtelier→JA] ✅ #'+numStr+' résolu dans Jobs Attente');
-        });
-        
-        // 2. Retirer de ServiceClient (seulement si créé par Jobs Attente)
-        fbDb.ref('jobs').orderByChild('order').equalTo(numStr).once('value', function(scSnap){
-          if(!scSnap.exists()) return;
-          scSnap.forEach(function(child){
-            var job = child.val();
-            if(job && job._fromJobsAttente){
-              fbDb.ref('jobs/' + child.key).remove().then(function(){
-                console.log('[InspAtelier→SC] 🗑️ Job #'+numStr+' retiré de ServiceClient');
-              });
-            }
-          });
-        });
-        
-        // 3. Dans Série+ : remettre en "À faire" (produire) puisque détecté en Inspection Atelier
-        fbDb.ref('serieCommandes').once('value', function(serieSnap){
-          var cards = serieSnap.val() || {};
-          for(var cid in cards){
-            var c = cards[cid];
-            if(!c) continue;
-            var o = String(c.order||'').trim();
-            var p = String(c.numeroPO||c.po||'').trim();
-            var oStrip = o.replace(/^0+/,'');
-            var nStrip = numStr.replace(/^0+/,'');
-            if(o === numStr || p === numStr || oStrip === nStrip){
-              var updates = {};
-              updates['serieCommandes/' + cid + '/_manualStatus'] = 'produire';
-              updates['serieCommandes/' + cid + '/_fromJobsAttente'] = null;
-              updates['serieCommandes/' + cid + '/_jaResolvedAt'] = new Date().toISOString();
-              updates['serieCommandes/' + cid + '/_jaResolvedBy'] = 'inspection_atelier';
-              fbDb.ref().update(updates).then(function(){
-                console.log('[InspAtelier→Série] ✅ Carte #'+numStr+' remise en "À faire"');
-              });
-              break;
-            }
+      if(String(e.numero||'').trim() !== numStr) return;
+      found = true;
+      console.log('[InspAtelier→JA] 🔍 Détecté #'+numStr+' dans Jobs Attente, nettoyage...');
+
+      // 1. Marquer comme résolu dans Jobs Attente
+      fbDb.ref('jobsEnAttente/' + jaId).update({
+        resolved: true,
+        resolvedAt: Date.now(),
+        resolvedBy: fbUser ? fbUser.email : 'inspection_atelier',
+        _resolvedByApp: 'inspection_atelier'
+      }).then(function(){
+        console.log('[InspAtelier→JA] ✅ #'+numStr+' résolu dans Jobs Attente');
+      });
+
+      // 2. Retirer de ServiceClient (seulement si créé par Jobs Attente)
+      fbDb.ref('jobs').orderByChild('order').equalTo(numStr).once('value', function(scSnap){
+        if(!scSnap.exists()) return;
+        scSnap.forEach(function(child){
+          var job = child.val();
+          if(job && job._fromJobsAttente){
+            fbDb.ref('jobs/' + child.key).remove().then(function(){
+              console.log('[InspAtelier→SC] 🗑️ Job #'+numStr+' retiré de ServiceClient');
+            });
           }
         });
+      });
+
+      // 3. Dans Série+ : remettre en "À faire" (produire) — carte trouvée dans le cache local, pas de lecture Firebase
+      var cards = getSerieCards();
+      var nStrip = numStr.replace(/^0+/,'');
+      for(var cid in cards){
+        var c = cards[cid];
+        if(!c) continue;
+        var o = String(c.order||'').trim();
+        var pNum = String(c.numeroPO||c.po||'').trim();
+        var oStrip = o.replace(/^0+/,'');
+        if(o === numStr || pNum === numStr || oStrip === nStrip){
+          var updates = {};
+          updates['serieCommandes/' + cid + '/_manualStatus'] = 'produire';
+          updates['serieCommandes/' + cid + '/_fromJobsAttente'] = null;
+          updates['serieCommandes/' + cid + '/_jaResolvedAt'] = new Date().toISOString();
+          updates['serieCommandes/' + cid + '/_jaResolvedBy'] = 'inspection_atelier';
+          fbDb.ref().update(updates).then(function(){
+            console.log('[InspAtelier→Série] ✅ Carte #'+numStr+' remise en "À faire"');
+          });
+          break;
+        }
       }
     });
     if(found) showToast('📋 #'+numStr+' retiré des Commandes en attente','success');
+  }, function(err){
+    console.warn('[InspAtelier→JA] Lecture jobsEnAttente refusée : ' + (err && err.message));
   });
 }
 
