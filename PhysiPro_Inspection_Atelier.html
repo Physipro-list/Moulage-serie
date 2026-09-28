@@ -4469,6 +4469,7 @@ var PChat = (function() {
       <button class="vrf-btn go" id="vrfGo" onclick="VERIF.analyser()">🔎 Analyser</button>
       <button class="vrf-btn sec" id="vrfCopy" onclick="VERIF.copier()" style="display:none;">📋 Copier la liste</button>
       <button class="vrf-btn sec" onclick="VERIF.reset()">↺ Nouvelle liste</button>
+      <button class="vrf-btn sec" id="vrfPrint" onclick="VERIF.imprimer()" style="display:none;" title="Imprimer les compteurs et le tableau des passages">🖨️ Imprimer</button>
       <button class="vrf-btn sec" id="vrfRattrapage" onclick="PASSAGES_VERIF.rattraper()" style="display:none;" title="Une seule fois : remplit l'index des dates de passage avec l'historique déjà enregistré">📚 Rattrapage de l'historique</button>
       <span class="vrf-status" id="vrfStatus"></span>
     </div>
@@ -5092,6 +5093,7 @@ var VERIF = (function () {
       fl.classList.remove('show');
     }
     _el('vrfCopy').style.display = missing.length ? '' : 'none';
+    _el('vrfPrint').style.display = '';   // 2026-09-28 : impression
   }
 
   function analyser() {
@@ -5141,6 +5143,7 @@ var VERIF = (function () {
     _el('vrfSum').classList.remove('show');
     _el('vrfFound').classList.remove('show');
     _el('vrfCopy').style.display = 'none';
+    _el('vrfPrint').style.display = 'none';
     var pz = _el('vrfPassages'); if (pz) { pz.classList.remove('show'); pz.innerHTML = ''; }
     _status('');
     _el('vrfText').focus();
@@ -5157,7 +5160,57 @@ var VERIF = (function () {
     if (e.key === 'Escape') { var ov = _el('vrfOverlay'); if (ov && ov.classList.contains('show')) close(); }
   });
 
-  return { open: open, close: close, analyser: analyser, copier: copier, reset: reset };
+  /* ─── 2026-09-28 : IMPRESSION — les trois compteurs, puis tout le tableau des passages ───
+     Page claire, faite pour le papier : ✓ vert, ✗ rouge. Rien n'est relu dans
+     Firebase — on imprime exactement ce qui est à l'écran. */
+  function imprimer() {
+    var pills = document.querySelectorAll('#vrfSum .vrf-pill');
+    if (!pills.length || !_el('vrfSum').classList.contains('show')) { showToast('Analyse d’abord une liste', 'error'); return; }
+    var nb = function (i) { var b = pills[i] && pills[i].querySelector('b'); return b ? b.textContent : '0'; };
+    var tab = document.querySelector('#vrfPassages table');
+    var etat = document.querySelector('#vrfPassages .vrf-pas-alerte, #vrfPassages .vrf-pas-info:last-child');
+    var d = new Date();
+    var jour = ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
+    var H = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Vérification des commandes — ' + jour + '</title><style>'
+      + '*{box-sizing:border-box}html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+      + 'body{font-family:"Segoe UI",Arial,sans-serif;color:#1c2b36;margin:12mm 11mm;font-size:12px}'
+      + '.ban{background:linear-gradient(90deg,#04152c,#4a8ef5);color:#fff;border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}'
+      + '.ban b{font-size:17px;letter-spacing:1.5px;text-transform:uppercase}.ban span{font-weight:700;font-size:12px}'
+      + '.sum{display:flex;gap:10px;margin-bottom:14px}'
+      + '.pill{flex:1;text-align:center;border-radius:8px;padding:8px 6px;border:2px solid}'
+      + '.pill b{display:block;font-size:26px;line-height:1.1}.pill i{font-style:normal;font-size:11px;color:#475569}'
+      + '.tot{border-color:#4a8ef5;background:#eef4ff}.tot b{color:#1d4ed8}'
+      + '.ok{border-color:#22c55e;background:#ecfdf3}.ok b{color:#15803d}'
+      + '.ko{border-color:#f59e0b;background:#fffbeb}.ko b{color:#b45309}'
+      + 'h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:#04152c;border-bottom:2px solid #4a8ef5;padding-bottom:3px;margin:6px 0 6px}'
+      + 'table{width:100%;border-collapse:collapse}'
+      + 'th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#475569;border-bottom:1.5px solid #94a3b8;padding:5px 6px}'
+      + 'td{padding:5px 6px;border-bottom:1px solid #e2e8f0;font-family:Consolas,monospace;font-size:12px;vertical-align:top}'
+      + 'tr{break-inside:avoid}.vrf-pas-no{font-weight:800}'
+      + '.vrf-pas-ok{color:#16a34a;font-weight:900}.vrf-pas-ko{color:#dc2626;font-weight:900;font-size:14px}'
+      + '.leg,.etat{font-size:10.5px;color:#475569;margin-top:8px}'
+      + '</style></head><body>'
+      + '<div class="ban"><b>Vérification des commandes</b><span>' + jour + '</span></div>'
+      + '<div class="sum">'
+      +   '<div class="pill tot"><b>' + esc(nb(0)) + '</b><i>analysés</i></div>'
+      +   '<div class="pill ok"><b>' + esc(nb(1)) + '</b><i>déjà passés</i></div>'
+      +   '<div class="pill ko"><b>' + esc(nb(2)) + '</b><i>pas encore passés</i></div>'
+      + '</div>'
+      + (tab ? '<h2>Passages dans les départements</h2>' + tab.outerHTML
+             + '<div class="leg"><span class="vrf-pas-ok">✓</span> passée, avec sa date · '
+             + '<span class="vrf-pas-ko">✗</span> pas encore passée dans ce département '
+             + '(couture : date de sortie)</div>'
+             + (etat ? '<div class="etat">' + esc(etat.textContent) + '</div>' : '')
+             : '<div class="etat">Tableau des passages non disponible.</div>')
+      + '<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>'
+      + '</body></html>';
+    var w = window.open('', 'imprVerif', 'width=900,height=900');
+    if (!w) { showToast('Fenêtre bloquée : autorise les fenêtres surgissantes pour ce site', 'error'); return; }
+    w.document.write(H);
+    w.document.close();
+  }
+
+  return { open: open, close: close, analyser: analyser, copier: copier, reset: reset, imprimer: imprimer };
 })();
 window.VERIF = VERIF;
 
