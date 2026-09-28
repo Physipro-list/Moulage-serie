@@ -363,6 +363,8 @@ body.col-resizing *{cursor:col-resize!important;}
 .vrf-pas-rien{color:rgba(255,255,255,.3);}
 .vrf-pas-ok{color:#22c55e;font-weight:900;}
 .vrf-pas-nom{color:#cbd5e1;font-family:'Segoe UI',Arial,sans-serif;font-size:10.5px;}
+#vrfRattrapage{background:rgba(251,191,36,.18);border:1px solid rgba(251,191,36,.6);color:#fde68a;}
+#vrfRattrapage:hover{background:rgba(251,191,36,.3);}
 .vrf-pas-alerte{color:#fbbf24;font-size:10.5px;padding:4px 0 0;font-weight:700;}
 .vrf-pas-ko{color:#ef4444;font-weight:900;font-size:13px;}
 .vrf-pas-info{color:var(--text-muted);font-size:10.5px;padding:3px 0;}
@@ -5134,6 +5136,7 @@ var VERIF = (function () {
         });
         _showResults(list.length, found, missing, res.ok);
         _status('');
+        PASSAGES_VERIF.majBouton();
         PASSAGES_VERIF.afficher(list, datesAtelier);   // 2026-09-28 : dates par département
       })
       .then(function () { _busy = false; btn.disabled = false; },
@@ -5326,14 +5329,16 @@ var PASSAGES_VERIF = (function () {
       /* l'état de l'historique, pour savoir si un \u2717 veut dire « pas passée » ou « pas encore indexée » */
       if (_etatRattrapage && _etatRattrapage.date && !_aJour(_etatRattrapage)) {
         h += '<div class="vrf-pas-alerte">\u26a0\ufe0f Les noms de l\u2019historique ne sont pas encore dans l\u2019index : '
-           + 'utilise une fois le bouton \ud83d\udcda Rattrapage des noms (compte atelieratp). Les nouvelles entrées ont déjà leur nom.</div>';
+           + 'clique une fois sur \ud83d\udcda Rattrapage des noms, en bas à côté d\u2019Imprimer (compte atelieratp ; tu es connecté avec '
+           + esc(_compte()) + '). Les nouvelles entrées ont déjà leur nom.</div>';
       } else if (_etatRattrapage && _etatRattrapage.date) {
         h += '<div class="vrf-pas-info">\ud83d\udcda Historique rattrapé le ' + _fr(String(_etatRattrapage.date).slice(0, 10))
            + (_etatRattrapage.entrees ? ' (' + _etatRattrapage.entrees + ' dates)' : '') + '.</div>';
       } else {
         h += '<div class="vrf-pas-alerte">\u26a0\ufe0f Le rattrapage de l\u2019historique n\u2019a pas encore été fait : '
            + 'les colonnes Couture et Finale ne montrent que ce qui a été enregistré depuis la mise en ligne. '
-           + 'Utilise le bouton \ud83d\udcda Rattrapage de l\u2019historique (compte atelieratp).</div>';
+           + 'Clique une fois sur \ud83d\udcda Rattrapage de l\u2019historique, en bas à côté d\u2019Imprimer (compte atelieratp ; tu es connecté avec '
+           + esc(_compte()) + ').</div>';
       }
       zone.innerHTML = h;
       /* les dates d'atelier trouvées dans la page complètent l'index (seulement ce qui manque) */
@@ -5361,11 +5366,15 @@ var PASSAGES_VERIF = (function () {
      remplit l'index. Marque ensuite passagesCommandes/_rattrapage, et le
      bouton disparaît pour de bon. */
   function _estDaniel() { return !!(fbUser && String(fbUser.email || '').toLowerCase() === 'atelieratp@physipro.com'); }
+  /* le nœud « archives » n'est lisible que par ces deux comptes (règles Firebase) */
+  var COMPTES_RATTRAPAGE = ['atelieratp@physipro.com', 'valerie18@videotron.ca'];
+  function _peutRattraper() { return !!(fbUser && COMPTES_RATTRAPAGE.indexOf(String(fbUser.email || '').toLowerCase()) !== -1); }
+  function _compte() { return (fbUser && fbUser.email) || '(non connecté)'; }
 
   function majBouton() {
     var b = document.getElementById('vrfRattrapage');
     if (!b) return;
-    if (!_estDaniel() || !fbDb) { b.style.display = 'none'; return; }
+    if (!fbDb || !fbUser) { b.style.display = 'none'; return; }
     fbDb.ref(PASSAGES.NOEUD + '/_rattrapage').once('value').then(function (s) {
       _etatRattrapage = s.val() || null;
       b.style.display = _aJour(_etatRattrapage) ? 'none' : '';
@@ -5375,7 +5384,14 @@ var PASSAGES_VERIF = (function () {
   }
 
   function rattraper() {
-    if (!_estDaniel()) return;
+    if (!_peutRattraper()) {
+      alert('Le rattrapage lit les archives d\u2019Inspection Atelier, que seuls les comptes '
+          + 'atelieratp@physipro.com et valerie18@videotron.ca peuvent lire.\n\n'
+          + 'Tu es connecté avec : ' + _compte() + '\n\n'
+          + 'Connecte-toi avec atelieratp@physipro.com, puis clique de nouveau sur ce bouton. '
+          + 'C\u2019est à faire une seule fois : ensuite tous les comptes voient les dates et les noms.');
+      return;
+    }
     if (!confirm('Rattrapage de l’historique\n\nLes données déjà enregistrées des trois départements vont être lues UNE seule fois '
                + '(environ 1 à 3 Mo) pour remplir l’index des dates de passage.\n\nÀ faire une seule fois. Continuer ?')) return;
     var b = document.getElementById('vrfRattrapage');
