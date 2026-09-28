@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>PhysiPro 📷 Photos v11</title>
+<title>PhysiPro 📷 Photos v12</title>
 <!-- PhotoSender v11 : la photo PSM part au FORMAT FINAL — cadrage entier,
        1400 px au plus long côté, ~130 Ko. La PSM la garde telle quelle : plus
        de recadrage carré à l'arrivée (qui coupait le haut et le bas d'une photo
@@ -622,7 +622,7 @@
     <div id="badgeAtelier" style="display:none;background:#1d4ed8;color:#fff;border-radius:8px;
          padding:8px 12px;font-size:13px;font-weight:700;margin:6px 0;text-align:center;line-height:1.35">
       🔧 Photo PSM — cadrage entier<br>
-      <span style="font-weight:500;opacity:.9">Ce que tu vois à l'écran est exactement ce qui arrive au bureau — rien n'est coupé.</span>
+      <span style="font-weight:500;opacity:.9">Ce que tu vois à l'écran arrive au bureau en entier — rien n'est coupé (bords blancs ajoutés au besoin).</span>
     </div>
     <div class="cam-status" id="camStatus">Touchez « Prendre une photo »</div>
     <div class="cam-status" id="camDef" style="font-size:11px;opacity:.6;min-height:0"></div>
@@ -751,6 +751,22 @@ var PHOTO_MODES = {
   devis:   { taille: 2400, qualite: 0.88, plafond: 900000, plancher: 0.72, hires: true,  mode: 'devis'   }
 };
 var PHOTO_REGLAGE = PHOTO_MODES.normal;
+
+/* v12 — PHOTO PSM EN CARRÉ, AVEC BORDS BLANCS. La PSM réserve un carré à
+   chaque photo. Plutôt que de couper la photo, on l'entoure de bandes
+   blanches : elle arrive entière, au bon format, et la PSM la garde telle
+   quelle (aucune seconde compression). Le blanc ne pèse presque rien. */
+function _carreBlanc(canvas) {
+  if (PHOTO_REGLAGE.mode !== 'atelier' || canvas.width === canvas.height) return canvas;
+  var cote = Math.max(canvas.width, canvas.height);
+  var c = document.createElement('canvas');
+  c.width = cote; c.height = cote;
+  var cx = c.getContext('2d');
+  cx.fillStyle = '#ffffff';
+  cx.fillRect(0, 0, cote, cote);
+  cx.drawImage(canvas, Math.round((cote - canvas.width) / 2), Math.round((cote - canvas.height) / 2));
+  return c;
+}
 
 /* v11 — FILET DE POIDS POUR LA PSM. Si, même à la qualité minimale, la photo
    dépasse encore son plafond (image très chargée), on la réduit un peu en
@@ -1274,6 +1290,7 @@ function captureFrame() {
   var ctx = canvas.getContext('2d');
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(v, sx, sy, sw, sh, 0, 0, w, h);
+  canvas = _carreBlanc(canvas);   // v12
   var quality = PHOTO_REGLAGE.qualite;
   var plancher = PHOTO_REGLAGE.plancher;   // v8 : le plancher appartient au mode
   var result = canvas.toDataURL('image/jpeg', quality);
@@ -1330,7 +1347,7 @@ function readAndCompress(file) {
       reader.onload = function(e) {
         var img = new Image();
         img.onload = function() {
-          var canvas = _drawWithOrientation(img, orientation, PHOTO_REGLAGE.taille);
+          var canvas = _carreBlanc(_drawWithOrientation(img, orientation, PHOTO_REGLAGE.taille));   // v12
           var quality = PHOTO_REGLAGE.qualite;
           var plancher = PHOTO_REGLAGE.plancher;   // v8
           var result = canvas.toDataURL('image/jpeg', quality);

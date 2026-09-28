@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1143-annuler-etampe]</title>
+<title>PhysiPro — Liste des matériaux [v1144-zoom-bords]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -2365,6 +2365,25 @@ label.footer-btn-label{
 .fiche-cadre.suit{ pointer-events:none; opacity:.95; }
 .fiche-cadre-poignee{ z-index:2; }
 
+/* v1144 : bouton 🔍 Zoom et cadre de zoom */
+.photo-card .item-img-btn.zoom-cadre-btn{
+  font-size:11px; font-weight:700; padding:2px 7px; white-space:nowrap;
+  color:#cfe1ff; background:rgba(74,142,245,0.18); border-color:rgba(74,142,245,0.6);
+}
+.photo-card .item-img-btn.zoom-cadre-btn:hover{ background:rgba(74,142,245,0.36); color:#fff; }
+.photo-card .item-img-btn.zoom-cadre-btn.active{ background:#ceab51; border-color:#000; color:#213e64; }
+.zoom-cadre{ background:rgba(74,142,245,0.10); box-shadow:0 0 0 2px #000, 0 0 0 4.5px #4a8ef5, 0 0 0 9999px rgba(0,0,0,0.35); }
+.zoom-cadre .fiche-cadre-barre{ min-width:238px; }
+.zoom-cadre .zc-moins, .zoom-cadre .zc-plus{
+  flex-shrink:0; width:20px; height:17px; border:none; border-radius:3px; cursor:pointer;
+  background:rgba(255,255,255,0.22); color:#fff; font-weight:900; font-size:12px; line-height:1;
+}
+.zoom-cadre .zc-moins:hover, .zoom-cadre .zc-plus:hover{ background:rgba(255,255,255,0.40); }
+.zoom-cadre .zc-pct{
+  width:48px; height:17px; border:1px solid rgba(0,0,0,0.85); border-radius:3px;
+  background:#fff; color:#1d375a; font-weight:800; font-size:11px; text-align:right; padding:0 3px;
+}
+.zoom-cadre .zc-unite{ color:#e5d8a2; font-weight:800; margin-left:-2px; }
 /* v1082 : choix du signataire dans la barre du cadre */
 .fiche-sign-btn{
   flex-shrink:0;
@@ -6973,6 +6992,8 @@ function _ensurePhotoCards() {
       +       '<button id="btnAnnot_fiche_' + i + '" class="item-img-btn fiche-btn" onclick="event.stopPropagation();ouvrirCadreFiche(' + i + ')" title="Poser la fiche (matériel, quantités, temps, notes) — un cadre apparaît, tu le places puis tu confirmes">\u25a3 Étampe</button>'
       /* v1143 : ↩ Annuler vient se coller à droite de ▣ Étampe — c'est ce qu'il défait */
       +       '<button id="btnUndoCrop_' + i + '" class="item-img-btn undo-btn" onclick="event.stopPropagation();undoCardCrop(' + i + ')" title="Aucune étape à annuler sur cette carte" disabled>↩ Annuler</button>'
+      /* v1144 : 🔍 Zoom — cadre posé à la souris, zoom au % près */
+      +       '<button id="btnZoomCadre_' + i + '" class="item-img-btn zoom-cadre-btn" onclick="event.stopPropagation();ouvrirCadreZoom(' + i + ')" title="Zoom : pose le cadre à la souris, règle le % exact, puis ✓">🔍 Zoom</button>'
       /* v1122 : Item et ▣ Étampe sont côte à côte à GAUCHE ; le ressort est
          passé APRÈS eux, donc c'est le bouton Copier qui part à droite. */
       +       '<span class="pch-ressort"></span>'
@@ -8626,8 +8647,9 @@ function fermerCadreFiche() {
   _ficheOublierEcouteurs();
   document.querySelectorAll('.photo-card-zone').forEach(function(z){ z.style.cursor = ''; });
   document.querySelectorAll('.fiche-cadre').forEach(function(el){ el.remove(); });
-  document.querySelectorAll('.fiche-btn.active').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelectorAll('.fiche-btn.active, .zoom-cadre-btn.active').forEach(function(b){ b.classList.remove('active'); });
   _cadreFicheIdx = null;
+  if (typeof _cadreZoomIdx !== 'undefined') _cadreZoomIdx = null;   // v1144
 }
 
 function ouvrirCadreFiche(idx) {
@@ -9669,6 +9691,195 @@ function _stampCaptureRegion(srcDataUrl, xPct, yPct, wPct, hPct, cb) {
   img.src = srcDataUrl;
 }
 
+
+/* ============================================================
+   v1144 — 🔍 ZOOM : UN CADRE QU'ON POSE OÙ ON VEUT, AU % PRÈS
+   Même geste que l'étampe : le cadre suit la souris, la molette règle le
+   zoom, un clic le dépose ; on peut ensuite le glisser où on veut et taper
+   le zoom exact dans la barre (− 250 % +). ✓ applique : la carte ne garde
+   que la zone du cadre, dans les MÊMES proportions que la photo — elle
+   occupe donc exactement la même place qu'avant. ↩ Annuler revient en
+   arrière.
+   Le résultat garde la taille de la photo d'origine (1400 px au plus) et
+   ~130 Ko : aucune consommation de plus qu'une photo normale.
+   Refusé sur un devis de plusieurs pages (règle de la v1072) : pour lire
+   un devis, les boutons + et − agrandissent l'affichage sans rien couper.
+   ============================================================ */
+var ZOOM_CADRE_MIN = 1.1, ZOOM_CADRE_MAX = 6;
+var _zoomCadrePct = 2;          // zoom retenu d'une fois à l'autre
+var _cadreZoomIdx = null;
+
+function ouvrirCadreZoom(idx) {
+  var dejaLa = !!document.querySelector('.zoom-cadre');
+  if (dejaLa && _cadreZoomIdx === idx) { fermerCadreFiche(); return; }
+  fermerCadreFiche();
+  if (typeof _stampMode !== 'undefined' && _stampMode) _stampDeactivate();
+  if (typeof _annotMode !== 'undefined' && _annotMode) _annotDeactivate();
+  setActiveCard(idx);
+
+  var t = fichiersGlobaux[idx];
+  if (!t || !t.data || !t.type || t.type.indexOf('image/') !== 0) {
+    showToast('Ajoute d’abord une photo dans cette carte', 'warning');
+    return;
+  }
+  if (Array.isArray(t.pages) && t.pages.length > 1) {
+    showToast('🔍 Sur un devis de plusieurs pages, utilise + et − pour agrandir sans couper', 'warning');
+    return;
+  }
+  var zone = _zoneOf(idx), img = _imgElOf(idx);
+  if (!zone || !img || !img.offsetWidth) return;
+
+  var cad = document.createElement('div');
+  cad.className = 'fiche-cadre zoom-cadre suit';
+  cad.innerHTML =
+      '<div class="fiche-cadre-barre">'
+    +   '<span class="fiche-cadre-titre">🔍 Zoom</span>'
+    +   '<button class="zc-moins" title="Moins de zoom">−</button>'
+    +   '<input class="zc-pct" type="number" min="' + Math.round(ZOOM_CADRE_MIN * 100) + '" max="' + (ZOOM_CADRE_MAX * 100) + '" step="10" title="Zoom exact, en %">'
+    +   '<span class="zc-unite">%</span>'
+    +   '<button class="zc-plus" title="Plus de zoom">+</button>'
+    +   '<button class="fiche-cadre-ok" title="Zoomer ici">✓</button>'
+    +   '<button class="fiche-cadre-non" title="Annuler">✕</button>'
+    + '</div>'
+    + '<div class="fiche-cadre-poignee" title="Redimensionner"></div>';
+  zone.appendChild(cad);
+  _cadreZoomIdx = idx;
+  var champ = cad.querySelector('.zc-pct');
+  var bouton = document.getElementById('btnZoomCadre_' + idx);
+  if (bouton) bouton.classList.add('active');
+
+  function bornes() {
+    return { L: img.offsetLeft, T: img.offsetTop, W: img.offsetWidth, H: img.offsetHeight };
+  }
+  /* le cadre a toujours les proportions de la photo : zoom = largeur photo / largeur cadre */
+  function poser(z, cx, cy) {
+    z = Math.max(ZOOM_CADRE_MIN, Math.min(ZOOM_CADRE_MAX, z));
+    _zoomCadrePct = z;
+    var b = bornes();
+    var w = b.W / z, h = b.H / z;
+    if (cx == null) { cx = cad.offsetLeft + cad.offsetWidth / 2; cy = cad.offsetTop + cad.offsetHeight / 2; }
+    cad.style.width  = w + 'px';
+    cad.style.height = h + 'px';
+    cad.style.left = Math.max(b.L, Math.min(cx - w / 2, b.L + b.W - w)) + 'px';
+    cad.style.top  = Math.max(b.T, Math.min(cy - h / 2, b.T + b.H - h)) + 'px';
+    if (document.activeElement !== champ) champ.value = Math.round(z * 100);
+    cad.classList.toggle('barre-dessous', (cad.offsetTop - b.T) < 26);
+  }
+  var b0 = bornes();
+  poser(_zoomCadrePct, b0.L + b0.W / 2, b0.T + b0.H / 2);
+
+  function suivre(e) {
+    if (!cad.classList.contains('suit')) return;
+    var zr = zone.getBoundingClientRect();
+    poser(_zoomCadrePct, e.clientX - zr.left + zone.scrollLeft, e.clientY - zr.top + zone.scrollTop);
+  }
+  function molette(e) {
+    e.preventDefault();
+    poser(_zoomCadrePct * (e.deltaY < 0 ? 1.08 : 0.926));
+    if (cad.classList.contains('suit')) suivre(e);
+  }
+  function deposer(e) {
+    if (!cad.classList.contains('suit')) return;
+    e.preventDefault(); e.stopPropagation();
+    cad.classList.remove('suit');
+    zone.removeEventListener('mousemove', suivre);
+    zone.removeEventListener('click', deposer, true);
+    zone.style.cursor = '';
+    showToast('🔍 Glisse le cadre, règle le % puis ✓', 'info');
+  }
+  zone.style.cursor = 'crosshair';
+  _ficheEcouter(zone, 'mousemove', suivre);
+  _ficheEcouter(zone, 'wheel', molette, { passive: false });
+  _ficheEcouter(zone, 'click', deposer, true);
+  showToast('🔍 Molette = zoom · clic = déposer le cadre', 'info');
+
+  /* réglage exact du % */
+  _ficheEcouter(champ, 'change', function(){
+    var v = parseFloat(champ.value);
+    if (v > 0) poser(v / 100);
+  });
+  _ficheEcouter(champ, 'keydown', function(e){
+    e.stopPropagation();
+    if (e.key === 'Enter') { var v = parseFloat(champ.value); if (v > 0) poser(v / 100); champ.blur(); }
+  });
+  ['mousedown', 'click'].forEach(function(ev){
+    _ficheEcouter(champ, ev, function(e){ e.stopPropagation(); });
+  });
+  _ficheEcouter(cad.querySelector('.zc-moins'), 'click', function(e){
+    e.stopPropagation(); e.preventDefault(); poser(Math.round((_zoomCadrePct - 0.1) * 10) / 10);
+  });
+  _ficheEcouter(cad.querySelector('.zc-plus'), 'click', function(e){
+    e.stopPropagation(); e.preventDefault(); poser(Math.round((_zoomCadrePct + 0.1) * 10) / 10);
+  });
+
+  /* déplacer le cadre, ou le redimensionner à la poignée (proportions gardées) */
+  var mvt = null;
+  _ficheEcouter(cad, 'mousedown', function(e){
+    if (e.target.closest('button, input')) return;
+    e.preventDefault(); e.stopPropagation();
+    mvt = { poignee: !!e.target.closest('.fiche-cadre-poignee'), x: e.clientX, y: e.clientY,
+            l: cad.offsetLeft, t: cad.offsetTop, w: cad.offsetWidth };
+  });
+  _ficheEcouter(document, 'mousemove', function(e){
+    if (!mvt || _cadreZoomIdx !== idx) return;
+    var b = bornes(), dx = e.clientX - mvt.x, dy = e.clientY - mvt.y;
+    if (mvt.poignee) {
+      var w = Math.max(b.W / ZOOM_CADRE_MAX, Math.min(mvt.w + dx, b.W / ZOOM_CADRE_MIN));
+      var z = b.W / w;
+      poser(z, mvt.l + w / 2, mvt.t + (w * b.H / b.W) / 2);
+    } else {
+      poser(_zoomCadrePct, mvt.l + cad.offsetWidth / 2 + dx, mvt.t + cad.offsetHeight / 2 + dy);
+    }
+  });
+  _ficheEcouter(document, 'mouseup', function(){ mvt = null; });
+
+  _ficheEcouter(cad.querySelector('.fiche-cadre-non'), 'click', function(e){
+    e.stopPropagation(); e.preventDefault(); fermerCadreFiche();
+  });
+  _ficheEcouter(cad.querySelector('.fiche-cadre-ok'), 'click', function(e){
+    e.stopPropagation(); e.preventDefault();
+    var b = bornes();
+    var x = (cad.offsetLeft - b.L) / b.W, y = (cad.offsetTop - b.T) / b.H;
+    var w = cad.offsetWidth / b.W, h = cad.offsetHeight / b.H;
+    fermerCadreFiche();
+    _zoomAppliquer(idx, x, y, w, h);
+  });
+}
+
+/* Garde la zone choisie, aux dimensions de la photo d'origine. */
+function _zoomAppliquer(idx, x, y, w, h) {
+  var t = fichiersGlobaux[idx];
+  if (!t || !t.data) return;
+  var avant = t.data;
+  var etape = _histoEtape(t, avant, 'zoom');
+  var im = new Image();
+  im.onload = function() {
+    var W = im.naturalWidth, H = im.naturalHeight;
+    var c = document.createElement('canvas');
+    c.width = W; c.height = H;                    // même taille, donc même place
+    var ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(im, x * W, y * H, w * W, h * H, 0, 0, W, H);
+    var q = 0.70, out = c.toDataURL('image/jpeg', q);
+    while (out.length > PHOTO_TEL_PLAFOND && q > 0.48) { q -= 0.04; out = c.toDataURL('image/jpeg', q); }
+    _histoEmpiler(t, etape);
+    _setCardData(idx, out);
+    t.type = 'image/jpeg';
+    t.pages = null; t.pageIdx = 0;
+    _renderGlobalImage();
+    setActiveCard(idx);
+    if (!_midFirebaseLoading) _saveGlobalImage();
+    showToast('🔍 Zoom ' + Math.round(1 / w * 100) + ' % — ↩ Annuler pour revenir', 'success');
+  };
+  im.onerror = function(){ showToast('Photo illisible', 'warning'); };
+  im.src = avant;
+}
+
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape' && _cadreZoomIdx != null) fermerCadreFiche();
+});
+
 // ESC pour annuler le mode étampe
 document.addEventListener('keydown', function(e){
   if (e.key !== 'Escape') return;
@@ -9836,17 +10047,25 @@ function _photoTelephone(dataUrl, cb) {
   img.onload = function() {
     var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
     if (!w || !h) { cb(dataUrl); return; }
-    var dejaBon = Math.max(w, h) <= PHOTO_TEL_MAX
+    /* v1144 : la photo occupe la MÊME place qu'avant (un carré) — une photo
+       verticale ou horizontale reçoit des bords blancs de chaque côté au lieu
+       d'être coupée. Le blanc ne pèse presque rien en JPEG, et il sert : on
+       peut y poser l'étampe sans cacher la photo. */
+    var dejaBon = w === h
+               && w <= PHOTO_TEL_MAX
                && dataUrl.length <= PHOTO_TEL_PLAFOND
                && /^data:image\/jpeg/.test(dataUrl);
     if (dejaBon) { cb(dataUrl); return; }            // aucune perte, aucun calcul
     var r = Math.min(1, PHOTO_TEL_MAX / Math.max(w, h));
+    var pw = Math.round(w * r), ph = Math.round(h * r), cote = Math.max(pw, ph);
     var c = document.createElement('canvas');
-    c.width = Math.round(w * r); c.height = Math.round(h * r);
+    c.width = cote; c.height = cote;
     var ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, cote, cote);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, 0, 0, c.width, c.height);     // image ENTIÈRE, jamais rognée
+    ctx.drawImage(img, Math.round((cote - pw) / 2), Math.round((cote - ph) / 2), pw, ph);   // ENTIÈRE, centrée
     var q = 0.66, res = c.toDataURL('image/jpeg', q);
     while (res.length > PHOTO_TEL_PLAFOND && q > 0.48) { q -= 0.04; res = c.toDataURL('image/jpeg', q); }
     cb(res);
