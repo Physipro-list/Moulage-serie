@@ -6,8 +6,14 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>PhysiPro 📷 Photos v10</title>
-<!-- PhotoSender v8 : TROIS qualités selon la demande (voir PHOTO_MODES).
+<title>PhysiPro 📷 Photos v11</title>
+<!-- PhotoSender v11 : la photo PSM part au FORMAT FINAL — cadrage entier,
+       1400 px au plus long côté, ~130 Ko. La PSM la garde telle quelle : plus
+       de recadrage carré à l'arrivée (qui coupait le haut et le bas d'une photo
+       prise à la verticale, et cachait l'écriture), et 3 à 4 fois moins de
+       données envoyées qu'avec les 2000 px / 500 Ko de la v8, qui étaient de
+       toute façon réduits à 1100 px / 120 Ko par la PSM.
+     PhotoSender v8 : TROIS qualités selon la demande (voir PHOTO_MODES).
      - « atelier » (demandes venues de PSM, source:'psm_simple' ou qualite:'atelier') :
        max 2000 px / qualité 82 % / plafond 500 Ko. Ces photos sont vues en grand,
        annotées et zoomées au bureau puis imprimées dans le PDF — 1200 px / 60 %
@@ -615,8 +621,8 @@
     <!-- v8 : demande venue de PSM — photo d'atelier en haute définition -->
     <div id="badgeAtelier" style="display:none;background:#1d4ed8;color:#fff;border-radius:8px;
          padding:8px 12px;font-size:13px;font-weight:700;margin:6px 0;text-align:center;line-height:1.35">
-      🔧 Photo PSM — haute définition<br>
-      <span style="font-weight:500;opacity:.9">Approche-toi et remplis l'écran avec la pièce : la photo sera agrandie et annotée au bureau.</span>
+      🔧 Photo PSM — cadrage entier<br>
+      <span style="font-weight:500;opacity:.9">Ce que tu vois à l'écran est exactement ce qui arrive au bureau — rien n'est coupé.</span>
     </div>
     <div class="cam-status" id="camStatus">Touchez « Prendre une photo »</div>
     <div class="cam-status" id="camDef" style="font-size:11px;opacity:.6;min-height:0"></div>
@@ -730,17 +736,40 @@ let selectedJob = null;
    donc il ne doit PAS passer à true pour l'atelier, sinon on rognerait la photo.
 
      normal  1200 px / 60 % / 120 Ko  — moulages, questionnements (photos CONSERVÉES)
-     atelier 2000 px / 82 % / 500 Ko  — PSM : photo vue en grand, annotée, zoomée,
+     atelier 1400 px / 66 % / 130 Ko  — PSM (v11) : photo vue en grand, annotée, zoomée,
                                         puis imprimée dans le PDF. Elle ne dort pas
                                         dans Firebase : PSM efface la demande dès
                                         qu'il l'a reçue.
      devis   2400 px / 88 % / 900 Ko  — bon de commande à lire (OCR), cadre de visée */
 var PHOTO_MODES = {
   normal:  { taille: 1200, qualite: 0.60, plafond: 120000, plancher: 0.45, hires: false, mode: 'normal'  },
-  atelier: { taille: 2000, qualite: 0.82, plafond: 500000, plancher: 0.65, hires: false, mode: 'atelier' },
+  /* v11 : 2000 px / 82 % / 500 Ko -> 1400 px / 66 % / 130 Ko. La PSM réduisait
+     de toute façon chaque photo à 1100 px / 120 Ko en la recadrant en carré :
+     les 500 Ko traversaient Firebase pour rien. Maintenant ce qui part est
+     exactement ce qui sera gardé — cadrage entier, aucune seconde compression. */
+  atelier: { taille: 1400, qualite: 0.66, plafond: 130000, plancher: 0.48, hires: false, mode: 'atelier' },
   devis:   { taille: 2400, qualite: 0.88, plafond: 900000, plancher: 0.72, hires: true,  mode: 'devis'   }
 };
 var PHOTO_REGLAGE = PHOTO_MODES.normal;
+
+/* v11 — FILET DE POIDS POUR LA PSM. Si, même à la qualité minimale, la photo
+   dépasse encore son plafond (image très chargée), on la réduit un peu en
+   TAILLE plutôt que d'envoyer plus lourd. Le cadrage ne change jamais : c'est
+   toute l'image, plus petite. Seul le mode « atelier » (PSM) est concerné. */
+function _sousLePlafond(canvas, result, quality) {
+  if (PHOTO_REGLAGE.mode !== 'atelier') return result;
+  var src = canvas, garde = 0;
+  while (result.length > PHOTO_REGLAGE.plafond * 1.15 && garde++ < 6) {
+    var c = document.createElement('canvas');
+    c.width = Math.round(src.width * 0.85); c.height = Math.round(src.height * 0.85);
+    var cx = c.getContext('2d');
+    cx.imageSmoothingQuality = 'high';
+    cx.drawImage(src, 0, 0, c.width, c.height);
+    src = c;
+    result = c.toDataURL('image/jpeg', quality);
+  }
+  return result;
+}
 
 /* Quel mode pour cette demande ? On accepte l'ancienne écriture (hires /
    qualite:'haute') pour ne rien casser des demandes déjà en place. */
@@ -1251,6 +1280,7 @@ function captureFrame() {
   while (result.length > PHOTO_REGLAGE.plafond && quality > plancher) {
     quality -= 0.05; result = canvas.toDataURL('image/jpeg', quality);
   }
+  result = _sousLePlafond(canvas, result, quality);   // v11
   pendingPhotos.push({ dataUrl: result, name: 'photo_' + Date.now() + '.jpg' });
   renderPreviews();
   updateSendBtn();
@@ -1308,7 +1338,7 @@ function readAndCompress(file) {
             quality -= 0.05;
             result = canvas.toDataURL('image/jpeg', quality);
           }
-          resolve(result);
+          resolve(_sousLePlafond(canvas, result, quality));   // v11
         };
         img.src = e.target.result;
       };

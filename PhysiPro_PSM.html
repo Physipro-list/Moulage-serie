@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1141-etampe-exacte]</title>
+<title>PhysiPro — Liste des matériaux [v1142-photo-entiere]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -9812,6 +9812,48 @@ function _cropSquareCompress(dataUrl, cb) {
   img.src = dataUrl;
 }
 
+/* ============================================================
+   v1142 — LA PHOTO DU TÉLÉPHONE ARRIVE ENTIÈRE
+   Chaque photo reçue était recadrée en CARRÉ au centre (v1015). Une photo
+   prise à la verticale perdait donc environ le quart du haut et le quart du
+   bas — c'est là que l'écriture disparaissait. Et elle était compressée une
+   DEUXIÈME fois (1100 px / 60 %) après l'avoir été sur le téléphone.
+   Maintenant :
+     - le cadrage est celui que tu voyais à l'écran du téléphone, en entier ;
+     - PhotoSender v11 envoie déjà le format final (1400 px, ~130 Ko) : la
+       photo est gardée TELLE QUELLE, sans seconde compression ;
+     - seulement si elle arrive plus grosse (vieille version du téléphone),
+       elle est réduite aux mêmes limites — jamais recadrée.
+   La carte l'affiche dans ses proportions exactes (contain), donc rien
+   n'est caché à l'écran non plus.
+   ============================================================ */
+var PHOTO_TEL_MAX = 1400;        // plus long côté, en pixels
+var PHOTO_TEL_PLAFOND = 140000;  // ~130 Ko d'image, en longueur de data URL
+
+function _photoTelephone(dataUrl, cb) {
+  var img = new Image();
+  img.onload = function() {
+    var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    if (!w || !h) { cb(dataUrl); return; }
+    var dejaBon = Math.max(w, h) <= PHOTO_TEL_MAX
+               && dataUrl.length <= PHOTO_TEL_PLAFOND
+               && /^data:image\/jpeg/.test(dataUrl);
+    if (dejaBon) { cb(dataUrl); return; }            // aucune perte, aucun calcul
+    var r = Math.min(1, PHOTO_TEL_MAX / Math.max(w, h));
+    var c = document.createElement('canvas');
+    c.width = Math.round(w * r); c.height = Math.round(h * r);
+    var ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, c.width, c.height);     // image ENTIÈRE, jamais rognée
+    var q = 0.66, res = c.toDataURL('image/jpeg', q);
+    while (res.length > PHOTO_TEL_PLAFOND && q > 0.48) { q -= 0.04; res = c.toDataURL('image/jpeg', q); }
+    cb(res);
+  };
+  img.onerror = function() { cb(dataUrl); };
+  img.src = dataUrl;
+}
+
 // Idem à partir d'un canvas déjà redressé par l'EXIF
 function _cropSquareCompressFromCanvas(srcCanvas, cb) {
   var w = srcCanvas.width, h = srcCanvas.height;
@@ -10200,7 +10242,7 @@ function _fillCardsWithPhotos(photos, startIdx) {
       if (!_midFirebaseLoading) _saveGlobalImage();
       return;
     }
-    _cropSquareCompress(queue.shift(), function(compressed) {   // v1015 : carré parfait
+    _photoTelephone(queue.shift(), function(compressed) {   // v1142 : entière, pas de carré
       var t = fichiersGlobaux[idx];
       if (!t) { t = fichiersGlobaux[idx] = _newFileTab('Photo ' + (idx + 1)); }
       t.data = compressed;
@@ -10250,7 +10292,7 @@ function _appendPhotosToCard(idx, photos) {
       _renderGlobalImage();
       return;
     }
-    _cropSquareCompress(queue.shift(), function(carre) {
+    _photoTelephone(queue.shift(), function(carre) {        // v1142 : entière, pas de carré
       var a = _cardPhotos(t);
       a.push(carre);
       t.photoIdx = a.length - 1;
@@ -10308,7 +10350,8 @@ function _requestMobilePhoto(target) {
     status: 'waiting',
     timestamp: Date.now(),
     source: 'psm_simple',
-    /* v1049 : réclame la qualité « atelier » au téléphone (PhotoSender v8+) —
+    /* v1142 : « atelier » = 1400 px / ~130 Ko, cadrage entier (PhotoSender v11).
+       v1049 : réclame la qualité « atelier » au téléphone (PhotoSender v8+) —
        2000 px / 82 % au lieu de 1200 px / 60 %. La photo est agrandie, annotée
        et imprimée dans le PDF, donc elle a besoin de la définition. Elle ne
        reste pas dans Firebase : la demande est effacée dès réception, plus bas.
