@@ -361,6 +361,8 @@ body.col-resizing *{cursor:col-resize!important;}
 .vrf-pas-tab td{padding:3px 6px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:top;font-family:Consolas,monospace;white-space:nowrap;}
 .vrf-pas-no{font-weight:800;color:#e2e8f0;}
 .vrf-pas-rien{color:rgba(255,255,255,.3);}
+.vrf-pas-ok{color:#22c55e;font-weight:900;}
+.vrf-pas-ko{color:#ef4444;font-weight:900;font-size:13px;}
 .vrf-pas-info{color:var(--text-muted);font-size:10.5px;padding:3px 0;}
 .vrf-found-row{display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05);font-family:Consolas,monospace;}
 .vrf-found-row span:last-child{color:var(--text-muted);font-family:'Segoe UI',sans-serif;font-size:10px;}
@@ -707,8 +709,16 @@ var PASSAGES = (function () {
     if (!s) return '';
     var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
     if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
-    m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
-    if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4}|\d{2})\b/);
+    if (m) return (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    /* « lundi 5 janvier 2026 », « 5 janv. 2026 » */
+    var MOIS = ['janv', 'f\u00e9v', 'mars', 'avr', 'mai', 'juin', 'juil', 'ao\u00fb', 'sept', 'oct', 'nov', 'd\u00e9c'];
+    var t = s.toLowerCase().replace(/fev/, 'f\u00e9v').replace(/aou/, 'ao\u00fb').replace(/dec/, 'd\u00e9c');
+    m = t.match(/(\d{1,2})(?:er)?\s+([a-z\u00e0-\u00ff]+)\.?\s+(\d{4})/);
+    if (m) {
+      for (var i = 0; i < 12; i++) if (m[2].indexOf(MOIS[i]) === 0)
+        return m[3] + '-' + ('0' + (i + 1)).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    }
     return '';
   }
   function _memo() { try { return JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { return {}; } }
@@ -5004,21 +5014,26 @@ var VERIF = (function () {
     return out;
   }
 
-  function _addRows(idx, month, rows) {
+  var _archiveDates = null;   // 2026-09-28 : { clé: { 'AAAA-MM-JJ': true } } — dates d'atelier des archives
+  function _addRows(idx, month, rows, dates) {
     if (!rows) return;
     var arr = Array.isArray(rows) ? rows : Object.keys(rows).map(function (k) { return rows[k]; });
     arr.forEach(function (r) {
       if (!r || r.type !== 'entry') return;
+      if (dates && (r.bon || r.bonCmd)) {
+        var ck = PASSAGES.cle(r.bon || r.bonCmd), dj = PASSAGES.dateIso(r.entryDate || r.timestamp);
+        if (ck && dj) { (dates[ck] = dates[ck] || {})[dj] = true; }
+      }
       var b = _norm(r.bon || r.bonCmd || '');
       if (!b) return;
       if (!idx[b] || month > idx[b]) idx[b] = month;   // garder le mois le plus récent
     });
   }
 
-  function _localIndex() {
+  function _localIndex(dates) {
     var idx = {};
     var data = loadDLocal('inspection');
-    Object.keys(data).forEach(function (m) { _addRows(idx, m, data[m]); });
+    Object.keys(data).forEach(function (m) { _addRows(idx, m, data[m], dates); });
     return idx;
   }
 
@@ -5027,9 +5042,10 @@ var VERIF = (function () {
     if (!fbDb || !fbUser) return Promise.reject(new Error('Firebase non connecté'));
     return fbDb.ref('archives/inspection').once('value').then(function (snap) {
       var arch = snap.val() || {};
-      var idx = {};
-      Object.keys(arch).forEach(function (m) { _addRows(idx, m, arch[m]); });
+      var idx = {}, dts = {};
+      Object.keys(arch).forEach(function (m) { _addRows(idx, m, arch[m], dts); });
       _archiveIndex = idx;
+      _archiveDates = dts;
       return idx;
     });
   }
@@ -5078,7 +5094,11 @@ var VERIF = (function () {
     _loadArchives().then(function (a) { return { arch: a, ok: true }; })
       .catch(function (e) { console.warn('[VERIF] Archives:', e && e.message); return { arch: {}, ok: false }; })
       .then(function (res) {
-        var local = _localIndex();
+        var datesAtelier = {};
+        var local = _localIndex(datesAtelier);
+        Object.keys(_archiveDates || {}).forEach(function (k) {
+          Object.keys(_archiveDates[k]).forEach(function (d) { (datesAtelier[k] = datesAtelier[k] || {})[d] = true; });
+        });
         var found = [], missing = [];
         list.forEach(function (num) {
           var k = _norm(num);
@@ -5088,7 +5108,7 @@ var VERIF = (function () {
         });
         _showResults(list.length, found, missing, res.ok);
         _status('');
-        PASSAGES_VERIF.afficher(list);   // 2026-09-28 : dates par département
+        PASSAGES_VERIF.afficher(list, datesAtelier);   // 2026-09-28 : dates par département
       })
       .then(function () { _busy = false; btn.disabled = false; },
             function (e) { _busy = false; btn.disabled = false; _status(''); showToast('❌ ' + e.message, 'error'); });
@@ -5159,13 +5179,21 @@ var PASSAGES_VERIF = (function () {
   }
 
   function _fr(iso) { var p = String(iso).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso; }
+  /* ✓ vert + date(s) si la commande est passée ; ✗ rouge sinon */
   function _dates(o) {
-    if (!o || typeof o !== 'object') return '<span class="vrf-pas-rien">—</span>';
-    var k = Object.keys(o).sort();
-    return k.map(_fr).join('<br>');
+    var k = (o && typeof o === 'object') ? Object.keys(o).filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); }).sort() : [];
+    if (!k.length) return '<span class="vrf-pas-ko" title="Pas passée">\u2717</span>';
+    return k.map(function (d) { return '<span class="vrf-pas-ok">\u2713</span> ' + _fr(d); }).join('<br>');
+  }
+  /* réunit deux ensembles de dates { 'AAAA-MM-JJ': true } */
+  function _union(a, b) {
+    var o = {};
+    [a, b].forEach(function (x) { if (x && typeof x === 'object') Object.keys(x).forEach(function (d) { o[d] = true; }); });
+    return o;
   }
 
-  function afficher(liste) {
+  function afficher(liste, datesAtelier) {
+    datesAtelier = datesAtelier || {};
     var zone = document.getElementById('vrfPassages');
     if (!zone) return;
     if (!liste.length) { zone.classList.remove('show'); return; }
@@ -5184,14 +5212,23 @@ var PASSAGES_VERIF = (function () {
       liste.forEach(function (num, k) {
         var e = _cache[cles[k]], v = (e && e.v) || null;
         if (v) nb++;
+        /* atelier : l'index ET les lignes d'Inspection Atelier déjà en mémoire (page + archives) */
+        var at = _union(v && v.atelier, datesAtelier[cles[k]]);
         h += '<tr><td class="vrf-pas-no">' + esc(num) + '</td>'
-           + '<td>' + _dates(v && v.atelier) + '</td>'
+           + '<td>' + _dates(at) + '</td>'
            + '<td>' + _dates(v && v.couture) + '</td>'
            + '<td>' + _dates(v && v.finale) + '</td></tr>';
       });
       h += '</tbody></table></div>';
-      if (nb < liste.length) h += '<div class="vrf-pas-info">« — » = aucune date enregistrée pour ce département.</div>';
+      h += '<div class="vrf-pas-info"><span class="vrf-pas-ok">\u2713</span> passée, avec sa date \u00b7 '
+         + '<span class="vrf-pas-ko">\u2717</span> pas encore passée dans ce département</div>';
       zone.innerHTML = h;
+      /* les dates d'atelier trouvées dans la page complètent l'index (seulement ce qui manque) */
+      var aNoter = [];
+      Object.keys(datesAtelier).forEach(function (c) {
+        Object.keys(datesAtelier[c]).forEach(function (d) { aNoter.push({ bon: c, date: d }); });
+      });
+      PASSAGES.noter('atelier', aNoter);
     }).catch(function (e) {
       zone.innerHTML = '<div class="vrf-pas-info">⚠️ Dates de passage illisibles (' + esc(e && e.message || '') + ').'
                      + ' Vérifie la règle Firebase du nœud « passagesCommandes ».</div>';
@@ -5243,7 +5280,17 @@ var PASSAGES_VERIF = (function () {
           if (x.type === 'entry') ajouter('atelier', x.bon, x.entryDate || x.timestamp);
         });
         lignes(r[2]).forEach(function (x) { ajouter('couture', x.bonCmd, x.dateSortie); });
-        lignes(r[3]).forEach(function (x) { if (x.type === 'entry') ajouter('finale', x.cmd, x.date); });
+        /* finale : une entrée sans date prend celle de la ligne-date qui la précède */
+        Object.keys(r[3] || {}).forEach(function (m) {
+          var arr = r[3][m], jour = '';
+          if (!arr) return;
+          if (!Array.isArray(arr)) arr = Object.keys(arr).map(function (x) { return arr[x]; });
+          arr.forEach(function (x) {
+            if (!x) return;
+            if (x.type === 'date' && x.dateLabel) jour = x.dateLabel;
+            if (x.type === 'entry') ajouter('finale', x.cmd, x.date || jour);
+          });
+        });
         /* écriture par paquets de 400 chemins */
         var cles = Object.keys(maj), i = 0;
         function paquet() {

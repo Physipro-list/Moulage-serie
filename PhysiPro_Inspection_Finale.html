@@ -372,8 +372,16 @@ var PASSAGES = (function () {
     if (!s) return '';
     var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
     if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
-    m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
-    if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4}|\d{2})\b/);
+    if (m) return (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    /* « lundi 5 janvier 2026 », « 5 janv. 2026 » */
+    var MOIS = ['janv', 'f\u00e9v', 'mars', 'avr', 'mai', 'juin', 'juil', 'ao\u00fb', 'sept', 'oct', 'nov', 'd\u00e9c'];
+    var t = s.toLowerCase().replace(/fev/, 'f\u00e9v').replace(/aou/, 'ao\u00fb').replace(/dec/, 'd\u00e9c');
+    m = t.match(/(\d{1,2})(?:er)?\s+([a-z\u00e0-\u00ff]+)\.?\s+(\d{4})/);
+    if (m) {
+      for (var i = 0; i < 12; i++) if (m[2].indexOf(MOIS[i]) === 0)
+        return m[3] + '-' + ('0' + (i + 1)).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    }
     return '';
   }
   function _memo() { try { return JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { return {}; } }
@@ -723,9 +731,11 @@ function pushFB(){
       console.log('✅ Firebase saved: '+totalEntries+' entries');
       /* 2026-09-28 : dates de passage — seulement les entrées pas encore notées */
       var _pp=[];
-      Object.keys(clean).forEach(function(m){ (clean[m]||[]).forEach(function(r){
-        if(r&&r.type==='entry'&&r.cmd)_pp.push({bon:r.cmd,date:r.date});
-      }); });
+      Object.keys(clean).forEach(function(m){ var jour='';
+        (clean[m]||[]).forEach(function(r){
+          if(r&&r.type==='date'&&r.dateLabel)jour=r.dateLabel;       // ligne-date du tableau
+          if(r&&r.type==='entry'&&r.cmd)_pp.push({bon:r.cmd,date:r.date||jour});
+        }); });
       PASSAGES.noter('finale',_pp);
     }).catch(function(err){
       console.error('❌ Firebase error:',err.message);
