@@ -362,6 +362,7 @@ body.col-resizing *{cursor:col-resize!important;}
 .vrf-pas-no{font-weight:800;color:#e2e8f0;}
 .vrf-pas-rien{color:rgba(255,255,255,.3);}
 .vrf-pas-ok{color:#22c55e;font-weight:900;}
+.vrf-pas-alerte{color:#fbbf24;font-size:10.5px;padding:4px 0 0;font-weight:700;}
 .vrf-pas-ko{color:#ef4444;font-weight:900;font-size:13px;}
 .vrf-pas-info{color:var(--text-muted);font-size:10.5px;padding:3px 0;}
 .vrf-found-row{display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05);font-family:Consolas,monospace;}
@@ -746,7 +747,16 @@ var PASSAGES = (function () {
     }).catch(function (e) { console.warn('[PASSAGES] écriture refusée :', e && e.message); });
   }
 
-  return { NOEUD: NOEUD, cle: cle, dateIso: dateIso, noter: noter };
+  /* seulement le mois courant et le précédent : l'historique est couvert par
+     le rattrapage unique — on n'a jamais à le renvoyer */
+  function moisRecents(m) {
+    var d = new Date(), a = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    d.setDate(1); d.setMonth(d.getMonth() - 1);
+    var b = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    return m === a || m === b;
+  }
+
+  return { NOEUD: NOEUD, cle: cle, dateIso: dateIso, noter: noter, moisRecents: moisRecents };
 })();
 window.PASSAGES = PASSAGES;
 
@@ -1481,7 +1491,7 @@ function pushToFB(dept) {
       /* 2026-09-28 : dates de passage — seulement les entrées pas encore notées */
       if (dept === 'inspection') {
         var _pp = [];
-        Object.keys(data).forEach(function (m) {
+        Object.keys(data).filter(PASSAGES.moisRecents).forEach(function (m) {
           (Array.isArray(data[m]) ? data[m] : []).forEach(function (r) {
             if (r && r.type === 'entry' && r.bon) _pp.push({ bon: r.bon, date: r.entryDate || r.timestamp });
           });
@@ -5161,6 +5171,7 @@ window.VERIF = VERIF;
    ══════════════════════════════════════════════════════════════════════ */
 var PASSAGES_VERIF = (function () {
   var _cache = {};                  // clé -> { v, t }
+  var _etatRattrapage;              // undefined = pas lu · null = jamais fait · objet = fait
   var DUREE = 10 * 60 * 1000;
   var PAQUET = 20;
 
@@ -5204,7 +5215,11 @@ var PASSAGES_VERIF = (function () {
     zone.innerHTML = '<div class="vrf-pas-info">📅 Lecture des dates de passage…</div>';
     zone.classList.add('show');
     var cles = liste.map(function (n) { return PASSAGES.cle(n); });
-    _lire(cles).then(function () {
+    var etat = (_etatRattrapage !== undefined) ? Promise.resolve()
+      : fbDb.ref(PASSAGES.NOEUD + '/_rattrapage').once('value')
+          .then(function (s) { _etatRattrapage = s.val() || null; })
+          .catch(function () { _etatRattrapage = null; });
+    Promise.all([_lire(cles), etat]).then(function () {
       var nb = 0;
       var h = '<div class="vrf-pas-titre">📅 Passages dans les départements</div>'
             + '<div class="vrf-pas-tab"><table><thead><tr><th>Commande</th><th>Insp. Atelier</th>'
@@ -5221,12 +5236,26 @@ var PASSAGES_VERIF = (function () {
       });
       h += '</tbody></table></div>';
       h += '<div class="vrf-pas-info"><span class="vrf-pas-ok">\u2713</span> passée, avec sa date \u00b7 '
-         + '<span class="vrf-pas-ko">\u2717</span> pas encore passée dans ce département</div>';
+         + '<span class="vrf-pas-ko">\u2717</span> pas encore passée dans ce département'
+         + ' (en couture : \u2717 = pas encore de date de sortie)</div>';
+      /* l'état de l'historique, pour savoir si un \u2717 veut dire « pas passée » ou « pas encore indexée » */
+      if (_etatRattrapage && _etatRattrapage.date) {
+        h += '<div class="vrf-pas-info">\ud83d\udcda Historique rattrapé le ' + _fr(String(_etatRattrapage.date).slice(0, 10))
+           + (_etatRattrapage.entrees ? ' (' + _etatRattrapage.entrees + ' dates)' : '') + '.</div>';
+      } else {
+        h += '<div class="vrf-pas-alerte">\u26a0\ufe0f Le rattrapage de l\u2019historique n\u2019a pas encore été fait : '
+           + 'les colonnes Couture et Finale ne montrent que ce qui a été enregistré depuis la mise en ligne. '
+           + 'Utilise le bouton \ud83d\udcda Rattrapage de l\u2019historique (compte atelieratp).</div>';
+      }
       zone.innerHTML = h;
       /* les dates d'atelier trouvées dans la page complètent l'index (seulement ce qui manque) */
+      /* seulement les commandes de CETTE liste — jamais toutes les archives */
       var aNoter = [];
-      Object.keys(datesAtelier).forEach(function (c) {
-        Object.keys(datesAtelier[c]).forEach(function (d) { aNoter.push({ bon: c, date: d }); });
+      cles.forEach(function (c) {
+        var dejaIdx = (_cache[c] && _cache[c].v && _cache[c].v.atelier) || {};
+        Object.keys(datesAtelier[c] || {}).forEach(function (d) {
+          if (!dejaIdx[d]) aNoter.push({ bon: c, date: d });   // déjà dans l'index : rien à envoyer
+        });
       });
       PASSAGES.noter('atelier', aNoter);
     }).catch(function (e) {
@@ -5306,6 +5335,7 @@ var PASSAGES_VERIF = (function () {
       .then(function () {
         if (b) b.style.display = 'none';
         _cache = {};
+        _etatRattrapage = { date: new Date().toISOString(), entrees: n };
         showToast('✅ Historique rattrapé : ' + n + ' dates de passage enregistrées', 'success');
       })
       .catch(function (e) {
