@@ -5076,7 +5076,7 @@ var VERIF = (function () {
   function _el(id) { return document.getElementById(id); }
   function _status(t) { var e = _el('vrfStatus'); if (e) e.textContent = t || ''; }
 
-  function _showResults(total, found, missing, archivesOk) {
+  function _showResults(total, found, missing, archivesOk, viaIndex) {
     var ta = _el('vrfText');
     ta.value = missing.join('\n');
     var lbl = _el('vrfLabel');
@@ -5085,7 +5085,8 @@ var VERIF = (function () {
       : '✅ Toutes les commandes ont déjà passé en Inspection Atelier';
     lbl.className = 'vrf-label done';
     _el('vrfHint').textContent = archivesOk
-      ? 'Recherche faite dans tous les mois, archives comprises.'
+      ? (viaIndex ? 'Recherche faite dans tous les mois, par l\u2019index des passages (sans relire les archives).'
+                  : 'Recherche faite dans tous les mois, archives comprises.')
       : '⚠️ Archives inaccessibles — recherche faite seulement dans les mois chargés dans la page (mois courant et précédent).';
     _el('vrfSum').innerHTML =
       '<div class="vrf-pill tot"><b>' + total + '</b>analysés</div>' +
@@ -5114,9 +5115,26 @@ var VERIF = (function () {
     if (!list.length) { showToast('Collez au moins un numéro', 'error'); return; }
     _busy = true;
     var btn = _el('vrfGo'); btn.disabled = true;
-    _status(_archiveIndex ? 'Analyse…' : 'Lecture des archives…');
-    _loadArchives().then(function (a) { return { arch: a, ok: true }; })
-      .catch(function (e) { console.warn('[VERIF] Archives:', e && e.message); return { arch: {}, ok: false }; })
+    _status('Analyse…');
+    /* 2026-09-28 — une fois l'historique rattrapé, l'INDEX répond : une petite fiche
+       par numéro (~0,1 Ko) au lieu de relire toutes les archives (~300 Ko et plus).
+       Sans rattrapage à jour, on garde l'ancienne méthode, par les archives. */
+    PASSAGES_VERIF.etat().then(function (aJour) {
+      if (aJour) {
+        return PASSAGES_VERIF.fiches(list).then(function (fiches) {
+          var arch = {};
+          list.forEach(function (num) {
+            var f = fiches[PASSAGES.cle(num)], at = f && f.atelier;
+            var d = (at && typeof at === 'object') ? Object.keys(at).filter(function (x) { return /^\d{4}-\d{2}-\d{2}$/.test(x); }).sort().pop() : null;
+            if (d) arch[_norm(num)] = d.slice(0, 7);   // mois le plus récent, comme avant
+          });
+          return { arch: arch, ok: true, viaIndex: true };
+        });
+      }
+      _status(_archiveIndex ? 'Analyse…' : 'Lecture des archives…');
+      return _loadArchives().then(function (a) { return { arch: a, ok: true }; });
+    })
+      .catch(function (e) { console.warn('[VERIF] Recherche:', e && e.message); return { arch: {}, ok: false }; })
       .then(function (res) {
         var datesAtelier = {};
         var local = _localIndex(datesAtelier);
@@ -5134,7 +5152,7 @@ var VERIF = (function () {
           if (local[k] && res.arch[k] && res.arch[k] > local[k]) m = res.arch[k];
           if (m) found.push({ num: num, month: m }); else missing.push(num);
         });
-        _showResults(list.length, found, missing, res.ok);
+        _showResults(list.length, found, missing, res.ok, res.viaIndex);
         _status('');
         PASSAGES_VERIF.majBouton();
         PASSAGES_VERIF.afficher(list, datesAtelier);   // 2026-09-28 : dates par département
@@ -5375,6 +5393,8 @@ var PASSAGES_VERIF = (function () {
     var b = document.getElementById('vrfRattrapage');
     if (!b) return;
     if (!fbDb || !fbUser) { b.style.display = 'none'; return; }
+    /* déjà su à jour : plus rien à lire, jamais */
+    if (_aJour(_etatRattrapage)) { b.style.display = 'none'; return; }
     fbDb.ref(PASSAGES.NOEUD + '/_rattrapage').once('value').then(function (s) {
       _etatRattrapage = s.val() || null;
       b.style.display = _aJour(_etatRattrapage) ? 'none' : '';
@@ -5455,7 +5475,25 @@ var PASSAGES_VERIF = (function () {
       });
   }
 
-  return { afficher: afficher, majBouton: majBouton, rattraper: rattraper };
+  /* le rattrapage (version avec noms) est-il fait ? — lu une seule fois par session */
+  function etat() {
+    if (_etatRattrapage !== undefined) return Promise.resolve(_aJour(_etatRattrapage));
+    if (!fbDb || !fbUser) return Promise.resolve(false);
+    return fbDb.ref(PASSAGES.NOEUD + '/_rattrapage').once('value')
+      .then(function (s) { _etatRattrapage = s.val() || null; return _aJour(_etatRattrapage); })
+      .catch(function () { return false; });
+  }
+  /* les fiches de la liste, par le même cache que le tableau : aucune double lecture */
+  function fiches(liste) {
+    var cles = liste.map(function (n) { return PASSAGES.cle(n); });
+    return _lire(cles).then(function () {
+      var o = {};
+      cles.forEach(function (c) { o[c] = _cache[c] ? _cache[c].v : null; });
+      return o;
+    });
+  }
+
+  return { afficher: afficher, majBouton: majBouton, rattraper: rattraper, etat: etat, fiches: fiches };
 })();
 window.PASSAGES_VERIF = PASSAGES_VERIF;
 
