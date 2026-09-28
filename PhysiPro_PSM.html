@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1144-zoom-bords]</title>
+<title>PhysiPro — Liste des matériaux [v1145-barres]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -2633,7 +2633,7 @@ label.footer-btn-label{
 /* v1115 : champ du nom de l'item, à droite du bouton Étampes */
 .pch-item{
   display:inline-flex; align-items:center; gap:4px; flex-shrink:0;
-  margin-left:8px; padding:1px 6px;
+  margin-left:6px; padding:1px 6px;   /* v1145 : collé au champ Item */
   border:1px solid rgba(165,171,181,0.55); border-radius:3px;
   background:rgba(0,0,0,0.22);
   color:#8ea6c5; font-size:8.5px; font-weight:800; letter-spacing:.3px;
@@ -2657,6 +2657,18 @@ label.footer-btn-label{
 .pch-pousse{ flex:1 1 auto; min-width:0; }
 /* v1118 : les deux loupes, discrètes
    v1119 : resserrées pour que les quatre boutons du groupe tiennent. */
+/* v1145 : le bouton flottant « Agrandir PDF », en bas du document */
+.doc-large-flottant{
+  position:fixed; z-index:45;
+  height:22px; padding:0 9px;
+  border:1px solid rgba(0,0,0,0.85); border-radius:4px;
+  background:rgba(29,55,90,0.88); color:#e8ebf0;
+  font-family:inherit; font-size:10px; font-weight:800; letter-spacing:.2px;
+  white-space:nowrap; cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,0.45);
+}
+.doc-large-flottant:hover{ background:#4a8ef5; color:#fff; }
+.doc-large-flottant.actif{ background:#ceab51; color:#213e64; }
 /* v1136 : le bouton d'agrandissement du document, à côté du champ Item.
    v1137 : il porte son nom en toutes lettres ; la zone Item se resserre
    d'autant pour que les deux tiennent côte à côte sans pousser le reste. */
@@ -3594,6 +3606,8 @@ label.item-img-btn{ user-select:none; }
         <input type="file" id="globalImgFile" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip" style="display:none" onchange="_handleGlobalFile(this.files);this.value=''">
         <span class="footer-sep"></span>
         <!-- Sorties -->
+        <!-- v1145 : 📋 Copier quitte l'en-tête des cartes ; il copie la photo de la carte active -->
+        <button class="footer-btn" onclick="copierPhoto(currentFileTabIdx)" title="Copier la photo de la soumission active — ensuite Ctrl+V pour la coller ailleurs">📋 Copier</button>
         <button class="footer-btn" onclick="exportCostXlsm()" title="Exporter vers le template Excel coût de revient">📊 Coût</button>
         <button class="footer-btn" onclick="openPrintView()" title="Imprimer (choix : soumission, photo de la carte, PDF original)">🖨️ Imprimer</button>
         <span class="footer-sep"></span>
@@ -6974,30 +6988,14 @@ function _ensurePhotoCards() {
       +              'onkeydown="if(event.key===\'Enter\'){this.blur();}" '
       +              'onmousedown="event.stopPropagation();setActiveCard(' + i + ')">'
       +       '</span>'
-      /* v1136 : bouton d'agrandissement du document, collé au champ Item.
-         Il ne touche qu'à la colonne du document : un clic l'étend sur toute
-         la largeur de la soumission, un autre le ramène. La hauteur ne bouge
-         jamais. */
-      +       '<button class="item-img-btn doc-large-btn" id="btnDocLarge_' + i + '" '
-      +              'onclick="event.stopPropagation();basculerDocLarge(' + i + ')" '
-      +              'title="Agrandir le document sur toute la largeur \u2014 recliquer pour revenir">\u26f6 Agrandir PDF</button>'
-      +       '<div class="pch-photos-nav" id="photosNav_' + i + '"></div>'
-      /* v1123 : un ressort de chaque côté du bouton ▣ Étampe le ramène au
-         milieu de la barre, l'item restant calé tout à gauche. */
-      +       '<span class="pch-ressort"></span>'
-      /* v1118 : les boutons 🔍 Zoom et ◻ forme sont retirés. Le recadrage
-         détruisait l'image et n'avait plus sa place depuis que les devis
-         multipages existent ; la loupe + ci-dessous les remplace. */
-
+      /* v1145 : ▣ Étampe, ↩ Annuler et 🔍 Zoom collés au champ Item, à gauche.
+         « Agrandir PDF » est descendu en bas du document (bouton flottant) et
+         📋 Copier est parti dans la barre du bas, à gauche de 📊 Coût. */
       +       '<button id="btnAnnot_fiche_' + i + '" class="item-img-btn fiche-btn" onclick="event.stopPropagation();ouvrirCadreFiche(' + i + ')" title="Poser la fiche (matériel, quantités, temps, notes) — un cadre apparaît, tu le places puis tu confirmes">\u25a3 Étampe</button>'
-      /* v1143 : ↩ Annuler vient se coller à droite de ▣ Étampe — c'est ce qu'il défait */
       +       '<button id="btnUndoCrop_' + i + '" class="item-img-btn undo-btn" onclick="event.stopPropagation();undoCardCrop(' + i + ')" title="Aucune étape à annuler sur cette carte" disabled>↩ Annuler</button>'
-      /* v1144 : 🔍 Zoom — cadre posé à la souris, zoom au % près */
       +       '<button id="btnZoomCadre_' + i + '" class="item-img-btn zoom-cadre-btn" onclick="event.stopPropagation();ouvrirCadreZoom(' + i + ')" title="Zoom : pose le cadre à la souris, règle le % exact, puis ✓">🔍 Zoom</button>'
-      /* v1122 : Item et ▣ Étampe sont côte à côte à GAUCHE ; le ressort est
-         passé APRÈS eux, donc c'est le bouton Copier qui part à droite. */
+      +       '<div class="pch-photos-nav" id="photosNav_' + i + '"></div>'
       +       '<span class="pch-ressort"></span>'
-      +       '<button class="item-img-btn copy-btn" onclick="event.stopPropagation();copierPhoto(' + i + ')" title="Copier cette photo — ensuite Ctrl+V pour la coller ailleurs">📋</button>'
       +     '</div>'
       +     '<div class="pch-rest">'
       /* v1118 : tout ce groupe est poussé vers la DROITE — voir .pch-pousse */
@@ -7032,6 +7030,11 @@ function _ensurePhotoCards() {
       +     '</div>'
       +   '</div>'
       +   '<div class="photo-card-body">'
+      /* v1145 : « Agrandir PDF » flotte en bas du document et suit le défilement */
+      +     '<button class="doc-large-flottant" id="btnDocLarge_' + i + '" '
+      +            'onmousedown="event.stopPropagation()" '
+      +            'onclick="event.stopPropagation();setActiveCard(' + i + ');basculerDocLarge(' + i + ')" '
+      +            'title="Agrandir le document sur toute la largeur \u2014 recliquer pour revenir">\u26f6 Agrandir PDF</button>'
       +     '<div class="item-img-zone global-img-zone photo-card-zone" id="globalImgZone_' + i + '" tabindex="0">'
       +       '<div class="item-img-placeholder" id="globalImgPlaceholder_' + i + '">📋 Ctrl+V pour coller<br>ou glisser un fichier ici</div>'
       +     '</div>'
@@ -7861,11 +7864,50 @@ function _deleteItemAtIdx(idx) {
 }
 
 // ---------- Rendu de TOUTES les cartes photos (v1007) ----------
+/* ============================================================
+   v1145 — « AGRANDIR PDF » EN BAS DU DOCUMENT, QUI SUIT LE DÉFILEMENT
+   Le bouton est posé PAR-DESSUS le document, dans son coin bas-gauche. Quand
+   on descend dans la page (ou dans un devis de plusieurs pages), il reste au
+   bas de la partie visible du document, au-dessus de la barre de boutons —
+   toujours sous la main, jamais hors de l'écran.
+   ============================================================ */
+var _docLargeRaf = null;
+function _placerBoutonsAgrandir() {
+  if (_docLargeRaf) return;
+  _docLargeRaf = requestAnimationFrame(function(){
+    _docLargeRaf = null;
+    var barre = document.querySelector('.footer-left-bar');
+    var basEcran = window.innerHeight;
+    if (barre) { var rb = barre.getBoundingClientRect(); if (rb.top > 0 && rb.top < basEcran) basEcran = rb.top; }
+    /* on reste dans la partie visible de la pile des soumissions */
+    var pile = document.getElementById('photoCardsStack'), hautVu = 0;
+    if (pile) { var rp = pile.getBoundingClientRect(); hautVu = Math.max(0, rp.top); basEcran = Math.min(basEcran, rp.bottom); }
+    for (var i = 0; i < fichiersGlobaux.length; i++) {
+      var b = document.getElementById('btnDocLarge_' + i);
+      if (!b) continue;
+      var z = _zoneOf(i), t = fichiersGlobaux[i];
+      if (!z || !t || !t.data) { b.style.display = 'none'; continue; }
+      var r = z.getBoundingClientRect();
+      var bas = Math.min(r.bottom, basEcran) - 8;
+      var haut = Math.max(r.top, hautVu) + 8;
+      var h = b.offsetHeight || 22;
+      if (r.width <= 0 || bas - h < haut) { b.style.display = 'none'; continue; }
+      b.style.display = '';
+      b.style.left = Math.round(r.left + 8) + 'px';
+      b.style.top  = Math.round(bas - h) + 'px';
+      b.classList.toggle('actif', (ZOOM_DOC[i] || 1) > 1);
+    }
+  });
+}
+window.addEventListener('scroll', _placerBoutonsAgrandir, true);   // page ET zones de devis
+window.addEventListener('resize', _placerBoutonsAgrandir);
+
 function _renderGlobalImage() {
   _ensurePhotoCards();
   for (var i = 0; i < fichiersGlobaux.length; i++) _renderCardZone(i);
   _updateStampButtonLabel();
   _updateUndoButtons();
+  _placerBoutonsAgrandir();   // v1145
 }
 
 // ---------- Rendu du contenu d'UNE carte (zone image / PDF / fichier) ----------
@@ -7909,6 +7951,7 @@ function basculerDocLarge(idx) {
   _ajusterLargeurPhoto(idx);
   var b = document.getElementById('btnDocLarge_' + idx);
   if (b) b.classList.toggle('actif', ZOOM_DOC[idx] > 1);
+  setTimeout(_placerBoutonsAgrandir, 30);   // v1145 : la colonne a changé de largeur
   showToast(ZOOM_DOC[idx] > 1 ? 'Document sur toute la largeur' : 'Taille normale', 'info');
 }
 
