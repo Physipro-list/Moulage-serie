@@ -813,6 +813,71 @@ var _k=['AIza','SyCk','7bqV','nx08','Kz1f','Vq1W','24Au','W854','KY9j','Pno'];
 var firebaseConfig={apiKey:_k.join(''),authDomain:"liste-des-moulages-physipro.firebaseapp.com",databaseURL:"https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",projectId:"liste-des-moulages-physipro",storageBucket:"liste-des-moulages-physipro.firebasestorage.app",messagingSenderId:"24566847562",appId:"1:24566847562:web:db492bdd33116373e0eeb3"};
 firebase.initializeApp(firebaseConfig);
 var fbDb=firebase.database(),fbAuth=firebase.auth(),fbUser=null;
+/* ══════════════════════════════════════════════════════════════════════
+   PASSAGES DES COMMANDES — index léger partagé (2026-09-28)
+   Même bloc dans Inspection Atelier, Production Couture et Inspection
+   Finale. Chaque module note, pour chaque numéro de commande, la date à
+   laquelle il l'a vue passer :
+       passagesCommandes/<numéro>/<département>/<AAAA-MM-JJ> = true
+   (atelier = date d'entrée · couture = date de sortie · finale = date)
+   - Quelques dizaines d'octets par entrée, écrits UNE fois : chaque poste
+     retient ce qu'il a déjà envoyé (localStorage) et n'envoie que le neuf.
+   - Rien n'est jamais lu en bloc : « Vérifier des commandes » lit une seule
+     petite fiche par numéro demandé.
+   - Règle Firebase à ajouter :
+       "passagesCommandes": { ".read": "auth != null", ".write": "auth != null" }
+   ══════════════════════════════════════════════════════════════════════ */
+var PASSAGES = (function () {
+  var NOEUD = 'passagesCommandes';
+  var LS = 'physipro_passages_ecrits_v1';
+  var MAX_MEMO = 12000;          // entrées retenues localement, les plus récentes
+
+  /* même normalisation que « Vérifier » : casse, espaces, zéros de tête */
+  function cle(v) {
+    var s = String(v == null ? '' : v).trim().toLowerCase().replace(/\s+/g, '');
+    var z = s.replace(/^0+/, '');
+    s = z || s;
+    return s.replace(/[.#$\[\]\/]/g, '_');
+  }
+  /* « 05/09/2026 », « 5-9-2026 », « 2026-09-05 », ISO complet -> « 2026-09-05 » */
+  function dateIso(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) return '';
+    var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+    m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+    if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    return '';
+  }
+  function _memo() { try { return JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { return {}; } }
+  function _garder(memo) {
+    var k = Object.keys(memo);
+    if (k.length > MAX_MEMO) { k.slice(0, k.length - MAX_MEMO).forEach(function (x) { delete memo[x]; }); }
+    try { localStorage.setItem(LS, JSON.stringify(memo)); } catch (e) {}
+  }
+
+  /* paires = [{ bon, date }] — n'envoie que ce que ce poste n'a jamais envoyé */
+  function noter(dept, paires) {
+    if (typeof fbDb === 'undefined' || !fbDb || !fbUser || !paires || !paires.length) return;
+    var memo = _memo(), maj = {}, n = 0;
+    paires.forEach(function (p) {
+      var c = cle(p.bon), d = dateIso(p.date);
+      if (!c || !d || c.charAt(0) === '_') return;
+      var k = c + '/' + dept + '/' + d;
+      if (memo[k] || maj[k]) return;
+      maj[k] = true; n++;
+    });
+    if (!n) return;
+    fbDb.ref(NOEUD).update(maj).then(function () {
+      Object.keys(maj).forEach(function (k) { memo[k] = 1; });
+      _garder(memo);
+    }).catch(function (e) { console.warn('[PASSAGES] écriture refusée :', e && e.message); });
+  }
+
+  return { NOEUD: NOEUD, cle: cle, dateIso: dateIso, noter: noter };
+})();
+window.PASSAGES = PASSAGES;
+
 
 // === VERSION PROTECTION ===
 var APP_VERSION=20260221;var APP_MODULE='couture';var _versionOK=true;
@@ -2001,6 +2066,9 @@ function _syncMonth(month,retryN){
   setSyncBadge('saving');
   fbDb.ref('inspectionCoutureData/'+month).set(monthData).then(function(){
     setSyncBadge('online');
+    /* 2026-09-28 : dates de passage — la date de SORTIE de couture */
+    PASSAGES.noter('couture', monthData.filter(function(r){ return r && r.bonCmd && r.dateSortie; })
+                                       .map(function(r){ return { bon: r.bonCmd, date: r.dateSortie }; }));
     try{var pending=JSON.parse(localStorage.getItem('physipro_couture_pending')||'{}');delete pending[month];localStorage.setItem('physipro_couture_pending',JSON.stringify(pending));}catch(e){}
   }).catch(function(e){
     console.error('Sync error for',month,'attempt',retryN,e);
