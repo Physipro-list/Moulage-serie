@@ -362,6 +362,7 @@ body.col-resizing *{cursor:col-resize!important;}
 .vrf-pas-no{font-weight:800;color:#e2e8f0;}
 .vrf-pas-rien{color:rgba(255,255,255,.3);}
 .vrf-pas-ok{color:#22c55e;font-weight:900;}
+.vrf-pas-nom{color:#cbd5e1;font-family:'Segoe UI',Arial,sans-serif;font-size:10.5px;}
 .vrf-pas-alerte{color:#fbbf24;font-size:10.5px;padding:4px 0 0;font-weight:700;}
 .vrf-pas-ko{color:#ef4444;font-weight:900;font-size:13px;}
 .vrf-pas-info{color:var(--text-muted);font-size:10.5px;padding:3px 0;}
@@ -683,7 +684,8 @@ var fbUser=null;
    Même bloc dans Inspection Atelier, Production Couture et Inspection
    Finale. Chaque module note, pour chaque numéro de commande, la date à
    laquelle il l'a vue passer :
-       passagesCommandes/<numéro>/<département>/<AAAA-MM-JJ> = true
+       passagesCommandes/<numéro>/<département>/<AAAA-MM-JJ>/<nom> = true
+   (<nom> = la personne qui l'a faite — « _ » quand la ligne n'en a pas)
    (atelier = date d'entrée · couture = date de sortie · finale = date)
    - Quelques dizaines d'octets par entrée, écrits UNE fois : chaque poste
      retient ce qu'il a déjà envoyé (localStorage) et n'envoie que le neuf.
@@ -722,6 +724,10 @@ var PASSAGES = (function () {
     }
     return '';
   }
+  /* un nom de personne utilisable comme clé Firebase */
+  function nomCle(v) {
+    return String(v == null ? '' : v).replace(/[.#$\[\]\/]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+  }
   function _memo() { try { return JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { return {}; } }
   function _garder(memo) {
     var k = Object.keys(memo);
@@ -736,7 +742,7 @@ var PASSAGES = (function () {
     paires.forEach(function (p) {
       var c = cle(p.bon), d = dateIso(p.date);
       if (!c || !d || c.charAt(0) === '_') return;
-      var k = c + '/' + dept + '/' + d;
+      var k = c + '/' + dept + '/' + d + '/' + (nomCle(p.nom) || '_');
       if (memo[k] || maj[k]) return;
       maj[k] = true; n++;
     });
@@ -756,7 +762,7 @@ var PASSAGES = (function () {
     return m === a || m === b;
   }
 
-  return { NOEUD: NOEUD, cle: cle, dateIso: dateIso, noter: noter, moisRecents: moisRecents };
+  return { NOEUD: NOEUD, cle: cle, dateIso: dateIso, nomCle: nomCle, noter: noter, moisRecents: moisRecents };
 })();
 window.PASSAGES = PASSAGES;
 
@@ -1493,7 +1499,7 @@ function pushToFB(dept) {
         var _pp = [];
         Object.keys(data).filter(PASSAGES.moisRecents).forEach(function (m) {
           (Array.isArray(data[m]) ? data[m] : []).forEach(function (r) {
-            if (r && r.type === 'entry' && r.bon) _pp.push({ bon: r.bon, date: r.entryDate || r.timestamp });
+            if (r && r.type === 'entry' && r.bon) _pp.push({ bon: r.bon, date: r.entryDate || r.timestamp, nom: r.nom });
           });
         });
         PASSAGES.noter('atelier', _pp);
@@ -5033,7 +5039,11 @@ var VERIF = (function () {
       if (!r || r.type !== 'entry') return;
       if (dates && (r.bon || r.bonCmd)) {
         var ck = PASSAGES.cle(r.bon || r.bonCmd), dj = PASSAGES.dateIso(r.entryDate || r.timestamp);
-        if (ck && dj) { (dates[ck] = dates[ck] || {})[dj] = true; }
+        if (ck && dj) {
+          var pj = (dates[ck] = dates[ck] || {});
+          if (typeof pj[dj] !== 'object') pj[dj] = {};
+          pj[dj][PASSAGES.nomCle(r.nom) || '_'] = true;
+        }
       }
       var b = _norm(r.bon || r.bonCmd || '');
       if (!b) return;
@@ -5109,7 +5119,11 @@ var VERIF = (function () {
         var datesAtelier = {};
         var local = _localIndex(datesAtelier);
         Object.keys(_archiveDates || {}).forEach(function (k) {
-          Object.keys(_archiveDates[k]).forEach(function (d) { (datesAtelier[k] = datesAtelier[k] || {})[d] = true; });
+          Object.keys(_archiveDates[k]).forEach(function (d) {
+            var pj = (datesAtelier[k] = datesAtelier[k] || {});
+            if (typeof pj[d] !== 'object') pj[d] = {};
+            Object.keys(_archiveDates[k][d] || {}).forEach(function (n) { pj[d][n] = true; });
+          });
         });
         var found = [], missing = [];
         list.forEach(function (num) {
@@ -5188,6 +5202,7 @@ var VERIF = (function () {
       + 'td{padding:5px 6px;border-bottom:1px solid #e2e8f0;font-family:Consolas,monospace;font-size:12px;vertical-align:top}'
       + 'tr{break-inside:avoid}.vrf-pas-no{font-weight:800}'
       + '.vrf-pas-ok{color:#16a34a;font-weight:900}.vrf-pas-ko{color:#dc2626;font-weight:900;font-size:14px}'
+      + '.vrf-pas-nom{color:#475569;font-family:"Segoe UI",Arial,sans-serif;font-size:11px}'
       + '.leg,.etat{font-size:10.5px;color:#475569;margin-top:8px}'
       + '</style></head><body>'
       + '<div class="ban"><b>Vérification des commandes</b><span>' + jour + '</span></div>'
@@ -5225,6 +5240,8 @@ window.VERIF = VERIF;
 var PASSAGES_VERIF = (function () {
   var _cache = {};                  // clé -> { v, t }
   var _etatRattrapage;              // undefined = pas lu · null = jamais fait · objet = fait
+  var RATTRAPAGE_V = 2;             // v2 : avec le nom de la personne (technicien, couturière)
+  function _aJour(e) { return !!(e && e.date && (e.v || 1) >= RATTRAPAGE_V); }
   var DUREE = 10 * 60 * 1000;
   var PAQUET = 20;
 
@@ -5244,15 +5261,30 @@ var PASSAGES_VERIF = (function () {
 
   function _fr(iso) { var p = String(iso).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso; }
   /* ✓ vert + date(s) si la commande est passée ; ✗ rouge sinon */
+  /* les noms d'une date : { 'Marc': true, '_': true } -> ['Marc'] ; ancien format (true) -> [] */
+  function _noms(v) {
+    return (v && typeof v === 'object') ? Object.keys(v).filter(function (n) { return n !== '_'; }).sort() : [];
+  }
   function _dates(o) {
     var k = (o && typeof o === 'object') ? Object.keys(o).filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); }).sort() : [];
     if (!k.length) return '<span class="vrf-pas-ko" title="Pas passée">\u2717</span>';
-    return k.map(function (d) { return '<span class="vrf-pas-ok">\u2713</span> ' + _fr(d); }).join('<br>');
+    return k.map(function (d) {
+      var n = _noms(o[d]);
+      return '<span class="vrf-pas-ok">\u2713</span> ' + _fr(d)
+           + (n.length ? ' <span class="vrf-pas-nom">(' + n.map(esc).join(', ') + ')</span>' : '');
+    }).join('<br>');
   }
-  /* réunit deux ensembles de dates { 'AAAA-MM-JJ': true } */
+  /* réunit deux ensembles { 'AAAA-MM-JJ': true | { nom: true } } en gardant tous les noms */
   function _union(a, b) {
     var o = {};
-    [a, b].forEach(function (x) { if (x && typeof x === 'object') Object.keys(x).forEach(function (d) { o[d] = true; }); });
+    [a, b].forEach(function (x) {
+      if (!x || typeof x !== 'object') return;
+      Object.keys(x).forEach(function (d) {
+        if (typeof o[d] !== 'object') o[d] = {};
+        if (x[d] && typeof x[d] === 'object') Object.keys(x[d]).forEach(function (n) { o[d][n] = true; });
+        else o[d]._ = true;
+      });
+    });
     return o;
   }
 
@@ -5292,7 +5324,10 @@ var PASSAGES_VERIF = (function () {
          + '<span class="vrf-pas-ko">\u2717</span> pas encore passée dans ce département'
          + ' (en couture : \u2717 = pas encore de date de sortie)</div>';
       /* l'état de l'historique, pour savoir si un \u2717 veut dire « pas passée » ou « pas encore indexée » */
-      if (_etatRattrapage && _etatRattrapage.date) {
+      if (_etatRattrapage && _etatRattrapage.date && !_aJour(_etatRattrapage)) {
+        h += '<div class="vrf-pas-alerte">\u26a0\ufe0f Les noms de l\u2019historique ne sont pas encore dans l\u2019index : '
+           + 'utilise une fois le bouton \ud83d\udcda Rattrapage des noms (compte atelieratp). Les nouvelles entrées ont déjà leur nom.</div>';
+      } else if (_etatRattrapage && _etatRattrapage.date) {
         h += '<div class="vrf-pas-info">\ud83d\udcda Historique rattrapé le ' + _fr(String(_etatRattrapage.date).slice(0, 10))
            + (_etatRattrapage.entrees ? ' (' + _etatRattrapage.entrees + ' dates)' : '') + '.</div>';
       } else {
@@ -5307,7 +5342,11 @@ var PASSAGES_VERIF = (function () {
       cles.forEach(function (c) {
         var dejaIdx = (_cache[c] && _cache[c].v && _cache[c].v.atelier) || {};
         Object.keys(datesAtelier[c] || {}).forEach(function (d) {
-          if (!dejaIdx[d]) aNoter.push({ bon: c, date: d });   // déjà dans l'index : rien à envoyer
+          Object.keys(datesAtelier[c][d] || {}).forEach(function (n) {
+            var dj = dejaIdx[d];
+            if (dj && typeof dj === 'object' && dj[n]) return;   // déjà dans l'index : rien à envoyer
+            aNoter.push({ bon: c, date: d, nom: n === '_' ? '' : n });
+          });
         });
       });
       PASSAGES.noter('atelier', aNoter);
@@ -5328,7 +5367,10 @@ var PASSAGES_VERIF = (function () {
     if (!b) return;
     if (!_estDaniel() || !fbDb) { b.style.display = 'none'; return; }
     fbDb.ref(PASSAGES.NOEUD + '/_rattrapage').once('value').then(function (s) {
-      b.style.display = s.val() ? 'none' : '';
+      _etatRattrapage = s.val() || null;
+      b.style.display = _aJour(_etatRattrapage) ? 'none' : '';
+      b.textContent = (_etatRattrapage && !_aJour(_etatRattrapage))
+        ? '\ud83d\udcda Rattrapage des noms (une fois)' : '\ud83d\udcda Rattrapage de l\u2019historique';
     }).catch(function () { b.style.display = 'none'; });
   }
 
@@ -5339,10 +5381,10 @@ var PASSAGES_VERIF = (function () {
     var b = document.getElementById('vrfRattrapage');
     if (b) { b.disabled = true; b.textContent = '⏳ Rattrapage…'; }
     var maj = {}, n = 0;
-    function ajouter(dept, bon, date) {
+    function ajouter(dept, bon, date, nom) {
       var c = PASSAGES.cle(bon), d = PASSAGES.dateIso(date);
       if (!c || !d || c.charAt(0) === '_') return;
-      var k = c + '/' + dept + '/' + d;
+      var k = c + '/' + dept + '/' + d + '/' + (PASSAGES.nomCle(nom) || '_');
       if (!maj[k]) { maj[k] = true; n++; }
     }
     function lignes(noeud) {
@@ -5359,9 +5401,9 @@ var PASSAGES_VERIF = (function () {
     Promise.all([lu('inspectionData'), lu('archives/inspection'), lu('inspectionCoutureData'), lu('inspectionFinaleData')])
       .then(function (r) {
         lignes(r[0]).concat(lignes(r[1])).forEach(function (x) {
-          if (x.type === 'entry') ajouter('atelier', x.bon, x.entryDate || x.timestamp);
+          if (x.type === 'entry') ajouter('atelier', x.bon, x.entryDate || x.timestamp, x.nom);
         });
-        lignes(r[2]).forEach(function (x) { ajouter('couture', x.bonCmd, x.dateSortie); });
+        lignes(r[2]).forEach(function (x) { ajouter('couture', x.bonCmd, x.dateSortie, x.nom); });
         /* finale : une entrée sans date prend celle de la ligne-date qui la précède */
         Object.keys(r[3] || {}).forEach(function (m) {
           var arr = r[3][m], jour = '';
@@ -5382,13 +5424,13 @@ var PASSAGES_VERIF = (function () {
           return fbDb.ref(PASSAGES.NOEUD).update(u).then(paquet);
         }
         return paquet().then(function () {
-          return fbDb.ref(PASSAGES.NOEUD + '/_rattrapage').set({ date: new Date().toISOString(), par: fbUser.email, entrees: n });
+          return fbDb.ref(PASSAGES.NOEUD + '/_rattrapage').set({ date: new Date().toISOString(), par: fbUser.email, entrees: n, v: RATTRAPAGE_V });
         });
       })
       .then(function () {
         if (b) b.style.display = 'none';
         _cache = {};
-        _etatRattrapage = { date: new Date().toISOString(), entrees: n };
+        _etatRattrapage = { date: new Date().toISOString(), entrees: n, v: RATTRAPAGE_V };
         showToast('✅ Historique rattrapé : ' + n + ' dates de passage enregistrées', 'success');
       })
       .catch(function (e) {

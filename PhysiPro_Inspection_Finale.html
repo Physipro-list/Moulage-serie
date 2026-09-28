@@ -345,7 +345,8 @@ var fbDb=firebase.database(),fbAuth=firebase.auth(),fbUser=null;
    Même bloc dans Inspection Atelier, Production Couture et Inspection
    Finale. Chaque module note, pour chaque numéro de commande, la date à
    laquelle il l'a vue passer :
-       passagesCommandes/<numéro>/<département>/<AAAA-MM-JJ> = true
+       passagesCommandes/<numéro>/<département>/<AAAA-MM-JJ>/<nom> = true
+   (<nom> = la personne qui l'a faite — « _ » quand la ligne n'en a pas)
    (atelier = date d'entrée · couture = date de sortie · finale = date)
    - Quelques dizaines d'octets par entrée, écrits UNE fois : chaque poste
      retient ce qu'il a déjà envoyé (localStorage) et n'envoie que le neuf.
@@ -384,6 +385,10 @@ var PASSAGES = (function () {
     }
     return '';
   }
+  /* un nom de personne utilisable comme clé Firebase */
+  function nomCle(v) {
+    return String(v == null ? '' : v).replace(/[.#$\[\]\/]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+  }
   function _memo() { try { return JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { return {}; } }
   function _garder(memo) {
     var k = Object.keys(memo);
@@ -398,7 +403,7 @@ var PASSAGES = (function () {
     paires.forEach(function (p) {
       var c = cle(p.bon), d = dateIso(p.date);
       if (!c || !d || c.charAt(0) === '_') return;
-      var k = c + '/' + dept + '/' + d;
+      var k = c + '/' + dept + '/' + d + '/' + (nomCle(p.nom) || '_');
       if (memo[k] || maj[k]) return;
       maj[k] = true; n++;
     });
@@ -409,7 +414,16 @@ var PASSAGES = (function () {
     }).catch(function (e) { console.warn('[PASSAGES] écriture refusée :', e && e.message); });
   }
 
-  return { NOEUD: NOEUD, cle: cle, dateIso: dateIso, noter: noter };
+  /* seulement le mois courant et le précédent : l'historique est couvert par
+     le rattrapage unique — on n'a jamais à le renvoyer */
+  function moisRecents(m) {
+    var d = new Date(), a = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    d.setDate(1); d.setMonth(d.getMonth() - 1);
+    var b = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    return m === a || m === b;
+  }
+
+  return { NOEUD: NOEUD, cle: cle, dateIso: dateIso, nomCle: nomCle, noter: noter, moisRecents: moisRecents };
 })();
 window.PASSAGES = PASSAGES;
 
@@ -731,7 +745,7 @@ function pushFB(){
       console.log('✅ Firebase saved: '+totalEntries+' entries');
       /* 2026-09-28 : dates de passage — seulement les entrées pas encore notées */
       var _pp=[];
-      Object.keys(clean).forEach(function(m){ var jour='';
+      Object.keys(clean).filter(PASSAGES.moisRecents).forEach(function(m){ var jour='';
         (clean[m]||[]).forEach(function(r){
           if(r&&r.type==='date'&&r.dateLabel)jour=r.dateLabel;       // ligne-date du tableau
           if(r&&r.type==='entry'&&r.cmd)_pp.push({bon:r.cmd,date:r.date||jour});
