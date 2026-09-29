@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1149-impression-pleine-page]</title>
+<title>PhysiPro — Liste des matériaux [v1150-zoom-sans-blanc]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -9747,8 +9747,7 @@ function _stampCaptureRegion(srcDataUrl, xPct, yPct, wPct, hPct, cb) {
    clic sur 🔍 Zoom annule. ↩ Annuler revient à la photo d'avant.
    Différence voulue avec le Questionnement : la photo garde la MÊME place
    dans la carte. La zone choisie est agrandie au maximum dans le cadre de
-   la photo, et s'il reste de la place (zone plus mince que la photo), elle
-   est complétée par des bords blancs — jamais coupée, jamais étirée.
+   la photo, et (v1150 : plus de bords blancs, l'image prend les proportions de la zone).
    Poids : taille de la photo d'origine, ~130 Ko au plus.
    Refusé sur un devis de plusieurs pages (règle de la v1072) : là, les
    boutons + et − agrandissent l'affichage sans rien couper.
@@ -9864,16 +9863,18 @@ function _zoomAppliquer(idx, x, y, w, h) {
     var W = im.naturalWidth, H = im.naturalHeight;
     var sx = x * W, sy = y * H, sw = w * W, sh = h * H;
     if (sw < 2 || sh < 2) return;
-    var ech = Math.min(W / sw, H / sh);
-    var dw = sw * ech, dh = sh * ech;
+    /* v1149 : plus de bords blancs — le résultat prend EXACTEMENT les
+       proportions de la zone choisie (bande mince = image mince). Le plus
+       long côté vise la taille de la photo d'origine. */
+    var cible = Math.min(PHOTO_TEL_MAX, Math.max(W, H));
+    var ech = cible / Math.max(sw, sh);
+    var dw = Math.max(1, Math.round(sw * ech)), dh = Math.max(1, Math.round(sh * ech));
     var c = document.createElement('canvas');
-    c.width = W; c.height = H;                    // même taille, donc même place
+    c.width = dw; c.height = dh;
     var ctx = c.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, W, H);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(im, sx, sy, sw, sh, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    ctx.drawImage(im, sx, sy, sw, sh, 0, 0, dw, dh);
     var q = 0.70, out = c.toDataURL('image/jpeg', q);
     while (out.length > PHOTO_TEL_PLAFOND && q > 0.48) { q -= 0.04; out = c.toDataURL('image/jpeg', q); }
     _histoEmpiler(t, etape);
@@ -11144,8 +11145,10 @@ function _printWithStamps() {
     /* v1149 : la photo remplit TOUTE la feuille (plus de bande blanche en bas).
        object-fit:cover = pas de déformation ; l'écart de format avec le papier
        (quelques %) est rogné à parts égales en haut/bas ou à gauche/droite. */
+    var _ecart = Math.abs((canvas.width / canvas.height) / (8.5 / 11) - 1);
+    var _fit = _ecart > 0.15 ? 'contain' : 'cover';   // zoom très allongé : on ne le rogne pas
     html += '<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;}'
-          + 'img{position:fixed;left:0;top:0;width:100vw;height:100vh;object-fit:cover;display:block;}'
+          + 'img{position:fixed;left:0;top:0;width:100vw;height:100vh;object-fit:' + _fit + ';display:block;}'
           + '@page{margin:0;size:letter;}</style>';
     html += '</head><body>';
     html += '<img src="' + dataUrl + '">';
