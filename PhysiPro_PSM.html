@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1146-zoom-questionnement]</title>
+<title>PhysiPro — Liste des matériaux [v1148-pleine-largeur]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -2427,6 +2427,9 @@ label.footer-btn-label{
 }
 .photo-card .photo-card-zone .pdf-pages img:hover{ border-color:rgba(0,0,0,0.85); }
 .photo-card .photo-card-zone .pdf-pages img.active{ border-color:#000; }
+/* v1147 : une photo seule remplit toute la largeur, sans bordure ni bande blanche */
+.photo-card .photo-card-zone .pdf-pages img.solo{ border:0; border-radius:0; cursor:default; }
+.photo-card .photo-card-zone .pdf-pages img.solo:hover{ border:0; }
 .photo-card-zone.has-thumbs{ padding-right:48px; }
 .card-thumbs{
   position:absolute;
@@ -7976,7 +7979,7 @@ function _ajusterLargeurPhoto(idx) {
      hauteur ne contraint plus sa largeur — le calcul « hauteur × format »
      n'a plus de sens ici et donnait une colonne inutilement étroite.
      On lui donne directement la largeur maximale permise. */
-  if (tab.pages && tab.pages.length > 1) {
+  if (true) {   /* v1147 : photo seule = même largeur pleine que les documents */
     /* v1118 : le facteur de la loupe s'applique ici.
        v1135 : le plafond passe de 92 % à 100 % -- à fond, le document prend
        TOUTE la largeur de la soumission. La colonne du matériel se referme
@@ -8071,16 +8074,23 @@ function _renderCardZone(idx) {
       var premiere = pile.querySelector('img');
       if (premiere && premiere.complete && premiere.naturalWidth) setTimeout(function(){ _ajusterLargeurPhoto(idx); }, 0);
     } else {
+      /* v1147 : photo seule = pleine largeur de la colonne, hauteur libre,
+         défilement vertical si elle est plus haute que la zone. */
+      zone.classList.add('multipage');
+      var pileS = document.createElement('div');
+      pileS.className = 'pdf-pages';
       var img = document.createElement('img');
       img.src = src;
       img.id = 'globalImgEl_' + idx;
+      img.className = 'pdf-page-img solo active';
       img.title = 'Clic droit → « Copier l\'image », ou bouton 📋 dans l\'en-tête';
-      /* v1058 : dès que les dimensions réelles sont connues, la colonne se
-         resserre sur l'image. onload couvre le premier affichage, le test
-         .complete couvre une image déjà en cache (onload ne rejoue pas). */
-      img.addEventListener('load', function(){ _ajusterLargeurPhoto(idx); });
-      zone.appendChild(img);
-      if (img.complete && img.naturalWidth) setTimeout(function(){ _ajusterLargeurPhoto(idx); }, 0);
+      img.addEventListener('load', function(){
+        _ajusterLargeurPhoto(idx);
+        _rognerBordsBlancs(idx, img);
+      });
+      pileS.appendChild(img);
+      zone.appendChild(pileS);
+      if (img.complete && img.naturalWidth) setTimeout(function(){ _ajusterLargeurPhoto(idx); _rognerBordsBlancs(idx, img); }, 0);
     }
   } else if (type === 'application/pdf') {
     var emb = document.createElement('embed');
@@ -9999,101 +10009,123 @@ function _compressItemImg(dataUrl, cb) {
 // pas en CSS : les étampes restent alignées et le PDF reçoit la même image.
 // (Les pages de PDF converties ne passent PAS ici — un plan ne doit pas être coupé.)
 // ============================================================
-var CARD_PHOTO_SIZE = 1100;   // côté du carré final, en pixels
+var CARD_PHOTO_SIZE = 1400;   // v1147 : plus long côté (le ratio d'origine est conservé)
 
-function _cropSquareCompress(dataUrl, cb) {
+/* v1147 : réduit au plus long côté max, SANS recadrer ni ajouter de blanc. */
+function _redimJpeg(srcEl, w, h, maxSide, plafond) {
+  var r = Math.min(1, maxSide / Math.max(w, h));
+  var pw = Math.max(1, Math.round(w * r)), ph = Math.max(1, Math.round(h * r));
+  var c = document.createElement('canvas');
+  c.width = pw; c.height = ph;
+  var ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(srcEl, 0, 0, pw, ph);
+  var q = 0.66, res = c.toDataURL('image/jpeg', q);
+  while (res.length > plafond && q > 0.48) { q -= 0.04; res = c.toDataURL('image/jpeg', q); }
+  return res;
+}
+
+function _cropSquareCompress(dataUrl, cb) {   // nom conservé, ne recadre plus (v1147)
   var img = new Image();
   img.onload = function() {
-    var w = img.naturalWidth || img.width;
-    var h = img.naturalHeight || img.height;
+    var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
     if (!w || !h) { cb(dataUrl); return; }
-    // Côté du carré = plus petite dimension → recadrage centré
-    var side = Math.min(w, h);
-    var sx = Math.round((w - side) / 2);
-    var sy = Math.round((h - side) / 2);
-    var out = Math.min(side, CARD_PHOTO_SIZE);
-    var c = document.createElement('canvas');
-    c.width = out; c.height = out;
-    var ctx = c.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, sx, sy, side, side, 0, 0, out, out);
-    // Compression économie Firebase (standard Moulage/AjoutRapide)
-    var q = 0.60, res = c.toDataURL('image/jpeg', q);
-    while (res.length > 120000 && q > 0.45) { q -= 0.05; res = c.toDataURL('image/jpeg', q); }
-    cb(res);
+    cb(_redimJpeg(img, w, h, CARD_PHOTO_SIZE, PHOTO_TEL_PLAFOND));
   };
   img.onerror = function() { cb(dataUrl); };
   img.src = dataUrl;
 }
 
-/* ============================================================
-   v1142 — LA PHOTO DU TÉLÉPHONE ARRIVE ENTIÈRE
-   Chaque photo reçue était recadrée en CARRÉ au centre (v1015). Une photo
-   prise à la verticale perdait donc environ le quart du haut et le quart du
-   bas — c'est là que l'écriture disparaissait. Et elle était compressée une
-   DEUXIÈME fois (1100 px / 60 %) après l'avoir été sur le téléphone.
-   Maintenant :
-     - le cadrage est celui que tu voyais à l'écran du téléphone, en entier ;
-     - PhotoSender v11 envoie déjà le format final (1400 px, ~130 Ko) : la
-       photo est gardée TELLE QUELLE, sans seconde compression ;
-     - seulement si elle arrive plus grosse (vieille version du téléphone),
-       elle est réduite aux mêmes limites — jamais recadrée.
-   La carte l'affiche dans ses proportions exactes (contain), donc rien
-   n'est caché à l'écran non plus.
-   ============================================================ */
 var PHOTO_TEL_MAX = 1400;        // plus long côté, en pixels
-var PHOTO_TEL_PLAFOND = 140000;  // ~130 Ko d'image, en longueur de data URL
+var PHOTO_TEL_PLAFOND = 200000;  // v1147 : un peu plus large, la photo n'est plus un carré
 
+/* v1147 : la photo garde ses proportions exactes — plus de carré blanc. */
 function _photoTelephone(dataUrl, cb) {
   var img = new Image();
   img.onload = function() {
     var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
     if (!w || !h) { cb(dataUrl); return; }
-    /* v1144 : la photo occupe la MÊME place qu'avant (un carré) — une photo
-       verticale ou horizontale reçoit des bords blancs de chaque côté au lieu
-       d'être coupée. Le blanc ne pèse presque rien en JPEG, et il sert : on
-       peut y poser l'étampe sans cacher la photo. */
-    var dejaBon = w === h
-               && w <= PHOTO_TEL_MAX
+    var dejaBon = Math.max(w, h) <= PHOTO_TEL_MAX
                && dataUrl.length <= PHOTO_TEL_PLAFOND
                && /^data:image\/jpeg/.test(dataUrl);
-    if (dejaBon) { cb(dataUrl); return; }            // aucune perte, aucun calcul
-    var r = Math.min(1, PHOTO_TEL_MAX / Math.max(w, h));
-    var pw = Math.round(w * r), ph = Math.round(h * r), cote = Math.max(pw, ph);
-    var c = document.createElement('canvas');
-    c.width = cote; c.height = cote;
-    var ctx = c.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, cote, cote);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, Math.round((cote - pw) / 2), Math.round((cote - ph) / 2), pw, ph);   // ENTIÈRE, centrée
-    var q = 0.66, res = c.toDataURL('image/jpeg', q);
-    while (res.length > PHOTO_TEL_PLAFOND && q > 0.48) { q -= 0.04; res = c.toDataURL('image/jpeg', q); }
-    cb(res);
+    if (dejaBon) { cb(dataUrl); return; }
+    cb(_redimJpeg(img, w, h, PHOTO_TEL_MAX, PHOTO_TEL_PLAFOND));
   };
   img.onerror = function() { cb(dataUrl); };
   img.src = dataUrl;
 }
 
-// Idem à partir d'un canvas déjà redressé par l'EXIF
+// Idem à partir d'un canvas déjà redressé par l'EXIF (v1147 : sans recadrage)
 function _cropSquareCompressFromCanvas(srcCanvas, cb) {
   var w = srcCanvas.width, h = srcCanvas.height;
   if (!w || !h) { cb(srcCanvas.toDataURL('image/jpeg', 0.60)); return; }
-  var side = Math.min(w, h);
-  var sx = Math.round((w - side) / 2);
-  var sy = Math.round((h - side) / 2);
-  var out = Math.min(side, CARD_PHOTO_SIZE);
-  var c = document.createElement('canvas');
-  c.width = out; c.height = out;
-  var ctx = c.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(srcCanvas, sx, sy, side, side, 0, 0, out, out);
-  var q = 0.60, res = c.toDataURL('image/jpeg', q);
-  while (res.length > 120000 && q > 0.45) { q -= 0.05; res = c.toDataURL('image/jpeg', q); }
-  cb(res);
+  cb(_redimJpeg(srcCanvas, w, h, CARD_PHOTO_SIZE, PHOTO_TEL_PLAFOND));
+}
+
+/* v1147 — Photos déjà en carte : les bandes blanches gravées dans l'image
+   (anciens carrés blancs) sont rognées une seule fois, puis sauvegardées.
+   On ne touche pas aux documents multi-pages ni aux cartes annotées. */
+function _rognerDataUrl(url, cb) {
+  var im = new Image();
+  im.onload = function() {
+    var w = im.naturalWidth, h = im.naturalHeight;
+    if (!w || !h || w < 200) { cb(url); return; }
+    try {
+      var c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      var ctx = c.getContext('2d');
+      ctx.drawImage(im, 0, 0);
+      var blancCol = function(x) {
+        var d = ctx.getImageData(x, 0, 1, h).data, nb = 0;
+        for (var y = 0; y < h; y++) {
+          var k = y * 4;
+          if (d[k] > 244 && d[k+1] > 244 && d[k+2] > 244) nb++;
+        }
+        return nb / h > 0.985;
+      };
+      var g = 0, dr = w - 1;
+      while (g < w / 3 && blancCol(g)) g++;
+      while (dr > w * 2 / 3 && blancCol(dr)) dr--;
+      var largeur = dr - g + 1;
+      if ((g + (w - 1 - dr)) < w * 0.04 || largeur < w * 0.3) { cb(url); return; }
+      var c2 = document.createElement('canvas');
+      c2.width = largeur; c2.height = h;
+      c2.getContext('2d').drawImage(c, g, 0, largeur, h, 0, 0, largeur, h);
+      cb(c2.toDataURL('image/jpeg', 0.85));
+    } catch (e) { cb(url); }
+  };
+  im.onerror = function() { cb(url); };
+  im.src = url;
+}
+
+function _rognerBordsBlancs(idx, imgEl) {
+  var t = fichiersGlobaux[idx];
+  if (!t || !t.data || t._rogne || t.dataPdfOriginal) return;
+  if (Array.isArray(t.pages) && t.pages.length) return;
+  t._rogne = true;
+  var avant = t.data;
+  _rognerDataUrl(avant, function(res) {
+    if (res === avant || t.data !== avant) return;
+    t.data = res;
+    var pi = t.photoIdx || 0;
+    if (Array.isArray(t.photos) && t.photos[pi] !== undefined) t.photos[pi] = res;
+    // l'historique (annuler) reçoit le même rognage, sinon un retour ramènerait les bandes
+    if (Array.isArray(t.history)) {
+      t.history.forEach(function(e) {
+        var url = (typeof e === 'string') ? e : (e && e.data);
+        if (!url || typeof url !== 'string') return;
+        _rognerDataUrl(url, function(r2) {
+          if (r2 === url) return;
+          if (typeof e === 'string') { var k = t.history.indexOf(e); if (k >= 0) t.history[k] = r2; }
+          else e.data = r2;
+        });
+      });
+    }
+    var cur = document.getElementById('globalImgEl_' + idx);
+    if (cur) cur.src = res;
+    if (typeof _saveGlobalImage === 'function' && !_midFirebaseLoading) _saveGlobalImage();
+  });
 }
 
 function _readExifOrientation(file) {
