@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Inspection Atelier v20260929b</title>
+<title>PhysiPro — Inspection Atelier v20260929c</title>
 <style>
 :root{--bg-main:#0f172a;--bg-card:#1e293b;--bg-input:#0f172a;--border:#334155;--gold:#c9a227;--gold-light:#fbbf24;--text:#e2e8f0;--text-muted:#94a3b8;--success:#22c55e;--danger:#ef4444;--info:#3b82f6;--purple:#a855f7;--teal:#14b8a6;--tbl-zoom:11px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -5107,20 +5107,34 @@ var VERIF = (function () {
     return z || s;
   }
 
-  /* Découpe la liste collée : lignes, virgules, points-virgules, tabulations, espaces */
+  /* Découpe la liste collée : lignes, virgules, points-virgules, tabulations, espaces.
+     v20260929 — si une ligne contient AUSSI une date (collée depuis Excel à côté du
+     numéro : "00297050  24/09/2026" ou "00297050,2026-09-24"), elle est capturée à
+     part dans _datesParsed, pour afficher une colonne "Date commande" dans le
+     tableau des passages — sans changer le comportement pour une liste de numéros
+     seuls (toujours acceptée telle quelle). */
+  var _datesParsed = {};
+  var DATE_RE = /^\d{4}-\d{1,2}-\d{1,2}$|^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/;
   function _parse(txt) {
-    var parts = String(txt || '').split(/[\s,;]+/);
+    _datesParsed = {};
+    var lines = String(txt || '').split(/\r?\n/);
     var seen = {}, out = [];
-    parts.forEach(function (p) {
-      p = p.trim();
-      if (!p) return;
-      var k = _norm(p);
-      if (seen[k]) return;
-      seen[k] = true;
-      out.push(p);
+    lines.forEach(function (line) {
+      var toks = line.split(/[\s,;]+/).map(function (t) { return t.trim(); }).filter(Boolean);
+      if (!toks.length) return;
+      var dateTok = null, numToks = [];
+      toks.forEach(function (t) { if (DATE_RE.test(t)) { if (!dateTok) dateTok = t; } else { numToks.push(t); } });
+      numToks.forEach(function (p) {
+        var k = _norm(p);
+        if (!seen[k]) { seen[k] = true; out.push(p); }
+        if (dateTok && !_datesParsed[k]) _datesParsed[k] = dateTok;
+      });
     });
     return out;
   }
+  /* Date "de la commande" (celle collée à côté du numéro), pour affichage dans le
+     tableau des passages. Retourne '' si aucune date n'a été collée pour ce numéro. */
+  function dateDe(num) { return _datesParsed[_norm(num)] || ''; }
 
   var _archiveDates = null;   // 2026-09-28 : { clé: { 'AAAA-MM-JJ': true } } — dates d'atelier des archives
   function _addRows(idx, month, rows, dates) {
@@ -5263,7 +5277,7 @@ var VERIF = (function () {
     _el('vrfText').value = '';
     _el('vrfLabel').textContent = 'Collez votre liste de numéros de commande';
     _el('vrfLabel').className = 'vrf-label';
-    _el('vrfHint').textContent = 'Une colonne d\'Excel, un courriel, des numéros séparés par des virgules ou des espaces — tout est accepté. Les doublons et les lignes vides sont retirés automatiquement.';
+    _el('vrfHint').textContent = 'Une colonne d\'Excel, un courriel, des numéros séparés par des virgules ou des espaces — tout est accepté. Colle aussi la date de la commande à côté du numéro (ex.: 00297050  24/09/2026) pour la voir dans le tableau. Les doublons et les lignes vides sont retirés automatiquement.';
     _el('vrfSum').classList.remove('show');
     _el('vrfFound').classList.remove('show');
     _el('vrfCopy').style.display = 'none';
@@ -5335,7 +5349,7 @@ var VERIF = (function () {
     w.document.close();
   }
 
-  return { open: open, close: close, analyser: analyser, copier: copier, reset: reset, imprimer: imprimer };
+  return { open: open, close: close, analyser: analyser, copier: copier, reset: reset, imprimer: imprimer, dateDe: dateDe };
 })();
 window.VERIF = VERIF;
 
@@ -5417,14 +5431,16 @@ var PASSAGES_VERIF = (function () {
     Promise.all([_lire(cles), etat]).then(function () {
       var nb = 0;
       var h = '<div class="vrf-pas-titre">📅 Passages dans les départements</div>'
-            + '<div class="vrf-pas-tab"><table><thead><tr><th>Commande</th><th>Insp. Atelier</th>'
+            + '<div class="vrf-pas-tab"><table><thead><tr><th>Commande</th><th>Date commande</th><th>Insp. Atelier</th>'
             + '<th>Couture (sortie)</th><th>Insp. Finale</th></tr></thead><tbody>';
       liste.forEach(function (num, k) {
         var e = _cache[cles[k]], v = (e && e.v) || null;
         if (v) nb++;
         /* atelier : l'index ET les lignes d'Inspection Atelier déjà en mémoire (page + archives) */
         var at = _union(v && v.atelier, datesAtelier[cles[k]]);
+        var dCmd = (window.VERIF && VERIF.dateDe) ? VERIF.dateDe(num) : '';
         h += '<tr><td class="vrf-pas-no">' + esc(num) + '</td>'
+           + '<td>' + (dCmd ? esc(dCmd) : '<span class="vrf-pas-ko">—</span>') + '</td>'
            + '<td>' + _dates(at) + '</td>'
            + '<td>' + _dates(v && v.couture) + '</td>'
            + '<td>' + _dates(v && v.finale) + '</td></tr>';
