@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Inspection Atelier v20260929</title>
+<title>PhysiPro — Inspection Atelier v20260929b</title>
 <style>
 :root{--bg-main:#0f172a;--bg-card:#1e293b;--bg-input:#0f172a;--border:#334155;--gold:#c9a227;--gold-light:#fbbf24;--text:#e2e8f0;--text-muted:#94a3b8;--success:#22c55e;--danger:#ef4444;--info:#3b82f6;--purple:#a855f7;--teal:#14b8a6;--tbl-zoom:11px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -2222,7 +2222,6 @@ function getSF(){var el=document.getElementById('global-search');return el?(el.v
 var INSP_COLS=[
   {id:'num',label:'#',w:'28px',fixed:true},
   {id:'bon',label:'Bon',w:'80px'},
-  {id:'dateDue',label:'Éch.',w:'62px'},
   {id:'dateCmd',label:'Date',w:'62px'},
   {id:'nom',label:'Nom',w:'130px',gear:'employes_atelier|Techniciens'},
   {id:'job',label:'Job',w:'32px'},
@@ -2245,7 +2244,24 @@ function getOrderedCols(dept){
   if(!cfg)return defs.map(function(d){return{id:d.id,visible:true};});
   var res=[];
   cfg.order.forEach(function(id){var d=defs.find(function(x){return x.id===id;});if(d)res.push({id:id,visible:(cfg.hidden||[]).indexOf(id)<0});});
-  defs.forEach(function(d){if(!res.find(function(r){return r.id===d.id;}))res.push({id:d.id,visible:true});});
+  /* v20260929 — FIX : une colonne absente de la config déjà sauvegardée (ex.: nouvelle
+     colonne ajoutée par une mise à jour) était toujours empilée tout à la fin du
+     tableau, même si sa position "naturelle" (dans INSP_COLS) est ailleurs — c'est
+     pour ça que "Date" apparaissait à droite au lieu d'être collée à "Bon" pour
+     quiconque avait déjà personnalisé ses colonnes. On l'insère maintenant juste
+     après sa voisine de gauche connue. */
+  defs.forEach(function(d,di){
+    var already=false;
+    for(var ri=0;ri<res.length;ri++){if(res[ri].id===d.id){already=true;break;}}
+    if(already)return;
+    var insertAt=res.length;
+    for(var pi=di-1;pi>=0;pi--){
+      var prevId=defs[pi].id;var foundPos=-1;
+      for(var ri2=0;ri2<res.length;ri2++){if(res[ri2].id===prevId){foundPos=ri2;break;}}
+      if(foundPos>=0){insertAt=foundPos+1;break;}
+    }
+    res.splice(insertAt,0,{id:d.id,visible:true});
+  });
   return res;
 }
 function getVisCols(dept){return getOrderedCols(dept).filter(function(c){return c.visible;});}
@@ -2616,7 +2632,6 @@ function cellHTML(dept,colId,row,idx,count,hasErr,month,dateLabelPrecalc){
       var pb=rowHasPartial(row)?'<span class="partial-badge">PARTIEL</span>':'';
       return'<div class="bon-wrap cell-editable" style="cursor:pointer;padding:2px 0;" onclick="editBon(\''+dept+'\','+idx+',this'+ms+')">'+pb+'<div class="bon-row">'+star+'<span class="cell-bon">'+esc(row.bon)+'</span></div></div>';
     case 'dateCmd':return'<span style="color:var(--text-muted);font-size:9px;white-space:nowrap;">'+esc(dateLabelPrecalc!=null?dateLabelPrecalc:dateForIdx(dept,idx,month))+'</span>';
-    case 'dateDue':return'<div class="cell-editable" style="cursor:pointer;padding:2px 4px;text-align:center;font-size:10px;white-space:nowrap;color:'+(row.dateDue?'var(--text)':'var(--text-muted)')+';" onclick="editDateDue(\''+dept+'\','+idx+',this'+ms+')">'+(row.dateDue?esc(row.dateDue):'—')+'</div>';
     case 'nom':return '<div class="cell-dropdown clr-nom '+(row.nom?'has-value':'empty')+'" onclick="openCellDropdown(\''+dept+'\','+idx+',\'nom\',\'Technicien\',\'employes_atelier\''+ms+')">'+(row.nom?esc(row.nom):'—')+'</div>';
     case 'job':return'<div onclick="editJob(\''+dept+'\','+idx+',this'+ms+')" style="cursor:pointer;font-weight:700;color:var(--teal);width:100%;text-align:center;padding:4px 0;" class="cell-editable">'+(parseInt(row.job)||1)+'</div>';
     case 'qty':var q=parseInt(row.qty)||1;return'<div onclick="editQty(\''+dept+'\','+idx+',this'+ms+')" style="cursor:pointer;width:100%;text-align:center;padding:4px 0;font-weight:700;" class="cell-editable">'+q+'</div>';
@@ -2753,7 +2768,6 @@ function openEmptyRowDropdown(el,field,title,listKey){
 /* ═══ SAVE ON EVERY CHANGE ═══ */
 function uf(d,i,f,v,month){if(!hasPermission("M"))return;var md=gmd(d,month);if(md.rows[i]&&md.rows[i].type==='entry'){md.rows[i][f]=v;md.data[md.month]=md.rows;saveD(d,md.data);}}
 function editQty(dept,idx,el,month){var md=gmd(dept,month);var row=md.rows[idx];if(!row||row.type!=='entry')return;var cur=parseInt(row.qty)||1;var val=cur;var inp=document.createElement('input');inp.type='number';inp.value=val;inp.min='1';inp.placeholder='1';inp.style.cssText='width:50px;padding:2px 4px;font-size:12px;font-weight:700;text-align:center;background:rgba(255,255,255,.1);border:1px solid var(--gold);border-radius:3px;color:#e2e8f0;outline:none;';el.innerHTML='';el.appendChild(inp);inp.focus();inp.select();function save(){var nv=parseInt(inp.value)||1;uf(dept,idx,'qty',nv,month);renderTable(dept);}inp.addEventListener('blur',save);inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();save();}if(e.key==='Escape'){renderTable(dept);}});}
-function editDateDue(dept,idx,el,month){var md=gmd(dept,month);var row=md.rows[idx];if(!row||row.type!=='entry')return;var old=row.dateDue||'';var inp=document.createElement('input');inp.type='date';inp.style.cssText='width:100%;padding:2px 4px;font-size:11px;text-align:center;background:rgba(255,255,255,.1);border:1px solid var(--gold);border-radius:3px;color:#e2e8f0;outline:none;';var dp=old.split('/');if(dp.length===3)inp.value=dp[2]+'-'+dp[1]+'-'+dp[0];el.innerHTML='';el.appendChild(inp);inp.focus();function save(){var v=inp.value;if(v){var pp=v.split('-');row.dateDue=(pp.length===3)?(pp[2]+'/'+pp[1]+'/'+pp[0]):v;}else{row.dateDue='';}md.data[md.month]=md.rows;saveD(dept,md.data);renderTable(dept);}inp.addEventListener('change',save);inp.addEventListener('blur',save);inp.addEventListener('keydown',function(e){if(e.key==='Enter')save();if(e.key==='Escape')renderTable(dept);});}
 function editBon(dept,idx,el,month){var md=gmd(dept,month);var row=md.rows[idx];if(!row||row.type!=='entry')return;var cur=row.bon||'';var inp=document.createElement('input');inp.type='text';inp.value=cur;inp.placeholder='# bon';inp.style.cssText='width:80px;padding:2px 4px;font-size:11px;font-weight:700;text-align:center;background:rgba(255,255,255,.1);border:1px solid var(--gold);border-radius:3px;color:#e2e8f0;outline:none;';el.innerHTML='';el.appendChild(inp);inp.focus();inp.select();function save(){var nv=inp.value.trim();if(nv){uf(dept,idx,'bon',nv,month);}renderTable(dept);}inp.addEventListener('blur',save);inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();save();}if(e.key==='Escape'){renderTable(dept);}});}
 function editJob(dept,idx,el,month){var md=gmd(dept,month);var row=md.rows[idx];if(!row||row.type!=='entry')return;var cur=parseInt(row.job)||1;var inp=document.createElement('input');inp.type='number';inp.value=cur;inp.min='1';inp.placeholder='1';inp.style.cssText='width:40px;padding:2px 4px;font-size:12px;font-weight:700;text-align:center;background:rgba(255,255,255,.1);border:1px solid var(--teal);border-radius:3px;color:var(--teal);outline:none;';el.innerHTML='';el.appendChild(inp);inp.focus();inp.select();function save(){var nv=parseInt(inp.value)||1;uf(dept,idx,'job',nv,month);renderTable(dept);}inp.addEventListener('blur',save);inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();save();}if(e.key==='Escape'){renderTable(dept);}});}
 function setReason(d,i,v,month){var md=gmd(d,month);var r=md.rows[i];if(!r||r.type!=='entry')return;r.errorReason=v;r.hasError=!!v;r.errQty=v?1:0;md.data[md.month]=md.rows;saveD(d,md.data);renderTable(d);}
