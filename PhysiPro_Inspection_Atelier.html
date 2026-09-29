@@ -2144,11 +2144,32 @@ function sortRowsByDateAsc(rows){
   withIdx.forEach(function(x){if(x.g.dateRow)out.push(x.g.dateRow);x.g.entries.forEach(function(e){out.push(e);});});
   return out;
 }
+/* v20260929 — PERF : ne pas re-trier à CHAQUE render (ça ralentissait tout après
+   chaque frappe/clic). On vérifie d'abord en un seul passage, sans regrouper,
+   si l'ordre est déjà bon ; le tri complet (coûteux) ne s'exécute que la
+   première fois par mois, ou si un séparateur de date vient d'être ajouté/
+   modifié/supprimé (voir _dateOrderDirty ci-dessous). */
+var _dateOrderChecked={};
+function markDateOrderDirty(dept,month){delete _dateOrderChecked[dept+'|'+month];}
+function isDateOrderOK(rows){
+  var lastTs=-Infinity;
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i];
+    if(!r||r.type!=='date')continue;
+    var ts=parseDateLabel(r.dateLabel);
+    if(ts==null||isNaN(ts))continue; // date illisible : on ne bloque pas sur elle
+    if(ts<lastTs)return false;
+    lastTs=ts;
+  }
+  return true;
+}
 function ensureSortedByDate(dept,md){
+  var key=dept+'|'+md.month;
+  if(_dateOrderChecked[key])return md.rows;
+  if(isDateOrderOK(md.rows)){_dateOrderChecked[key]=true;return md.rows;}
   var sorted=sortRowsByDateAsc(md.rows);
-  var changed=sorted.length!==md.rows.length;
-  if(!changed)for(var i=0;i<sorted.length;i++){if(sorted[i]!==md.rows[i]){changed=true;break;}}
-  if(changed){md.rows=sorted;md.data[md.month]=sorted;saveD(dept,md.data);}
+  md.rows=sorted;md.data[md.month]=sorted;saveD(dept,md.data);
+  _dateOrderChecked[key]=true;
   return md.rows;
 }
 function updateDates(){var t=todayStr();var e1=document.getElementById('insp-date-display');if(e1)e1.textContent=t;}
@@ -2171,6 +2192,9 @@ function getFavoriteRows(){
   for(var mi=0;mi<months.length;mi++){
     var month=months[mi];
     var rows=allData[month]||[];
+    var dateAt=new Array(rows.length);
+    var curLbl='';
+    for(var fi=0;fi<rows.length;fi++){if(rows[fi]&&rows[fi].type==='date')curLbl=rows[fi].dateLabel||'';dateAt[fi]=curLbl;}
     for(var ri=rows.length-1;ri>=0;ri--){
       var row=rows[ri];
       if(!row||row.type==='date')continue;
@@ -2178,12 +2202,12 @@ function getFavoriteRows(){
       if(!bon||seen[bon])continue;
       if(!_cachedFindSerie(bon))continue;
       seen[bon]=true;
-      allEntries.push({row:row,month:month,realIdx:ri});
+      allEntries.push({row:row,month:month,realIdx:ri,dateLabel:dateAt[ri]});
     }
   }
   return allEntries.slice(0,15);
 }
-function addDateSep(dept){var md=gmd(dept);var rows=md.rows;rows.push({id:'date-'+Date.now(),type:'date',dateLabel:todayStr()});md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('📅 Séparation ajoutée','success');}
+function addDateSep(dept){var md=gmd(dept);var rows=md.rows;rows.push({id:'date-'+Date.now(),type:'date',dateLabel:todayStr()});md.data[md.month]=rows;saveD(dept,md.data);markDateOrderDirty(dept,md.month);renderTable(dept);showToast('📅 Séparation ajoutée','success');}
 /* ═══ SEARCH — DEBOUNCED (150ms) to prevent lag on every keystroke ═══ */
 var _searchTimer=null;
 function onSearchInput(){
@@ -2198,6 +2222,7 @@ function getSF(){var el=document.getElementById('global-search');return el?(el.v
 var INSP_COLS=[
   {id:'num',label:'#',w:'28px',fixed:true},
   {id:'bon',label:'Bon',w:'80px'},
+  {id:'dateDue',label:'Éch.',w:'62px'},
   {id:'dateCmd',label:'Date',w:'62px'},
   {id:'nom',label:'Nom',w:'130px',gear:'employes_atelier|Techniciens'},
   {id:'job',label:'Job',w:'32px'},
@@ -2451,7 +2476,8 @@ function renderTable(dept){
         var hasPart=rowHasPartial(row);
         var rc=[];if(hasErr)rc.push('error-row');if(hasPart)rc.push('partial-row');
         html+='<tr class="'+rc.join(' ')+'">';
-        vis.forEach(function(vc){html+='<td>'+cellHTML(dept,vc.id,row,realIdx,count,hasErr,realMonth)+'</td>';});
+        var _favDateLbl=fEntry.dateLabel;
+        vis.forEach(function(vc){html+='<td>'+cellHTML(dept,vc.id,row,realIdx,count,hasErr,realMonth,_favDateLbl)+'</td>';});
         html+='</tr>';
       }
     }
@@ -2464,12 +2490,14 @@ function renderTable(dept){
       var mon=allMonths[smi];
       var mRows=allData[mon]||[];
       var matches=[];
+      var curDateLabelS='';
       for(var mri=0;mri<mRows.length;mri++){
         var mr=mRows[mri];
+        if(mr&&mr.type==='date'){curDateLabelS=mr.dateLabel||'';continue;}
         if(!mr||mr.type!=='entry')continue;
         var ss=[mr.bon,mr.nom,mr.item,mr.client,mr.inspecteur,mr.description,mr.errorReason].join(' ').toLowerCase();
         if(ss.indexOf(f)<0)continue;
-        matches.push({row:mr,idx:mri});
+        matches.push({row:mr,idx:mri,dateLabel:curDateLabelS});
       }
       if(!matches.length)continue;
       // En-tête de mois pour chaque groupe de résultats
@@ -2481,7 +2509,8 @@ function renderTable(dept){
         var hasPart=rowHasPartial(mrow);
         var rc=[];if(hasErr)rc.push('error-row');if(hasPart)rc.push('partial-row');
         html+='<tr class="'+rc.join(' ')+'">';
-        vis.forEach(function(vc){html+='<td>'+cellHTML(dept,vc.id,mrow,mIdx,count,hasErr,mon)+'</td>';});
+        var mDateLbl=matches[mj].dateLabel;
+        vis.forEach(function(vc){html+='<td>'+cellHTML(dept,vc.id,mrow,mIdx,count,hasErr,mon,mDateLbl)+'</td>';});
         html+='</tr>';
       }
     }
@@ -2491,9 +2520,10 @@ function renderTable(dept){
   }else if(!rows||!rows.length){
     html='<tr><td colspan="'+nc+'"><div class="empty-state"><div class="icon">'+(dept==='inspection'?'☑️':'🧵')+'</div><p>Aucune entrée — '+gml(month)+'</p></div></td></tr>';
   }else{
+    var curDateLabel='';
     for(var idx=0;idx<rows.length;idx++){
       var row=rows[idx];
-      if(row.type==='date'){if(!hideDates)html+='<tr class="date-row"><td colspan="'+nc+'"><div class="date-row-inner"><span class="date-row-label" onclick="editDateSep(event,\''+dept+'\','+idx+')" title="Modifier la date">📅 '+esc(row.dateLabel)+'</span><span class="date-row-del" onclick="delDateSep(\''+dept+'\','+idx+')" title="Supprimer ce séparateur">✕</span></div></td></tr>';continue;}
+      if(row.type==='date'){curDateLabel=row.dateLabel||'';if(!hideDates)html+='<tr class="date-row"><td colspan="'+nc+'"><div class="date-row-inner"><span class="date-row-label" onclick="editDateSep(event,\''+dept+'\','+idx+')" title="Modifier la date">📅 '+esc(row.dateLabel)+'</span><span class="date-row-del" onclick="delDateSep(\''+dept+'\','+idx+')" title="Supprimer ce séparateur">✕</span></div></td></tr>';continue;}
       // (Recherche gérée par la branche globale ci-dessus — ici = affichage normal du mois courant)
       // Auto-fix client label from Série+ (batched, saves once after render)
       var _rfSm = _cachedFindSerie((row.bon||'').trim());
@@ -2506,7 +2536,7 @@ function renderTable(dept){
       var hasPart=rowHasPartial(row);
       var rc=[];if(hasErr)rc.push('error-row');if(hasPart)rc.push('partial-row');
       html+='<tr class="'+rc.join(' ')+'">';
-      vis.forEach(function(vc){html+='<td>'+cellHTML(dept,vc.id,row,idx,count,hasErr)+'</td>';});
+      vis.forEach(function(vc){html+='<td>'+cellHTML(dept,vc.id,row,idx,count,hasErr,undefined,curDateLabel)+'</td>';});
       html+='</tr>';
     }
   }
@@ -2563,7 +2593,7 @@ function scrollToBottom(dept){
   if(targetTop<0)targetTop=0;
   wrap.scrollTop=targetTop;
 }
-function cellHTML(dept,colId,row,idx,count,hasErr,month){
+function cellHTML(dept,colId,row,idx,count,hasErr,month,dateLabelPrecalc){
   var isI=dept==='inspection';
   var ms=month?",'"+month+"'":''; /* suffixe mois pour édition cross-mois (recherche globale) */
   switch(colId){
@@ -2585,7 +2615,8 @@ function cellHTML(dept,colId,row,idx,count,hasErr,month){
       }
       var pb=rowHasPartial(row)?'<span class="partial-badge">PARTIEL</span>':'';
       return'<div class="bon-wrap cell-editable" style="cursor:pointer;padding:2px 0;" onclick="editBon(\''+dept+'\','+idx+',this'+ms+')">'+pb+'<div class="bon-row">'+star+'<span class="cell-bon">'+esc(row.bon)+'</span></div></div>';
-    case 'dateCmd':return'<span style="color:var(--text-muted);font-size:9px;white-space:nowrap;">'+esc(dateForIdx(dept,idx,month))+'</span>';
+    case 'dateCmd':return'<span style="color:var(--text-muted);font-size:9px;white-space:nowrap;">'+esc(dateLabelPrecalc!=null?dateLabelPrecalc:dateForIdx(dept,idx,month))+'</span>';
+    case 'dateDue':return'<div class="cell-editable" style="cursor:pointer;padding:2px 4px;text-align:center;font-size:10px;white-space:nowrap;color:'+(row.dateDue?'var(--text)':'var(--text-muted)')+';" onclick="editDateDue(\''+dept+'\','+idx+',this'+ms+')">'+(row.dateDue?esc(row.dateDue):'—')+'</div>';
     case 'nom':return '<div class="cell-dropdown clr-nom '+(row.nom?'has-value':'empty')+'" onclick="openCellDropdown(\''+dept+'\','+idx+',\'nom\',\'Technicien\',\'employes_atelier\''+ms+')">'+(row.nom?esc(row.nom):'—')+'</div>';
     case 'job':return'<div onclick="editJob(\''+dept+'\','+idx+',this'+ms+')" style="cursor:pointer;font-weight:700;color:var(--teal);width:100%;text-align:center;padding:4px 0;" class="cell-editable">'+(parseInt(row.job)||1)+'</div>';
     case 'qty':var q=parseInt(row.qty)||1;return'<div onclick="editQty(\''+dept+'\','+idx+',this'+ms+')" style="cursor:pointer;width:100%;text-align:center;padding:4px 0;font-weight:700;" class="cell-editable">'+q+'</div>';
@@ -2722,6 +2753,7 @@ function openEmptyRowDropdown(el,field,title,listKey){
 /* ═══ SAVE ON EVERY CHANGE ═══ */
 function uf(d,i,f,v,month){if(!hasPermission("M"))return;var md=gmd(d,month);if(md.rows[i]&&md.rows[i].type==='entry'){md.rows[i][f]=v;md.data[md.month]=md.rows;saveD(d,md.data);}}
 function editQty(dept,idx,el,month){var md=gmd(dept,month);var row=md.rows[idx];if(!row||row.type!=='entry')return;var cur=parseInt(row.qty)||1;var val=cur;var inp=document.createElement('input');inp.type='number';inp.value=val;inp.min='1';inp.placeholder='1';inp.style.cssText='width:50px;padding:2px 4px;font-size:12px;font-weight:700;text-align:center;background:rgba(255,255,255,.1);border:1px solid var(--gold);border-radius:3px;color:#e2e8f0;outline:none;';el.innerHTML='';el.appendChild(inp);inp.focus();inp.select();function save(){var nv=parseInt(inp.value)||1;uf(dept,idx,'qty',nv,month);renderTable(dept);}inp.addEventListener('blur',save);inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();save();}if(e.key==='Escape'){renderTable(dept);}});}
+function editDateDue(dept,idx,el,month){var md=gmd(dept,month);var row=md.rows[idx];if(!row||row.type!=='entry')return;var old=row.dateDue||'';var inp=document.createElement('input');inp.type='date';inp.style.cssText='width:100%;padding:2px 4px;font-size:11px;text-align:center;background:rgba(255,255,255,.1);border:1px solid var(--gold);border-radius:3px;color:#e2e8f0;outline:none;';var dp=old.split('/');if(dp.length===3)inp.value=dp[2]+'-'+dp[1]+'-'+dp[0];el.innerHTML='';el.appendChild(inp);inp.focus();function save(){var v=inp.value;if(v){var pp=v.split('-');row.dateDue=(pp.length===3)?(pp[2]+'/'+pp[1]+'/'+pp[0]):v;}else{row.dateDue='';}md.data[md.month]=md.rows;saveD(dept,md.data);renderTable(dept);}inp.addEventListener('change',save);inp.addEventListener('blur',save);inp.addEventListener('keydown',function(e){if(e.key==='Enter')save();if(e.key==='Escape')renderTable(dept);});}
 function editBon(dept,idx,el,month){var md=gmd(dept,month);var row=md.rows[idx];if(!row||row.type!=='entry')return;var cur=row.bon||'';var inp=document.createElement('input');inp.type='text';inp.value=cur;inp.placeholder='# bon';inp.style.cssText='width:80px;padding:2px 4px;font-size:11px;font-weight:700;text-align:center;background:rgba(255,255,255,.1);border:1px solid var(--gold);border-radius:3px;color:#e2e8f0;outline:none;';el.innerHTML='';el.appendChild(inp);inp.focus();inp.select();function save(){var nv=inp.value.trim();if(nv){uf(dept,idx,'bon',nv,month);}renderTable(dept);}inp.addEventListener('blur',save);inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();save();}if(e.key==='Escape'){renderTable(dept);}});}
 function editJob(dept,idx,el,month){var md=gmd(dept,month);var row=md.rows[idx];if(!row||row.type!=='entry')return;var cur=parseInt(row.job)||1;var inp=document.createElement('input');inp.type='number';inp.value=cur;inp.min='1';inp.placeholder='1';inp.style.cssText='width:40px;padding:2px 4px;font-size:12px;font-weight:700;text-align:center;background:rgba(255,255,255,.1);border:1px solid var(--teal);border-radius:3px;color:var(--teal);outline:none;';el.innerHTML='';el.appendChild(inp);inp.focus();inp.select();function save(){var nv=parseInt(inp.value)||1;uf(dept,idx,'job',nv,month);renderTable(dept);}inp.addEventListener('blur',save);inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();save();}if(e.key==='Escape'){renderTable(dept);}});}
 function setReason(d,i,v,month){var md=gmd(d,month);var r=md.rows[i];if(!r||r.type!=='entry')return;r.errorReason=v;r.hasError=!!v;r.errQty=v?1:0;md.data[md.month]=md.rows;saveD(d,md.data);renderTable(d);}
@@ -2752,14 +2784,14 @@ function delDateSep(d,i){if(!confirm('Supprimer ce séparateur de date?'))return
       setFbWriting(d,false);setSyncBadge('online');
     }).catch(function(e){setFbWriting(d,false);});
   }
-  renderTable(d);showToast('🗑️ Séparateur supprimé','info');}
+  markDateOrderDirty(d,md.month);renderTable(d);showToast('🗑️ Séparateur supprimé','info');}
 function editDateSep(evt,d,i){var md=gmd(d);var row=md.rows[i];if(!row||row.type!=='date')return;var el=evt.target;var old=row.dateLabel;var inp=document.createElement('input');inp.type='date';inp.className='date-row-input';
 // FIX #18: Convert DD/MM/YYYY → YYYY-MM-DD for date input
 var dp=old.split('/');if(dp.length===3)inp.value=dp[2]+'-'+dp[1]+'-'+dp[0];else inp.value=old;
 el.parentNode.replaceChild(inp,el);inp.focus();function save(){var v=inp.value;if(v&&v!==old){
 // Convert YYYY-MM-DD back to DD/MM/YYYY for storage
 var pp=v.split('-');if(pp.length===3)row.dateLabel=pp[2]+'/'+pp[1]+'/'+pp[0];else row.dateLabel=v;
-md.data[md.month]=md.rows;saveD(d,md.data);showToast('📅 Date modifiée','success');}renderTable(d);}inp.addEventListener('change',save);inp.addEventListener('blur',save);inp.addEventListener('keydown',function(e){if(e.key==='Enter')save();if(e.key==='Escape')renderTable(d);});}
+md.data[md.month]=md.rows;saveD(d,md.data);markDateOrderDirty(d,md.month);showToast('📅 Date modifiée','success');}renderTable(d);}inp.addEventListener('change',save);inp.addEventListener('blur',save);inp.addEventListener('keydown',function(e){if(e.key==='Enter')save();if(e.key==='Escape')renderTable(d);});}
 
 
 /* ═══ SÉRIE+ ═══ */
