@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Inspection Atelier v20260929c</title>
+<title>PhysiPro — Inspection Atelier v20260929e</title>
 <style>
 :root{--bg-main:#0f172a;--bg-card:#1e293b;--bg-input:#0f172a;--border:#334155;--gold:#c9a227;--gold-light:#fbbf24;--text:#e2e8f0;--text-muted:#94a3b8;--success:#22c55e;--danger:#ef4444;--info:#3b82f6;--purple:#a855f7;--teal:#14b8a6;--tbl-zoom:11px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -360,6 +360,7 @@ body.col-resizing *{cursor:col-resize!important;}
 .vrf-pas-tab th{position:sticky;top:0;background:#0f2847;color:#93c5fd;text-align:left;font-size:10px;padding:3px 6px;border-bottom:1px solid rgba(74,142,245,.4);}
 .vrf-pas-tab td{padding:3px 6px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:top;font-family:Consolas,monospace;white-space:nowrap;}
 .vrf-pas-no{font-weight:800;color:#e2e8f0;}
+.vrf-pas-item{color:#cbd5e1;font-family:'Segoe UI',Arial,sans-serif;font-size:10px;white-space:normal;max-width:170px;}
 .vrf-pas-rien{color:rgba(255,255,255,.3);}
 .vrf-pas-ok{color:#22c55e;font-weight:900;}
 .vrf-pas-nom{color:#cbd5e1;font-family:'Segoe UI',Arial,sans-serif;font-size:10.5px;}
@@ -5115,6 +5116,10 @@ var VERIF = (function () {
      seuls (toujours acceptée telle quelle). */
   var _datesParsed = {};
   var DATE_RE = /^\d{4}-\d{1,2}-\d{1,2}$|^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/;
+  /* Un collage Excel d'une cellule Date inclut souvent une heure invisible
+     ("2026-09-24 00:00:00") — ce jeton-là doit être ignoré, pas traité comme
+     un numéro de commande. */
+  var TIME_RE = /^\d{1,2}:\d{2}(:\d{2})?(\s*(am|pm))?$/i;
   function _parse(txt) {
     _datesParsed = {};
     var lines = String(txt || '').split(/\r?\n/);
@@ -5123,7 +5128,11 @@ var VERIF = (function () {
       var toks = line.split(/[\s,;]+/).map(function (t) { return t.trim(); }).filter(Boolean);
       if (!toks.length) return;
       var dateTok = null, numToks = [];
-      toks.forEach(function (t) { if (DATE_RE.test(t)) { if (!dateTok) dateTok = t; } else { numToks.push(t); } });
+      toks.forEach(function (t) {
+        if (DATE_RE.test(t)) { if (!dateTok) dateTok = t; }
+        else if (TIME_RE.test(t) || /^(am|pm)$/i.test(t)) { /* heure collée avec la date : ignorée */ }
+        else { numToks.push(t); }
+      });
       numToks.forEach(function (p) {
         var k = _norm(p);
         if (!seen[k]) { seen[k] = true; out.push(p); }
@@ -5135,6 +5144,12 @@ var VERIF = (function () {
   /* Date "de la commande" (celle collée à côté du numéro), pour affichage dans le
      tableau des passages. Retourne '' si aucune date n'a été collée pour ce numéro. */
   function dateDe(num) { return _datesParsed[_norm(num)] || ''; }
+
+  /* 2026-09-29 — Item / matériau de la commande, lu directement dans les lignes
+     d'Inspection Atelier (locales + archives) : pas besoin de le coller, il sort
+     automatiquement dans le tableau des passages dès qu'on analyse une liste. */
+  var _itemIndex = {};   // clé normalisée -> { month, item }
+  function itemDe(num) { var e = _itemIndex[_norm(num)]; return (e && e.item) || ''; }
 
   var _archiveDates = null;   // 2026-09-28 : { clé: { 'AAAA-MM-JJ': true } } — dates d'atelier des archives
   function _addRows(idx, month, rows, dates) {
@@ -5153,6 +5168,9 @@ var VERIF = (function () {
       var b = _norm(r.bon || r.bonCmd || '');
       if (!b) return;
       if (!idx[b] || month > idx[b]) idx[b] = month;   // garder le mois le plus récent
+      if (r.item && String(r.item).trim() && (!_itemIndex[b] || month >= _itemIndex[b].month)) {
+        _itemIndex[b] = { month: month, item: String(r.item).trim() };
+      }
     });
   }
 
@@ -5327,6 +5345,7 @@ var VERIF = (function () {
       + 'tr{break-inside:avoid}.vrf-pas-no{font-weight:800}'
       + '.vrf-pas-ok{color:#16a34a;font-weight:900}.vrf-pas-ko{color:#dc2626;font-weight:900;font-size:14px}'
       + '.vrf-pas-nom{color:#475569;font-family:"Segoe UI",Arial,sans-serif;font-size:11px}'
+      + '.vrf-pas-item{color:#334155;font-family:"Segoe UI",Arial,sans-serif;font-size:10.5px}'
       + '.leg,.etat{font-size:10.5px;color:#475569;margin-top:8px}'
       + '</style></head><body>'
       + '<div class="ban"><b>Vérification des commandes</b><span>' + jour + '</span></div>'
@@ -5349,7 +5368,7 @@ var VERIF = (function () {
     w.document.close();
   }
 
-  return { open: open, close: close, analyser: analyser, copier: copier, reset: reset, imprimer: imprimer, dateDe: dateDe };
+  return { open: open, close: close, analyser: analyser, copier: copier, reset: reset, imprimer: imprimer, dateDe: dateDe, itemDe: itemDe };
 })();
 window.VERIF = VERIF;
 
@@ -5431,7 +5450,7 @@ var PASSAGES_VERIF = (function () {
     Promise.all([_lire(cles), etat]).then(function () {
       var nb = 0;
       var h = '<div class="vrf-pas-titre">📅 Passages dans les départements</div>'
-            + '<div class="vrf-pas-tab"><table><thead><tr><th>Commande</th><th>Date commande</th><th>Insp. Atelier</th>'
+            + '<div class="vrf-pas-tab"><table><thead><tr><th>Commande</th><th>Date commande</th><th>Item</th><th>Insp. Atelier</th>'
             + '<th>Couture (sortie)</th><th>Insp. Finale</th></tr></thead><tbody>';
       liste.forEach(function (num, k) {
         var e = _cache[cles[k]], v = (e && e.v) || null;
@@ -5439,8 +5458,10 @@ var PASSAGES_VERIF = (function () {
         /* atelier : l'index ET les lignes d'Inspection Atelier déjà en mémoire (page + archives) */
         var at = _union(v && v.atelier, datesAtelier[cles[k]]);
         var dCmd = (window.VERIF && VERIF.dateDe) ? VERIF.dateDe(num) : '';
+        var itm = (window.VERIF && VERIF.itemDe) ? VERIF.itemDe(num) : '';
         h += '<tr><td class="vrf-pas-no">' + esc(num) + '</td>'
            + '<td>' + (dCmd ? esc(dCmd) : '<span class="vrf-pas-ko">—</span>') + '</td>'
+           + '<td class="vrf-pas-item">' + (itm ? esc(itm) : '<span class="vrf-pas-ko">—</span>') + '</td>'
            + '<td>' + _dates(at) + '</td>'
            + '<td>' + _dates(v && v.couture) + '</td>'
            + '<td>' + _dates(v && v.finale) + '</td></tr>';
@@ -5448,7 +5469,7 @@ var PASSAGES_VERIF = (function () {
       h += '</tbody></table></div>';
       h += '<div class="vrf-pas-info"><span class="vrf-pas-ok">\u2713</span> passée, avec sa date \u00b7 '
          + '<span class="vrf-pas-ko">\u2717</span> pas encore passée dans ce département'
-         + ' (en couture : \u2717 = pas encore de date de sortie)</div>';
+         + ' (en couture : \u2717 = pas encore de date de sortie \u00b7 « Item » = matériau de la commande, lu dans Inspection Atelier)</div>';
       /* l'état de l'historique, pour savoir si un \u2717 veut dire « pas passée » ou « pas encore indexée » */
       if (_etatRattrapage && _etatRattrapage.date && !_aJour(_etatRattrapage)) {
         h += '<div class="vrf-pas-alerte">\u26a0\ufe0f Les noms de l\u2019historique ne sont pas encore dans l\u2019index : '
