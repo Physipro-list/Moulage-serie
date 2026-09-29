@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Inspection Atelier v20260929e</title>
+<title>PhysiPro — Inspection Atelier v20260929f</title>
 <style>
 :root{--bg-main:#0f172a;--bg-card:#1e293b;--bg-input:#0f172a;--border:#334155;--gold:#c9a227;--gold-light:#fbbf24;--text:#e2e8f0;--text-muted:#94a3b8;--success:#22c55e;--danger:#ef4444;--info:#3b82f6;--purple:#a855f7;--teal:#14b8a6;--tbl-zoom:11px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -5145,11 +5145,38 @@ var VERIF = (function () {
      tableau des passages. Retourne '' si aucune date n'a été collée pour ce numéro. */
   function dateDe(num) { return _datesParsed[_norm(num)] || ''; }
 
-  /* 2026-09-29 — Item / matériau de la commande, lu directement dans les lignes
-     d'Inspection Atelier (locales + archives) : pas besoin de le coller, il sort
-     automatiquement dans le tableau des passages dès qu'on analyse une liste. */
-  var _itemIndex = {};   // clé normalisée -> { month, item }
-  function itemDe(num) { var e = _itemIndex[_norm(num)]; return (e && e.item) || ''; }
+  /* 2026-09-29 — Item / matériau des commandes en COUTURE (champ « items » de
+     Production Couture, nœud Firebase inspectionCoutureData), pour les commandes
+     qui n'ont pas encore de date de sortie. Lu une fois par « Analyser » (cache
+     5 min, comme les autres lectures de ce module), pour éviter de relire
+     ~876 Ko à chaque clic si on ré-analyse la même liste. */
+  var _coutureItemsCache = null, _coutureItemsCacheT = 0;
+  var COUTURE_ITEMS_TTL = 5 * 60 * 1000;
+  function _loadCoutureItems() {
+    if (_coutureItemsCache && (Date.now() - _coutureItemsCacheT) < COUTURE_ITEMS_TTL) return Promise.resolve(_coutureItemsCache);
+    if (!fbDb) return Promise.resolve(_coutureItemsCache || {});
+    return fbDb.ref('inspectionCoutureData').once('value').then(function (snap) {
+      var data = snap.val() || {};
+      var idx = {};
+      Object.keys(data).forEach(function (m) {
+        var arr = data[m];
+        if (!arr) return;
+        if (!Array.isArray(arr)) arr = Object.keys(arr).map(function (k) { return arr[k]; });
+        arr.forEach(function (r) {
+          if (!r) return;
+          var b = _norm(r.bonCmd || '');
+          if (!b) return;
+          var pasDeSortie = !(r.dateSortie && String(r.dateSortie).trim());
+          var it = String(r.items || '').trim();
+          if (pasDeSortie && it) idx[b] = it;   // seulement les commandes sans date de sortie
+        });
+      });
+      _coutureItemsCache = idx;
+      _coutureItemsCacheT = Date.now();
+      return idx;
+    }).catch(function () { return _coutureItemsCache || {}; });
+  }
+  function itemCoutureDe(num) { return (_coutureItemsCache && _coutureItemsCache[_norm(num)]) || ''; }
 
   var _archiveDates = null;   // 2026-09-28 : { clé: { 'AAAA-MM-JJ': true } } — dates d'atelier des archives
   function _addRows(idx, month, rows, dates) {
@@ -5168,9 +5195,6 @@ var VERIF = (function () {
       var b = _norm(r.bon || r.bonCmd || '');
       if (!b) return;
       if (!idx[b] || month > idx[b]) idx[b] = month;   // garder le mois le plus récent
-      if (r.item && String(r.item).trim() && (!_itemIndex[b] || month >= _itemIndex[b].month)) {
-        _itemIndex[b] = { month: month, item: String(r.item).trim() };
-      }
     });
   }
 
@@ -5276,7 +5300,9 @@ var VERIF = (function () {
         _showResults(list.length, found, missing, res.ok, res.viaIndex);
         _status('');
         PASSAGES_VERIF.majBouton();
-        PASSAGES_VERIF.afficher(list, datesAtelier);   // 2026-09-28 : dates par département
+        return _loadCoutureItems().then(function () {
+          PASSAGES_VERIF.afficher(list, datesAtelier);   // 2026-09-28 : dates par département
+        });
       })
       .then(function () { _busy = false; btn.disabled = false; },
             function (e) { _busy = false; btn.disabled = false; _status(''); showToast('❌ ' + e.message, 'error'); });
@@ -5368,7 +5394,7 @@ var VERIF = (function () {
     w.document.close();
   }
 
-  return { open: open, close: close, analyser: analyser, copier: copier, reset: reset, imprimer: imprimer, dateDe: dateDe, itemDe: itemDe };
+  return { open: open, close: close, analyser: analyser, copier: copier, reset: reset, imprimer: imprimer, dateDe: dateDe, itemCoutureDe: itemCoutureDe };
 })();
 window.VERIF = VERIF;
 
@@ -5450,7 +5476,7 @@ var PASSAGES_VERIF = (function () {
     Promise.all([_lire(cles), etat]).then(function () {
       var nb = 0;
       var h = '<div class="vrf-pas-titre">📅 Passages dans les départements</div>'
-            + '<div class="vrf-pas-tab"><table><thead><tr><th>Commande</th><th>Date commande</th><th>Item</th><th>Insp. Atelier</th>'
+            + '<div class="vrf-pas-tab"><table><thead><tr><th>Commande</th><th>Date commande</th><th>Insp. Atelier</th>'
             + '<th>Couture (sortie)</th><th>Insp. Finale</th></tr></thead><tbody>';
       liste.forEach(function (num, k) {
         var e = _cache[cles[k]], v = (e && e.v) || null;
@@ -5458,18 +5484,25 @@ var PASSAGES_VERIF = (function () {
         /* atelier : l'index ET les lignes d'Inspection Atelier déjà en mémoire (page + archives) */
         var at = _union(v && v.atelier, datesAtelier[cles[k]]);
         var dCmd = (window.VERIF && VERIF.dateDe) ? VERIF.dateDe(num) : '';
-        var itm = (window.VERIF && VERIF.itemDe) ? VERIF.itemDe(num) : '';
+        /* couture : pas de date de sortie -> on montre l'item/matériau entré en couture, à la place */
+        var coutureVal = v && v.couture;
+        var aUneDateSortie = !!(coutureVal && typeof coutureVal === 'object'
+          && Object.keys(coutureVal).some(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); }));
+        var coutureHtml = _dates(coutureVal);
+        if (!aUneDateSortie) {
+          var itmC = (window.VERIF && VERIF.itemCoutureDe) ? VERIF.itemCoutureDe(num) : '';
+          if (itmC) coutureHtml += '<div class="vrf-pas-item">' + esc(itmC) + '</div>';
+        }
         h += '<tr><td class="vrf-pas-no">' + esc(num) + '</td>'
            + '<td>' + (dCmd ? esc(dCmd) : '<span class="vrf-pas-ko">—</span>') + '</td>'
-           + '<td class="vrf-pas-item">' + (itm ? esc(itm) : '<span class="vrf-pas-ko">—</span>') + '</td>'
            + '<td>' + _dates(at) + '</td>'
-           + '<td>' + _dates(v && v.couture) + '</td>'
+           + '<td>' + coutureHtml + '</td>'
            + '<td>' + _dates(v && v.finale) + '</td></tr>';
       });
       h += '</tbody></table></div>';
       h += '<div class="vrf-pas-info"><span class="vrf-pas-ok">\u2713</span> passée, avec sa date \u00b7 '
          + '<span class="vrf-pas-ko">\u2717</span> pas encore passée dans ce département'
-         + ' (en couture : \u2717 = pas encore de date de sortie \u00b7 « Item » = matériau de la commande, lu dans Inspection Atelier)</div>';
+         + ' (en couture : \u2717 = pas encore de date de sortie — l’item entré en couture est alors affiché sous le ✗)</div>';
       /* l'état de l'historique, pour savoir si un \u2717 veut dire « pas passée » ou « pas encore indexée » */
       if (_etatRattrapage && _etatRattrapage.date && !_aJour(_etatRattrapage)) {
         h += '<div class="vrf-pas-alerte">\u26a0\ufe0f Les noms de l\u2019historique ne sont pas encore dans l\u2019index : '
