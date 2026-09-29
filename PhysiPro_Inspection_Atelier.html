@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Inspection Atelier v20260928b</title>
+<title>PhysiPro — Inspection Atelier v20260929</title>
 <style>
 :root{--bg-main:#0f172a;--bg-card:#1e293b;--bg-input:#0f172a;--border:#334155;--gold:#c9a227;--gold-light:#fbbf24;--text:#e2e8f0;--text-muted:#94a3b8;--success:#22c55e;--danger:#ef4444;--info:#3b82f6;--purple:#a855f7;--teal:#14b8a6;--tbl-zoom:11px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -850,7 +850,7 @@ function safeFbUpdate(ref, data, callback) {
 }
 
 // === VERSION PROTECTION ===
-var APP_VERSION=20260928;var APP_MODULE='inspection';var _versionOK=true;
+var APP_VERSION=20260929;var APP_MODULE='inspection';var _versionOK=true;
 function checkAppVersion(){if(!fbDb)return;fbDb.ref('appSettings/versions/'+APP_MODULE).once('value').then(function(s){var r=s.val();if(r&&typeof r==='number'&&APP_VERSION<r){_versionOK=false;var b=document.createElement('div');b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;background:#dc2626;color:white;padding:12px 20px;font-weight:700;text-align:center;font-size:14px;';b.innerHTML='⚠️ VERSION OBSOLÈTE. <button onclick="location.reload(true)" style="margin-left:15px;background:white;color:#dc2626;border:none;padding:6px 16px;border-radius:6px;font-weight:bold;cursor:pointer;">🔄 Rafraîchir</button>';document.body.prepend(b);}else{fbDb.ref('appSettings/versions/'+APP_MODULE).set(APP_VERSION);_versionOK=true;}});}
 function writeBlocked(s){if(!_versionOK){if(!s)alert('🔒 Version obsolète');return true;}return false;}
 
@@ -2111,6 +2111,46 @@ function gmk(d){d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1
 function gml(k){var p=k.split('-'),ms=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];return ms[parseInt(p[1])]+' '+p[0];}
 function todayStr(){var t=new Date();return String(t.getDate()).padStart(2,'0')+'/'+String(t.getMonth()+1).padStart(2,'0')+'/'+t.getFullYear();}
 function gmd(d,forceMonth){var data=loadD(d);var el=document.getElementById('insp-month');var m=forceMonth||(el?el.value:gmk());if(!data[m])data[m]=[];return{data:data,month:m,rows:data[m]};}
+/* ═══ TRI CHRONOLOGIQUE DES SÉPARATEURS DE DATE (colonne "Date" + auto-tri) ═══ */
+function parseDateLabel(lbl){
+  if(!lbl)return null;
+  var s=String(lbl).trim();
+  var m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if(m)return new Date(parseInt(m[3],10),parseInt(m[2],10)-1,parseInt(m[1],10)).getTime();
+  m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if(m)return new Date(parseInt(m[1],10),parseInt(m[2],10)-1,parseInt(m[3],10)).getTime();
+  return null;
+}
+function dateForIdx(dept,idx,month){
+  var arr=month?gmd(dept,month).rows:gmd(dept).rows;
+  for(var i=idx;i>=0;i--){if(arr[i]&&arr[i].type==='date')return arr[i].dateLabel||'';}
+  return '';
+}
+function sortRowsByDateAsc(rows){
+  var groups=[],current=null;
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i];
+    if(r.type==='date'){current={dateRow:r,entries:[],ts:parseDateLabel(r.dateLabel)};groups.push(current);}
+    else{if(!current){current={dateRow:null,entries:[],ts:-Infinity};groups.push(current);}current.entries.push(r);}
+  }
+  var withIdx=groups.map(function(g,i){return{g:g,i:i};});
+  withIdx.sort(function(a,b){
+    var ta=(a.g.ts==null||isNaN(a.g.ts))?Number.POSITIVE_INFINITY:a.g.ts;
+    var tb=(b.g.ts==null||isNaN(b.g.ts))?Number.POSITIVE_INFINITY:b.g.ts;
+    if(ta!==tb)return ta-tb;
+    return a.i-b.i; /* tri stable — égalité ou date illisible : on garde l'ordre d'origine */
+  });
+  var out=[];
+  withIdx.forEach(function(x){if(x.g.dateRow)out.push(x.g.dateRow);x.g.entries.forEach(function(e){out.push(e);});});
+  return out;
+}
+function ensureSortedByDate(dept,md){
+  var sorted=sortRowsByDateAsc(md.rows);
+  var changed=sorted.length!==md.rows.length;
+  if(!changed)for(var i=0;i<sorted.length;i++){if(sorted[i]!==md.rows[i]){changed=true;break;}}
+  if(changed){md.rows=sorted;md.data[md.month]=sorted;saveD(dept,md.data);}
+  return md.rows;
+}
 function updateDates(){var t=todayStr();var e1=document.getElementById('insp-date-display');if(e1)e1.textContent=t;}
 function lastDateInRows(rows){for(var i=rows.length-1;i>=0;i--){if(rows[i].type==='date')return rows[i].dateLabel;if(rows[i].type==='entry'&&rows[i].entryDate)return rows[i].entryDate;}return null;}
 
@@ -2158,6 +2198,7 @@ function getSF(){var el=document.getElementById('global-search');return el?(el.v
 var INSP_COLS=[
   {id:'num',label:'#',w:'28px',fixed:true},
   {id:'bon',label:'Bon',w:'80px'},
+  {id:'dateCmd',label:'Date',w:'62px'},
   {id:'nom',label:'Nom',w:'130px',gear:'employes_atelier|Techniciens'},
   {id:'job',label:'Job',w:'32px'},
   {id:'qty',label:'Qté Sér./Inv.',w:'70px'},
@@ -2356,6 +2397,7 @@ function renderTable(dept){
   if(dept!=='inspection')return;
   if(_syncPhase==='syncing'){console.log('[RENDER] Blocked during sync');return;}
   var md=gmd(dept);var rows=md.rows;var month=md.month;
+  if(!getSF()&&!_favoritesFilter)rows=ensureSortedByDate(dept,md);
   var vis=getVisCols(dept);var defs=getDefs(dept);
   var theadId='insp-thead';
   var tbodyId='insp-body';
@@ -2543,6 +2585,7 @@ function cellHTML(dept,colId,row,idx,count,hasErr,month){
       }
       var pb=rowHasPartial(row)?'<span class="partial-badge">PARTIEL</span>':'';
       return'<div class="bon-wrap cell-editable" style="cursor:pointer;padding:2px 0;" onclick="editBon(\''+dept+'\','+idx+',this'+ms+')">'+pb+'<div class="bon-row">'+star+'<span class="cell-bon">'+esc(row.bon)+'</span></div></div>';
+    case 'dateCmd':return'<span style="color:var(--text-muted);font-size:9px;white-space:nowrap;">'+esc(dateForIdx(dept,idx,month))+'</span>';
     case 'nom':return '<div class="cell-dropdown clr-nom '+(row.nom?'has-value':'empty')+'" onclick="openCellDropdown(\''+dept+'\','+idx+',\'nom\',\'Technicien\',\'employes_atelier\''+ms+')">'+(row.nom?esc(row.nom):'—')+'</div>';
     case 'job':return'<div onclick="editJob(\''+dept+'\','+idx+',this'+ms+')" style="cursor:pointer;font-weight:700;color:var(--teal);width:100%;text-align:center;padding:4px 0;" class="cell-editable">'+(parseInt(row.job)||1)+'</div>';
     case 'qty':var q=parseInt(row.qty)||1;return'<div onclick="editQty(\''+dept+'\','+idx+',this'+ms+')" style="cursor:pointer;width:100%;text-align:center;padding:4px 0;font-weight:700;" class="cell-editable">'+q+'</div>';
