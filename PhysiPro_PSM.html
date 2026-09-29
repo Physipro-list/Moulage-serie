@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1151-zoom-adapte]</title>
+<title>PhysiPro — Liste des matériaux [v1154-cnc]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -413,6 +413,13 @@ body{
 .topbar-dept-btn.active{ background:rgba(165,171,181,0.26); border-color:#000; color:#fff; }
 /* v1098 : Couture en BLEU FONCÉ plutôt qu'en rose */
 .topbar-dept-btn#deptBtnCouture.active{ background:rgba(45,49,55,0.90); border-color:#000; color:#b9c6d7; }
+/* v1153 : deux départements de plus — Métal (gris acier) et CNC (ardoise).
+   Les quatre boutons vivent dans la même rangée ; le rembourrage est un
+   peu resserré pour qu'Atelier et Couture glissent vers la gauche sans
+   que la barre ne déborde. */
+.topbar-dept-btn{ padding:0 11px; }
+.topbar-dept-btn#deptBtnMetal.active{ background:rgba(96,104,116,0.90); border-color:#000; color:#e6ebf2; }
+.topbar-dept-btn#deptBtnCnc.active{ background:rgba(58,74,96,0.92); border-color:#000; color:#cfe0f5; }
 
 .topbar-temps{
   display:flex;
@@ -2716,6 +2723,19 @@ label.footer-btn-label{
   border-color:rgba(0,0,0,0.85);
   color:#d7dee6;
 }
+/* v1153 : mêmes teintes que les boutons du haut pour Métal et CNC */
+.pch-rest .photo-card-temps.metal{
+  border-color:rgba(0,0,0,0.85);
+  background:rgba(96,104,116,0.85);
+  color:#e6ebf2;
+}
+.pch-rest .photo-card-temps.metal .photo-card-temps-input{ border-color:rgba(0,0,0,0.85); color:#eef2f7; }
+.pch-rest .photo-card-temps.cnc{
+  border-color:rgba(0,0,0,0.85);
+  background:rgba(58,74,96,0.88);
+  color:#cfe0f5;
+}
+.pch-rest .photo-card-temps.cnc .photo-card-temps-input{ border-color:rgba(0,0,0,0.85); color:#dfeaf8; }
 /* v1076 : l'encadré vit dans l'en-tête (.pch-rest). */
 /* v1098 : l'encadré du temps reprend les bleus du reste de l'interface —
    plus d'ambre. L'Atelier est en bleu clair, la Couture en bleu foncé. */
@@ -3553,6 +3573,9 @@ label.item-img-btn{ user-select:none; }
       <div class="topbar-dept">
         <button class="topbar-dept-btn active" id="deptBtnAtelier" onclick="setCatDept('atelier')" title="Travailler côté Atelier">🔨 Atelier</button>
         <button class="topbar-dept-btn" id="deptBtnCouture" onclick="setCatDept('couture')" title="Travailler côté Couture">🧵 Couture</button>
+        <!-- v1153 : deux départements de plus, à droite de Couture -->
+        <button class="topbar-dept-btn" id="deptBtnMetal" onclick="setCatDept('metal')" title="Travailler côté Métal">⚙️ Métal</button>
+        <button class="topbar-dept-btn" id="deptBtnCnc" onclick="setCatDept('cnc')" title="Travailler côté CNC">🛠️ CNC</button>
       </div>
       <button class="topbar-fs-btn" id="btnPleinEcran" onclick="togglePleinEcran()" title="Plein écran (comme F11)">⛶</button>
       <span id="userEmail" style="display:none"></span>
@@ -4069,7 +4092,12 @@ var MATERIAUX_ATELIER_BASE = [
 
 // Couture et Métal retirés (v956) — Couture reconstituée en v1057
 var MATERIAUX_COUTURE_BASE = [];
+/* v1153 : Métal et CNC redeviennent des départements à part entière. Leurs
+   listes de base sont vides pour l'instant — les matériaux s'ajoutent par le
+   ➕ du catalogue (catalogue_custom, marqué du département en cours), ou ici
+   plus tard, sur le modèle des deux autres listes. */
 var MATERIAUX_METAL_BASE = [];
+var MATERIAUX_CNC_BASE = [];
 
 /* v1057 — COÛT UNITAIRE par code, colonne « LISTE DE PRIX COST » de la liste
    fournisseur. C'est la colonne de COÛT (le prix plancher en est le produit
@@ -4762,6 +4790,47 @@ Object.assign(SHEET_SIZES_BASE, {
 var customCatalog = [];
 var currentDept = 'atelier';
 
+/* ============================================================
+   v1153 — QUATRE DÉPARTEMENTS : ATELIER, COUTURE, MÉTAL, CNC
+   Jusqu'ici tout le fichier testait « couture ? … : atelier » à la main,
+   à une vingtaine d'endroits. Pour ajouter Métal et CNC sans en oublier
+   un, tout ce qui dépend du département passe par cette table :
+     - champTemps / champNote : le champ de la carte où vivent le temps et
+       la note de CE département (t.temps et t.note restent les champs
+       historiques de l'Atelier — rien à migrer) ;
+     - sign : les initiales qui signent la fiche par défaut ;
+     - excelRow : la ligne du gabarit « Coût de revient » qui reçoit ses
+       heures (25 Couture, 26 Atelier, 27 Usinage et soudure = Métal,
+       29 CNC-ROBOT = CNC).
+   Ajouter un cinquième département = une ligne ici, un bouton dans la
+   barre du haut, une base de matériaux, une ligne dans _baseDuDept.
+   ============================================================ */
+var DEPTS = {
+  atelier: { label: 'Atelier', icone: '\ud83d\udd28', champTemps: 'temps',        champNote: 'note',
+             titreNote: '\ud83d\udcdd Notes technicien',          titreNoteFiche: 'NOTES TECHNICIEN',
+             libelleTemps: 'TEMPS ATELIER :', sign: 'DC', excelRow: 26 },
+  couture: { label: 'Couture', icone: '\ud83e\uddf5', champTemps: 'tempsCouture', champNote: 'noteCouture',
+             titreNote: '\ud83e\uddf5 Note pour la couturi\u00e8re',   titreNoteFiche: 'NOTE POUR LA COUTURI\u00c8RE',
+             libelleTemps: 'TEMPS COUTURE :', sign: 'MA', excelRow: 25 },
+  metal:   { label: 'M\u00e9tal',   icone: '\u2699\ufe0f',     champTemps: 'tempsMetal',   champNote: 'noteMetal',
+             titreNote: '\u2699\ufe0f Notes m\u00e9tal',               titreNoteFiche: 'NOTES M\u00c9TAL',
+             libelleTemps: 'TEMPS M\u00c9TAL :',   sign: 'DC', excelRow: 27 },
+  cnc:     { label: 'CNC',     icone: '\ud83d\udee0\ufe0f', champTemps: 'tempsCnc',     champNote: 'noteCnc',
+             titreNote: '\ud83d\udee0\ufe0f Notes CNC',                 titreNoteFiche: 'NOTES CNC',
+             libelleTemps: 'TEMPS CNC :',     sign: 'DC', excelRow: 29 }
+};
+var DEPT_ORDRE = ['atelier', 'couture', 'metal', 'cnc'];
+/* un département inconnu (ancien enregistrement, faute de frappe) = atelier */
+function _normDept(d) { return (d && DEPTS[d]) ? d : 'atelier'; }
+function _deptInfo(d) { return DEPTS[_normDept(d || currentDept)]; }
+function _baseDuDept(d) {
+  d = _normDept(d);
+  if (d === 'couture') return MATERIAUX_COUTURE_BASE;
+  if (d === 'metal')   return MATERIAUX_METAL_BASE;
+  if (d === 'cnc')     return MATERIAUX_CNC_BASE;
+  return MATERIAUX_ATELIER_BASE;
+}
+
 // Echappe les caractères HTML pour insertion sécurisée
 function esc(s) {
   return String(s == null ? '' : s)
@@ -4924,10 +4993,9 @@ function _tempsBrancherDeplacement() {
 function _updateTopbarTemps() {
   var totalEl = document.getElementById('topbarTempsTotal');
   if (!totalEl) return;
-  var dept = currentDept || 'atelier';
-  var items = (typeof itemsParDept !== 'undefined' && itemsParDept[dept]) ? itemsParDept[dept] : [];
-  var deptLabels = {atelier:'Atelier'};
-  var deptName = deptLabels[dept] || 'Atelier';
+  var dept = _normDept(currentDept);
+  var deptName = _deptInfo(dept).label;   // v1153
+  var champ = _deptInfo(dept).champTemps;
 
   /* v1067 : LE TOTAL VIENT DES SOUMISSIONS, pas d'itemsParDept.
      C'est la même source que le bouton 📊 Coût depuis la v1059 : le champ
@@ -4937,7 +5005,7 @@ function _updateTopbarTemps() {
      il apparaît dès qu'il y a une minute à montrer. */
   var totalMin = 0;
   (typeof fichiersGlobaux !== 'undefined' ? fichiersGlobaux : []).forEach(function(t){
-    totalMin += parseFloat(t && t.temps) || 0;
+    totalMin += parseFloat(t && t[champ]) || 0;   // v1153 : le temps DU département affiché
   });
   if (totalMin > 0) {
     var totalH = (Math.round(totalMin / 60 * 100) / 100).toFixed(2).replace('.', ',');
@@ -5035,8 +5103,7 @@ function renderCatalogBrowser() {
   var listEl = document.getElementById('catBrowserList');
   if (!listEl) return;
   var query = ((document.getElementById('catBrowserSearch') || {}).value || '').trim().toLowerCase();
-  var base;
-  base = (currentDept === 'couture') ? MATERIAUX_COUTURE_BASE : MATERIAUX_ATELIER_BASE;   // v1057
+  var base = _baseDuDept(currentDept);   // v1153
 
   // Construire entrées unifiées
   var entries = [];
@@ -5206,21 +5273,20 @@ function _fmtPrix(v) {
   return (Math.round(v * 100) / 100).toFixed(2).replace('.', ',') + ' $';
 }
 
-/* v1057 : bascule Atelier / Couture du catalogue. */
+/* v1057 : bascule Atelier / Couture du catalogue.
+   v1153 : quatre départements — les boutons se parcourent par DEPT_ORDRE. */
 function setCatDept(dept) {
-  currentDept = (dept === 'couture') ? 'couture' : 'atelier';
-  var a = document.getElementById('catDeptAtelier');
-  var c = document.getElementById('catDeptCouture');
-  if (a) a.classList.toggle('active', currentDept === 'atelier');
-  if (c) c.classList.toggle('active', currentDept === 'couture');
-  /* v1080 : les boutons de la barre du haut et ceux du catalogue montrent
-     toujours la même chose, et les champs TEMPS basculent avec eux. */
-  var ta = document.getElementById('deptBtnAtelier');
-  var tc = document.getElementById('deptBtnCouture');
-  if (ta) ta.classList.toggle('active', currentDept === 'atelier');
-  if (tc) tc.classList.toggle('active', currentDept === 'couture');
+  currentDept = _normDept(dept);
+  /* v1080 : les boutons de la barre du haut montrent toujours le département
+     en cours, et les champs TEMPS / NOTES basculent avec eux. */
+  var IDS = { atelier: 'deptBtnAtelier', couture: 'deptBtnCouture', metal: 'deptBtnMetal', cnc: 'deptBtnCnc' };
+  DEPT_ORDRE.forEach(function(d){
+    var b = document.getElementById(IDS[d]);
+    if (b) b.classList.toggle('active', currentDept === d);
+  });
   if (typeof _majChampsTemps === 'function') _majChampsTemps();
   if (typeof _majChampsNote === 'function') _majChampsNote();   // v1109
+  if (typeof _updateTopbarTemps === 'function') _updateTopbarTemps();   // v1153 : le total suit le département
   if (typeof renderCatalogBrowser === 'function') renderCatalogBrowser();
   if (typeof _syncCatRowsInSoumission === 'function') _syncCatRowsInSoumission();
 
@@ -5240,8 +5306,8 @@ function setCatDept(dept) {
 }
 
 function _getUnifiedMatList(dept) {
-  // v1057 : deux bases selon le département (Couture rétablie)
-  var base = (dept === 'couture') ? MATERIAUX_COUTURE_BASE : MATERIAUX_ATELIER_BASE;
+  dept = _normDept(dept);
+  var base = _baseDuDept(dept);   // v1153 : une base par département
 
   var entries = [];
   base.forEach(function(s){
@@ -5286,8 +5352,10 @@ function openEditMatsModal() {
   // Mise à jour titre selon dépt
   var icon = document.getElementById('matModalDeptIcon');
   var label = document.getElementById('matModalDeptLabel');
-  // Couture/Métal retirés (v956) — toujours Atelier
-  icon.textContent = '🔨'; label.textContent = 'Atelier';
+  /* v1153 : le titre dit dans quel département le matériau sera rangé —
+     il affichait « Atelier » même quand on était en Couture. */
+  var di = _deptInfo(currentDept);
+  icon.textContent = di.icone; label.textContent = di.label;
   // Reset recherche
   document.getElementById('matModalSearch').value = '';
   renderMatModalList();
@@ -5548,7 +5616,8 @@ var _soumissionSaveTimer = null;
 // Charger depuis Firebase
 db.ref('psm_simple/soumission_courante').on('value', function(snap) {
   var v = snap.val() || {};
-  soumissionMats = { atelier: Array.isArray(v.atelier) ? v.atelier : [] };
+  soumissionMats = {};
+  DEPT_ORDRE.forEach(function(d){ soumissionMats[d] = Array.isArray(v[d]) ? v[d] : []; });   // v1153
   /* v1068 : ménage à l'ouverture. Une liste enregistrée par une version
      antérieure peut contenir des codes qui ne sont dans aucune carte —
      ce sont eux qui ressortaient dans le coût de revient. On les retire
@@ -5592,9 +5661,17 @@ function _saveSoumission() {
 
 // Ajoute un matériau à la soumission du dépt courant (ignore doublons)
 // v1010 : l'ajoute AUSSI à la carte photo active (liste locale de la carte)
+/* v1153 : la liste du département est créée à la demande — en Couture (et
+   maintenant Métal, CNC) soumissionMats n'avait que la clé atelier, et
+   list.some(...) levait une erreur après l'ajout à la carte. */
+function _listeSoum(dept) {
+  var d = _normDept(dept || currentDept);
+  if (!Array.isArray(soumissionMats[d])) soumissionMats[d] = [];
+  return soumissionMats[d];
+}
 function addToSoumission(entry) {
   var addedToCard = addMatToCard(entry);
-  var list = soumissionMats[currentDept];
+  var list = _listeSoum(currentDept);
   var exists = list.some(function(m){ return m.code === entry.code; });
   if (exists) {
     if (addedToCard) showToast('🧱 ' + entry.code + ' ajouté à la carte ' + (currentFileTabIdx + 1), 'success');
@@ -5629,7 +5706,7 @@ function addToSoumission(entry) {
 
 // Retire un matériau de la soumission
 function removeFromSoumission(code) {
-  var list = soumissionMats[currentDept];
+  var list = _listeSoum(currentDept);
   var idx = list.findIndex(function(m){ return m.code === code; });
   if (idx === -1) return;
   list.splice(idx, 1);
@@ -5642,7 +5719,7 @@ function removeFromSoumission(code) {
 
 // Met à jour la quantité d'un matériau
 function updateSoumissionQty(code, val) {
-  var list = soumissionMats[currentDept];
+  var list = _listeSoum(currentDept);
   var item = list.find(function(m){ return m.code === code; });
   if (!item) return;
   // Accepter texte (fraction "1/2", "1 1/2") ou nombre (entier ou décimal)
@@ -5761,7 +5838,9 @@ function _attachCatRowClickHandlers() {
         code: entry.code,
         name: entry.name,
         w: entry.w,
-        h: entry.h
+        h: entry.h,
+        thickness: entry.thickness,   // v1153
+        prix: entry.prix              // v1153 : coût unitaire du catalogue
       });
     });
   });
@@ -6176,6 +6255,21 @@ function _commitNewSoumissionWithName(name) {
   fichiersGlobaux = _defaultFileTabs();
   currentFileTabIdx = 0;
 
+  /* v1152 : les champs à l'écran (notes technicien / couturière, temps, item)
+     ne se rafraîchissaient pas — le modèle était vidé, mais le texte tapé
+     restait dans les cartes et revenait à la sauvegarde suivante. On les
+     vide ici, à la main, avant d'écrire quoi que ce soit dans Firebase. */
+  try {
+    for (var _i = 0; _i < 12; _i++) {
+      var _n = document.getElementById('photoNote_' + _i); if (_n) _n.innerHTML = '';
+      var _t = document.getElementById('photoTemps_' + _i); if (_t) _t.value = '';
+      var _it = document.getElementById('photoItem_' + _i); if (_it) _it.value = '';
+    }
+    if (typeof _majChampsNote === 'function') _majChampsNote();
+    if (typeof _majChampsTemps === 'function') _majChampsTemps();
+    if (typeof _majChampsItem === 'function') _majChampsItem();
+  } catch (e) { console.warn('Vidage des champs :', e); }
+
   var newRef = db.ref('psm_simple/soumissions').push();
   var newId = newRef.key;
   var now = Date.now();
@@ -6384,7 +6478,10 @@ var DEFAULT_FILE_TABS = 1;   // v1047 : UNE seule fenêtre au départ (pleine la
 // note : v1007 — texte « Notes pour technicien » propre à chaque carte.
 // LOCAL SEULEMENT : jamais envoyé à Firebase (voir _saveGlobalImage), sert au PDF final.
 function _newFileTab(name) {
-  return { name: name || 'Photo', data: '', type: '', filename: '', note: '', temps: '', tempsCouture: '', mats: [], history: [], photos: [], photoIdx: 0, pages: null, pageIdx: 0, dataPdfOriginal: '' };
+  return { name: name || 'Photo', data: '', type: '', filename: '',
+           note: '', noteCouture: '', noteMetal: '', noteCnc: '',            // v1153
+           temps: '', tempsCouture: '', tempsMetal: '', tempsCnc: '',        // v1153
+           mats: [], history: [], photos: [], photoIdx: 0, pages: null, pageIdx: 0, dataPdfOriginal: '' };
 }
 function _defaultFileTabs() {
   var out = [];
@@ -6499,8 +6596,12 @@ db.ref('psm_simple/image_globale').on('value', function(snap) {
   // Ces champs restent LOCAUX : on les conserve à travers les rechargements
   var _notesLocales  = fichiersGlobaux.map(function(t){ return (t && t.note) || ''; });
   var _notesCoutureLocales = fichiersGlobaux.map(function(t){ return (t && t.noteCouture) || ''; });   // v1109
+  var _notesMetalLocales   = fichiersGlobaux.map(function(t){ return (t && t.noteMetal) || ''; });     // v1153
+  var _notesCncLocales     = fichiersGlobaux.map(function(t){ return (t && t.noteCnc) || ''; });       // v1153
   var _tempsLocaux   = fichiersGlobaux.map(function(t){ return (t && t.temps) || ''; });
   var _tempsCoutureLocaux = fichiersGlobaux.map(function(t){ return (t && t.tempsCouture) || ''; });   // v1080
+  var _tempsMetalLocaux   = fichiersGlobaux.map(function(t){ return (t && t.tempsMetal) || ''; });     // v1153
+  var _tempsCncLocaux     = fichiersGlobaux.map(function(t){ return (t && t.tempsCnc) || ''; });       // v1153
   var _itemsLocaux   = fichiersGlobaux.map(function(t){ return (t && t.item) || ''; });   // v1116
   var _matsLocaux    = fichiersGlobaux.map(function(t){ return (t && Array.isArray(t.mats)) ? t.mats : []; });
   var _histoLocaux   = fichiersGlobaux.map(function(t){ return (t && Array.isArray(t.history)) ? t.history : []; });
@@ -6519,8 +6620,12 @@ db.ref('psm_simple/image_globale').on('value', function(snap) {
         filename: (it && typeof it.filename === 'string') ? it.filename : '',
         note: _notesLocales[i] || '',
         noteCouture: _notesCoutureLocales[i] || '',   // v1109
+        noteMetal: _notesMetalLocales[i] || '',       // v1153
+        noteCnc: _notesCncLocales[i] || '',           // v1153
         temps: _tempsLocaux[i] || '',
         tempsCouture: (_tempsCoutureLocaux && _tempsCoutureLocaux[i]) || '',   // v1080
+        tempsMetal: _tempsMetalLocaux[i] || '',       // v1153
+        tempsCnc: _tempsCncLocaux[i] || '',           // v1153
         /* v1116 : ce qui est dans le champ l'emporte sur l'écho de Firebase */
         item: (_itemsLocaux && _itemsLocaux[i]) || (it && it.item) || '',
         mats: _matsLocaux[i] || [],
@@ -6943,7 +7048,7 @@ function _syncCardNotesFromDom() {
     var el = document.getElementById('photoNote_' + i);
     if (el) t[_champNote()] = el.innerHTML;   // v1109
     var tps = document.getElementById('photoTemps_' + i);
-    if (tps) t.temps = tps.value;
+    if (tps) t[_champTemps()] = tps.value;   /* v1153 : le champ du département en cours, pas toujours l'atelier */
   });
 }
 
@@ -7004,7 +7109,7 @@ function _ensurePhotoCards() {
       /* v1076 : TEMPS ATELIER dans l'en-tête, en tête de la partie droite —
          donc exactement au-dessus de la colonne Matériel, une ligne plus haut
          qu'à la v1075, sur la même ligne que ▣ Étampes et les boutons ↩ 🔄 ✕. */
-      +       '<span class="photo-card-temps pch-temps">TEMPS ATELIER :'
+      +       '<span class="photo-card-temps pch-temps' + (currentDept !== 'atelier' ? ' ' + currentDept : '') + '">' + _libelleTemps()   /* v1153 */
       +         '<input type="number" class="photo-card-temps-input" id="photoTemps_' + i + '" min="0" step="5" placeholder="0" '
       +              'oninput="updateCardTemps(' + i + ', this.value)" onmousedown="event.stopPropagation();setActiveCard(' + i + ')">'
       +         '<span class="photo-card-temps-unit">min</span>'
@@ -7084,7 +7189,7 @@ function _ensurePhotoCards() {
     var noteEl = document.getElementById('photoNote_' + i);
     if (noteEl) noteEl.innerHTML = (t && t[_champNote()]) ? t[_champNote()] : '';   // v1109
     var tpsEl = document.getElementById('photoTemps_' + i);
-    if (tpsEl) tpsEl.value = (t && t.temps) ? t.temps : '';
+    if (tpsEl) tpsEl.value = (t && t[_champTemps()]) ? t[_champTemps()] : '';   /* v1153 : le temps du département en cours */
     _renderCardMats(i);
     _renderPhotosNav(i);
     _attachCardDrop(i);
@@ -7166,7 +7271,8 @@ function _majBoutonsTarif() {
   }
 }
 
-function _champTemps() { return (currentDept === 'couture') ? 'tempsCouture' : 'temps'; }
+function _champTemps() { return _deptInfo(currentDept).champTemps; }   // v1153
+function _libelleTemps() { return _deptInfo(currentDept).libelleTemps; }
 
 /* ============================================================
    v1109 — DEUX NOTES, UNE PAR DÉPARTEMENT
@@ -7175,9 +7281,9 @@ function _champTemps() { return (currentDept === 'couture') ? 'tempsCouture' : '
    historique, donc rien à migrer — et t.noteCouture pour la couture.
    Écrire une note en couture n'efface plus celle de l'atelier.
    ============================================================ */
-function _champNote()    { return (currentDept === 'couture') ? 'noteCouture' : 'note'; }
-function _titreNote()    { return (currentDept === 'couture') ? '\ud83e\uddf5 Note pour la couturi\u00e8re' : '\ud83d\udcdd Notes technicien'; }
-function _titreNoteFiche(){ return (currentDept === 'couture') ? 'NOTE POUR LA COUTURI\u00c8RE' : 'NOTES TECHNICIEN'; }
+function _champNote()    { return _deptInfo(currentDept).champNote; }        // v1153
+function _titreNote()    { return _deptInfo(currentDept).titreNote; }
+function _titreNoteFiche(){ return _deptInfo(currentDept).titreNoteFiche; }
 
 /* ============================================================
    v1115 — LE NOM DE L'ITEM
@@ -7285,7 +7391,7 @@ function _majChampsNote() {
 /* Recharge les champs TEMPS et leur étiquette après un changement de dépt */
 function _majChampsTemps() {
   var champ = _champTemps();
-  var libelle = (currentDept === 'couture') ? 'TEMPS COUTURE :' : 'TEMPS ATELIER :';
+  var libelle = _libelleTemps();
   for (var i = 0; i < fichiersGlobaux.length; i++) {
     var inp = document.getElementById('photoTemps_' + i);
     if (inp) {
@@ -7293,7 +7399,8 @@ function _majChampsTemps() {
       inp.value = (!isNaN(v) && v > 0) ? v : '';
       var enc = inp.parentElement;
       if (enc) {
-        enc.classList.toggle('couture', currentDept === 'couture');
+        /* v1153 : une classe par département (l'Atelier n'en porte pas) */
+        DEPT_ORDRE.forEach(function(d){ enc.classList.toggle(d, d !== 'atelier' && currentDept === d); });
         if (enc.firstChild && enc.firstChild.nodeType === 3) enc.firstChild.nodeValue = libelle;
       }
     }
@@ -7327,7 +7434,7 @@ function addMatToCard(entry, cardIdx) {
     h: entry.h,
     thickness: entry.thickness,
     prix: (entry.prix != null) ? entry.prix : null,   // v1057 : coût unitaire
-    dept: (currentDept === 'couture') ? 'couture' : 'atelier',   // v1107
+    dept: _normDept(currentDept),   // v1107, v1153 : quatre départements
     qty: 1
   });
   _renderCardMats(idx);
@@ -7446,7 +7553,7 @@ function _ajusterEspaceNoteToutes() {
 
 /* v1107 : les matériaux du département en cours. Sans marque = atelier. */
 function _deptDuMat(m) {
-  return (m && m.dept === 'couture') ? 'couture' : 'atelier';
+  return _normDept(m && m.dept);   // v1153
 }
 function _matsDuDept(t, dept) {
   var d = dept || currentDept || 'atelier';
@@ -7467,10 +7574,11 @@ function _renderCardMats(idx) {
     cnt.classList.toggle('zero', list.length === 0);
   }
   if (!list.length) {
-    var autre = _matsDuDept(t, currentDept === 'couture' ? 'atelier' : 'couture').length;
+    /* v1153 : ce que portent les AUTRES départements, tous confondus */
+    var autre = ((t && Array.isArray(t.mats)) ? t.mats.length : 0) - list.length;
     box.innerHTML = '<div class="photo-card-mats-empty">'
       + 'Clique un matériau du catalogue pour l\'ajouter ici'
-      + (autre ? '<br><span style="opacity:.7">' + autre + ' dans l\'autre département</span>' : '')
+      + (autre > 0 ? '<br><span style="opacity:.7">' + autre + (autre > 1 ? ' dans les autres départements' : ' dans un autre département') + '</span>' : '')
       + '</div>';
     return;
   }
@@ -8640,7 +8748,7 @@ var FICHE_SIGNATAIRES = { DC: 'Daniel Charest', MA: 'Martine' };
    le bouton de département de la barre du haut, et les deux boutons du cadre
    permettent de passer outre pour un cas particulier. null = « suis le
    département ». */
-var FICHE_DEPT_SIGN = { atelier: 'DC', couture: 'MA' };
+var FICHE_DEPT_SIGN = { atelier: 'DC', couture: 'MA', metal: 'DC', cnc: 'DC' };   // v1153
 var _ficheSignatureForcee = null;
 
 function _ficheSignataire() {
@@ -9010,15 +9118,30 @@ function _surfaceTexte(m, q) {
   return (Math.round(po2 / 144 * 100) / 100).toString().replace('.', ',') + ' pi\u00b2';
 }
 
-/* Lecture d'une quantité écrite à la main : « 1 1/2 », « 3/4 », « 2,5 ». */
+/* Lecture d'une quantité écrite à la main.
+   v1153 — UN SEUL LECTEUR pour toute la page (l'export Excel avait sa copie,
+   _qteNum, qui ne comprenait pas les mêmes écritures). Sont lues :
+     « 2 », « 2,5 », « 2.5 »            décimales, virgule ou point
+     « 3/4 », « 1 1/2 », « 1-1/2 »       fractions, avec ou sans entier
+     « ½ », « 1½ », « 1 ¼ »              les caractères ½ ¼ ¾ ⅓ ⅔ ⅛ ⅜ ⅝ ⅞
+     « 2 UN », « 1/2 pi² »               une unité qui traîne est ignorée
+   Tout ce qui ne se lit pas vaut 0 — jamais NaN. */
+var _FRACS_UNI = { '\u00bd': 0.5, '\u00bc': 0.25, '\u00be': 0.75, '\u2153': 1/3, '\u2154': 2/3,
+                   '\u215b': 0.125, '\u215c': 0.375, '\u215d': 0.625, '\u215e': 0.875 };
 function _qteNumPub(v) {
   if (v == null || v === '') return 0;
-  if (typeof v === 'number') return v;
-  var t = String(v).trim().replace(',', '.');
-  var m = t.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
-  if (m) return parseInt(m[1], 10) + parseInt(m[2], 10) / parseInt(m[3], 10);
-  m = t.match(/^(\d+)\s*\/\s*(\d+)$/);
-  if (m) return parseInt(m[1], 10) / parseInt(m[2], 10);
+  if (typeof v === 'number') return isNaN(v) ? 0 : v;
+  var t = String(v).trim().replace(/,/g, '.').replace(/\s+/g, ' ');
+  /* caractère de fraction : « ½ », « 1½ », « 1 ½ » */
+  var u = t.match(/^(\d+)?\s*([\u00bc-\u00be\u2153\u2154\u215b-\u215e])/);
+  if (u) return (u[1] ? parseInt(u[1], 10) : 0) + _FRACS_UNI[u[2]];
+  /* entier + fraction : « 1 1/2 », « 1-1/2 » */
+  var m = t.match(/^(\d+)[\s\-]+(\d+)\s*\/\s*(\d+)/);
+  if (m) return parseInt(m[3], 10) > 0 ? parseInt(m[1], 10) + parseInt(m[2], 10) / parseInt(m[3], 10) : 0;
+  /* fraction seule : « 3/4 » (un dénominateur nul vaut 0, pas « 1 ») */
+  m = t.match(/^(\d+)\s*\/\s*(\d+)/);
+  if (m) return parseInt(m[2], 10) > 0 ? parseInt(m[1], 10) / parseInt(m[2], 10) : 0;
+  /* décimale, unité éventuelle derrière */
   var f = parseFloat(t);
   return isNaN(f) ? 0 : f;
 }
@@ -9054,8 +9177,8 @@ function _ficheLignes(idx) {
      de rien et s'affichent toujours. Seule la ligne de temps est
      conditionnelle, puisqu'elle n'a rien à dire quand le champ est vide.
      ============================================================ */
-  var couture = (currentDept === 'couture');
-  var tps = parseFloat(couture ? t.tempsCouture : t.temps);
+  var di = _deptInfo(currentDept);   // v1153 : quatre départements
+  var tps = parseFloat(t[di.champTemps]);
   var aTemps = (!isNaN(tps) && tps > 0);
   var nomItem = ((t.item || '').trim()) || _nomItemDefaut(idx);   // v1117
 
@@ -9064,7 +9187,7 @@ function _ficheLignes(idx) {
      le mot « Tarif », qui n'apprenait rien. Une ligne de gagnée sur la fiche,
      et l'information là où on la cherche. */
   L.push({ type: 'titre',
-           txt: (couture ? 'COUTURE' : 'ATELIER') + '  \u00b7  ' + _tarifDe(idx),
+           txt: di.label.toUpperCase() + '  \u00b7  ' + _tarifDe(idx),
            droiteTitre: 'Item : ' + nomItem });
   if (aTemps) {
     L.push({ type: 'ligne', gauche: 'Temps de production', droite: tps + ' min' });
@@ -11220,18 +11343,10 @@ function exportCostXlsm() {
 
   /* v1046 : les quantités posées avec la petite règle 📐 sont des FRACTIONS
      (« 1 1/2 », « 3/4 »). parseFloat("1 1/2") donne 1 — le pied carré calculé
-     était donc perdu à l'export. Cette fonction lit les deux formes. */
-  function _qteNum(v){
-    if (v == null || v === '') return 0;
-    if (typeof v === 'number') return v;
-    var t = String(v).trim().replace(',', '.');
-    var m = t.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);          // « 1 1/2 »
-    if (m) return parseFloat(m[1]) + (parseFloat(m[2]) / parseFloat(m[3]));
-    m = t.match(/^(\d+)\s*\/\s*(\d+)$/);                        // « 3/4 »
-    if (m) return parseFloat(m[1]) / parseFloat(m[2]);
-    var f = parseFloat(t);
-    return isNaN(f) ? 0 : f;
-  }
+     était donc perdu à l'export.
+     v1153 : plus de copie locale — c'est _qteNumPub, le lecteur de toute la
+     page, qui lit aussi « ½ », « 1½ » et « 1-1/2 ». */
+  var _qteNum = _qteNumPub;
 
   /* v1046 : les matériaux vivent à DEUX endroits — la liste de gauche
      (soumissionMats) et le matériel attaché à chaque carte photo
@@ -11329,19 +11444,22 @@ function exportCostXlsm() {
      taux — 40,40 $/h contre 42,15 $/h pour l'Atelier. Les deux durées partent
      séparément, mais sur la MÊME feuille ; les matériaux des deux
      départements restent dans une seule liste. */
-  var minCouture = 0;
+  var minCouture = 0, minMetal = 0, minCnc = 0;
   (typeof fichiersGlobaux !== 'undefined' ? fichiersGlobaux : []).forEach(function(ct){
     minCouture += parseFloat(ct && ct.tempsCouture) || 0;
+    minMetal   += parseFloat(ct && ct.tempsMetal) || 0;    // v1153
+    minCnc     += parseFloat(ct && ct.tempsCnc) || 0;      // v1153
   });
   var hCouture = minCouture / 60;
   var hAtelier = minAtelier / 60; // en heures
-  var hMetal = 0; // Métal retiré v956
+  var hMetal = minMetal / 60;     // v1153 : ligne 27 du gabarit, « Usinage et soudure »
+  var hCnc = minCnc / 60;         // v1153 : ligne 29 du gabarit, « CNC-ROBOT »
 
   // Nom de la soumission
   var nameEl = document.getElementById('soumissionPillName');
   var soumName = (nameEl && nameEl.textContent && nameEl.textContent.trim()) ? nameEl.textContent.trim() : 'Brouillon';
 
-  if (allMats.length === 0 && hCouture === 0 && hAtelier === 0 && hMetal === 0) {
+  if (allMats.length === 0 && hCouture === 0 && hAtelier === 0 && hMetal === 0 && hCnc === 0) {
     showToast('⚠️ Aucun matériau ni temps dans la soumission', 'warning');
     return;
   }
@@ -11360,10 +11478,14 @@ function exportCostXlsm() {
              Total: m.prix != null ? Math.round(m.prix * m.qty * 100) / 100 : '—' };
   }));
   console.log('Atelier : ' + Math.round(minAtelier) + ' min (' + (Math.round(hAtelier * 100) / 100) + ' h)'
-            + ' · Couture : ' + Math.round(minCouture) + ' min (' + (Math.round(hCouture * 100) / 100) + ' h)');
+            + ' · Couture : ' + Math.round(minCouture) + ' min (' + (Math.round(hCouture * 100) / 100) + ' h)'
+            + ' · Métal : ' + Math.round(minMetal) + ' min (' + (Math.round(hMetal * 100) / 100) + ' h)'
+            + ' · CNC : ' + Math.round(minCnc) + ' min (' + (Math.round(hCnc * 100) / 100) + ' h)');
   showToast('⏳ ' + allMats.length + ' matériaux · ' + (Math.round(totalMat * 100) / 100).toFixed(2).replace('.', ',') + ' $ · '
             + (Math.round(hAtelier * 100) / 100) + ' h atelier'
             + (hCouture > 0 ? ' · ' + (Math.round(hCouture * 100) / 100) + ' h couture' : '')
+            + (hMetal > 0 ? ' · ' + (Math.round(hMetal * 100) / 100) + ' h métal' : '')      // v1153
+            + (hCnc > 0 ? ' · ' + (Math.round(hCnc * 100) / 100) + ' h CNC' : '')            // v1153
             + (sansCout ? ' · ' + sansCout + ' sans coût' : ''), 'info');
 
   // Helper : remplace n'importe quelle cellule (self-closing OU avec contenu) en préservant les attributs autres que t=
@@ -11460,10 +11582,11 @@ function exportCostXlsm() {
       }
 
       // === SECTION 2 : TEMPS DE PRODUCTION (heures) ===
-      // Row 25 = Couture, Row 26 = Atelier, Row 27 = Usinage et soudure (= Métal)
+      // Row 25 = Couture, Row 26 = Atelier, Row 27 = Usinage et soudure (= Métal), Row 29 = CNC-ROBOT (= CNC)
       if (hCouture > 0) sheetXml = _patchCellNum(sheetXml, 'E25', Math.round(hCouture * 100) / 100);
       if (hAtelier > 0) sheetXml = _patchCellNum(sheetXml, 'E26', Math.round(hAtelier * 100) / 100);
       if (hMetal > 0)   sheetXml = _patchCellNum(sheetXml, 'E27', Math.round(hMetal * 100) / 100);
+      if (hCnc > 0)     sheetXml = _patchCellNum(sheetXml, 'E29', Math.round(hCnc * 100) / 100);   // v1153
       /* v1055 : même bogue dans la section Temps. H25, H26 et H28 ont la
          formule ; H27 (Usinage et soudure), H29 (CNC-ROBOT), H30 (Assemblage)
          et H32 (R&D) sont des zéros en dur, alors que H33 =SUM(H25:H32) les
@@ -11622,8 +11745,12 @@ function saveProjectFile(silencieux) {
         filename: t.filename || '',
         note: t.note || '',
         noteCouture: t.noteCouture || '',   // v1109
+        noteMetal: t.noteMetal || '',       // v1153
+        noteCnc: t.noteCnc || '',           // v1153
         temps: t.temps || '',
         tempsCouture: t.tempsCouture || '',   // v1080
+        tempsMetal: t.tempsMetal || '',       // v1153
+        tempsCnc: t.tempsCnc || '',           // v1153
         tarif: t.tarif || 'PSM',              // v1097
         item: t.item || '',                   // v1115
         mats: Array.isArray(t.mats) ? t.mats : []
@@ -11671,7 +11798,17 @@ function loadProjectFile(files) {
       t.filename = c.filename || '';
       t.note = c.note || '';
       t.noteCouture = c.noteCouture || '';   // v1109
+      t.noteMetal = c.noteMetal || '';       // v1153
+      t.noteCnc = c.noteCnc || '';           // v1153
       t.temps = c.temps || '';
+      /* v1153 : ces trois-là étaient écrits dans le fichier mais jamais relus
+         — le temps de couture, le tarif et le nom de l'item disparaissaient
+         à la réouverture d'un projet. */
+      t.tempsCouture = c.tempsCouture || '';
+      t.tempsMetal = c.tempsMetal || '';
+      t.tempsCnc = c.tempsCnc || '';
+      t.tarif = (c.tarif === 'Prix major\u00e9') ? 'Prix major\u00e9' : 'PSM';
+      t.item = c.item || '';
       t.mats = Array.isArray(c.mats) ? c.mats : [];
       return t;
     });
