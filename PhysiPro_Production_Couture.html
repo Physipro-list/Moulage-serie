@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Production Couture</title>
+<title>PhysiPro — Production Couture v20260930c</title>
 <style>
 :root{--bg-main:#0f172a;--bg-card:#1e293b;--bg-input:#0f172a;--border:#334155;--gold:#c9a227;--gold-light:#fbbf24;--text:#e2e8f0;--text-muted:#94a3b8;--success:#22c55e;--danger:#ef4444;--info:#3b82f6;--purple:#a855f7;--teal:#14b8a6;--tbl-zoom:11px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -682,7 +682,8 @@ body.col-resizing *{cursor:col-resize!important;}
         <span class="pchat-bell-icon">🔔</span>
         <span class="pchat-bell-text" id="pchatBellText"></span>
       </button>
-      <button class="pchat-toggle" id="pchatToggleBtn" onclick="PChat.openContactModal()" title="Messages privés">💬 Chat</button>
+      <!-- v20260930c : chat privé retiré (les échanges se font dans le moulage) -->
+      <button class="pchat-toggle" id="pchatToggleBtn" onclick="PChat.openContactModal()" title="Messages privés" style="display:none">💬 Chat</button>
       <div class="search-box-small">
         <input type="text" id="searchInput" placeholder="🔍 Rechercher..." oninput="filterTable()">
       </div>
@@ -1190,8 +1191,7 @@ function activateReadyRow(idx,field,val){
   if(field==='bonCmd'){
     var bon=val.trim();
     if(fbDb){
-      fbDb.ref('serieCommandes').once('value').then(function(snap){
-        serieCardsCache=snap.val()||{};
+      _serieFrais(false).then(function(){
         var m=findSerie(bon);
         if(m){_handleSerieMatch(bon,m,idx);}else{openEntryModal(idx);}
       }).catch(function(){
@@ -1312,14 +1312,23 @@ function filterTable(){
   _clsTimer=setTimeout(function(){_clsSearch(sl);},450);
 }
 
+/* v20260930b : le classeur complet (inspectionCoutureData, ~876 Ko) était relu
+   dans Firebase à CHAQUE recherche qui ne trouvait rien dans le mois courant, et
+   à chaque ouverture de « Sans nom ». On le garde maintenant 15 minutes en mémoire. */
+var _clsClasseur=null,_clsClasseurT=0,_CLS_TTL=15*60*1000;
+function _classeurComplet(){
+  if(_clsClasseur&&(Date.now()-_clsClasseurT)<_CLS_TTL)return Promise.resolve(_clsClasseur);
+  return fbDb.ref('inspectionCoutureData').once('value').then(function(snap){
+    _clsClasseur=snap.val()||{};_clsClasseurT=Date.now();return _clsClasseur;
+  });
+}
 function _clsSearch(sl){
   if(!fbDb||!fbUser){showToast('⚠️ Firebase non connecté pour la recherche classeur','warning');return;}
   // Vérifier que la recherche est toujours la même
   var check=(document.getElementById('searchInput').value||'').trim().toLowerCase();
   if(check!==sl)return;
 
-  fbDb.ref('inspectionCoutureData').once('value').then(function(snap){
-    var all=snap.val()||{};
+  _classeurComplet().then(function(all){
     // Re-vérifier que la recherche n'a pas changé
     var check2=(document.getElementById('searchInput').value||'').trim().toLowerCase();
     if(check2!==sl)return;
@@ -1417,8 +1426,7 @@ input.value='';input.focus();
 _checkJobsAttente(bon);
 // Fresh fetch from Firebase then match (like Inspection Atelier)
 if(fbDb){
-  fbDb.ref('serieCommandes').once('value').then(function(snap){
-    serieCardsCache=snap.val()||{};
+  _serieFrais(false).then(function(){
     var m=findSerie(bon);
     if(m){_handleSerieMatch(bon,m,newIdx);}else{openEntryModal(newIdx);}
   }).catch(function(){
@@ -1652,8 +1660,26 @@ saveData();renderTable();closeEntryModal();showToast('✅ Enregistré','success'
 
 /* ═══ SÉRIE+ INTEGRATION ═══ */
 var serieCardsCache={};var _serieListener=null;
-function loadSerieCards(){if(!fbDb||!fbUser)return;fbDb.ref('serieCommandes').once('value').then(function(snap){serieCardsCache=snap.val()||{};console.log('[Couture] Serie cards: '+Object.keys(serieCardsCache).length);renderTable();listenSerieCards();}).catch(function(e){console.error('[Couture] Serie load error:',e);});}
-function listenSerieCards(){if(_serieListener||!fbDb)return;_serieListener=fbDb.ref('serieCommandes').on('value',function(snap){var oldCount=Object.keys(serieCardsCache).length;var fbCards=snap.val()||{};var newCount=Object.keys(fbCards).length;if(oldCount>3&&newCount<oldCount*0.5){console.error('🛡️ [Couture] Serie cards anomalie: '+oldCount+'→'+newCount+' — cache préservé');return;}serieCardsCache=fbCards;if(newCount<oldCount){console.log('[Couture] Serie cards: '+oldCount+'→'+newCount);}renderTable();});}
+/* v20260930b : l'écoute est posée AVANT la lecture — la carte n'est téléchargée
+   qu'une fois (avant : une fois pour la lecture, une 2e fois pour l'écoute). */
+/* v20260930c : les commandes de série (serieCommandes) ne sont plus téléchargées
+   à chaque ouverture ni écoutées en permanence. Elles sont gardées sur ce poste
+   24 h (localStorage) ; un « Vérifier » ou une ⭐ force une relecture. */
+var SERIE_CACHE_KEY='physipro_couture_serie_cache',SERIE_TTL=24*60*60*1000;
+function _serieFrais(force){
+  if(!force){
+    try{var c=JSON.parse(localStorage.getItem(SERIE_CACHE_KEY)||'null');
+      if(c&&c.t&&(Date.now()-c.t)<SERIE_TTL&&c.cards){serieCardsCache=c.cards;return Promise.resolve(serieCardsCache);}}catch(e){}
+  }
+  if(!fbDb||!fbUser)return Promise.resolve(serieCardsCache);
+  return fbDb.ref('serieCommandes').once('value').then(function(snap){
+    serieCardsCache=snap.val()||{};
+    try{localStorage.setItem(SERIE_CACHE_KEY,JSON.stringify({t:Date.now(),cards:serieCardsCache}));}catch(e){}
+    return serieCardsCache;
+  });
+}
+function loadSerieCards(){if(!fbDb||!fbUser)return;_serieFrais(false).then(function(){console.log('[Couture] Serie cards: '+Object.keys(serieCardsCache).length);renderTable();}).catch(function(e){console.error('[Couture] Serie load error:',e);});}
+function listenSerieCards(){return;/* v20260930c : plus d'écoute permanente */if(_serieListener||!fbDb)return;_serieListener=fbDb.ref('serieCommandes').on('value',function(snap){var oldCount=Object.keys(serieCardsCache).length;var fbCards=snap.val()||{};var newCount=Object.keys(fbCards).length;if(oldCount>3&&newCount<oldCount*0.5){console.error('🛡️ [Couture] Serie cards anomalie: '+oldCount+'→'+newCount+' — cache préservé');return;}serieCardsCache=fbCards;if(newCount<oldCount){console.log('[Couture] Serie cards: '+oldCount+'→'+newCount);}renderTable();});}
 function findSerie(num){var n=String(num).trim();var nStrip=n.replace(/^0+/,'');for(var id in serieCardsCache){var c=serieCardsCache[id];var o=(c.order||'').trim();var p=(c.numeroPO||'').trim();if(o===n||p===n||o.replace(/^0+/,'')===nStrip||p.replace(/^0+/,'')===nStrip)return{cardId:id,card:c};}return null;}
 function getUnfinishedCouture(card){var res=[];(card.items||[]).forEach(function(item,ii){var pend=[];(item.grandeurs||[]).forEach(function(g,gi){var done=(g.couture&&g.couture.inspected)||false;var inInv=(g.couture&&g.couture.sentToInventaire)||false;var qf=parseInt(g.couture&&g.couture.qtyFait)||0;var isP=(g.couture&&g.couture.partiel)||false;var tQ=parseInt(g.qty)||0;if(!done){var rem=isP?(tQ-qf):tQ;pend.push({gi:gi,name:g.name,qty:tQ,qtyFait:qf,remaining:rem,inInventaire:inInv,wasPartial:isP});}});if(pend.length)res.push({ii:ii,name:item.name,pending:pend});});return res;}
 function getCompletedCouture(card){var res=[];(card.items||[]).forEach(function(item,ii){var done=[];(item.grandeurs||[]).forEach(function(g,gi){var isDone=(g.couture&&g.couture.inspected)||false;if(isDone)done.push({gi:gi,name:g.name,qty:parseInt(g.qty)||0});});if(done.length)res.push({ii:ii,name:item.name,completed:done});});return res;}
@@ -1791,8 +1817,7 @@ function _handleSerieMatch(bon, match, rowIdx) {
 function reVerifyAllSerieRows() {
   if (!fbDb) { showToast('Firebase non connecté', 'error'); return; }
   showToast('🔍 Vérification en cours...', 'info');
-  fbDb.ref('serieCommandes').once('value').then(function(snap) {
-    serieCardsCache = snap.val() || {};
+  _serieFrais(true).then(function() {
     var autoCompleted = 0, starsFound = 0, labelsFixed = 0;
     for (var k in localStorage) {
       if (k.indexOf('physipro_couture_data_') !== 0) continue;
@@ -1843,8 +1868,7 @@ window.reVerifyAllSerieRows = reVerifyAllSerieRows;
 function openSerieFromStarByBon(bon){
   if(!bon)return;
   if(fbDb){
-    fbDb.ref('serieCommandes').once('value').then(function(snap){
-      serieCardsCache=snap.val()||{};
+    _serieFrais(true).then(function(){
       // Find real idx in source month
       var realIdx=-1;
       for(var k in localStorage){
@@ -1874,8 +1898,7 @@ function openSerieFromStar(idx){var row=(data[currentMonth]||[])[idx];if(!row||!
   var bon=row.bonCmd.trim();
   // Force re-fetch from Firebase to get freshest card data (like Inspection Atelier)
   if(fbDb){
-    fbDb.ref('serieCommandes').once('value').then(function(snap){
-      serieCardsCache=snap.val()||{};
+    _serieFrais(true).then(function(){
       var m=findSerie(bon);
       if(m){_handleSerieMatch(bon,m,idx);}
       else{showToast('Carte Série+ introuvable pour '+bon,'error');}
@@ -2075,8 +2098,14 @@ function saveData(){if(writeBlocked())return;if(!hasPermission("M")&&!hasPermiss
   try{localStorage.setItem('physipro_couture_data_'+currentMonth,JSON.stringify(cleanData));}catch(e){console.error('localStorage save error:',e);}
   try{var pending=JSON.parse(localStorage.getItem('physipro_couture_pending')||'{}');pending[currentMonth]=Date.now();localStorage.setItem('physipro_couture_pending',JSON.stringify(pending));}catch(e){}
   if(!fbDb||!fbUser){setSyncBadge('offline');return;}
-  _syncMonth(currentMonth);
+  /* v20260930b : les changements faits coup sur coup partent ensemble (1,2 s) */
+  var _mSync=currentMonth;
+  if(_cSyncT&&_cSyncMois!==_mSync){clearTimeout(_cSyncT);_syncMonth(_cSyncMois);}
+  clearTimeout(_cSyncT);_cSyncMois=_mSync;
+  _cSyncT=setTimeout(function(){_cSyncT=null;_syncMonth(_mSync);},1200);
 }
+var _cSyncT=null,_cSyncMois='';
+window.addEventListener('beforeunload',function(){if(_cSyncT){clearTimeout(_cSyncT);_cSyncT=null;try{_syncMonth(_cSyncMois);}catch(e){}}});
 /* ══════════════════════════════════════════════════════════════════════
    FUSION MULTI-POSTES (2026-09-30)
    Avant : chaque poste écrivait le mois COMPLET (set) à partir de SA copie
@@ -2257,8 +2286,25 @@ function syncAllPending(){
   if (totalFixed > 0) console.log('[MIGRATION-COUTURE] ✅ ' + totalFixed + ' ligne(s) marquée(s) permanent');
 })();
 
+/* v20260930b : chaque sauvegarde passe par une « transaction » Firebase. Sans
+   écoute ouverte sur le mois, Firebase retéléchargeait le MOIS AU COMPLET à
+   chaque changement de case, avant d'écrire. Une écoute permanente (qui ne fait
+   rien d'autre) garde le mois en mémoire : la transaction part de cette copie
+   et seules les modifications voyagent. */
+var _cMoisEcoute='',_cNoop=function(){};
+function _cGarderMois(m){
+  if(!fbDb||!fbUser||!m||_cMoisEcoute===m)return;
+  if(_cMoisEcoute){
+    fbDb.ref('inspectionCoutureData/'+_cMoisEcoute).off('value',_cNoop);
+    fbDb.ref('coutureLists/_supprimees/'+_cMoisEcoute).off('value',_cNoop);
+  }
+  _cMoisEcoute=m;
+  fbDb.ref('inspectionCoutureData/'+m).on('value',_cNoop,function(){});
+  fbDb.ref('coutureLists/_supprimees/'+m).on('value',_cNoop,function(){});
+}
 function loadData(){
   var m=currentMonth;
+  _cGarderMois(m);
   // Try localStorage first for immediate display
   try{var local=localStorage.getItem('physipro_couture_data_'+m);if(local)data[m]=JSON.parse(local);}catch(e){}
   if(!fbDb||!fbUser){renderTable();return;}
@@ -2484,8 +2530,12 @@ function chargerSansNom(){
     _snRemplirMenus(); _snAfficherFiltres(); _snAppliquer();
   }
   if(fbDb&&fbUser){
-    fbDb.ref('inspectionCoutureData').once('value').then(function(snap){
-      fini(snap.val()||{},'firebase');
+    _classeurComplet().then(function(tous){
+      /* le mois courant vient de l'écran : il est toujours à jour */
+      var copie={};Object.keys(tous).forEach(function(k){copie[k]=tous[k];});
+      var cur=(data[currentMonth]||[]).filter(function(r){return r&&!r._empty;});
+      if(cur.length)copie[currentMonth]=cur;
+      fini(copie,'firebase');
     }).catch(function(e){
       console.error('[Sans nom] lecture Firebase :',e);
       showToast('⚠️ Firebase inaccessible — liste tirée des mois gardés sur cet ordinateur','warning');
@@ -3372,12 +3422,18 @@ var PChat = (function() {
     var _db = getDb();
     if (!_db) return;
 
-    TEAM.forEach(function(t) {
+    /* v20260930c : chat privé désactivé — aucune conversation n'est plus lue.
+       Seules les nouvelles des moulages (moulageNotifications) alimentent la cloche. */
+    var PCHAT_PRIVE = false;
+    (PCHAT_PRIVE ? TEAM : []).forEach(function(t) {
       if (t.email.toLowerCase() === myEmail) return;
       var chatKey = getChatKey(myName, t.short);
       var emailKey = myEmail.replace(/\./g, '_');
 
-      var ref = _db.ref('privateChat/' + chatKey);
+      /* v20260930b : seulement les 40 derniers messages de chaque fil — avant, TOUT
+         l'historique (photos comprises, jusqu'à 100 Ko chacune) de chaque collègue
+         était téléchargé à chaque ouverture de la page, juste pour compter les non-lus. */
+      var ref = _db.ref('privateChat/' + chatKey).limitToLast(40);
       var listener = ref.on('value', function(snap) {
         var msgs = snap.val() || {};
         var count = 0;
@@ -3430,7 +3486,8 @@ var PChat = (function() {
     // ═══ CROSS-APP: Listen for ALL notification sources ═══
     var crossEmailKey = myEmail.replace(/\./g, '_');
     
-    _db.ref('jobNotifications').orderByChild('to').equalTo(myEmail).on('value', function(snap) {
+    /* v20260930c : jobNotifications venait de Service Client, page retirée du site — plus lu */
+    if (PCHAT_PRIVE) _db.ref('jobNotifications').orderByChild('to').equalTo(myEmail).on('value', function(snap) {
       _crossAppNotifs._job = {};
       var all = snap.val() || {};
       Object.keys(all).forEach(function(k) {

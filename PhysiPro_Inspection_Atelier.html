@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Inspection Atelier v20260929f</title>
+<title>PhysiPro — Inspection Atelier v20260930b</title>
 <style>
 :root{--bg-main:#0f172a;--bg-card:#1e293b;--bg-input:#0f172a;--border:#334155;--gold:#c9a227;--gold-light:#fbbf24;--text:#e2e8f0;--text-muted:#94a3b8;--success:#22c55e;--danger:#ef4444;--info:#3b82f6;--purple:#a855f7;--teal:#14b8a6;--tbl-zoom:11px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -617,7 +617,8 @@ tr:hover .row-del-btn{opacity:.6;}
         <span class="pchat-bell-icon">🔔</span>
         <span class="pchat-bell-text" id="pchatBellText"></span>
       </button>
-      <button class="pchat-toggle" id="pchatToggleBtn" onclick="PChat.openContactModal()" title="Messages privés">💬 Chat</button>
+      <!-- v20260930b : chat privé retiré (les échanges se font dans le moulage) -->
+      <button class="pchat-toggle" id="pchatToggleBtn" onclick="PChat.openContactModal()" title="Messages privés" style="display:none">💬 Chat</button>
       <div class="search-box-small">
         <input type="text" id="global-search" placeholder="🔍 Rechercher..." oninput="onSearchInput()">
         <button class="tb-gear-inside" onclick="openSettingsPanel()" title="Paramètres">⚙️</button>
@@ -851,7 +852,7 @@ function safeFbUpdate(ref, data, callback) {
 }
 
 // === VERSION PROTECTION ===
-var APP_VERSION=20260929;var APP_MODULE='inspection';var _versionOK=true;
+var APP_VERSION=20260930;var APP_MODULE='inspection';var _versionOK=true;
 function checkAppVersion(){if(!fbDb)return;fbDb.ref('appSettings/versions/'+APP_MODULE).once('value').then(function(s){var r=s.val();if(r&&typeof r==='number'&&APP_VERSION<r){_versionOK=false;var b=document.createElement('div');b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;background:#dc2626;color:white;padding:12px 20px;font-weight:700;text-align:center;font-size:14px;';b.innerHTML='⚠️ VERSION OBSOLÈTE. <button onclick="location.reload(true)" style="margin-left:15px;background:white;color:#dc2626;border:none;padding:6px 16px;border-radius:6px;font-weight:bold;cursor:pointer;">🔄 Rafraîchir</button>';document.body.prepend(b);}else{fbDb.ref('appSettings/versions/'+APP_MODULE).set(APP_VERSION);_versionOK=true;}});}
 function writeBlocked(s){if(!_versionOK){if(!s)alert('🔒 Version obsolète');return true;}return false;}
 
@@ -1348,6 +1349,7 @@ function stopListenDeletedIds() {
  * ═══════════════════════════════════════════════════════════ */
 var _serieListener = null;
 function listenSerieCards() {
+  return;   // v20260930b : plus d'écoute permanente de serieCommandes
   if (_serieListener || !fbDb) return;
   _serieListener = fbDb.ref('serieCommandes').on('value', function(snap) {
     var fbCards = snap.val(); if (!fbCards) return;
@@ -1493,7 +1495,7 @@ function pushToFB(dept) {
     _autoBackup(dept);
     setFbWriting(dept, true);
     setSyncBadge('syncing');
-    fbDb.ref(FB_PATHS[dept]).set(data).then(function() {
+    _ecrireParMois(FB_PATHS[dept], data, fbData).then(function() {   // v20260930a : mois changés seulement
       setTimeout(function() { setFbWriting(dept, false); setSyncBadge('online'); }, 1500);
       _retryCount[dept] = 0;
       console.log('✅ Firebase saved:', dept, entryCount + ' entries');
@@ -1532,6 +1534,39 @@ function pushToFB(dept) {
     }
   });
 }
+/* ═══ v20260930a — ÉCONOMIE DE TÉLÉCHARGEMENT FIREBASE ═══
+   1) Écrire seulement les MOIS qui ont changé. Avant, chaque sauvegarde
+      réécrivait le classeur AU COMPLET (.set) et Firebase renvoyait alors le
+      classeur entier à chaque autre poste qui avait la page ouverte.
+   2) « Écoutes de garde » : une écoute qui ne fait rien, posée dès le départ,
+      garde les nœuds en mémoire. Les lectures du démarrage et l'écoute en
+      direct posée ensuite ne retéléchargent plus le même nœud une 2e fois. */
+function _fbEmp(v){
+  if(v===null||v===undefined)return '';
+  if(typeof v!=='object')return JSON.stringify(v);
+  var k=Object.keys(v).sort(),out=[];
+  for(var i=0;i<k.length;i++){var e=_fbEmp(v[k[i]]);if(e!=='')out.push(JSON.stringify(k[i])+':'+e);}
+  return out.length?'{'+out.join(',')+'}':'';
+}
+function _ecrireParMois(chemin,local,serveur){
+  if(!serveur||typeof serveur!=='object')return fbDb.ref(chemin).set(local);
+  var upd={},n=0;
+  Object.keys(local).forEach(function(m){if(_fbEmp(local[m])!==_fbEmp(serveur[m])){upd[m]=local[m];n++;}});
+  Object.keys(serveur).forEach(function(m){if(!Object.prototype.hasOwnProperty.call(local,m)){upd[m]=null;n++;}});
+  if(!n)return Promise.resolve();
+  console.log('[FB] '+n+' mois écrit(s) : '+Object.keys(upd).join(', '));
+  return fbDb.ref(chemin).update(upd);
+}
+var _gardes=[],_gardeNoop=function(){};
+function _poserGardes(chemins){
+  if(!fbDb||_gardes.length)return;
+  chemins.forEach(function(p){fbDb.ref(p).on('value',_gardeNoop,function(){});_gardes.push(p);});
+}
+function _retirerGardes(){
+  _gardes.forEach(function(p){try{fbDb.ref(p).off('value',_gardeNoop);}catch(e){}});
+  _gardes=[];
+}
+
 function debouncePush(dept) {
   clearTimeout(_syncTimeout[dept]);
   _syncTimeout[dept] = setTimeout(function() { pushToFB(dept); }, 800);
@@ -1553,6 +1588,7 @@ function stopFirebaseSync() {
   });
   if (_serieListener) { fbDb.ref('serieCommandes').off('value', _serieListener); _serieListener = null; }
   stopListenDeletedIds();
+  _retirerGardes();   // v20260930a
   _syncPhase = 'idle';
 }
 
@@ -1563,6 +1599,7 @@ function stopFirebaseSync() {
 function startFirebaseSync() {
   if (_syncPhase !== 'idle') { console.warn('[SYNC] Already running, skip'); return; }
   _syncPhase = 'syncing';
+  _poserGardes([FB_PATHS.inspection, FB_DELETED_PATH, 'serieDeletedCards']);   // v20260930a/b
   cleanOldDeletedIds();
   console.log('[SYNC] ═══ Starting Firebase sync ═══');
 
@@ -1651,9 +1688,19 @@ function _loadSerieDeletedCards() {
 }
 
 /* ─── Step 3: Load serie cards ─── */
+/* v20260930b : serieCommandes n'est plus téléchargé à chaque ouverture — au plus
+   une fois par 24 h par poste (le cache local SK fait foi entre-temps ; les bons
+   sont déjà cherchés en local d'abord, et « Vérifier » / ⭐ relisent Firebase). */
+var SERIE_T_KEY = 'physipro_serie_cache_t', SERIE_TTL = 24 * 60 * 60 * 1000;
 function _loadSerieCards() {
+  var t = 0; try { t = parseInt(localStorage.getItem(SERIE_T_KEY) || '0', 10) || 0; } catch (e) {}
+  if (t && (Date.now() - t) < SERIE_TTL && Object.keys(getSerieCards()).length) {
+    console.log('[SYNC] Serie cards : cache local (< 24 h)');
+    return Promise.resolve();
+  }
   return fbDb.ref('serieCommandes').once('value').then(function(snap) {
     var fbCards = snap.val();
+    try { localStorage.setItem(SERIE_T_KEY, String(Date.now())); } catch (e) {}
     if (fbCards) {
       var local = getSerieCards();
       var delIds = {}; try { delIds = JSON.parse(localStorage.getItem('physipro_serie_deleted_cards') || '{}'); } catch(e) {}
@@ -4140,12 +4187,18 @@ var PChat = (function() {
     var _db = getDb();
     if (!_db) return;
 
-    TEAM.forEach(function(t) {
+    /* v20260930b : chat privé désactivé — aucune conversation n'est plus lue.
+       Seules les nouvelles des moulages (moulageNotifications) alimentent la cloche. */
+    var PCHAT_PRIVE = false;
+    (PCHAT_PRIVE ? TEAM : []).forEach(function(t) {
       if (t.email.toLowerCase() === myEmail) return;
       var chatKey = getChatKey(myName, t.short);
       var emailKey = myEmail.replace(/\./g, '_');
 
-      var ref = _db.ref('privateChat/' + chatKey);
+      /* v20260930a : seulement les 40 derniers messages de chaque fil — avant, TOUT
+         l'historique (photos comprises) de chaque collègue était téléchargé à
+         chaque ouverture de la page, juste pour compter les non-lus. */
+      var ref = _db.ref('privateChat/' + chatKey).limitToLast(40);
       var listener = ref.on('value', function(snap) {
         var msgs = snap.val() || {};
         var count = 0;
@@ -4198,7 +4251,8 @@ var PChat = (function() {
     // ═══ CROSS-APP: Listen for ALL notification sources ═══
     var crossEmailKey = myEmail.replace(/\./g, '_');
     
-    _db.ref('jobNotifications').orderByChild('to').equalTo(myEmail).on('value', function(snap) {
+    /* v20260930b : jobNotifications venait de Service Client, page retirée du site — plus lu */
+    if (PCHAT_PRIVE) _db.ref('jobNotifications').orderByChild('to').equalTo(myEmail).on('value', function(snap) {
       _crossAppNotifs._job = {};
       var all = snap.val() || {};
       Object.keys(all).forEach(function(k) {

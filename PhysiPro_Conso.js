@@ -1,5 +1,5 @@
 /* ================================================================
-   PhysiPro_Conso.js \u2014 v1.1 (2026-09-24)
+   PhysiPro_Conso.js \u2014 v1.2 (2026-09-30)
    COMPTEUR DE T\u00c9L\u00c9CHARGEMENT FIREBASE, PARTAG\u00c9 PAR TOUTES LES PAGES
 
    \u00c0 inclure AVANT les scripts Firebase de chaque page :
@@ -24,6 +24,11 @@
       \u00e0 gauche avec le total du jour ; un clic ouvre le d\u00e9tail par
       page. Lui seul peut \u00ab Continuer quand m\u00eame \u00bb apr\u00e8s l'arr\u00eat.
 
+   v1.2 : chaque octet recu est aussi classe par NOEUD Firebase (le premier
+      morceau du chemin : serieCommandes, privateChat, inspectionData...),
+      pour voir QUOI coute cher dans chaque page. Le detail (clic sur la
+      pastille) montre les 3 plus gros noeuds sous chaque page.
+
    LIMITES : un estim\u00e9. Firebase compte aussi un peu d'enveloppe
    r\u00e9seau, et seules les pages qui incluent ce fichier sont compt\u00e9es.
    ================================================================ */
@@ -39,7 +44,8 @@
 
   var MO = 1024 * 1024;
   if (window.__physiproConso) return;          // d\u00e9j\u00e0 charg\u00e9
-  var C = window.__physiproConso = { octets: 0, envoyes: 0, total: null, arrete: false };
+  var C = window.__physiproConso = { octets: 0, envoyes: 0, total: null, arrete: false,
+                                     noeuds: {}, noeudsEnvoyes: {} };   // v1.2
 
   /* jour Firebase = date du Pacifique */
   function jour() {
@@ -58,6 +64,35 @@
 
   /* ---------------- 1. COMPTAGE ---------------- */
   function compter(n) { if (n > 0) C.octets += n; }
+  /* v1.2 : classement par noeud. Un gros message Firebase arrive en plusieurs
+     morceaux : d'abord le NOMBRE de morceaux, puis les morceaux. On les
+     recolle pour lire le chemin ("p":"serieCommandes/...") au debut. */
+  function noeudDe(txt) {
+    var m = /"p":"\/?([^"\/]*)/.exec(txt.slice(0, 400));
+    var n = m ? (m[1] || '(racine)') : '(reponses)';
+    return n.replace(/[.#$\[\]\/]/g, '_').slice(0, 60);
+  }
+  function classer(txt, n) {
+    try { var k = noeudDe(txt); C.noeuds[k] = (C.noeuds[k] || 0) + n; } catch (e) {}
+  }
+  function suivreSocket(s) {
+    var reste = 0, tampon = '', total = 0;
+    s.addEventListener('message', function (ev) {
+      var n = taille(ev.data);
+      compter(n);
+      if (typeof ev.data !== 'string') return;
+      try {
+        if (reste > 0) {
+          tampon += ev.data; total += n; reste--;
+          if (reste === 0) { classer(tampon, total); tampon = ''; total = 0; }
+        } else if (/^\d{1,4}$/.test(ev.data)) {
+          reste = parseInt(ev.data, 10); tampon = ''; total = n;
+        } else {
+          classer(ev.data, n);
+        }
+      } catch (e) {}
+    });
+  }
   function taille(d) {
     if (typeof d === 'string') return d.length;
     if (d && typeof d.byteLength === 'number') return d.byteLength;
@@ -69,7 +104,7 @@
     var WS2 = function (url, prot) {
       var s = (prot === undefined) ? new WS(url) : new WS(url, prot);
       if (/firebaseio\.com|firebasedatabase\.app/i.test(String(url))) {
-        s.addEventListener('message', function (ev) { compter(taille(ev.data)); });
+        suivreSocket(s);
       }
       return s;
     };
@@ -84,7 +119,14 @@
       var p = F.apply(this, arguments);
       if (/firebaseio\.com|firebasedatabase\.app/i.test(url)) {
         p.then(function (r) {
-          try { r.clone().arrayBuffer().then(function (b) { compter(b.byteLength); }); } catch (e) {}
+          try { r.clone().arrayBuffer().then(function (b) {
+            compter(b.byteLength);
+            try {   /* v1.2 : lecture REST -> noeud = debut du chemin de l'adresse */
+              var ch = decodeURIComponent(String(url).replace(/^https?:\/\/[^\/]+\/?/, '').split(/[?#]/)[0]).replace(/\.json$/, '');
+              var k = ((ch.split('/')[0] || '(racine)') + ' (REST)').replace(/[.#$\[\]\/]/g, '_');
+              C.noeuds[k] = (C.noeuds[k] || 0) + b.byteLength;
+            } catch (e) {}
+          }); } catch (e) {}
         }).catch(function () {});
       }
       return p;
@@ -134,6 +176,13 @@
     p.textContent = '\u2601 ' + (t == null ? '\u2026' : mo(t) + ' / ' + QUOTA_MO + ' Mo') + '  \u00b7  cette page ' + mo(C.octets);
     p.style.background = (t != null && t >= AVERTIR_MO * MO) ? '#b3261e' : '#04152c';
   }
+  /* v1.2 : les 3 plus gros noeuds d'une page, en petit sous son nom */
+  function gros(n) {
+    var k = Object.keys(n || {}).sort(function (a, b) { return n[b] - n[a]; }).slice(0, 3);
+    if (!k.length) return '';
+    return '<br><span style="color:#b3261e;font-size:11px">' +
+      k.map(function (x) { return x + ' ' + mo(n[x]); }).join(' \u00b7 ') + '</span>';
+  }
   function basculerDetail() {
     var d = el('pcDetail');
     if (d) { d.parentNode.removeChild(d); return; }
@@ -141,12 +190,12 @@
     document.body.appendChild(d);
     try {
       firebase.database().ref('consoDetail/' + jour()).once('value').then(function (s) {
-        var v = s.val() || {}, lignes = Object.keys(v).map(function (k) { return [k, v[k] && v[k].o || 0, v[k] && v[k].u || '']; });
+        var v = s.val() || {}, lignes = Object.keys(v).map(function (k) { return [k, v[k] && v[k].o || 0, v[k] && v[k].u || '', v[k] && v[k].n || {}]; });
         lignes.sort(function (a, b) { return b[1] - a[1]; });
         var h = '<b>Aujourd\u2019hui par poste et page</b><table>';
         lignes.forEach(function (l) {
           h += '<tr><td>' + l[0].replace(/^p[a-z0-9]{6}_/, '') + '<br><span style="color:#8d9cb0">' + l[2] +
-               ' \u00b7 ' + l[0].slice(0, 7) + '</span></td><td class="n">' + mo(l[1]) + '</td></tr>';
+               ' \u00b7 ' + l[0].slice(0, 7) + '</span>' + gros(l[3]) + '</td><td class="n">' + mo(l[1]) + '</td></tr>';
         });
         d.innerHTML = h + '</table>';
       }).catch(function (e) { d.textContent = 'Lecture impossible : ' + e.message; });
@@ -215,10 +264,20 @@
       C.total = (snap && snap.val()) || 0;
       verifier();
     }, false);
+    var dn = {};                                           // v1.2 : ce qui reste a envoyer, par noeud
+    Object.keys(C.noeuds).forEach(function (k) {
+      var d = C.noeuds[k] - (C.noeudsEnvoyes[k] || 0);
+      if (d > 0) { dn[k] = d; C.noeudsEnvoyes[k] = C.noeuds[k]; }
+    });
     if (delta > 0) {
       db.ref('consoDetail/' + j + '/' + CLE_DETAIL).transaction(function (v) {
-        v = v || { o: 0 }; v.o = (v.o || 0) + delta; v.u = u.email || ''; v.t = Date.now(); return v;
-      }, null, false);
+        v = v || { o: 0 }; v.o = (v.o || 0) + delta; v.u = u.email || ''; v.t = Date.now();
+        v.n = v.n || {};                                   // v1.2 : par noeud
+        Object.keys(dn).forEach(function (k) { v.n[k] = (v.n[k] || 0) + dn[k]; });
+        return v;
+      }, function (err) {
+        if (err) Object.keys(dn).forEach(function (k) { C.noeudsEnvoyes[k] = (C.noeudsEnvoyes[k] || 0) - dn[k]; });
+      }, false);
     }
   }
   function verifier() {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Inspection Finale</title>
+<title>PhysiPro — Inspection Finale v20260930b</title>
 <meta name="theme-color" content="#04152c">
 <style>
 :root{--bg:#0f172a;--bg2:#1e293b;--bdr:#334155;--gold:#c9a227;--goldL:#fbbf24;--txt:#e2e8f0;--mutd:#94a3b8;--ok:#22c55e;--err:#ef4444;--info:#3b82f6;--purp:#7c3aed;--tbl-zoom:12px;}
@@ -739,7 +739,7 @@ function pushFB(){
     }
     _autoBackup();
     setFbWriting(true);setSB('syncing');
-    fbDb.ref(FB).set(clean).then(function(){
+    _ecrireParMois(FB,clean,fbData).then(function(){   // v20260930a : mois changés seulement
       setTimeout(function(){setFbWriting(false);setSB('online');},1500);
       _retryCount=0;
       console.log('✅ Firebase saved: '+totalEntries+' entries');
@@ -773,6 +773,40 @@ function pushFB(){
   });
 }
 function debPush(){clearTimeout(_syncT);_syncT=setTimeout(pushFB,800);}
+
+/* ═══ v20260930a — ÉCONOMIE DE TÉLÉCHARGEMENT FIREBASE ═══
+   1) Écrire seulement les MOIS qui ont changé. Avant, chaque sauvegarde
+      réécrivait le classeur AU COMPLET (.set) et Firebase renvoyait alors le
+      classeur entier à chaque autre poste qui avait la page ouverte.
+   2) « Écoutes de garde » : une écoute qui ne fait rien, posée dès le départ,
+      garde les nœuds en mémoire. Les lectures du démarrage et l'écoute en
+      direct posée ensuite ne retéléchargent plus le même nœud une 2e fois. */
+function _fbEmp(v){
+  if(v===null||v===undefined)return '';
+  if(typeof v!=='object')return JSON.stringify(v);
+  var k=Object.keys(v).sort(),out=[];
+  for(var i=0;i<k.length;i++){var e=_fbEmp(v[k[i]]);if(e!=='')out.push(JSON.stringify(k[i])+':'+e);}
+  return out.length?'{'+out.join(',')+'}':'';
+}
+function _ecrireParMois(chemin,local,serveur){
+  if(!serveur||typeof serveur!=='object')return fbDb.ref(chemin).set(local);
+  var upd={},n=0;
+  Object.keys(local).forEach(function(m){if(_fbEmp(local[m])!==_fbEmp(serveur[m])){upd[m]=local[m];n++;}});
+  Object.keys(serveur).forEach(function(m){if(!Object.prototype.hasOwnProperty.call(local,m)){upd[m]=null;n++;}});
+  if(!n)return Promise.resolve();
+  console.log('[FB] '+n+' mois écrit(s) : '+Object.keys(upd).join(', '));
+  return fbDb.ref(chemin).update(upd);
+}
+var _gardes=[],_gardeNoop=function(){};
+function _poserGardes(chemins){
+  if(!fbDb||_gardes.length)return;
+  chemins.forEach(function(p){fbDb.ref(p).on('value',_gardeNoop,function(){});_gardes.push(p);});
+}
+function _retirerGardes(){
+  _gardes.forEach(function(p){try{fbDb.ref(p).off('value',_gardeNoop);}catch(e){}});
+  _gardes=[];
+}
+
 
 /* ═══ LISTEN FB (from Inspection Atelier) ═══ */
 function listenFB(){
@@ -808,6 +842,7 @@ function stopSync(){
   if(_fbListener){fbDb.ref(FB).off('value',_fbListener);_fbListener=null;}
   if(_serieListener){fbDb.ref('serieCommandes').off('value',_serieListener);_serieListener=null;}
   stopListenDeletedIds();
+  _retirerGardes();   // v20260930a
   _syncPhase='idle';
 }
 
@@ -904,6 +939,7 @@ window.forceMigrateDatesNow=function(){
 function startFirebaseSync(){
   if(_syncPhase!=='idle')return;
   _syncPhase='syncing';
+  _poserGardes([FB,FB_DELETED_PATH]);   // v20260930a/b
   cleanOldDeletedIds();
   console.log('[SYNC] ═══ Starting Firebase sync ═══');
   // Step 1: Load deleted IDs
@@ -916,8 +952,13 @@ function startFirebaseSync(){
     return true;
   }).catch(function(){console.warn('[SYNC] DeletedIds error (continuing)');}).then(function(){
     // Step 2: Load serie cards
+    /* v20260930b : serieCommandes au plus une fois par 24 h par poste (cache local SK
+       entre-temps ; ⭐ et « Vérifier » relisent Firebase au besoin). Plus d'écoute permanente. */
+    var _st=0;try{_st=parseInt(localStorage.getItem(SERIE_T_KEY)||'0',10)||0;}catch(e){}
+    if(_st&&(Date.now()-_st)<SERIE_TTL&&Object.keys(getSerieCards()).length){console.log('[SYNC] Serie cards : cache local (< 24 h)');return;}
     return fbDb.ref('serieCommandes').once('value').then(function(snap){
       var fbCards=snap.val();
+      try{localStorage.setItem(SERIE_T_KEY,String(Date.now()));}catch(e){}
       if(fbCards){
         var local=getSerieCards();
         Object.keys(fbCards).forEach(function(id){
@@ -999,6 +1040,7 @@ function startFirebaseSync(){
 
 /* ═══ LISTEN SERIE CARDS (from Inspection Atelier) ═══ */
 function listenSerieCards(){
+  return;   // v20260930b : plus d'écoute permanente de serieCommandes
   if(_serieListener||!fbDb)return;
   _serieListener=fbDb.ref('serieCommandes').on('value',function(snap){
     var fbCards=snap.val();if(!fbCards)return;
@@ -1254,6 +1296,7 @@ function editCell(idx,field,el,opts){
 
 /* ═══ SÉRIE+ LOOKUP ═══ */
 function getSerieCards(){try{return JSON.parse(localStorage.getItem(SK))||{};}catch(e){return {};}}
+var SERIE_T_KEY='physipro_serie_cache_t',SERIE_TTL=24*60*60*1000;   // v20260930b
 function findSerie(num){
   var cards=getSerieCards();var n=String(num).trim();if(!n)return null;
   var nStrip=n.replace(/^0+/,'');var nL6=nStrip.slice(-6);
@@ -1466,6 +1509,10 @@ function reopenSerie(bon,rowIdx){
 
 function checkSerieForRow(rowIdx,bon){
   if(!bon)return;
+  /* v20260930b : la carte est cherchée en LOCAL d'abord ; Firebase n'est relu
+     que si le bon est introuvable ici (avant : tout serieCommandes à chaque bon). */
+  var _loc=findSerie(bon);
+  if(_loc){window._serieTargetRow=rowIdx;openSerieModal(bon,_loc);return;}
   if(fbDb){
     fbDb.ref('serieCommandes').once('value').then(function(snap){
       var fb=snap.val()||{};var local=getSerieCards();
