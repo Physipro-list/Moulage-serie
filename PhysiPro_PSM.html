@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1162-entree-fluide]</title>
+<title>PhysiPro — Liste des matériaux [v1163-cartouche-centre]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -351,10 +351,9 @@ body{
   gap:9px;
   padding:2px 6px 2px 12px;
   border:1px solid rgba(0,0,0,0.85);
-  border-right:none;
-  border-radius:4px 0 0 4px;
+  border-radius:5px;             /* v1163 : cartouche autonome, centré */
   background:rgba(22,23,26, 0.6);
-  margin-right:-10px;            /* annule le gap du centre : collé au bouton */
+  margin:0;
   min-width:0;
 }
 .soumission-cartouche-divider{
@@ -634,13 +633,38 @@ body{
   font-family:inherit;
   font-size:10.5px;
   font-weight:700;
-  padding:4px 9px;
-  border-radius:0 6px 6px 0;
+  padding:4px 0;
+  width:82px;                    /* v1163 : même largeur que « Effacer » → cartouche au centre exact */
+  text-align:center;
+  border-radius:6px;
   cursor:pointer;
   white-space:nowrap;
   flex-shrink:0;
   transition:all .12s;
 }
+.topbar-effacer-soum-btn{
+  background:rgba(220,70,70,0.18);
+  border:1.5px solid rgba(0,0,0,0.85);
+  color:#f3c4c4;
+  font-family:inherit;
+  font-size:10.5px;
+  font-weight:700;
+  padding:4px 0;
+  width:82px;
+  text-align:center;
+  border-radius:6px;
+  cursor:pointer;
+  white-space:nowrap;
+  flex-shrink:0;
+  transition:all .12s;
+}
+.topbar-effacer-soum-btn:hover:not(:disabled){
+  background:rgba(220,70,70,0.40);
+  border-color:#000;
+  color:#fff;
+  transform:translateY(-1px);
+}
+.topbar-effacer-soum-btn:disabled{ opacity:.35; cursor:default; }
 .topbar-new-soum-btn:hover{
   background:rgba(67,164,106,0.35);
   border-color:#000;
@@ -3717,6 +3741,7 @@ label.item-img-btn{ user-select:none; }
            haut ; un clic sur l'une d'elles la rouvre. Le ✕ de fermeture est
            retiré, et Créer passe à droite. -->
       <div class="soum-centre" id="soumCentre"><!-- v1155 : centré sur la barre -->
+      <button class="topbar-new-soum-btn" onclick="boutonCreerSoum()" title="Créer une nouvelle soumission (repart à zéro)">✚ Créer</button>
       <div class="soumission-cartouche ouvrable" id="soumissionCartouche"
            onclick="basculerMenuSoum(event)" title="Voir toutes les soumissions">
         <span class="soumission-center-label">Soumission</span>
@@ -3727,7 +3752,7 @@ label.item-img-btn{ user-select:none; }
         <span class="soumission-chevron">▾</span>
         <div class="soum-menu" id="soumMenu"></div>
       </div>
-      <button class="topbar-new-soum-btn" onclick="startNewSoumission()" title="Créer une nouvelle soumission (repart à zéro)">✚ Créer</button>
+      <button class="topbar-effacer-soum-btn" id="btnEffacerSoum" onclick="boutonEffacerSoum(event)" title="Effacer la soumission ouverte" disabled>🗑 Effacer</button>
       </div><!-- /soum-centre -->
     </div>
 
@@ -6339,6 +6364,9 @@ function applySheetCalc() {
 // ============================================================
 var soumissionsCache = {};
 var currentSoumissionId = null;
+/* v1163 : nom connu localement dès la création / l'ouverture, pour que le
+   cartouche l'affiche tout de suite, sans attendre le retour de l'index. */
+var _nomsLocaux = {};
 var _soumissionSnapshotSaveTimer = null;
 
 // ---------- Statut de sauvegarde ----------
@@ -6357,13 +6385,19 @@ function _updateSoumissionPill() {
   var pill = document.getElementById('soumissionPill');
   var nameEl = document.getElementById('soumissionPillName');
   if (!pill || !nameEl) return;
-  if (currentSoumissionId && soumissionsCache[currentSoumissionId]) {
-    nameEl.textContent = soumissionsCache[currentSoumissionId].name || '(sans nom)';
+  var _en = currentSoumissionId ? soumissionsCache[currentSoumissionId] : null;
+  var _nom = currentSoumissionId ? ((_en && _en.name) || _nomsLocaux[currentSoumissionId] || '') : '';
+  if (currentSoumissionId && (_en || _nom)) {
+    nameEl.textContent = _nom || '(sans nom)';
+    nameEl.title = _nom;
     pill.classList.remove('brouillon');
   } else {
     nameEl.textContent = '— Brouillon —';
+    nameEl.title = '';
     pill.classList.add('brouillon');
   }
+  var _bEff = document.getElementById('btnEffacerSoum');   // v1163
+  if (_bEff) _bEff.disabled = !currentSoumissionId;
 }
 
 // ---------- Snapshot de l'état courant ----------
@@ -6706,6 +6740,10 @@ function _commitNewSoumissionWithName(name) {
   var newRef = db.ref('psm_simple/soumissions').push();
   var newId = newRef.key;
   var now = Date.now();
+  /* v1163 : le nom tapé s'inscrit immédiatement dans le cartouche du haut */
+  _nomsLocaux[newId] = name;
+  currentSoumissionId = newId;
+  _updateSoumissionPill();
   _setSaveStatus('saving');
   var _snapNeuf = _nettoyerPourFirebase(_captureSnapshot());
   newRef.set({ name: name, createdAt: now, lastModified: now, data: _snapNeuf }).then(function(){
@@ -6713,6 +6751,7 @@ function _commitNewSoumissionWithName(name) {
     return _majIndex(newId, { name: name, createdAt: now, lastModified: now, nbItems: _snapNeuf.fichiersGlobaux.length, taille: JSON.stringify(_snapNeuf).length });
   }).then(function(){
     currentSoumissionId = newId;
+    _updateSoumissionPill();
     return db.ref('psm_simple/current_soumission_id').set(newId);
   }).then(function(){
     return Promise.all([
@@ -6828,11 +6867,60 @@ function confirmerSuppressionSoum() {
       /* Si c'était celle qui était ouverte, on ne laisse pas l'application
          pointer vers une soumission qui n'existe plus. */
       if (id === currentSoumissionId) {
-        return db.ref('psm_simple/current_soumission_id').set(null);
+        _reinitialiserEspaceApresSuppression();   // v1163
+        return db.ref('psm_simple').update({
+          current_soumission_id: null,
+          image_globale: null,
+          items: null,
+          current_item_idx: null,
+          soumission_courante: null
+        }).then(function(){ _menuDepartMontre = false; afficherMenuDepart(); });
       }
     })
-    .then(function(){ showToast('Soumission supprim\u00e9e', 'success'); })
+    .then(function(){ delete _nomsLocaux[id]; _majCompteurStockage(); showToast('Soumission supprim\u00e9e', 'success'); })
     .catch(function(err){ showToast('Erreur : ' + err.message, 'error'); });
+}
+
+/* v1163 : la soumission ouverte vient d'être effacée — on vide l'écran
+   (photos, notes, temps, matériel) pour ne pas laisser un fantôme. */
+function _reinitialiserEspaceApresSuppression() {
+  if (_soumissionSnapshotSaveTimer) { clearTimeout(_soumissionSnapshotSaveTimer); _soumissionSnapshotSaveTimer = null; }
+  if (_globalImgSaveTimer) { clearTimeout(_globalImgSaveTimer); _globalImgSaveTimer = null; }
+  if (_itemsSaveTimer) { clearTimeout(_itemsSaveTimer); _itemsSaveTimer = null; }
+  _annulerSauvegardesCartes();
+  currentSoumissionId = null;
+  _envoiCartes = {};
+  _tailleEspace = 0;
+  soumissionMats = { atelier: [] };
+  itemsParDept = { atelier: [_newItem('Item 1')] };
+  currentItemIdxParDept = { atelier: 0 };
+  fichiersGlobaux = _defaultFileTabs();
+  currentFileTabIdx = 0;
+  if (typeof ZOOM_DOC !== 'undefined') ZOOM_DOC = {};
+  for (var i = 0; i < 12; i++) {
+    var n = document.getElementById('photoNote_' + i); if (n) n.innerHTML = '';
+    var t = document.getElementById('photoTemps_' + i); if (t) t.value = '';
+    var it = document.getElementById('photoItem_' + i); if (it) it.value = '';
+  }
+  _renderGlobalImage();
+  _rafraichirChampsCartes();
+  _updateSoumissionPill();
+}
+
+/* v1163 : boutons de part et d'autre du cartouche */
+function boutonCreerSoum() {
+  fermerMenuSoum();
+  _menuDepartMontre = false;
+  afficherMenuDepart();
+  departNouvelle();
+}
+function boutonEffacerSoum(e) {
+  if (e) e.stopPropagation();
+  if (!currentSoumissionId) { showToast('Aucune soumission ouverte', 'info'); return; }
+  if (!soumissionsCache[currentSoumissionId]) {
+    soumissionsCache[currentSoumissionId] = { name: _nomsLocaux[currentSoumissionId] || '(sans nom)' };
+  }
+  demanderSuppressionSoum(e, currentSoumissionId);
 }
 
 function choisirSoumission(e, id) {
@@ -6882,6 +6970,7 @@ function _ouvrirSoumissionDonnees(id, entry, data) {
      localement avant même que Firebase ne réponde. */
   if (_soumissionSnapshotSaveTimer) { clearTimeout(_soumissionSnapshotSaveTimer); _soumissionSnapshotSaveTimer = null; }
   _annulerSauvegardesCartes();
+  if (entry && entry.name) _nomsLocaux[id] = entry.name;   // v1163
   currentSoumissionId = id;
   _updateSoumissionPill();
   _restaurerCartesLocales(fichiersToLoad);
