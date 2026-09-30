@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1164-boutons-reduits]</title>
+<title>PhysiPro — Liste des matériaux [v1165-conso-a-droite]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -193,6 +193,20 @@ body{
 .stock-rempli{ height:100%; width:0%; background:#43a46a; transition:width .3s, background .3s; }
 .stock-rempli.moyen{ background:#ceab51; }
 .stock-rempli.plein{ background:#cf6464; }
+/* v1165 : stockage plus petit + pastille de consommation à côté, en bas à droite */
+.col-footer-actions{ flex-wrap:nowrap !important; gap:6px; }
+.stock-jauge{ flex:1 1 0; padding:1px 4px; }
+.stock-texte{ font-size:9px; gap:4px; }
+.stock-ligne{ height:4px; margin-top:2px; }
+.conso-case{ flex:0 1 auto; min-width:0; display:flex; align-items:center; }
+.conso-case:empty{ display:none; }
+#consoCase > #pcPastille{
+  position:static !important; left:auto !important; bottom:auto !important;
+  font-size:9px !important; padding:2px 7px !important; border-radius:9px !important;
+  box-shadow:none !important; border:1px solid #000 !important;
+  white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important;
+  max-width:100% !important; opacity:1 !important;
+}
 
 /* ============================================================
    v1156 — MENU DE DÉPART
@@ -3880,6 +3894,10 @@ label.item-img-btn{ user-select:none; }
         <!-- v1124 : le bouton « 📄 Créer le PDF » est retiré. Le 📄 PDF de la
              v1081, qui sort les devis avec leurs étampes, le remplace.
              exportPdf() reste définie dans le fichier. -->
+        <!-- v1165 : la pastille de consommation internet (PhysiPro_Conso.js)
+             est rapatriée ici, à gauche du stockage, au lieu de flotter
+             par-dessus les boutons du bas à gauche. -->
+        <div class="conso-case" id="consoCase"></div>
         <!-- v1159 : jauge de stockage -->
         <div class="stock-jauge" id="stockJauge" title="Estimation de l'espace pris par PSM dans Firebase (soumissions + espace de travail), sur le 1 Go gratuit">
           <div class="stock-texte"><span id="stockTexte">💾 Stockage PSM : calcul…</span><span id="stockPct"></span></div>
@@ -3900,6 +3918,36 @@ label.item-img-btn{ user-select:none; }
      Il DOIT être chargé AVANT le SDK Firebase (avertit, puis met Firebase
      en pause juste sous le quota gratuit du jour). -->
 <script src="PhysiPro_Conso.js"></script>
+<script>
+/* v1165 : PhysiPro_Conso.js pose sa pastille en bas à gauche de l'écran
+   (position fixe), où elle cachait les boutons. Sans toucher à ce fichier
+   partagé, on la déplace dans la barre du bas à droite dès qu'elle existe. */
+(function _rapatrierPastilleConso() {
+  function deplacer() {
+    var p = document.getElementById('pcPastille');
+    var c = document.getElementById('consoCase');
+    if (p && c && p.parentNode !== c) c.appendChild(p);
+    return !!(p && c);
+  }
+  function lancer() {
+    if (deplacer()) return;
+    var essais = 0;
+    var t = setInterval(function(){ if (deplacer() || ++essais > 120) clearInterval(t); }, 500);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', lancer);
+  else lancer();
+  /* si la pastille était recréée plus tard, on la rattrape aussi */
+  try {
+    new MutationObserver(function(){ deplacer(); })
+      .observe(document.documentElement, { childList: true, subtree: false });
+    if (document.body) new MutationObserver(function(){ deplacer(); }).observe(document.body, { childList: true });
+    else document.addEventListener('DOMContentLoaded', function(){
+      new MutationObserver(function(){ deplacer(); }).observe(document.body, { childList: true });
+    });
+  } catch (e) {}
+})();
+
+</script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -6540,7 +6588,7 @@ function _majCompteurStockage() {
     if (en.taille) total += en.taille; else nonMesurees++;
   });
   var p = total / STOCKAGE_QUOTA * 100;
-  txt.textContent = '💾 Stockage PSM : ' + _fmtOctets(total) + ' / 1 Go';
+  txt.textContent = '💾 Stockage ' + _fmtOctets(total) + ' / 1 Go';   // v1165 : libellé raccourci
   pct.textContent = (p < 0.1 && total > 0 ? '< 0,1' : p.toFixed(1).replace('.', ',')) + ' %';
   barre.style.width = Math.min(100, Math.max(total > 0 ? 0.5 : 0, p)) + '%';
   barre.classList.toggle('moyen', p >= 60 && p < 85);
