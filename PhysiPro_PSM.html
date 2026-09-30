@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1168-calculateur]</title>
+<title>PhysiPro — Liste des matériaux [v1170-calc-2-chiffres]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -3886,6 +3886,17 @@ body{ background-attachment:scroll !important; }
 }
 .photo-card .item-img-btn.calc-btn:hover{ background:var(--t-accent) !important; }
 /* fenêtre du calculateur */
+/* v1169 : bouton Calculateur beaucoup plus petit (taille du « min ») */
+.photo-card .item-img-btn.calc-btn{ font-size:8px !important; font-weight:700 !important;
+  padding:0 5px !important; height:15px !important; line-height:1 !important; margin-left:2px; margin-right:4px; }
+.photo-cards-stack.solo .pch-rest .photo-card-temps{ margin-right:4px; }
+/* v1169 : + et − sous le ✕ rouge de l'image */
+.zoom-flottant{ position:absolute; top:36px; right:8px; z-index:5; display:flex; flex-direction:column; gap:4px; }
+.zoom-flottant button{ width:22px; height:22px; border-radius:50%; border:1px solid rgba(255,255,255,.35);
+  background:rgba(4,21,44,.85); color:#fff; font:900 14px/1 Arial,sans-serif; cursor:pointer; padding:0;
+  display:flex; align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(0,0,0,.4); }
+.zoom-flottant button:hover{ background:var(--t-accent); }
+.photo-card-zone.has-thumbs .zoom-flottant{ right:auto; left:9px; }
 .calc-panel{ width:460px; }
 .calc-table{ width:100%; border-collapse:collapse; font-size:12px; color:var(--t-text); }
 .calc-table th{ font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.3px;
@@ -8005,8 +8016,7 @@ function _ensurePhotoCards() {
       /* v1118 : loupe + pour agrandir un devis à l'écran. Elle ne touche PAS
          aux pixels : elle élargit la colonne d'affichage, donc rien n'est
          détruit et la qualité d'impression est intacte. */
-      +       '<button class="item-img-btn zoom-plus" onclick="event.stopPropagation();zoomerDoc(' + i + ', 1)" title="Agrandir le document">+</button>'
-      +       '<button class="item-img-btn zoom-moins" onclick="event.stopPropagation();zoomerDoc(' + i + ', -1)" title="Réduire le document">\u2212</button>'
+      /* v1169 : + et − quittent l'en-tête ; ils sont sous le ✕ rouge de l'image */
       +       '<div class="item-img-header-btns">'
       /* v1118 : bouton de rotation retiré. */
       +       '<button class="item-img-btn" onclick="event.stopPropagation();deleteFileTab(' + i + ')" title="Supprimer cette carte">✕</button>'
@@ -9257,7 +9267,7 @@ function _renderCardZone(idx) {
   if (getComputedStyle(zone).position === 'static') zone.style.position = 'relative';
   var ph = document.getElementById('globalImgPlaceholder_' + idx);
   // Nettoyer (incluant étampes et overlays du mode précédent)
-  ['img','embed','.item-img-remove','.file-card','.stamp-overlay','.stamp-capture-overlay','.stamp-banner','.pdf-page-nav','.card-thumbs'].forEach(function(sel){
+  ['img','embed','.item-img-remove','.zoom-flottant','.file-card','.stamp-overlay','.stamp-capture-overlay','.stamp-banner','.pdf-page-nav','.card-thumbs'].forEach(function(sel){
     zone.querySelectorAll(sel).forEach(function(el){ el.remove(); });
   });
   var tab = fichiersGlobaux[idx];
@@ -9382,6 +9392,17 @@ function _renderCardZone(idx) {
     if (!_midFirebaseLoading) _saveGlobalImage();
   });
   zone.appendChild(rmBtn);
+
+  /* v1169 : + et − pour agrandir / réduire, juste sous le ✕ rouge */
+  var zf = document.createElement('div');
+  zf.className = 'zoom-flottant';
+  zf.innerHTML = '<button type="button" title="Agrandir">+</button>'
+               + '<button type="button" title="Réduire">\u2212</button>';
+  var zb = zf.querySelectorAll('button');
+  zb[0].addEventListener('click', function(e){ e.stopPropagation(); setActiveCard(idx); zoomerDoc(idx, 1); });
+  zb[1].addEventListener('click', function(e){ e.stopPropagation(); setActiveCard(idx); zoomerDoc(idx, -1); });
+  zf.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+  zone.appendChild(zf);
 
   // v1037 : bande de vignettes à droite — on voit la photo principale ET les ajouts
   var phs = _cardPhotos(tab);
@@ -13015,9 +13036,9 @@ function _renderCalc() {
   liste.forEach(function(p, i){
     h += '<tr>'
       +  '<td class="num">' + (i + 1) + '</td>'
-      +  '<td><input type="text" inputmode="decimal" value="' + esc(p.w) + '" oninput="majCalcPiece(' + i + ',\'w\',this.value)" onkeydown="calcTouche(event,' + i + ')"></td>'
+      +  '<td><input type="text" inputmode="decimal" value="' + esc(p.w) + '" oninput="calcSaisie(event,' + i + ',\'w\')" onkeydown="calcTouche(event,' + i + ')"></td>'
       +  '<td>×</td>'
-      +  '<td><input type="text" inputmode="decimal" value="' + esc(p.h) + '" oninput="majCalcPiece(' + i + ',\'h\',this.value)" onkeydown="calcTouche(event,' + i + ')"></td>'
+      +  '<td><input type="text" inputmode="decimal" value="' + esc(p.h) + '" oninput="calcSaisie(event,' + i + ',\'h\')" onkeydown="calcTouche(event,' + i + ')"></td>'
       +  '<td><input type="text" inputmode="decimal" class="n" value="' + esc(p.n == null ? 1 : p.n) + '" oninput="majCalcPiece(' + i + ',\'n\',this.value)" onkeydown="calcTouche(event,' + i + ',true)"></td>'
       +  '<td class="pi2" id="calcPi2_' + i + '">—</td>'
       +  '<td><button class="calc-x" title="Retirer ce morceau" onclick="retirerCalcPiece(' + i + ')">✕</button></td>'
@@ -13031,6 +13052,24 @@ function majCalcPiece(i, k, v) {
   if (!liste[i]) return;
   liste[i][k] = v;
   _majTotauxCalc();
+}
+/* v1170 : saisie rapide — 2 chiffres dans Largeur => on passe à Longueur ;
+   2 chiffres dans Longueur => nouveau morceau. Pour une fraction (18 1/2) ou
+   3 chiffres (108), on reclique dans la case et on complète : le saut ne se
+   déclenche qu'au moment où la case passe à exactement 2 chiffres. */
+function calcSaisie(e, i, k) {
+  var el = e.target;
+  majCalcPiece(i, k, el.value);
+  if (e.inputType !== 'insertText' || !/^\d{2}$/.test(el.value)) return;
+  var ligne = el.closest('tr');
+  var ins = ligne ? ligne.querySelectorAll('input') : [];
+  if (k === 'w' && ins[1]) { ins[1].focus(); ins[1].select(); return; }
+  if (k === 'h') {
+    var liste = _calcListe(_calcIdx);
+    if (i === liste.length - 1) { ajouterCalcPiece(true); return; }
+    var suiv = ligne.nextElementSibling && ligne.nextElementSibling.querySelector('input');
+    if (suiv) { suiv.focus(); suiv.select(); }
+  }
 }
 function _majTotauxCalc() {
   var liste = _calcListe(_calcIdx), tot = 0;
@@ -13220,7 +13259,7 @@ document.addEventListener('keydown', function(e){
         <button type="button" onclick="viderCalc()">Tout effacer</button>
       </div>
       <div class="calc-total"><span id="calcTotalPo">0 po²</span><div><span>Total&nbsp;&nbsp;</span><strong id="calcTotal">0 pi²</strong></div></div>
-      <div class="calc-astuce">Entrée dans la dernière case = nouveau morceau. Les fractions marchent (12 1/2, 12½). Les morceaux restent enregistrés avec la soumission.</div>
+      <div class="calc-astuce">Tape 2 chiffres : ça saute seul de Largeur à Longueur, puis au morceau suivant. Pour 18 1/2 ou 108, reclique dans la case et complète. Les morceaux restent enregistrés avec la soumission.</div>
     </div>
   </div>
 
