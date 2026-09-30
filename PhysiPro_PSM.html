@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1171-toolbar]</title>
+<title>PhysiPro — Liste des matériaux [v1172-calc-regles]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -3938,6 +3938,34 @@ body{ background-attachment:scroll !important; }
 .calc-total strong{ font-size:20px; }
 .calc-total span{ font-size:11px; color:var(--t-muted); }
 .calc-astuce{ padding:0 16px 12px; font-size:10.5px; color:var(--t-muted); font-style:italic; }
+/* v1172 — calculateur combiné + tableau des matériaux pleine largeur */
+.calc-panel{ width:880px !important; max-width:96vw !important; }
+.calc-2col{ display:flex; align-items:stretch; }
+.calc-gauche{ flex:1 1 auto; min-width:0; border-right:1px solid var(--t-line); }
+.calc-droite{ flex:0 0 300px; padding:10px 16px 16px; display:flex; flex-direction:column; gap:6px; }
+.calc-soustitre{ font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; color:var(--t-muted); padding:10px 16px 0; }
+.calc-droite .calc-soustitre{ padding:0; }
+.calc-info{ font-size:11px; color:var(--t-muted); }
+.calc-lbl{ font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; color:var(--t-muted); margin-top:6px; }
+.calc-pi2-in{ display:flex; align-items:center; gap:6px; }
+.calc-pi2-in input{ flex:1; min-width:0; padding:8px 10px; font:800 20px inherit; font-family:inherit; text-align:right;
+  background:rgba(0,0,0,.25); color:var(--t-text); border:1px solid var(--t-line); border-radius:6px; outline:none; }
+.calc-pi2-in input:focus{ border-color:var(--t-accent); }
+.calc-pi2-in span{ font-weight:800; color:var(--t-muted); }
+.calc-qte{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-radius:8px; background:var(--t-accent-soft); }
+.calc-qte strong{ font-size:28px; color:#fde047; }
+.calc-mode{ padding:4px 10px; border-radius:6px; border:1px solid var(--t-line); background:rgba(255,255,255,.06); color:var(--t-text); font-size:11px; font-weight:700; cursor:pointer; }
+.calc-qte-det{ font-size:11px; color:var(--t-muted); min-height:14px; }
+.calc-barre{ position:relative; height:16px; border-radius:8px; background:rgba(255,255,255,.07); overflow:hidden; }
+.calc-barre > div{ height:100%; width:0; background:var(--t-accent); transition:width .15s; }
+.calc-barre span{ position:absolute; inset:0; font-size:10px; font-weight:700; text-align:center; line-height:16px; color:var(--t-text); }
+.calc-appliquer{ margin-top:auto; padding:10px; border-radius:8px; border:0; background:var(--t-accent); color:#fff; font-weight:800; font-size:13px; cursor:pointer; }
+.calc-appliquer:disabled{ opacity:.35; cursor:not-allowed; }
+.photo-card-right{ padding-left:0 !important; }
+.photo-card-mats-col{ border-left:0 !important; padding-left:0 !important; margin-left:0 !important; }
+.photo-card-mats{ padding-left:0 !important; padding-right:0 !important; margin-left:0 !important; }
+.photo-card-mats-header{ padding-left:4px !important; margin-left:0 !important; }
+.pch-rest{ padding-left:9px !important; }
 </style>
 </head>
 <body>
@@ -8027,7 +8055,6 @@ function _ensurePhotoCards() {
       +         '<span class="photo-card-temps-unit">min</span>'
       +       '</span>'
       /* v1168 : bouton Calculateur (pouces × pouces → pieds carrés), à la place de la petite barre */
-      +       '<button class="item-img-btn calc-btn" onclick="event.stopPropagation();ouvrirCalculateur(' + i + ')" title="Calculateur : largeur × longueur en pouces → pieds carrés, plusieurs morceaux additionnés">Calculateur</button>'
       /* v1171 : flèche, cercle, carré déplacés dans la barre Toolbar */
       /* v1118 : loupe + pour agrandir un devis à l'écran. Elle ne touche PAS
          aux pixels : elle élargit la colonne d'affichage, donc rien n'est
@@ -8763,9 +8790,10 @@ function _renderCardMats(idx) {
     // 📐 épaisseur : pour les blocs qui ont une épaisseur connue
     var hasThick = (m.thickness != null && !isNaN(m.thickness));
     var calcHtml = '';
-    if (canCalc) {
-      calcHtml = '<button class="photo-card-mat-calc" title="Calculateur de pieds carrés (' + m.w + '″×' + m.h + '″)" '
-        + 'onclick="event.stopPropagation();openSheetCalcByCode(\'' + safeCode + '\', ' + idx + ')">📐</button>';
+    /* v1172 : le 📐 ouvre le calculateur combiné (morceaux + quantité) */
+    if (canCalc || _uniteInfo(m.code).surface) {
+      calcHtml = '<button class="photo-card-mat-calc" title="Calculateur : morceaux en pouces → pi² → quantité' + (canCalc ? ' (feuille ' + m.w + '″×' + m.h + '″)' : '') + '" '
+        + 'onclick="event.stopPropagation();ouvrirCalcMat(' + idx + ', \'' + safeCode + '\')">📐</button>';
     } else if (hasThick) {
       calcHtml = '<button class="photo-card-mat-calc" title="Calculateur d\'épaisseur partielle (total : ' + m.thickness + '″)" '
         + 'onclick="event.stopPropagation();openThicknessCalc(\'' + safeCode + '\', ' + idx + ')">📐</button>';
@@ -13019,13 +13047,26 @@ function basculerToolbar(idx) {
   if (!on && typeof _annotDeactivate === 'function' && _annotMode) _annotDeactivate();
   setTimeout(function(){ _ajusterLargeurPhoto(idx); _placerBoutonsAgrandir(); }, 0);
 }
-var _calcIdx = null;
-function _calcListe(idx) {
-  var t = fichiersGlobaux[idx];
-  if (!t) return [];
-  if (!Array.isArray(t.calcPieces)) t.calcPieces = [];
-  if (!t.calcPieces.length) t.calcPieces.push({ w: '', h: '', n: 1 });
-  return t.calcPieces;
+/* v1172 — LE CALCULATEUR EST FUSIONNÉ AVEC LES RÈGLES 📐
+   On l'ouvre depuis le 📐 d'un matériau (colonne du centre). À gauche, les
+   morceaux (largeur × longueur × nb, en pouces) s'additionnent en pi² ; à
+   droite, ce total se reporte tout de suite et donne la quantité à inscrire :
+   fraction de feuille pour un matériau « à l'unité » (6 pi² sur 48×96 = 0,19),
+   ou les pi² eux-mêmes pour un matériau vendu au pied carré. Les morceaux sont
+   gardés avec le matériau (m.pieces) et partent avec la sauvegarde des mats. */
+var _calcIdx = null, _calcCode = null;
+function _calcMat() {
+  var t = fichiersGlobaux[_calcIdx];
+  if (!t || !Array.isArray(t.mats)) return null;
+  for (var i = 0; i < t.mats.length; i++) if (t.mats[i].code === _calcCode) return t.mats[i];
+  return null;
+}
+function _calcListe() {
+  var m = _calcMat();
+  if (!m) return [];
+  if (!Array.isArray(m.pieces)) m.pieces = [];
+  if (!m.pieces.length) m.pieces.push({ w: '', h: '', n: 1 });
+  return m.pieces;
 }
 function _calcPi2(p) {
   var w = _qteNumPub(p.w), h = _qteNumPub(p.h);
@@ -13033,36 +13074,44 @@ function _calcPi2(p) {
   return (w > 0 && h > 0 && n > 0) ? (w * h * n) / 144 : 0;
 }
 function _fmtNb(v, d) { return (Math.round(v * Math.pow(10, d)) / Math.pow(10, d)).toFixed(d).replace('.', ','); }
-function ouvrirCalculateur(idx) {
+function ouvrirCalcMat(idx, code) {
   setActiveCard(idx);
-  _calcIdx = idx;
-  var t = fichiersGlobaux[idx];
-  var nom = (t && (t.item || '').trim()) || _nomItemDefaut(idx);
-  document.getElementById('calcTitre').textContent = 'Calculateur — ' + nom;
+  _calcIdx = idx; _calcCode = code;
+  var m = _calcMat();
+  if (!m) { _calcIdx = null; return; }
+  document.getElementById('calcTitre').textContent = '📐 ' + (m.code || '') + ' — ' + (m.name || '');
+  var ui = _uniteInfo(m.code);
+  var surf = !!ui.surface;
+  var info = (m.w && m.h) ? ('Feuille : ' + m.w + '″ × ' + m.h + '″ = ' + _fmtNb(m.w * m.h / 144, 2) + ' pi²') : 'Pas de dimensions de feuille';
+  document.getElementById('calcMatInfo').textContent = info + ' · Unité : ' + ui.court + (ui.nom ? ' (' + ui.nom + ')' : '');
+  document.getElementById('calcQteLabel').textContent = surf ? 'Quantité (pi²)' : 'Quantité (fraction de la feuille)';
+  document.getElementById('calcModeBtn').textContent = sheetCalcFractionMode ? 'Fraction' : 'Décimal';
   _renderCalc();
   document.getElementById('calcOverlay').classList.add('open');
-  // curseur dans la première case vide
   setTimeout(function(){
     var vides = Array.prototype.filter.call(document.querySelectorAll('#calcCorps input'), function(x){ return !x.value; });
     var cible = vides[0] || document.querySelector('#calcCorps input');
     if (cible) { cible.focus(); cible.select(); }
   }, 60);
 }
+/* compat : l'ancien appel sans matériau ouvre le premier matériau de la carte */
+function ouvrirCalculateur(idx) {
+  var t = fichiersGlobaux[idx];
+  if (t && Array.isArray(t.mats) && t.mats.length) ouvrirCalcMat(idx, t.mats[0].code);
+}
 function fermerCalculateur() {
   document.getElementById('calcOverlay').classList.remove('open');
-  if (_calcIdx != null) {
-    // on ne garde pas les lignes restées complètement vides
-    var t = fichiersGlobaux[_calcIdx];
-    if (t && Array.isArray(t.calcPieces)) {
-      t.calcPieces = t.calcPieces.filter(function(p){ return String(p.w).trim() || String(p.h).trim(); });
-    }
+  var m = _calcMat();
+  if (m && Array.isArray(m.pieces)) {
+    m.pieces = m.pieces.filter(function(p){ return String(p.w).trim() || String(p.h).trim(); });
+    if (!m.pieces.length) delete m.pieces;
     _saveChampsCarte(_calcIdx);
   }
-  _calcIdx = null;
+  _calcIdx = null; _calcCode = null;
 }
 function _renderCalc() {
   if (_calcIdx == null) return;
-  var liste = _calcListe(_calcIdx);
+  var liste = _calcListe();
   var h = '';
   liste.forEach(function(p, i){
     h += '<tr>'
@@ -13079,15 +13128,11 @@ function _renderCalc() {
   _majTotauxCalc();
 }
 function majCalcPiece(i, k, v) {
-  var liste = _calcListe(_calcIdx);
+  var liste = _calcListe();
   if (!liste[i]) return;
   liste[i][k] = v;
   _majTotauxCalc();
 }
-/* v1170 : saisie rapide — 2 chiffres dans Largeur => on passe à Longueur ;
-   2 chiffres dans Longueur => nouveau morceau. Pour une fraction (18 1/2) ou
-   3 chiffres (108), on reclique dans la case et on complète : le saut ne se
-   déclenche qu'au moment où la case passe à exactement 2 chiffres. */
 function calcSaisie(e, i, k) {
   var el = e.target;
   majCalcPiece(i, k, el.value);
@@ -13096,14 +13141,14 @@ function calcSaisie(e, i, k) {
   var ins = ligne ? ligne.querySelectorAll('input') : [];
   if (k === 'w' && ins[1]) { ins[1].focus(); ins[1].select(); return; }
   if (k === 'h') {
-    var liste = _calcListe(_calcIdx);
+    var liste = _calcListe();
     if (i === liste.length - 1) { ajouterCalcPiece(true); return; }
     var suiv = ligne.nextElementSibling && ligne.nextElementSibling.querySelector('input');
     if (suiv) { suiv.focus(); suiv.select(); }
   }
 }
 function _majTotauxCalc() {
-  var liste = _calcListe(_calcIdx), tot = 0;
+  var liste = _calcListe(), tot = 0;
   liste.forEach(function(p, i){
     var v = _calcPi2(p); tot += v;
     var c = document.getElementById('calcPi2_' + i);
@@ -13111,9 +13156,64 @@ function _majTotauxCalc() {
   });
   document.getElementById('calcTotal').textContent = _fmtNb(tot, 2) + ' pi²';
   document.getElementById('calcTotalPo').textContent = _fmtNb(tot * 144, 0) + ' po² · ' + liste.length + ' morceau' + (liste.length > 1 ? 'x' : '');
+  // le total de gauche se reporte à droite, tout de suite
+  var inp = document.getElementById('calcPi2In');
+  if (inp) inp.value = tot > 0 ? String(Math.round(tot * 100) / 100).replace('.', ',') : '';
+  calcResultat();
+}
+/* Droite : pi² (reportés ou tapés) → quantité */
+var _calcQte = '';
+function calcResultat() {
+  var m = _calcMat();
+  var out = document.getElementById('calcQte'), det = document.getElementById('calcQteDet');
+  var fill = document.getElementById('calcBarre'), lbl = document.getElementById('calcBarreLbl');
+  _calcQte = '';
+  if (!m) return;
+  var pi2 = _qteNumPub(document.getElementById('calcPi2In').value);
+  var surf = !!_uniteInfo(m.code).surface;
+  var pct = 0, detail = '';
+  if (!(pi2 > 0)) {
+    out.textContent = '—'; detail = 'Tape des morceaux à gauche ou des pi² ici.';
+  } else if (surf) {
+    _calcQte = String(Math.round(pi2 * 100) / 100);
+    out.textContent = _fmtNb(pi2, 2) + ' pi²';
+    detail = _fmtNb(pi2 * 144, 0) + ' po²';
+    if (m.w && m.h) pct = pi2 * 144 / (m.w * m.h) * 100;
+  } else if (m.w && m.h) {
+    var feuille = m.w * m.h, used = pi2 * 144, frac = used / feuille;
+    var dec = frac >= 0.01 ? frac.toFixed(2) : frac.toFixed(3);
+    var fr = toFraction(frac);
+    _calcQte = sheetCalcFractionMode ? fr : dec;
+    out.textContent = sheetCalcFractionMode ? fr : dec.replace('.', ',');
+    detail = (sheetCalcFractionMode ? dec.replace('.', ',') : fr) + ' de feuille · utilisé ' + Math.round(used) + ' po² · reste ' + Math.max(0, Math.round(feuille - used)) + ' po²';
+    pct = frac * 100;
+  } else {
+    _calcQte = String(Math.round(pi2 * 100) / 100);
+    out.textContent = _fmtNb(pi2, 2);
+    detail = 'Matériau sans dimensions de feuille : la quantité est en pi².';
+  }
+  det.textContent = detail;
+  fill.style.width = Math.min(100, pct) + '%';
+  lbl.textContent = pct > 0 ? _fmtNb(pct, 1) + ' % de la feuille' : '';
+  document.getElementById('calcAppliquer').disabled = !_calcQte;
+}
+function basculerCalcMode() {
+  sheetCalcFractionMode = !sheetCalcFractionMode;
+  document.getElementById('calcModeBtn').textContent = sheetCalcFractionMode ? 'Fraction' : 'Décimal';
+  calcResultat();
+}
+function appliquerCalcMat() {
+  var m = _calcMat();
+  if (!m || !_calcQte) return;
+  var idx = _calcIdx;
+  m.qty = _calcQte;
+  fermerCalculateur();
+  _renderCardMats(idx);
+  _saveChampsCarte(idx);
+  showToast('📐 Quantité mise à ' + m.qty, 'success');
 }
 function ajouterCalcPiece(focus) {
-  var liste = _calcListe(_calcIdx);
+  var liste = _calcListe();
   liste.push({ w: '', h: '', n: 1 });
   _renderCalc();
   if (focus) {
@@ -13122,23 +13222,23 @@ function ajouterCalcPiece(focus) {
   }
 }
 function retirerCalcPiece(i) {
-  var liste = _calcListe(_calcIdx);
+  var liste = _calcListe();
   liste.splice(i, 1);
   _renderCalc();
 }
 function viderCalc() {
-  if (_calcIdx == null) return;
-  if (!confirm('Effacer tous les morceaux du calculateur ?')) return;
-  fichiersGlobaux[_calcIdx].calcPieces = [];
+  var m = _calcMat();
+  if (!m) return;
+  if (!confirm('Effacer tous les morceaux de ce matériau ?')) return;
+  m.pieces = [];
   _renderCalc();
 }
-// Entrée : case suivante ; dans la dernière case de la dernière ligne, nouveau morceau
 function calcTouche(e, i, derniere) {
   if (e.key !== 'Enter') return;
   e.preventDefault();
   var tous = Array.prototype.slice.call(document.querySelectorAll('#calcCorps input'));
   var pos = tous.indexOf(e.target);
-  if (derniere && i === _calcListe(_calcIdx).length - 1) { ajouterCalcPiece(true); return; }
+  if (derniere && i === _calcListe().length - 1) { ajouterCalcPiece(true); return; }
   if (pos >= 0 && tous[pos + 1]) { tous[pos + 1].focus(); tous[pos + 1].select(); }
 }
 document.addEventListener('keydown', function(e){
@@ -13276,21 +13376,38 @@ document.addEventListener('keydown', function(e){
   <div class="sheet-calc-overlay" id="calcOverlay" onclick="if(event.target===this)fermerCalculateur()">
     <div class="sheet-calc-panel calc-panel">
       <div class="sheet-calc-header">
-        <span id="calcTitre">Calculateur — pieds carrés</span>
+        <span id="calcTitre">Calculateur</span>
         <button class="sheet-calc-close" onclick="fermerCalculateur()">✕</button>
       </div>
-      <div class="calc-lignes">
-        <table class="calc-table">
-          <thead><tr><th></th><th>Largeur (po)</th><th></th><th>Longueur (po)</th><th>Nb</th><th>pi²</th><th></th></tr></thead>
-          <tbody id="calcCorps"></tbody>
-        </table>
+      <div class="calc-2col">
+        <div class="calc-gauche">
+          <div class="calc-soustitre">Morceaux (pouces)</div>
+          <div class="calc-lignes">
+            <table class="calc-table">
+              <thead><tr><th></th><th>Largeur</th><th></th><th>Longueur</th><th>Nb</th><th>pi²</th><th></th></tr></thead>
+              <tbody id="calcCorps"></tbody>
+            </table>
+          </div>
+          <div class="calc-pied">
+            <button type="button" onclick="ajouterCalcPiece(true)">＋ Ajouter un morceau</button>
+            <button type="button" onclick="viderCalc()">Tout effacer</button>
+          </div>
+          <div class="calc-total"><span id="calcTotalPo">0 po²</span><div><span>Total&nbsp;&nbsp;</span><strong id="calcTotal">0 pi²</strong></div></div>
+          <div class="calc-astuce">Tape 2 chiffres : ça saute seul de Largeur à Longueur, puis au morceau suivant. Pour 18 1/2 ou 108, reclique dans la case et complète.</div>
+        </div>
+        <div class="calc-droite">
+          <div class="calc-soustitre">Quantité</div>
+          <div class="calc-info" id="calcMatInfo"></div>
+          <label class="calc-lbl">Pieds carrés utilisés</label>
+          <div class="calc-pi2-in"><input type="text" inputmode="decimal" id="calcPi2In" oninput="calcResultat()" onkeydown="if(event.key==='Enter'){event.preventDefault();appliquerCalcMat();}"><span>pi²</span></div>
+          <label class="calc-lbl" id="calcQteLabel">Quantité</label>
+          <div class="calc-qte"><strong id="calcQte">—</strong><button type="button" class="calc-mode" id="calcModeBtn" onclick="basculerCalcMode()" title="Décimal / fraction">Décimal</button></div>
+          <div class="calc-qte-det" id="calcQteDet"></div>
+          <div class="calc-barre"><div id="calcBarre"></div><span id="calcBarreLbl"></span></div>
+          <button type="button" class="calc-appliquer" id="calcAppliquer" onclick="appliquerCalcMat()">✓ Appliquer comme quantité</button>
+        </div>
       </div>
-      <div class="calc-pied">
-        <button type="button" onclick="ajouterCalcPiece(true)">＋ Ajouter un morceau</button>
-        <button type="button" onclick="viderCalc()">Tout effacer</button>
-      </div>
-      <div class="calc-total"><span id="calcTotalPo">0 po²</span><div><span>Total&nbsp;&nbsp;</span><strong id="calcTotal">0 pi²</strong></div></div>
-      <div class="calc-astuce">Tape 2 chiffres : ça saute seul de Largeur à Longueur, puis au morceau suivant. Pour 18 1/2 ou 108, reclique dans la case et complète. Les morceaux restent enregistrés avec la soumission.</div>
+    </div>
     </div>
   </div>
 
