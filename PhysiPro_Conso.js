@@ -1,5 +1,5 @@
 /* ================================================================
-   PhysiPro_Conso.js \u2014 v1.2 (2026-09-30)
+   PhysiPro_Conso.js \u2014 v1.3 (2026-09-30)
    COMPTEUR DE T\u00c9L\u00c9CHARGEMENT FIREBASE, PARTAG\u00c9 PAR TOUTES LES PAGES
 
    \u00c0 inclure AVANT les scripts Firebase de chaque page :
@@ -37,7 +37,7 @@
 
   /* ---------------- R\u00c9GLAGES ---------------- */
   var QUOTA_MO        = 360;   // quota gratuit quotidien de Firebase
-  var AVERTIR_MO      = 270;   // bandeau orange \u00e0 partir d'ici (~80 %)
+  var AVERTIR_MO      = 315;   // bandeau orange \u00e0 partir d'ici (v1.3 : 270 -> 315, trop t\u00f4t)
   var ARRETER_MO      = 330;   // d\u00e9connexion \u00e0 partir d'ici (marge de 30 Mo : le total n'est connu qu'aux 15 min)
   var ENVOI_MS        = 15 * 60 * 1000;  // mise \u00e0 jour du total aux 15 min
   var ADMIN           = 'atelieratp@physipro.com';
