@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1184-case-nom]</title>
+<title>PhysiPro — Liste des matériaux [v1185-cout-largeur]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -12480,6 +12480,31 @@ function exportCostXlsm() {
       sheetXml = sheetXml.replace(/(<f[^>]*>[^<]*<\/f>)<v>[^<]*<\/v>/g, '$1');
       sheetXml = sheetXml.replace(/(<f t="shared"[^/]*\/>)<v>[^<]*<\/v>/g, '$1');
 
+      /* ============================================================
+         v1185 — PLUS DE COLONNE « COÛT PRODUIT » À DROITE
+         La colonne L du gabarit portait le titre « Coût produit » et deux
+         paragraphes d'instructions, sur une colonne de 72 caractères : la
+         feuille était deux fois plus large que la soumission. Aucune
+         formule ne s'en sert. On retire les colonnes J à L (cellules,
+         fusions, largeurs), la zone utilisée revient à A–I, et l'impression
+         est ajustée à une page de large sur la soumission seule.
+         ============================================================ */
+      sheetXml = sheetXml.replace(/<c r="[J-L]\d+"[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g, '');
+      sheetXml = sheetXml.replace(/<mergeCell ref="L\d+:L\d+"\/>/g, '');
+      sheetXml = sheetXml.replace(/<mergeCells count="\d+">([\s\S]*?)<\/mergeCells>/, function(_t, corps){
+        var n = (corps.match(/<mergeCell /g) || []).length;
+        return n ? '<mergeCells count="' + n + '">' + corps + '</mergeCells>' : '';
+      });
+      sheetXml = sheetXml.replace(/<col min="1[012]" max="1[012]"[^>]*\/>/g, '');
+      sheetXml = sheetXml.replace(/<dimension ref="A1:L(\d+)"\/>/, '<dimension ref="A1:I$1"/>');
+      sheetXml = sheetXml.replace(/ spans="1:12"/g, ' spans="1:9"');
+      /* une page de large à l'impression */
+      sheetXml = sheetXml.replace(/<sheetPr([^>]*)>/, '<sheetPr$1><pageSetUpPr fitToPage="1"/>');
+      sheetXml = sheetXml.replace(/<sheetPr([^>]*)><pageSetUpPr fitToPage="1"\/>([\s\S]*?)<\/sheetPr>/, '<sheetPr$1>$2<pageSetUpPr fitToPage="1"/></sheetPr>');
+      sheetXml = sheetXml.replace(/<pageSetup ([^>]*?)\/>/, function(_t, a){
+        return '<pageSetup ' + a.replace(/\s*fitTo(Width|Height)="\d+"/g, '') + ' fitToWidth="1" fitToHeight="0"/>';
+      });
+
       // Réinjecter le sheet modifié
       zip.file('xl/worksheets/sheet12.xml', sheetXml);
 
@@ -12488,8 +12513,14 @@ function exportCostXlsm() {
       return zip.file('xl/workbook.xml').async('string').then(function(wbXml){
         if (wbXml.indexOf('fullCalcOnLoad') === -1) {
           wbXml = wbXml.replace(/<calcPr([^/]*)\/>/, '<calcPr$1 fullCalcOnLoad="1"/>');
-          zip.file('xl/workbook.xml', wbXml);
         }
+        /* v1185 : zone d'impression = la soumission seule (A1:I46).
+           COUT_PRODUIT_PHYSIPRO est le 12e onglet, donc localSheetId 11. */
+        if (wbXml.indexOf("'COUT_PRODUIT_PHYSIPRO'!$A$1") === -1 && wbXml.indexOf('localSheetId="11"') === -1) {
+          wbXml = wbXml.replace('</definedNames>',
+            '<definedName name="_xlnm.Print_Area" localSheetId="11">COUT_PRODUIT_PHYSIPRO!$A$1:$I$46</definedName></definedNames>');
+        }
+        zip.file('xl/workbook.xml', wbXml);
         // Régénérer le fichier .xlsm complet (macros + tous les onglets préservés)
         return zip.generateAsync({
           type: 'blob',
