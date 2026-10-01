@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1181-imprimer]</title>
+<title>PhysiPro — Liste des matériaux [v1184-case-nom]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -12673,6 +12673,42 @@ function _pageFinEntete(ctx, X, Y, W) {
   return yF + 6 - Y;
 }
 
+/* v1183 : case vide à remplir à la main — titre en haut, ligne « min »
+   v1184 : sous le temps, une ligne « NOM : » pour signer */
+function _pageFinCaseTemps(ctx, x, y, w, h, titre) {
+  ctx.save();
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#1d4ed8';
+  ctx.lineWidth = 5;
+  ctx.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#1d4ed8';
+  var fs = 44;
+  ctx.font = _fichePol(fs, true);
+  while (fs > 20 && ctx.measureText(titre).width > w - 40) { fs -= 2; ctx.font = _fichePol(fs, true); }
+  ctx.fillText(titre, x + 20, y + 18);
+
+  ctx.textBaseline = 'alphabetic';
+  ctx.strokeStyle = 'rgba(17,24,39,0.55)';
+  ctx.lineWidth = 2;
+  ctx.fillStyle = '#374151';
+  ctx.font = _fichePol(36, false);
+  /* ligne du temps, terminée par « min » */
+  var wMin = ctx.measureText('min').width;
+  var yT = y + h - 140;
+  ctx.beginPath(); ctx.moveTo(x + 24, yT); ctx.lineTo(x + w - 40 - wMin, yT); ctx.stroke();
+  ctx.fillText('min', x + w - 24 - wMin, yT);
+  /* ligne du nom, précédée de « NOM : » */
+  ctx.font = _fichePol(32, true);
+  var lib = 'NOM :';
+  var wLib = ctx.measureText(lib).width;
+  var yN = y + h - 44;
+  ctx.fillText(lib, x + 24, yN);
+  ctx.beginPath(); ctx.moveTo(x + 36 + wLib, yN); ctx.lineTo(x + w - 24, yN); ctx.stroke();
+  ctx.restore();
+}
+
 function etamperPageFin(idx) {
   var t = fichiersGlobaux[idx];
   if (!_pageFinPossible(t)) {
@@ -12707,6 +12743,11 @@ function etamperPageFin(idx) {
      toutes prennent ensuite la plus petite des tailles trouvées, pour que
      les cases se lisent pareil.
      ============================================================ */
+  /* v1183 : une bande est réservée au bas pour les cases « Temps … » des
+     départements qui n'ont rien dans la soumission (Couture, Métal, CNC) */
+  var sansContenu = ['couture', 'metal', 'cnc'].filter(function(d){ return depts.indexOf(d) < 0; });
+  var H_CASE_TEMPS = 340;   // v1184 : place pour la ligne NOM
+  if (sansContenu.length) hDispo -= H_CASE_TEMPS + PAGE_FIN_ECART;
   var hMoitie = (hDispo - PAGE_FIN_ECART) / 2;
   var wDemi = (W - PAGE_FIN_ECART) / 2;
   var cases = depts.map(function(d, k) {
@@ -12718,7 +12759,7 @@ function etamperPageFin(idx) {
   /* chaque département dessine SA fiche : on prête le département en cours
      le temps du dessin, puis on le rend — les fonctions de la fiche le
      lisent pour le titre, le temps, le matériel, la note et les initiales */
-  var deptAvant = currentDept, sigAvant = _ficheSignatureForcee, deborde = false;
+  var deptAvant = currentDept, sigAvant = _ficheSignatureForcee, deborde = false, yBas = y0;
   try {
     _ficheSignatureForcee = null;
     var fs = Infinity;
@@ -12732,10 +12773,21 @@ function etamperPageFin(idx) {
       currentDept = d;
       var hU = _ficheDessiner(ctx, idx, cases[k].x, cases[k].y, cases[k].w, Infinity, fs);
       if (hU > cases[k].h + 1) deborde = true;
+      yBas = Math.max(yBas, cases[k].y + hU);
     });
   } finally {
     currentDept = deptAvant;
     _ficheSignatureForcee = sigAvant;
+  }
+
+  /* v1183 : les cases vides, sur UNE ligne, juste sous les étampes */
+  if (sansContenu.length) {
+    var yC = Math.min(yBas + PAGE_FIN_ECART, PAGE_FIN_H - PAGE_FIN_MARGE - H_CASE_TEMPS);
+    var wC = (W - 2 * PAGE_FIN_ECART) / 3;
+    sansContenu.forEach(function(d, k) {
+      _pageFinCaseTemps(ctx, X + k * (wC + PAGE_FIN_ECART), yC, wC, H_CASE_TEMPS,
+                        'TEMPS ' + DEPTS[d].label.toUpperCase());
+    });
   }
 
   var q = 0.90, out = c.toDataURL('image/jpeg', q);
@@ -12759,6 +12811,7 @@ function exporterPdfEtampes(imprimer) {   // v1181 : true = bouton Imprimer
   var feuilles = [];
   fichiers.forEach(function(t, i){
     if (!t) return;
+    var debutCarte = feuilles.length;   // v1182
     if (Array.isArray(t.pages) && t.pages.length) {
       t.pages.forEach(function(src, n){
         if (src) feuilles.push({ src: src, soum: i + 1, page: n + 1, total: t.pages.length });
@@ -12772,7 +12825,17 @@ function exporterPdfEtampes(imprimer) {   // v1181 : true = bouton Imprimer
     if (t.pageFin && t.data && t.type && t.type.indexOf('image/') === 0) {
       feuilles.push({ src: _pageFinSrc(t), soum: i + 1, page: -1, total: 0 });
     }
+    /* v1182 — RECTO VERSO : chaque carte commence sur une feuille neuve.
+       Une carte qui finit sur un recto (nombre impair de pages) reçoit une
+       page blanche ; sinon la 1re page de la carte suivante s'imprimerait au
+       dos. Seulement à l'impression — un PDF enregistré n'en a pas besoin. */
+    if (imprimer) {
+      var nCarte = feuilles.length - debutCarte;
+      if (nCarte % 2 === 1) feuilles.push({ src: _pageFinBlanc(), soum: i + 1, page: -2, total: 0, vide: true });
+    }
   });
+  /* la dernière page blanche du paquet ne sert à rien : on la retire */
+  if (feuilles.length && feuilles[feuilles.length - 1].vide) feuilles.pop();
 
   if (!feuilles.length) {
     showToast('⚠️ Aucune image ni devis à exporter', 'warning');
@@ -12809,7 +12872,7 @@ function exporterPdfEtampes(imprimer) {   // v1181 : true = bouton Imprimer
   w.document.write(html);
   w.document.close();
   showToast(imprimer
-    ? feuilles.length + ' page(s) envoyée(s) à l\'impression — coche « Recto verso » pour la dernière page au dos'
+    ? feuilles.length + ' page(s) envoyée(s) à l\'impression — coche « Recto verso » : les étampes vont au dos et chaque carte commence sur une feuille neuve'
     : '📄 ' + feuilles.length + ' page(s) — choisis « Enregistrer au format PDF »', 'info');
 }
 
