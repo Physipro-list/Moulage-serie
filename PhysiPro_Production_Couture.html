@@ -2198,8 +2198,9 @@ function _cFusionLigne(b,l,r){
   return out;
 }
 /* base : {clé:ligne} ou null · L : lignes locales · R : lignes Firebase · tomb : {id:ts} */
+var _cMergeSupprimees=0;   // lignes retirées par la dernière fusion pour cause de suppression voulue
 function _coutureMerge(base,L,R,tomb,v1){
-  tomb=tomb||{};
+  tomb=tomb||{};_cMergeSupprimees=0;
   L=(L||[]).filter(function(r){return r&&!r._empty;});
   R=_cToArr(R);
   var rMap={},lSet={},out=[];
@@ -2208,7 +2209,7 @@ function _coutureMerge(base,L,R,tomb,v1){
   R.forEach(function(r){var k=_cKey(r);if(!(k in rMap))rMap[k]=r;});
   L.forEach(function(l){
     var k=_cKey(l);lSet[k]=true;
-    if(isTomb(l)||supprimeeIci(l))return;              // suppression voulue (ici ou ailleurs)
+    if(isTomb(l)||supprimeeIci(l)){if(rMap[k])_cMergeSupprimees++;return;}   // suppression voulue (ici ou ailleurs)
     var r=rMap[k];
     if(r){
       if(!base&&v1&&v1[k]===_cHash(l)){out.push(r);}         // transition : ligne pas changée ici → Firebase
@@ -2218,7 +2219,7 @@ function _coutureMerge(base,L,R,tomb,v1){
   });
   R.forEach(function(r){
     var k=_cKey(r);if(lSet[k])return;
-    if(isTomb(r)||supprimeeIci(r))return;
+    if(isTomb(r)||supprimeeIci(r)){_cMergeSupprimees++;return;}
     out.push(r);                                         // ajoutée ailleurs → gardée
   });
   return out;
@@ -2272,8 +2273,11 @@ function _syncMonth(month,retryN){
     return fbDb.ref('inspectionCoutureData/'+month).transaction(function(cur){
       var R=_cToArr(cur);
       var res=_coutureMerge(base,monthData,R,tomb,base?null:_coutureGetBaseV1(month));
-      if(res.length===0){if(cur===null||cur===undefined)return null;blocked=true;detail=R.length+' → 0';return;}
-      if(R.length>5&&res.length<R.length*0.5){blocked=true;detail=R.length+' → '+res.length;return;}
+      /* la fusion ne retire une ligne que pour une suppression voulue ; on ne bloque
+         que si des lignes manquent SANS cette explication (ne devrait jamais arriver) */
+      var inexpliquees=R.length-res.length-_cMergeSupprimees;
+      if(res.length===0){if(cur===null||cur===undefined||inexpliquees<=0)return null;blocked=true;detail=R.length+' → 0';return;}
+      if(R.length>5&&res.length<R.length*0.5&&inexpliquees>0){blocked=true;detail=R.length+' → '+res.length;return;}
       blocked=false;
       return res;
     }).then(function(tx){
