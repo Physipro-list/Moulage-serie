@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1179-cases]</title>
+<title>PhysiPro — Liste des matériaux [v1180-page-toujours]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -7838,6 +7838,7 @@ function _handleAddPhoto(files) {
         t.type = 'image/jpeg';
         t.pages = null;
         t.pageIdx = 0;
+        _assurerPageFin(t);   // v1180
         _renderGlobalImage();
         setActiveCard(idx);
         if (!_midFirebaseLoading) _saveGlobalImage();
@@ -9338,7 +9339,8 @@ function _renderCardZone(idx) {
   if (getComputedStyle(zone).position === 'static') zone.style.position = 'relative';
   var ph = document.getElementById('globalImgPlaceholder_' + idx);
   // Nettoyer (incluant étampes et overlays du mode précédent)
-  ['img','embed','.item-img-remove','.zoom-flottant','.file-card','.stamp-overlay','.stamp-capture-overlay','.stamp-banner','.pdf-page-nav','.card-thumbs'].forEach(function(sel){
+  /* v1180 : '.pdf-pages' aussi — la pile vide d'avant restait dans la zone */
+  ['img','embed','.item-img-remove','.zoom-flottant','.file-card','.stamp-overlay','.stamp-capture-overlay','.stamp-banner','.pdf-page-nav','.card-thumbs','.pdf-pages'].forEach(function(sel){
     zone.querySelectorAll(sel).forEach(function(el){ el.remove(); });
   });
   var tab = fichiersGlobaux[idx];
@@ -11609,7 +11611,7 @@ function _setGlobalImgFromDataUrl(dataUrl, cardIdx) {
     t.type = 'image/jpeg';
     t.filename = t.filename || 'photo.jpg';
     t.pages = null; t.pageIdx = 0; t.dataPdfOriginal = '';
-    t.pageFin = PAGE_FIN_VIERGE;   // v1178
+    _assurerPageFin(t);   // v1178
     _renderGlobalImage();
     setActiveCard(idx);
     if (!_midFirebaseLoading) _saveGlobalImage();
@@ -11683,7 +11685,7 @@ function _loadFileIntoCard(f, idx, done) {
             t.pages = null;
             t.pageIdx = 0;
             t.dataPdfOriginal = '';
-            t.pageFin = PAGE_FIN_VIERGE;        // v1178 : une feuille après
+            _assurerPageFin(t);        // v1178 : une feuille après
             _finish('🖼️ Photo ajoutée à la carte ' + (idx + 1));
           });
         };
@@ -11691,7 +11693,7 @@ function _loadFileIntoCard(f, idx, done) {
           _cropSquareCompress(ev.target.result, function(compressed){
             var t = _tab();
             t.data = compressed; t.type = 'image/jpeg'; t.filename = fname;
-            t.pageFin = PAGE_FIN_VIERGE;        // v1178
+            _assurerPageFin(t);        // v1178
             _finish('🖼️ Photo ajoutée');
           });
         };
@@ -11730,7 +11732,7 @@ function _loadFileIntoCard(f, idx, done) {
         t.data = pages[0];                   // image affichée = 1ère page
         t.type = 'image/jpeg';               // → image, donc l'étampe fonctionne
         t.filename = fname.replace(/\.pdf$/i, '') + ' (PDF p.1).jpg';
-        t.pageFin = PAGE_FIN_VIERGE;            // v1178 : page vierge à la fin
+        _assurerPageFin(t);            // v1178 : page vierge à la fin
         _finish('✅ PDF converti : ' + pages.length + ' page' + (pages.length > 1 ? 's' : ''));
       });
     };
@@ -11907,7 +11909,7 @@ function _fillCardsWithPhotos(photos, startIdx) {
       t.type = 'image/jpeg';
       t.filename = 'photo' + (idx + 1) + '.jpg';
       t.pages = null; t.pageIdx = 0; t.dataPdfOriginal = '';
-      t.pageFin = PAGE_FIN_VIERGE;   // v1178
+      _assurerPageFin(t);   // v1178
       placed++;
       setActiveCard(idx);
       next();
@@ -11958,6 +11960,7 @@ function _appendPhotosToCard(idx, photos) {
       t.type = 'image/jpeg';
       t.pages = null;
       t.pageIdx = 0;
+      _assurerPageFin(t);   // v1180
       suivante();
     });
   })();
@@ -12961,6 +12964,12 @@ function _pageFinSrc(t) {
   if (!t || !t.pageFin) return '';
   return (t.pageFin === PAGE_FIN_VIERGE) ? _pageFinBlanc() : t.pageFin;
 }
+/* v1180 : TOUTE entrée d'une photo ou d'un PDF dans une carte passe par ici.
+   La page vierge est ajoutée si elle manque, et une page déjà étampée est
+   gardée telle quelle (remplacer le document ne l'efface pas). */
+function _assurerPageFin(t) {
+  if (t && !t.pageFin) t.pageFin = PAGE_FIN_VIERGE;
+}
 function _pageFinPossible(t) {
   return !!(t && t.data && t.type && t.type.indexOf('image/') === 0);
 }
@@ -12968,7 +12977,8 @@ function _pageFinPossible(t) {
 /* l'image de la dernière page, au bas de la pile de la carte */
 function _ajouterImgPageFin(zone, idx, tab) {
   if (!tab || !tab.pageFin || !_pageFinPossible(tab)) return;
-  var pile = zone.querySelector('.pdf-pages');
+  var piles = zone.querySelectorAll('.pdf-pages');   // v1180 : la pile qu'on vient de bâtir
+  var pile = piles.length ? piles[piles.length - 1] : null;
   if (!pile) return;
   var im = document.createElement('img');
   im.src = _pageFinSrc(tab);
