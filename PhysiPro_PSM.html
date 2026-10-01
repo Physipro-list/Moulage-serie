@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1180-page-toujours]</title>
+<title>PhysiPro — Liste des matériaux [v1181-imprimer]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -4170,7 +4170,7 @@ body{ background-attachment:scroll !important; }
         <!-- v1145 : 📋 Copier quitte l'en-tête des cartes ; il copie la photo de la carte active -->
         <button class="footer-btn" onclick="copierPhoto(currentFileTabIdx)" title="Copier la photo de la soumission active — ensuite Ctrl+V pour la coller ailleurs">Copier</button>
         <button class="footer-btn" onclick="exportCostXlsm()" title="Exporter vers le template Excel coût de revient">Coût</button>
-        <button class="footer-btn" onclick="openPrintView()" title="Imprimer (choix : soumission, photo de la carte, PDF original)">Imprimer</button>
+        <button class="footer-btn" onclick="exporterPdfEtampes(true)" title="Imprimer la soumission en cours : toutes les pages avec les étampes, et la dernière page">Imprimer</button>
         <span class="footer-sep"></span>
         <!-- Fichier projet -->
         <button class="footer-btn" onclick="saveProjectFile()" title="Enregistrer le projet (photos, notes, temps, matériel) dans un fichier réouvrable">Enregistrer</button>
@@ -4231,7 +4231,7 @@ body{ background-attachment:scroll !important; }
       <div class="col-footer-actions">
         <!-- v1124 : le bouton « 📄 Créer le PDF » est retiré. Le 📄 PDF de la
              v1081, qui sort les devis avec leurs étampes, le remplace.
-             exportPdf() reste définie dans le fichier. -->
+             v1181 : exportPdf() est retirée avec l'ancienne impression. -->
         <!-- v1159 : jauge de stockage -->
         <div class="stock-jauge" id="stockJauge" title="Estimation de l'espace pris par PSM dans Firebase (soumissions + espace de travail), sur le 1 Go gratuit">
           <div class="stock-texte"><span id="stockTexte">Stockage : calcul…</span><span id="stockPct"></span></div>
@@ -12198,404 +12198,12 @@ renderSoumission();
 // STUBS — fonctions à implémenter dans une session future
 // ============================================================
 // ============================================================
-// IMPRIMER / PDF — modale avec 3 choix
+// IMPRIMER — v1181 : le bouton Imprimer imprime LA SOUMISSION EN COURS,
+// telle qu'elle est : toutes les pages de toutes les cartes avec leurs
+// étampes, puis la dernière page de chaque carte. La modale à trois choix
+// (soumission en liste, photo de la carte active, PDF original) est retirée,
+// avec ses fonctions — voir exporterPdfEtampes(true).
 // ============================================================
-function openPrintView() {
-  // Construire la modale s'il n'existe pas
-  var modal = document.getElementById('printChoiceModal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'printChoiceModal';
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
-    modal.innerHTML =
-      '<div style="background:linear-gradient(to bottom,#0a1628 0%,#142847 100%);border:2px solid #60a5fa;border-radius:10px;padding:18px 22px;max-width:420px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,0.5);">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">' +
-          '<h3 style="margin:0;color:#dbeafe;font-size:16px;font-weight:800;">🖨️ Imprimer / PDF</h3>' +
-          '<button onclick="document.getElementById(\'printChoiceModal\').style.display=\'none\'" style="background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.5);color:#fca5a5;width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:14px;">✕</button>' +
-        '</div>' +
-        '<div style="color:#bae6fd;font-size:11px;margin-bottom:12px;">Choisis ce que tu veux imprimer :</div>' +
-        '<button onclick="_doPrintAction(\'soumission\')" style="width:100%;margin-bottom:8px;padding:12px 14px;background:rgba(34,197,94,0.18);border:1.5px solid rgba(34,197,94,0.5);border-radius:6px;color:#bbf7d0;cursor:pointer;text-align:left;font-size:12px;font-weight:600;transition:all .15s;" onmouseover="this.style.background=\'rgba(34,197,94,0.3)\'" onmouseout="this.style.background=\'rgba(34,197,94,0.18)\'">' +
-          '<div style="font-size:14px;margin-bottom:3px;">📋 La soumission</div>' +
-          '<div style="font-size:10px;color:#86efac;font-weight:400;">Liste des matériaux + résumé du département actif</div>' +
-        '</button>' +
-        '<button onclick="_doPrintAction(\'stamps\')" style="width:100%;margin-bottom:8px;padding:12px 14px;background:rgba(251,191,36,0.18);border:1.5px solid rgba(251,191,36,0.5);border-radius:6px;color:#fde68a;cursor:pointer;text-align:left;font-size:12px;font-weight:600;transition:all .15s;" onmouseover="this.style.background=\'rgba(251,191,36,0.3)\'" onmouseout="this.style.background=\'rgba(251,191,36,0.18)\'">' +
-          '<div style="font-size:14px;margin-bottom:3px;">🔍 La photo de la carte active</div>' +
-          '<div style="font-size:10px;color:#fcd34d;font-weight:400;">Image telle qu\'affichée, recadrages inclus</div>' +
-        '</button>' +
-        '<button onclick="_doPrintAction(\'original\')" style="width:100%;margin-bottom:0;padding:12px 14px;background:rgba(96,165,250,0.18);border:1.5px solid rgba(96,165,250,0.5);border-radius:6px;color:#bfdbfe;cursor:pointer;text-align:left;font-size:12px;font-weight:600;transition:all .15s;" onmouseover="this.style.background=\'rgba(96,165,250,0.3)\'" onmouseout="this.style.background=\'rgba(96,165,250,0.18)\'">' +
-          '<div style="font-size:14px;margin-bottom:3px;">📄 Le PDF original</div>' +
-          '<div style="font-size:10px;color:#93c5fd;font-weight:400;">Le PDF original sans étampes</div>' +
-        '</button>' +
-      '</div>';
-    document.body.appendChild(modal);
-  }
-  modal.style.display = 'flex';
-}
-
-function _doPrintAction(choice) {
-  var modal = document.getElementById('printChoiceModal');
-  if (modal) modal.style.display = 'none';
-  if (choice === 'soumission') _printSoumissionList();
-  else if (choice === 'stamps') _printWithStamps();
-  else if (choice === 'original') _printOriginalPdf();
-}
-
-// Choix 1 : la soumission (liste des matériaux + résumé)
-// Choix 1 : la soumission — une fiche par PHOTO (v1021)
-// Disposition d'une fiche : photo à GAUCHE, matériaux à DROITE, note EN DESSOUS.
-// En-tête de page réduit de moitié, 4 fiches par page.
-function _printSoumissionList() {
-  var nameEl = document.getElementById('soumissionPillName');
-  var soumName = (nameEl && nameEl.textContent && nameEl.textContent.trim()) ? nameEl.textContent.trim() : 'Brouillon';
-  var dateStr = new Date().toLocaleDateString('fr-CA', {day:'numeric', month:'long', year:'numeric'});
-
-  function escHtml(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-
-  // v1021 : la source, ce sont les CARTES PHOTOS (photo + note + temps + matériel)
-  var cartes = (typeof fichiersGlobaux !== 'undefined') ? fichiersGlobaux : [];
-  // On n'imprime que les cartes qui ont quelque chose
-  var fiches = cartes.filter(function(t){
-    if (!t) return false;
-    var aNote = t.note && String(t.note).replace(/<[^>]+>/g, '').trim();
-    var aMats = Array.isArray(t.mats) && t.mats.length;
-    return !!(t.data || aNote || aMats);
-  });
-  if (!fiches.length) {
-    showToast('⚠️ Aucune photo à imprimer', 'warning');
-    return;
-  }
-
-  // Temps total = somme des temps de chaque carte
-  var totalMin = 0;
-  fiches.forEach(function(t){ totalMin += parseFloat(t.temps) || 0; });
-  var totalDisplay = (totalMin > 0)
-    ? (totalMin + ' min (' + (totalMin / 60).toFixed(2) + ' h)')
-    : '—';
-
-  // === Une FICHE : photo à gauche | matériaux à droite, note dessous ===
-  function buildFiche(t, idx) {
-    var tMin = parseFloat(t.temps) || 0;
-    var tempsTxt = (tMin > 0) ? (tMin + ' min (' + (tMin / 60).toFixed(2) + ' h)') : '—';
-
-    var h = '<div class="fiche">';
-
-    // En-tête : Item N + temps
-    h += '<div class="fiche-head">';
-    h += '<div class="fh-label">Item ' + (idx + 1) + '</div>';
-    h += '<div class="fh-temps"><span class="fh-temps-lbl">TEMPS :</span> <span class="fh-temps-val">' + escHtml(tempsTxt) + '</span></div>';
-    h += '</div>';
-
-    // v1023 : corps = photo à GAUCHE | note technicien à DROITE
-    h += '<div class="fiche-body">';
-
-    // v1034 : toutes les photos de la fenêtre, côte à côte (max 3)
-    var photos = (Array.isArray(t.photos) && t.photos.length)
-      ? t.photos.slice(0, 3)
-      : (t.data ? [t.data] : []);
-    h += '<div class="fb-img fb-img-' + Math.max(1, photos.length) + '">';
-    if (photos.length) {
-      photos.forEach(function(src){
-        h += '<div class="fb-img-cell"><img src="' + escHtml(src) + '" alt=""></div>';
-      });
-    } else {
-      h += '<div class="fb-empty">Aucune photo</div>';
-    }
-    h += '</div>';
-
-    h += '<div class="fb-note">';
-    h += '<div class="fb-note-title">NOTES TECHNICIEN</div>';
-    h += '<div class="fb-note-body">';
-    if (t.note && String(t.note).replace(/<[^>]+>/g, '').trim()) {
-      if (typeof _isHtmlNote === 'function' && _isHtmlNote(t.note)) {
-        h += _sanitizeNoteHtml(t.note);
-      } else {
-        h += escHtml(t.note).replace(/\n/g, '<br>');
-      }
-    } else {
-      h += '<span class="fb-empty">—</span>';
-    }
-    h += '</div>';
-    h += '</div>';
-
-    h += '</div>'; // .fiche-body
-
-    // v1023 : matériel EN DESSOUS, pleine largeur, réparti sur 3 colonnes
-    h += '<div class="fiche-mats">';
-    h += '<div class="fm-title">MATÉRIEL</div>';
-    var mats = Array.isArray(t.mats) ? t.mats : [];
-    if (mats.length) {
-      var NB_COLS = 3;
-      var parCol = Math.ceil(mats.length / NB_COLS);
-      h += '<div class="fm-cols">';
-      for (var c = 0; c < NB_COLS; c++) {
-        var lot = mats.slice(c * parCol, (c + 1) * parCol);
-        h += '<div class="fm-col">';
-        if (lot.length) {
-          h += '<table class="fm-tbl">';
-          lot.forEach(function(m){
-            var mes = (m.w && m.h) ? (m.w + '\u2033\u00d7' + m.h + '\u2033') : '';
-            h += '<tr>'
-               + '<td class="ft-code">' + escHtml(m.code || '') + '</td>'
-               + '<td class="ft-name">' + escHtml(m.name || '') + '</td>'
-               + '<td class="ft-mes">' + escHtml(mes) + '</td>'
-               + '<td class="ft-qty">' + escHtml(String(m.qty == null ? 1 : m.qty)) + '</td>'
-               + '</tr>';
-          });
-          h += '</table>';
-        }
-        h += '</div>';
-      }
-      h += '</div>';
-    } else {
-      h += '<div class="fm-empty">—</div>';
-    }
-    h += '</div>';
-
-    h += '</div>'; // .fiche
-    return h;
-  }
-
-  // === Pagination adaptative (v1026) ===
-  // Jusqu'à 4 fiches : TOUT sur une seule page, hauteur ajustée automatiquement.
-  // 5 fiches et plus : 3 par page (donc 5 → 3 + 2).
-  var DISPO_MM = 239.5;                                   // hauteur utile d'une page letter
-  var FICHES_PAR_PAGE = (fiches.length <= 4) ? fiches.length : 3;
-  var GAP_MM = 3;
-  var hFiche = (DISPO_MM - (FICHES_PAR_PAGE - 1) * GAP_MM) / FICHES_PAR_PAGE;
-  // v1029 : taille de référence = celle du format « 3 par page ». Une fiche seule
-  // ne doit PAS être agrandie — elle garde le même gabarit que d'habitude.
-  var H_STANDARD = (DISPO_MM - 2 * GAP_MM) / 3;             // ≈ 77.8 mm
-  if (hFiche > H_STANDARD) hFiche = H_STANDARD;
-  hFiche = Math.floor(hFiche * 10) / 10;
-  // Répartition interne : en-tête fixe, matériel proportionnel, photo+note au reste
-  var hTete = 6.5;
-  var hMats = Math.min(26, Math.max(19, (hFiche - hTete) * 0.36));
-  hMats = Math.round(hMats * 10) / 10;
-  var hCorps = Math.round((hFiche - hTete - hMats) * 10) / 10;
-  var pages = [];
-  for (var i = 0; i < fiches.length; i += FICHES_PAR_PAGE) {
-    var lot = [];
-    for (var j = i; j < Math.min(i + FICHES_PAR_PAGE, fiches.length); j++) {
-      lot.push({ t: fiches[j], idx: j });
-    }
-    pages.push(lot);
-  }
-  var totalPages = pages.length;
-
-  function buildPage(lot, pageNum) {
-    var h = '<div class="page">';
-    // Bandeau compact : Date | SOUMISSION Nom | Temps total (v1021 : moitié moins haut)
-    h += '<div class="hero">';
-    h += '<div class="hero-left">' + escHtml(dateStr) + '</div>';
-    h += '<div class="hero-center"><span class="hero-label">SOUMISSION</span><span class="hero-name">' + escHtml(soumName) + '</span></div>';
-    h += '<div class="hero-right"><span class="hero-total-lbl">TOTAL</span> <span class="hero-total-val">' + escHtml(totalDisplay) + '</span></div>';
-    h += '</div>';
-
-    h += '<div class="fiches-section">';
-    lot.forEach(function(p){ h += buildFiche(p.t, p.idx); });
-    h += '</div>';
-
-    h += '<div class="page-footer">Page ' + pageNum + ' / ' + totalPages + '</div>';
-    h += '</div>';
-    return h;
-  }
-
-  var pagesHtml = '';
-  pages.forEach(function(lot, idx){ pagesHtml += buildPage(lot, idx + 1); });
-
-  // === CSS d'impression ===
-  var css = '';
-  css += '*{box-sizing:border-box;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}';
-  css += 'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;margin:0;padding:0;color:#1a1a1a;font-size:10px;background:#fff;}';
-  css += '.page{padding:3mm 12mm 5mm 12mm;page-break-after:always;position:relative;min-height:265mm;}';
-  css += '.page:last-child{page-break-after:auto;}';
-
-  // Bandeau réduit de moitié : une seule ligne, ~9mm au lieu de ~18mm
-  css += '.hero{display:flex;align-items:center;justify-content:space-between;background:#1e3a5f !important;color:#fff !important;padding:3px 12px;border-radius:5px;margin-bottom:2.5mm;height:9mm;}';
-  css += '.hero-left{flex:0 0 auto;font-size:8.5px;color:#cbd5e1 !important;font-weight:600;}';
-  css += '.hero-center{flex:1;text-align:center;white-space:nowrap;overflow:hidden;}';
-  css += '.hero-label{font-size:7.5px;letter-spacing:1.2px;font-weight:700;color:#93c5fd !important;margin-right:6px;}';
-  css += '.hero-name{font-size:13px;font-weight:800;color:#fff !important;}';
-  css += '.hero-right{flex:0 0 auto;text-align:right;white-space:nowrap;}';
-  css += '.hero-total-lbl{font-size:7.5px;letter-spacing:.8px;font-weight:700;color:#93c5fd !important;}';
-  css += '.hero-total-val{font-size:10px;font-weight:800;color:#fff !important;}';
-
-  // v1026 : hauteurs calculées selon le nombre de fiches
-  css += '.fiches-section{display:flex;flex-direction:column;gap:' + GAP_MM + 'mm;}';
-  css += '.fiche{border:1.5px solid #1a1a1a;border-radius:5px;overflow:hidden;background:#fff;page-break-inside:avoid;height:' + hFiche + 'mm;display:flex;flex-direction:column;}';
-  css += '.fiche-head{display:flex;align-items:center;justify-content:space-between;padding:2px 8px;background:#f0f0f0 !important;border-bottom:1.2px solid #1a1a1a;flex-shrink:0;height:' + hTete + 'mm;}';
-  css += '.fh-label{font-size:12px;font-weight:800;color:#1a1a1a !important;}';
-  css += '.fh-temps{font-size:9px;color:#1a1a1a !important;}';
-  css += '.fh-temps-lbl{font-weight:700;color:#666 !important;font-size:7.5px;letter-spacing:.4px;}';
-  css += '.fh-temps-val{font-weight:800;color:#1a1a1a !important;margin-left:2px;}';
-
-  // v1023 : corps = photo à gauche | NOTE à droite
-  css += '.fiche-body{display:flex;flex-direction:row;flex:1;min-height:0;}';
-  var wImg = Math.min(52, Math.max(30, Math.round(hCorps)));   // photo carrée : largeur = hauteur du corps
-  // v1034 : la colonne s'élargit selon le nombre de photos ; la note rétrécit d'autant
-  css += '.fb-img{border-right:1.2px solid #1a1a1a;background:#fafafa !important;display:flex;align-items:center;justify-content:center;gap:1mm;padding:1.5mm;overflow:hidden;}';
-  css += '.fb-img-1{flex:0 0 ' + wImg + 'mm;}';
-  css += '.fb-img-2{flex:0 0 ' + (wImg * 2 + 2) + 'mm;}';
-  css += '.fb-img-3{flex:0 0 ' + (wImg * 3 + 4) + 'mm;}';
-  css += '.fb-img-cell{flex:1 1 0;min-width:0;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden;}';
-  css += '.fb-img img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block;}';
-  css += '.fb-empty{color:#999 !important;font-style:italic;font-size:8.5px;}';
-  css += '.fb-note{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;}';
-  css += '.fb-note-title{background:#1e3a5f !important;color:#fff !important;font-size:8.5px;font-weight:700;padding:2.5px 8px;letter-spacing:.8px;flex-shrink:0;}';
-  css += '.fb-note-body{flex:1;min-height:0;overflow:hidden;padding:4px 9px;font-size:9px;color:#222 !important;line-height:1.45;word-wrap:break-word;}';
-  css += '.fb-note-body ul,.fb-note-body ol{margin:0;padding:0 0 0 15px;}';
-  css += '.fb-note-body li,.fb-note-body div{margin:0;padding:0;line-height:1.45;}';
-
-  // v1023 : MATÉRIEL en bande pleine largeur, sur 3 colonnes
-  css += '.fiche-mats{flex-shrink:0;height:' + hMats + 'mm;border-top:1.2px solid #1a1a1a;display:flex;flex-direction:column;overflow:hidden;}';
-  css += '.fm-title{background:#1e3a5f !important;color:#fff !important;font-size:8px;font-weight:700;padding:2px 8px;letter-spacing:.8px;flex-shrink:0;}';
-  css += '.fm-cols{display:flex;flex:1;min-height:0;align-items:stretch;overflow:hidden;}';
-  css += '.fm-col{flex:1;min-width:0;overflow:hidden;border-right:1px solid #ddd;}';
-  css += '.fm-col:last-child{border-right:none;}';
-  css += '.fm-tbl{width:100%;border-collapse:collapse;font-size:7.5px;table-layout:fixed;}';
-  css += '.fm-tbl td{padding:1.2px 4px;border-bottom:1px solid #eee;vertical-align:top;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}';
-  css += '.fm-tbl tr:nth-child(even) td{background:#fafafa !important;}';
-  css += '.ft-code{font-family:"Courier New",monospace;font-weight:700;font-size:7px;color:#0a4d8a !important;white-space:nowrap;width:34px;}';
-  css += '.ft-name{font-size:7.5px;color:#222 !important;}';
-  css += '.ft-mes{font-size:7px;color:#444 !important;text-align:center;white-space:nowrap;width:40px;}';
-  css += '.ft-qty{text-align:right;font-weight:800;font-size:8px;color:#1a1a1a !important;width:22px;}';
-  css += '.fm-empty{padding:6px;text-align:center;color:#bbb !important;font-style:italic;font-size:8px;}';
-
-  css += '.page-footer{position:absolute;bottom:3mm;right:12mm;font-size:8px;color:#999 !important;}';
-  css += '@page{margin:0;size:letter;}';
-  css += '@page{@top-left{content:""}@top-center{content:""}@top-right{content:""}@bottom-left{content:""}@bottom-center{content:""}@bottom-right{content:""}}';
-  css += '@media print{.fiche{page-break-inside:avoid;}}';
-
-  // HTML final
-  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>\u00A0</title>';
-  html += '<style>' + css + '</style>';
-  html += '</head><body>';
-  html += pagesHtml;
-  html += '</body></html>';
-
-  // iframe caché — seule la boîte d'impression Chrome apparaît
-  var oldFrame = document.getElementById('_psmPrintFrame');
-  if (oldFrame) oldFrame.parentNode.removeChild(oldFrame);
-
-  var iframe = document.createElement('iframe');
-  iframe.id = '_psmPrintFrame';
-  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
-  document.body.appendChild(iframe);
-
-  var idoc = iframe.contentDocument || iframe.contentWindow.document;
-  idoc.open();
-  idoc.write(html);
-  idoc.close();
-
-  setTimeout(function() {
-    try {
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
-    } catch(e) {
-      showToast('⚠️ Erreur impression : ' + e.message, 'error');
-    }
-  }, 400);
-}
-
-// Choix 2 : photo de la carte active, telle qu'affichée (recadrages inclus)
-function _printWithStamps() {
-  var fichiers = (typeof fichiersGlobaux !== 'undefined') ? fichiersGlobaux : [];
-  var idx = (typeof currentFileTabIdx !== 'undefined') ? currentFileTabIdx : 0;
-  var f = fichiers[idx];
-  if (!f || !f.data) {
-    showToast('⚠️ Aucune image / PDF à imprimer dans cet onglet', 'warning');
-    return;
-  }
-
-  var imgData = f.data;
-  var stamps = (f.stamps || []);
-
-  var imgEl = new Image();
-  imgEl.onload = function() {
-    var canvas = document.createElement('canvas');
-    canvas.width = imgEl.naturalWidth;
-    canvas.height = imgEl.naturalHeight;
-    var ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(imgEl, 0, 0);
-
-    stamps.forEach(function(s, i) {
-      var x = (s.xPct / 100) * canvas.width;
-      var y = (s.yPct / 100) * canvas.height;
-      var w = (s.wPct / 100) * canvas.width;
-      var h = (s.hPct / 100) * canvas.height;
-      ctx.save();
-      ctx.strokeStyle = '#fbbf24';
-      ctx.lineWidth = 3;
-      ctx.setLineDash([6, 4]);
-      ctx.strokeRect(x - w/2, y - h/2, w, h);
-      ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(251,191,36,0.95)';
-      ctx.fillRect(x - w/2 - 1, y - h/2 - 18, 60, 16);
-      ctx.fillStyle = '#000';
-      ctx.font = 'bold 12px Arial';
-      ctx.fillText('Item ' + (i + 1), x - w/2 + 4, y - h/2 - 5);
-      ctx.restore();
-    });
-
-    var dataUrl = canvas.toDataURL('image/png');
-    var nameEl2 = document.getElementById('soumissionPillName');
-    var soumName = (nameEl2 && nameEl2.textContent && nameEl2.textContent.trim()) ? nameEl2.textContent.trim() : 'Brouillon';
-    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Étampes — ' + soumName + '</title>';
-    /* v1149 : la photo remplit TOUTE la feuille (plus de bande blanche en bas).
-       object-fit:cover = pas de déformation ; l'écart de format avec le papier
-       (quelques %) est rogné à parts égales en haut/bas ou à gauche/droite. */
-    var _ecart = Math.abs((canvas.width / canvas.height) / (8.5 / 11) - 1);
-    var _fit = _ecart > 0.15 ? 'contain' : 'cover';   // zoom très allongé : on ne le rogne pas
-    html += '<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;}'
-          + 'img{position:fixed;left:0;top:0;width:100vw;height:100vh;object-fit:' + _fit + ';display:block;}'
-          + '@page{margin:0;size:letter;}</style>';
-    html += '</head><body>';
-    html += '<img src="' + dataUrl + '">';
-    html += '<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script>';
-    html += '</body></html>';
-    var w2 = window.open('', 'stampsPrint', 'width=900,height=700');
-    if (w2) { w2.document.write(html); w2.document.close(); }
-    else showToast('⚠️ Le popup a été bloqué. Autorise les popups pour ce site.', 'error');
-  };
-  imgEl.onerror = function() {
-    showToast('⚠️ Impossible de charger l\'image pour impression', 'error');
-  };
-  imgEl.src = imgData;
-}
-
-// Choix 3 : PDF original (sans étampes)
-function _printOriginalPdf() {
-  var fichiers = (typeof fichiersGlobaux !== 'undefined') ? fichiersGlobaux : [];
-  var idx = (typeof currentFileTabIdx !== 'undefined') ? currentFileTabIdx : 0;
-  var f = fichiers[idx];
-  if (!f) {
-    showToast('⚠️ Aucun fichier dans cet onglet', 'warning');
-    return;
-  }
-  // Préférer dataPdfOriginal (PDF non altéré) si disponible
-  var pdfData = f.dataPdfOriginal || (f.type === 'application/pdf' ? f.data : null);
-  if (!pdfData) {
-    showToast('⚠️ Pas de PDF original disponible dans cet onglet (l\'onglet contient une image, pas un PDF).', 'warning');
-    return;
-  }
-  // Ouvrir dans nouvelle fenêtre, navigateur affichera son viewer PDF natif (utilisateur peut imprimer ou sauver)
-  var w = window.open('', 'origPdfPrint', 'width=900,height=900');
-  if (!w) {
-    showToast('⚠️ Le popup a été bloqué. Autorise les popups pour ce site.', 'error');
-    return;
-  }
-  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>PDF original</title><style>body,html{margin:0;padding:0;height:100%;}embed{width:100%;height:100%;border:none;}</style></head><body>');
-  w.document.write('<embed src="' + pdfData + '" type="application/pdf">');
-  w.document.write('</body></html>');
-  w.document.close();
-}
-
 // ============================================================
 // COÛT DE REVIENT (.xlsm)
 // ============================================================
@@ -13142,7 +12750,7 @@ function etamperPageFin(idx) {
     : 'Dernière page étampée : ' + noms, 'success');
 }
 
-function exporterPdfEtampes() {
+function exporterPdfEtampes(imprimer) {   // v1181 : true = bouton Imprimer
   var fichiers = (typeof fichiersGlobaux !== 'undefined') ? fichiersGlobaux : [];
   var nameEl = document.getElementById('soumissionPillName');
   var soumName = (nameEl && nameEl.textContent && nameEl.textContent.trim()) ? nameEl.textContent.trim() : 'Brouillon';
@@ -13178,7 +12786,7 @@ function exporterPdfEtampes() {
     + '.f{page-break-after:always;break-after:page;text-align:center;}'
     + '.f:last-child{page-break-after:auto;break-after:auto;}'
     + '.f img{max-width:100%;max-height:100vh;height:auto;display:block;margin:0 auto;}'
-    + '@page{margin:8mm;}'
+    + '@page{size:letter;margin:8mm;}'   /* v1181 : format lettre */
     + '@media print{.f{page-break-after:always;}}'
     + '</style></head><body>';
   feuilles.forEach(function(f){
@@ -13200,15 +12808,11 @@ function exporterPdfEtampes() {
   }
   w.document.write(html);
   w.document.close();
-  showToast('📄 ' + feuilles.length + ' page(s) — choisis « Enregistrer au format PDF »', 'info');
+  showToast(imprimer
+    ? feuilles.length + ' page(s) envoyée(s) à l\'impression — coche « Recto verso » pour la dernière page au dos'
+    : '📄 ' + feuilles.length + ' page(s) — choisis « Enregistrer au format PDF »', 'info');
 }
 
-function exportPdf() {
-  _printSoumissionList();
-  setTimeout(function() {
-    showToast('💡 Choisis « Enregistrer au format PDF » dans la fenêtre d\'impression', 'info');
-  }, 800);
-}
 
 // ============================================================
 // v1025 — FICHIER PROJET (.psm.json) : sauvegarde RÉOUVRABLE
