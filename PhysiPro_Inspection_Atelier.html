@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Inspection Atelier v20260930b</title>
+<title>PhysiPro — Inspection Atelier v20261007</title>
 <style>
 :root{--bg-main:#0f172a;--bg-card:#1e293b;--bg-input:#0f172a;--border:#334155;--gold:#c9a227;--gold-light:#fbbf24;--text:#e2e8f0;--text-muted:#94a3b8;--success:#22c55e;--danger:#ef4444;--info:#3b82f6;--purple:#a855f7;--teal:#14b8a6;--tbl-zoom:11px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -328,6 +328,20 @@ body.col-resizing *{cursor:col-resize!important;}
 .srs-foot strong{color:#fff;font-weight:800;}
 .srs-demo{font-size:8px;font-weight:800;color:#fbbf24;background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.45);border-radius:8px;padding:1px 6px;text-transform:uppercase;letter-spacing:.05em;}
 /* ═══ VÉRIFICATION DE COMMANDES (v20260924) ═══ */
+/* ═══ v20261007 : CHOIX DE L'INSPECTEUR ═══ */
+.insp-pick-ov{display:none;position:fixed;inset:0;background:rgba(2,6,23,.88);z-index:999990;align-items:center;justify-content:center;padding:18px;}
+.insp-pick-ov.show{display:flex;}
+.insp-pick-box{background:#0f2847;border:3px solid #fbbf24;border-radius:16px;padding:28px 30px 24px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6);text-align:center;}
+.insp-pick-q{font-size:30px;font-weight:900;color:#fff;margin-bottom:6px;}
+.insp-pick-sub{font-size:15px;color:#cbd5e1;margin-bottom:22px;}
+.insp-pick-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.insp-pick-btn{font-size:30px;font-weight:900;padding:26px 10px;border-radius:12px;border:3px solid #4a8ef5;background:#13325c;color:#fff;cursor:pointer;transition:transform .08s,background .15s;}
+.insp-pick-btn:hover{background:#1d4ed8;transform:scale(1.03);}
+.insp-pick-btn.actuel{border-color:#22c55e;background:#14532d;}
+.insp-pick-cancel{margin-top:18px;font-size:15px;padding:8px 22px;border-radius:8px;border:1px solid #64748b;background:transparent;color:#cbd5e1;cursor:pointer;}
+.insp-cur-btn{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:800;padding:5px 12px;border-radius:8px;border:2px solid #fbbf24;background:rgba(251,191,36,.12);color:#fde68a;cursor:pointer;white-space:nowrap;}
+.insp-cur-btn b{color:#fff;font-size:15px;}
+.insp-cur-btn:hover{background:rgba(251,191,36,.25);}
 .vrf-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:99997;align-items:center;justify-content:center;padding:18px;}
 .vrf-overlay.show{display:flex;}
 .vrf-panel{background:linear-gradient(to bottom,#0a1e3d,#122c53);border:2px solid #4a8ef5;border-radius:10px;width:100%;max-width:560px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;animation:modalIn .2s ease;}
@@ -369,6 +383,10 @@ body.col-resizing *{cursor:col-resize!important;}
 .vrf-pas-alerte{color:#fbbf24;font-size:10.5px;padding:4px 0 0;font-weight:700;}
 .vrf-pas-ko{color:#ef4444;font-weight:900;font-size:13px;}
 .vrf-pas-info{color:var(--text-muted);font-size:10.5px;padding:3px 0;}
+.vrf-pas-wait{color:#fbbf24;font-weight:900;}
+.vrf-pas-enc{white-space:normal;margin-top:2px;color:#fde68a;font-family:'Segoe UI',Arial,sans-serif;font-size:10.5px;}
+.vrf-pas-compte{font-size:11px;color:#cbd5e1;margin-bottom:4px;}
+.vrf-pas-compte b{color:#fff;font-size:12px;}
 .vrf-found-row{display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05);font-family:Consolas,monospace;}
 .vrf-found-row span:last-child{color:var(--text-muted);font-family:'Segoe UI',sans-serif;font-size:10px;}
 .vrf-foot{flex-shrink:0;display:flex;align-items:center;gap:6px;padding:9px 14px;background:rgba(0,0,0,.35);border-top:1px solid rgba(255,255,255,.12);flex-wrap:wrap;}
@@ -638,6 +656,8 @@ tr:hover .row-del-btn{opacity:.6;}
   <div class="entry-bar">
     <label>📋 #</label><input type="text" id="insp-bon" placeholder="# bon + Entrée" onkeydown="if(event.key==='Enter')scanBon('inspection')"><span class="zoom-btn" onclick="doRefresh('inspection')" title="Rafraîchir">🔄</span><span class="zoom-btn" onclick="restoreSerieFromFB()" title="Restaurer cartes Série+ depuis Firebase" style="color:#fbbf24;">🛡️</span>
     <div class="divider"></div>
+    <button class="insp-cur-btn" id="inspCurBtn" onclick="INSPECTEUR.ouvrir(true)" title="Changer l'inspecteur">👤 Inspecteur : <b id="inspCurNom">—</b> <span style="font-size:12px;opacity:.85;">(changer)</span></button>
+    <div class="divider"></div>
     <span class="zoom-btn" onclick="zoomTable(-1)" title="Réduire texte">▼</span><span class="zoom-btn" onclick="zoomTable(1)" title="Agrandir texte">▲</span>
     <button class="btn-sep" onclick="addDateSep('inspection')">📅 Séparation</button>
     <div class="divider"></div>
@@ -703,12 +723,34 @@ var PASSAGES = (function () {
   var LS = 'physipro_passages_ecrits_v1';
   var MAX_MEMO = 12000;          // entrées retenues localement, les plus récentes
 
-  /* même normalisation que « Vérifier » : casse, espaces, zéros de tête */
+  /* même normalisation que « Vérifier » : casse, espaces, zéros de tête.
+     v20261007 : un « # » ou « no » devant le numéro est ignoré (« #297050 » ->
+     « 297050 ») — avant, la clé devenait « _297050 » et la ligne était perdue. */
   function cle(v) {
     var s = String(v == null ? '' : v).trim().toLowerCase().replace(/\s+/g, '');
+    s = s.replace(/^(?:#|n[o\u00b0]\.?:?)+(?=\d)/, '');
     var z = s.replace(/^0+/, '');
     s = z || s;
     return s.replace(/[.#$\[\]\/]/g, '_');
+  }
+  /* v20261007 : une case peut contenir PLUSIEURS numéros (« 297050 / 297051 »,
+     « 297050, 297051 », « 297050 et 297051 ») — chacun reçoit sa propre clé.
+     « 297050-2 » (2e morceau d'une commande) compte aussi pour 297050.
+     Une case sans numéro reconnaissable garde sa clé d'avant. */
+  function bons(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) return [];
+    var vus = {}, out = [];
+    function ajoute(t) { var c = cle(t); if (c && c.charAt(0) !== '_' && !vus[c]) { vus[c] = true; out.push(c); } }
+    s.split(/[\s,;\/&+]+|\bet\b/i).forEach(function (t) {
+      t = t.trim();
+      if (!/\d{3,}/.test(t)) return;          // « A », « no », « 2 » seuls : pas un numéro
+      ajoute(t);
+      var m = t.match(/^#?0*(\d{4,})-[a-z0-9]{1,3}$/i);
+      if (m) ajoute(m[1]);
+    });
+    if (!out.length) ajoute(s);
+    return out;
   }
   /* « 05/09/2026 », « 5-9-2026 », « 2026-09-05 », ISO complet -> « 2026-09-05 » */
   function dateIso(v) {
@@ -744,11 +786,13 @@ var PASSAGES = (function () {
     if (typeof fbDb === 'undefined' || !fbDb || !fbUser || !paires || !paires.length) return;
     var memo = _memo(), maj = {}, n = 0;
     paires.forEach(function (p) {
-      var c = cle(p.bon), d = dateIso(p.date);
-      if (!c || !d || c.charAt(0) === '_') return;
-      var k = c + '/' + dept + '/' + d + '/' + (nomCle(p.nom) || '_');
-      if (memo[k] || maj[k]) return;
-      maj[k] = true; n++;
+      var d = dateIso(p.date);
+      if (!d) return;
+      bons(p.bon).forEach(function (c) {
+        var k = c + '/' + dept + '/' + d + '/' + (nomCle(p.nom) || '_');
+        if (memo[k] || maj[k]) return;
+        maj[k] = true; n++;
+      });
     });
     if (!n) return;
     fbDb.ref(NOEUD).update(maj).then(function () {
@@ -766,7 +810,7 @@ var PASSAGES = (function () {
     return m === a || m === b;
   }
 
-  return { NOEUD: NOEUD, cle: cle, dateIso: dateIso, nomCle: nomCle, noter: noter, moisRecents: moisRecents };
+  return { NOEUD: NOEUD, cle: cle, bons: bons, dateIso: dateIso, nomCle: nomCle, noter: noter, moisRecents: moisRecents };
 })();
 window.PASSAGES = PASSAGES;
 
@@ -852,7 +896,7 @@ function safeFbUpdate(ref, data, callback) {
 }
 
 // === VERSION PROTECTION ===
-var APP_VERSION=20260930;var APP_MODULE='inspection';var _versionOK=true;
+var APP_VERSION=20261007;var APP_MODULE='inspection';var _versionOK=true;
 function checkAppVersion(){if(!fbDb)return;fbDb.ref('appSettings/versions/'+APP_MODULE).once('value').then(function(s){var r=s.val();if(r&&typeof r==='number'&&APP_VERSION<r){_versionOK=false;var b=document.createElement('div');b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;background:#dc2626;color:white;padding:12px 20px;font-weight:700;text-align:center;font-size:14px;';b.innerHTML='⚠️ VERSION OBSOLÈTE. <button onclick="location.reload(true)" style="margin-left:15px;background:white;color:#dc2626;border:none;padding:6px 16px;border-radius:6px;font-weight:bold;cursor:pointer;">🔄 Rafraîchir</button>';document.body.prepend(b);}else{fbDb.ref('appSettings/versions/'+APP_MODULE).set(APP_VERSION);_versionOK=true;}});}
 function writeBlocked(s){if(!_versionOK){if(!s)alert('🔒 Version obsolète');return true;}return false;}
 
@@ -1201,6 +1245,7 @@ fbAuth.onAuthStateChanged(function(user) {
     var dot = document.getElementById('statusDot');
     if (badge) badge.textContent = displayName;
     if (dot) dot.classList.add('connected');
+    try { INSPECTEUR.demarrer(); } catch (e) { console.warn('[INSPECTEUR]', e); }
     // Show stats buttons only for users with S permission
     (function(){
       var canStats = hasPermission('S');
@@ -1832,6 +1877,13 @@ function _loadListsAndConfig() {
       var d = snap.val(); if (!d) return;
       Object.keys(d).forEach(function(k) { localStorage.setItem('physipro_list_' + k, JSON.stringify(d[k])); });
       console.log('[SYNC] Lists synced');
+      /* v20261007 : noms qui doivent TOUJOURS être dans les listes partagées (ajoutés une fois dans Firebase) */
+      invalidateListCache();
+      [['employes_atelier', ['René']]].forEach(function(p) {
+        var arr = getList(p[0]).slice(), ch = false;
+        p[1].forEach(function(n) { if (arr.indexOf(n) < 0) { arr.push(n); ch = true; } });
+        if (ch) saveList(p[0], arr);
+      });
     }).catch(function(e) {})
   );
   ['inspection'].forEach(function(dept) {
@@ -2130,7 +2182,7 @@ function saveD(d,data){if(!hasPermission("M"))return;
 }
 
 /* ═══ LISTS ═══ */
-var DEFAULT_LISTS={employes_atelier:['Pierre Caron','Serge Lavallée','Tommy Beaudoin','Nestor Torres','Mathieu Perreault','Cheickna','Daniel Charest','Saul','Pablo','Sylvain Carrier','Stéphane','Paul','Didier','Michel Coffe','Manuel'],items:['Premium','Ultra','Pz','Siliko','Physiair','Hp2','Cinch','Resolve','Brio','Thoraciques','Thoraciques faconnés','C3s','Axis','Lxa','Biseau','Glissières','Pelvien','Moulage','Moulage du cnc','Moulage retour d\'essayage','Appui tête normal','Appui tête bouclier','Appui tête juif','Appui tête constance','Appui tête prolongement latéral','App moignon','App mollet','Airfoam','Coussin de table','Gdsquared gel','Nssquared','Viscozen','Néozen','Valdis','Peinture moulage','Coussin dossier','Easy-fit'],clients:['France client','France série','Vermeiren client','Vermeiren série','HME client','HME série','C1South client','C1South série','Autre 1 client','Autre 1 série','Autre 2 client','Autre 2 série','Inventaire','Commande client','Série','Chsld Rimouski','Constance','Hopital Juif'],erreurs:['erreur','mauvais format','Mauvais matériaux','Mauvaise plaque','Oublie','Mauvaise épaisseur','Pelvien oublié','Coins pas coupés','Erreur magasin','mauvaise mesure','Manque coupe canvas','Biseau collé au lieu de velcro','Biseau mauvaise mesure','Item mauvais coté','abs manquant'],inspecteurs:['Valérie','Michelle','Nestor','Cassie','Serge','Daniel'],coutureuses:['Cassie','Michelle','Nestor','Valérie']};
+var DEFAULT_LISTS={employes_atelier:['Pierre Caron','Serge Lavallée','Tommy Beaudoin','Nestor Torres','Mathieu Perreault','Cheickna','Daniel Charest','Saul','Pablo','Sylvain Carrier','Stéphane','Paul','Didier','Michel Coffe','Manuel','René'],items:['Premium','Ultra','Pz','Siliko','Physiair','Hp2','Cinch','Resolve','Brio','Thoraciques','Thoraciques faconnés','C3s','Axis','Lxa','Biseau','Glissières','Pelvien','Moulage','Moulage du cnc','Moulage retour d\'essayage','Appui tête normal','Appui tête bouclier','Appui tête juif','Appui tête constance','Appui tête prolongement latéral','App moignon','App mollet','Airfoam','Coussin de table','Gdsquared gel','Nssquared','Viscozen','Néozen','Valdis','Peinture moulage','Coussin dossier','Easy-fit'],clients:['France client','France série','Vermeiren client','Vermeiren série','HME client','HME série','C1South client','C1South série','Autre 1 client','Autre 1 série','Autre 2 client','Autre 2 série','Inventaire','Commande client','Série','Chsld Rimouski','Constance','Hopital Juif'],erreurs:['erreur','mauvais format','Mauvais matériaux','Mauvaise plaque','Oublie','Mauvaise épaisseur','Pelvien oublié','Coins pas coupés','Erreur magasin','mauvaise mesure','Manque coupe canvas','Biseau collé au lieu de velcro','Biseau mauvaise mesure','Item mauvais coté','abs manquant'],inspecteurs:['Valérie','Michelle','Nestor','Cassie','Serge','Daniel'],coutureuses:['Cassie','Michelle','Nestor','Valérie']};
 /* ═══ LIST CACHE — Avoid repeated JSON.parse from localStorage ═══ */
 var _listCache={};
 var _listCacheTime=0;
@@ -3513,14 +3565,14 @@ function commitFromEmpty(trId,dept){
   }
   // Create the row with all collected values
   var md=gmd(dept);var rows=md.rows;
-  var autoInsp=insp||'';
+  var autoInsp=insp||INSPECTEUR.pour(dept,'');   // v20261007 : choix manuel de la ligne, sinon l'inspecteur choisi
   if(!autoInsp&&fbUser&&fbUser.email){autoInsp=resolveInspName(fbUser.email);}
   if(!autoInsp){var il=dept==='inspection'?getList('inspecteurs'):getList('coutureuses');autoInsp=il[0]||'';}
   var hasErr=err||!!reason;
   rows.push({id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:job,qty:qty,item:item||'',client:client,inspecteur:autoInsp,hasError:hasErr,errorReason:reason||'',errQty:hasErr?1:0,description:'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu',permanent:true});
   md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');
 }
-function addRow(bon,nom,qty,item,dept,client,notes,errorReason,inspOverride){if(!client||client==='Commande client'){var _smA=_cachedFindSerie(bon);if(_smA&&_smA.card){var ac=getSerieAutoClient(_smA.card);if(ac)client=ac;}}var md=gmd(dept);var rows=md.rows;var autoInsp=inspOverride||'';if(!autoInsp&&fbUser&&fbUser.email){autoInsp=resolveInspName(fbUser.email);}if(!autoInsp){var il=dept==='inspection'?getList('inspecteurs'):getList('coutureuses');autoInsp=il[0]||'';}var hasErr=!!errorReason;var newRow={id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:1,qty:parseInt(qty)||1,item:item||'',client:client||'Commande client',inspecteur:autoInsp,hasError:hasErr,errorReason:errorReason||'',errQty:hasErr?1:0,description:notes||'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu',permanent:true,serieSnapshot:{client:client||'',item:item||'',qty:qty,importedAt:new Date().toISOString()}};rows.push(newRow);md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');if(dept==='inspection')_checkJobsAttente(bon);}
+function addRow(bon,nom,qty,item,dept,client,notes,errorReason,inspOverride){if(!client||client==='Commande client'){var _smA=_cachedFindSerie(bon);if(_smA&&_smA.card){var ac=getSerieAutoClient(_smA.card);if(ac)client=ac;}}var md=gmd(dept);var rows=md.rows;var autoInsp=INSPECTEUR.pour(dept,inspOverride||'');if(!autoInsp&&fbUser&&fbUser.email){autoInsp=resolveInspName(fbUser.email);}if(!autoInsp){var il=dept==='inspection'?getList('inspecteurs'):getList('coutureuses');autoInsp=il[0]||'';}var hasErr=!!errorReason;var newRow={id:Date.now()+'-'+Math.random().toString(36).substr(2,5),type:'entry',bon:bon,nom:nom||'',job:1,qty:parseInt(qty)||1,item:item||'',client:client||'Commande client',inspecteur:autoInsp,hasError:hasErr,errorReason:errorReason||'',errQty:hasErr?1:0,description:notes||'',entryDate:todayStr(),timestamp:new Date().toISOString(),coutureStatus:'recu',permanent:true,serieSnapshot:{client:client||'',item:item||'',qty:qty,importedAt:new Date().toISOString()}};rows.push(newRow);md.data[md.month]=rows;saveD(dept,md.data);renderTable(dept);showToast('✅ #'+bon+' sauvegardé','success');if(dept==='inspection')_checkJobsAttente(bon);}
 
 /* ═══ STATS ═══ */
 var statsView='atelier';
@@ -4603,6 +4655,15 @@ var PChat = (function() {
 </div>
 
 <!-- ═══ PANNEAU : VÉRIFICATION DE COMMANDES (v20260924) ═══ -->
+<!-- ═══ v20261007 : QUI INSPECTE ? ═══ -->
+<div class="insp-pick-ov" id="inspPickOv">
+  <div class="insp-pick-box">
+    <div class="insp-pick-q">👤 Qui inspecte ?</div>
+    <div class="insp-pick-sub">Choisis ton nom : il sera inscrit comme inspecteur sur toutes les lignes que tu ajoutes.</div>
+    <div class="insp-pick-grid" id="inspPickGrid"></div>
+    <button class="insp-pick-cancel" id="inspPickCancel" onclick="INSPECTEUR.fermer()" style="display:none;">Annuler</button>
+  </div>
+</div>
 <div class="vrf-overlay" id="vrfOverlay" onclick="if(event.target===this)VERIF.close()">
   <div class="vrf-panel">
     <div class="vrf-head">
@@ -5152,15 +5213,55 @@ window.SERIES = SERIES;
    - Les archives sont lues UNE seule fois par session (au premier clic sur
      Analyser) puis gardées en mémoire, pour limiter le téléchargement Firebase.
    ══════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════
+   v20261007 — CHOIX DE L'INSPECTEUR
+   À chaque ouverture du programme, une grande fenêtre demande qui inspecte
+   (Valérie, Cassie, Serge, Daniel). Ce nom est ensuite inscrit dans la
+   colonne « Insp. » de toutes les nouvelles lignes d'Inspection, peu importe
+   le compte connecté (avant : le nom venait du courriel — Cassie, connectée
+   avec le compte de Valérie, apparaissait comme « Valérie »).
+   Le bouton « 👤 Inspecteur : … (changer) » dans la barre permet de changer.
+   Un nom choisi à la main dans la liste déroulante d'une ligne reste prioritaire.
+   ══════════════════════════════════════════════════════════════════════ */
+var INSPECTEUR = (function () {
+  var NOMS = ['Valérie', 'Cassie', 'Serge', 'Daniel'];
+  var _nom = '';
+  function nom() { return _nom; }
+  function _maj() {
+    var e = document.getElementById('inspCurNom'); if (e) e.textContent = _nom || '— choisir —';
+  }
+  function ouvrir(peutAnnuler) {
+    var g = document.getElementById('inspPickGrid'); if (!g) return;
+    g.innerHTML = NOMS.map(function (n) {
+      return '<button class="insp-pick-btn' + (n === _nom ? ' actuel' : '') + '" onclick="INSPECTEUR.choisir(\'' + n + '\')">' + esc(n) + '</button>';
+    }).join('');
+    document.getElementById('inspPickCancel').style.display = (peutAnnuler && _nom) ? '' : 'none';
+    document.getElementById('inspPickOv').classList.add('show');
+  }
+  function fermer() { if (!_nom) return; document.getElementById('inspPickOv').classList.remove('show'); }
+  function choisir(n) {
+    _nom = n; _maj();
+    try { localStorage.setItem('physipro_dernier_inspecteur', n); } catch (e) {}
+    document.getElementById('inspPickOv').classList.remove('show');
+    showToast('👤 Inspecteur : ' + n, 'success');
+  }
+  /* appelé une fois la connexion faite : on demande toujours au démarrage */
+  var _demande = false;
+  function demarrer() { _maj(); if (_demande || _nom) return; _demande = true; ouvrir(false); }
+  /* le nom à inscrire pour une nouvelle ligne de ce département */
+  function pour(dept, sinon) { return (dept === 'inspection' && _nom) ? _nom : (sinon || ''); }
+  return { NOMS: NOMS, nom: nom, ouvrir: ouvrir, fermer: fermer, choisir: choisir, demarrer: demarrer, pour: pour };
+})();
+window.INSPECTEUR = INSPECTEUR;
+
 var VERIF = (function () {
   var _archiveIndex = null;   // { numéroNormalisé: 'aaaa-mm' } — cache de session
   var _busy = false;
 
-  function _norm(v) {
-    var s = String(v == null ? '' : v).trim().toLowerCase().replace(/\s+/g, '');
-    var z = s.replace(/^0+/, '');
-    return z || s;
-  }
+  /* v20261007 : UNE seule normalisation partout (liste collée, index, données
+     des trois départements) — avant, « Vérifier » et l'index n'avaient pas
+     exactement la même, et un « # » devant le numéro faisait tout rater. */
+  function _norm(v) { return PASSAGES.cle(v); }
 
   /* Découpe la liste collée : lignes, virgules, points-virgules, tabulations, espaces.
      v20260929 — si une ligne contient AUSSI une date (collée depuis Excel à côté du
@@ -5199,38 +5300,102 @@ var VERIF = (function () {
      tableau des passages. Retourne '' si aucune date n'a été collée pour ce numéro. */
   function dateDe(num) { return _datesParsed[_norm(num)] || ''; }
 
-  /* 2026-09-29 — Item / matériau des commandes en COUTURE (champ « items » de
-     Production Couture, nœud Firebase inspectionCoutureData), pour les commandes
-     qui n'ont pas encore de date de sortie. Lu une fois par « Analyser » (cache
-     5 min, comme les autres lectures de ce module), pour éviter de relire
-     ~876 Ko à chaque clic si on ré-analyse la même liste. */
-  var _coutureItemsCache = null, _coutureItemsCacheT = 0;
-  var COUTURE_ITEMS_TTL = 5 * 60 * 1000;
-  function _loadCoutureItems() {
-    if (_coutureItemsCache && (Date.now() - _coutureItemsCacheT) < COUTURE_ITEMS_TTL) return Promise.resolve(_coutureItemsCache);
-    if (!fbDb) return Promise.resolve(_coutureItemsCache || {});
-    return fbDb.ref('inspectionCoutureData').once('value').then(function (snap) {
-      var data = snap.val() || {};
+  /* ─── v20261007 : LECTURE DIRECTE DES DONNÉES DES TROIS DÉPARTEMENTS ───
+     Avant, les colonnes Couture et Finale venaient SEULEMENT de l'index
+     passagesCommandes. Or l'index ne fait qu'ajouter : une date de sortie
+     corrigée, un numéro de bon corrigé, une ligne effacée ou une date effacée
+     y restaient pour toujours -> ✓ affichés pour des commandes pas sorties,
+     doubles dates, mauvais noms. Et une commande en 2 morceaux (un sorti, un
+     pas encore) apparaissait « sortie » au complet.
+     Maintenant Couture et Finale sont lues directement dans leurs données
+     (complètes, jamais archivées) : ce qu'on voit est exactement ce qui est
+     dans Production Couture / Inspection Finale. L'index ne sert plus que de
+     secours si la lecture est refusée. Pour l'Atelier, les mois encore dans
+     inspectionData sont lus directement ; l'index (ou les archives) ne sert
+     que pour les mois archivés. Cache 60 s : ré-analyser tout de suite ne
+     relit rien. */
+  var LIVE_TTL = 60 * 1000;
+  var _live = {};
+  function _lignesMois(arr) {
+    if (!arr) return [];
+    return Array.isArray(arr) ? arr : Object.keys(arr).map(function (k) { return arr[k]; });
+  }
+  function _ajDate(o, c, d, nom) {
+    var pj = (o[c] = o[c] || {});
+    if (typeof pj[d] !== 'object') pj[d] = {};
+    pj[d][PASSAGES.nomCle(nom) || '_'] = true;
+  }
+  var _BATIR = {
+    /* Couture : { clé: { faits: {date:{nom}}, enCours: [{item, nom, entree}] } } */
+    inspectionCoutureData: function (data) {
       var idx = {};
-      Object.keys(data).forEach(function (m) {
-        var arr = data[m];
-        if (!arr) return;
-        if (!Array.isArray(arr)) arr = Object.keys(arr).map(function (k) { return arr[k]; });
-        arr.forEach(function (r) {
-          if (!r) return;
-          var b = _norm(r.bonCmd || '');
-          if (!b) return;
-          var pasDeSortie = !(r.dateSortie && String(r.dateSortie).trim());
-          var it = String(r.items || '').trim();
-          if (pasDeSortie && it) idx[b] = it;   // seulement les commandes sans date de sortie
+      Object.keys(data || {}).forEach(function (m) {
+        _lignesMois(data[m]).forEach(function (r) {
+          if (!r || r._empty) return;
+          var cs = PASSAGES.bons(r.bonCmd);
+          if (!cs.length) return;
+          var sortie = String(r.dateSortie || '').trim(), d = PASSAGES.dateIso(sortie);
+          cs.forEach(function (c) {
+            var e = (idx[c] = idx[c] || { faits: {}, enCours: [] });
+            if (d) _ajDate(e.faits, 'x', d, r.nom);
+            else e.enCours.push({ item: String(r.items || '').trim(), nom: String(r.nom || '').trim(),
+                                  entree: PASSAGES.dateIso(r.dateEntree), sortieBrute: sortie });
+          });
         });
       });
-      _coutureItemsCache = idx;
-      _coutureItemsCacheT = Date.now();
+      Object.keys(idx).forEach(function (c) { idx[c].faits = idx[c].faits.x || {}; });
       return idx;
-    }).catch(function () { return _coutureItemsCache || {}; });
+    },
+    /* Finale : { clé: {date:{_:true}} } — une entrée sans date prend celle de la ligne-date au-dessus */
+    inspectionFinaleData: function (data) {
+      var idx = {};
+      Object.keys(data || {}).forEach(function (m) {
+        var jour = '';
+        _lignesMois(data[m]).forEach(function (r) {
+          if (!r) return;
+          if (r.type === 'date' && r.dateLabel) jour = r.dateLabel;
+          if (r.type !== 'entry' || !r.cmd) return;
+          var d = PASSAGES.dateIso(r.date || jour);
+          if (!d) return;
+          PASSAGES.bons(r.cmd).forEach(function (c) { _ajDate(idx, c, d, ''); });
+        });
+      });
+      return idx;
+    },
+    /* Atelier (mois non archivés) : { dates: {clé:{date:{nom}}}, mois: {AAAA-MM: true} } */
+    inspectionData: function (data) {
+      var dates = {}, mois = {};
+      Object.keys(data || {}).forEach(function (m) {
+        var lg = _lignesMois(data[m]);
+        if (lg.length) mois[m] = true;
+        lg.forEach(function (r) {
+          if (!r || r.type !== 'entry' || !r.bon) return;
+          var d = PASSAGES.dateIso(r.entryDate || r.timestamp);
+          if (!d) return;
+          PASSAGES.bons(r.bon).forEach(function (c) { _ajDate(dates, c, d, r.nom); });
+        });
+      });
+      return { dates: dates, mois: mois };
+    }
+  };
+  function _lireLive(noeud) {
+    var e = _live[noeud];
+    if (e && e.ok && (Date.now() - e.t) < LIVE_TTL) return Promise.resolve(e);
+    if (!fbDb || !fbUser) return Promise.resolve({ ok: false, v: null });
+    return fbDb.ref(noeud).once('value').then(function (snap) {
+      _live[noeud] = { ok: true, t: Date.now(), v: _BATIR[noeud](snap.val() || {}) };
+      return _live[noeud];
+    }).catch(function (err) {
+      console.warn('[VERIF] lecture ' + noeud + ' refusée :', err && err.message);
+      return { ok: false, v: null };
+    });
   }
-  function itemCoutureDe(num) { return (_coutureItemsCache && _coutureItemsCache[_norm(num)]) || ''; }
+  function live(noeud) { var e = _live[noeud]; return (e && e.ok) ? e.v : null; }
+  /* compat : l'item en couture d'une commande pas encore sortie */
+  function itemCoutureDe(num) {
+    var c = live('inspectionCoutureData'), e = c && c[_norm(num)];
+    return (e && e.enCours.length) ? e.enCours.map(function (x) { return x.item; }).filter(Boolean).join(' · ') : '';
+  }
 
   var _archiveDates = null;   // 2026-09-28 : { clé: { 'AAAA-MM-JJ': true } } — dates d'atelier des archives
   function _addRows(idx, month, rows, dates) {
@@ -5238,17 +5403,14 @@ var VERIF = (function () {
     var arr = Array.isArray(rows) ? rows : Object.keys(rows).map(function (k) { return rows[k]; });
     arr.forEach(function (r) {
       if (!r || r.type !== 'entry') return;
-      if (dates && (r.bon || r.bonCmd)) {
-        var ck = PASSAGES.cle(r.bon || r.bonCmd), dj = PASSAGES.dateIso(r.entryDate || r.timestamp);
-        if (ck && dj) {
-          var pj = (dates[ck] = dates[ck] || {});
-          if (typeof pj[dj] !== 'object') pj[dj] = {};
-          pj[dj][PASSAGES.nomCle(r.nom) || '_'] = true;
-        }
+      var cs = PASSAGES.bons(r.bon || r.bonCmd || '');
+      if (dates) {
+        var dj = PASSAGES.dateIso(r.entryDate || r.timestamp);
+        if (dj) cs.forEach(function (ck) { _ajDate(dates, ck, dj, r.nom); });
       }
-      var b = _norm(r.bon || r.bonCmd || '');
-      if (!b) return;
-      if (!idx[b] || month > idx[b]) idx[b] = month;   // garder le mois le plus récent
+      cs.forEach(function (b) {
+        if (!idx[b] || month > idx[b]) idx[b] = month;   // garder le mois le plus récent
+      });
     });
   }
 
@@ -5286,7 +5448,7 @@ var VERIF = (function () {
     _el('vrfHint').textContent = archivesOk
       ? (viaIndex ? 'Recherche faite dans tous les mois, par l\u2019index des passages (sans relire les archives).'
                   : 'Recherche faite dans tous les mois, archives comprises.')
-      : '⚠️ Archives inaccessibles — recherche faite seulement dans les mois chargés dans la page (mois courant et précédent).';
+      : '⚠️ Archives inaccessibles — recherche faite seulement dans les mois non archivés.';
     _el('vrfSum').innerHTML =
       '<div class="vrf-pill tot"><b>' + total + '</b>analysés</div>' +
       '<div class="vrf-pill ok"><b>' + found.length + '</b>déjà passés</div>' +
@@ -5308,6 +5470,20 @@ var VERIF = (function () {
     _el('vrfPrint').style.display = '';   // 2026-09-28 : impression
   }
 
+  /* fusionne des dates { 'AAAA-MM-JJ': true | {nom:true} } dans o ; sautMois = mois à ignorer */
+  function _fusion(o, src, sautMois) {
+    if (!src || typeof src !== 'object') return o;
+    Object.keys(src).forEach(function (d) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+      if (sautMois && sautMois[d.slice(0, 7)]) return;
+      if (typeof o[d] !== 'object') o[d] = {};
+      var v = src[d];
+      if (v && typeof v === 'object') Object.keys(v).forEach(function (n) { o[d][n] = true; });
+      else o[d]._ = true;
+    });
+    return o;
+  }
+
   function analyser() {
     if (_busy) return;
     var list = _parse(_el('vrfText').value);
@@ -5315,48 +5491,54 @@ var VERIF = (function () {
     _busy = true;
     var btn = _el('vrfGo'); btn.disabled = true;
     _status('Analyse…');
-    /* 2026-09-28 — une fois l'historique rattrapé, l'INDEX répond : une petite fiche
-       par numéro (~0,1 Ko) au lieu de relire toutes les archives (~300 Ko et plus).
-       Sans rattrapage à jour, on garde l'ancienne méthode, par les archives. */
-    PASSAGES_VERIF.etat().then(function (aJour) {
+    /* Atelier, mois archivés : l'index (si l'historique est rattrapé) ou les archives.
+       Tout le reste (atelier non archivé, couture, finale) : lu directement. */
+    var pIndex = PASSAGES_VERIF.etat().then(function (aJour) {
       if (aJour) {
         return PASSAGES_VERIF.fiches(list).then(function (fiches) {
-          var arch = {};
+          var at = {};
           list.forEach(function (num) {
-            var f = fiches[PASSAGES.cle(num)], at = f && f.atelier;
-            var d = (at && typeof at === 'object') ? Object.keys(at).filter(function (x) { return /^\d{4}-\d{2}-\d{2}$/.test(x); }).sort().pop() : null;
-            if (d) arch[_norm(num)] = d.slice(0, 7);   // mois le plus récent, comme avant
+            var c = _norm(num), f = fiches[c];
+            if (f && f.atelier && typeof f.atelier === 'object') at[c] = f.atelier;
           });
-          return { arch: arch, ok: true, viaIndex: true };
+          return { at: at, ok: true, viaIndex: true };
         });
       }
       _status(_archiveIndex ? 'Analyse…' : 'Lecture des archives…');
-      return _loadArchives().then(function (a) { return { arch: a, ok: true }; });
-    })
-      .catch(function (e) { console.warn('[VERIF] Recherche:', e && e.message); return { arch: {}, ok: false }; })
-      .then(function (res) {
-        var datesAtelier = {};
-        var local = _localIndex(datesAtelier);
-        Object.keys(_archiveDates || {}).forEach(function (k) {
-          Object.keys(_archiveDates[k]).forEach(function (d) {
-            var pj = (datesAtelier[k] = datesAtelier[k] || {});
-            if (typeof pj[d] !== 'object') pj[d] = {};
-            Object.keys(_archiveDates[k][d] || {}).forEach(function (n) { pj[d][n] = true; });
-          });
-        });
+      return _loadArchives().then(function () { return { at: _archiveDates || {}, ok: true }; });
+    }).catch(function (e) { console.warn('[VERIF] Recherche:', e && e.message); return { at: {}, ok: false }; });
+    var pLive = Promise.all([_lireLive('inspectionData'), _lireLive('inspectionCoutureData'), _lireLive('inspectionFinaleData')]);
+
+    Promise.all([pIndex, pLive])
+      .then(function (r) {
+        var res = r[0];
+        var liveAt = live('inspectionData');
+        var datesLocal = {};
+        var moisLocal = _localIndex(datesLocal);      // { clé: mois } — lignes de CE poste
+        var datesAtelier = {}, datesANoter = {};
         var found = [], missing = [];
         list.forEach(function (num) {
-          var k = _norm(num);
-          var m = local[k] || res.arch[k];
-          if (local[k] && res.arch[k] && res.arch[k] > local[k]) m = res.arch[k];
-          if (m) found.push({ num: num, month: m }); else missing.push(num);
+          var c = _norm(num);
+          /* vrai et à jour : données Firebase non archivées + lignes de ce poste */
+          var vrai = _fusion({}, liveAt && liveAt.dates[c]);
+          _fusion(vrai, datesLocal[c]);
+          if (Object.keys(vrai).length) datesANoter[c] = vrai;
+          /* + mois archivés seulement (une date de l'index dans un mois encore
+             présent dans inspectionData doit y être, sinon c'est une vieille
+             trace : bon corrigé, ligne effacée) */
+          var o = _fusion(_fusion({}, vrai), res.at[c], liveAt ? liveAt.mois : null);
+          var ds = Object.keys(o).sort();
+          if (ds.length) {
+            datesAtelier[c] = o;
+            found.push({ num: num, month: ds[ds.length - 1].slice(0, 7) });
+          } else if (moisLocal[c]) {
+            found.push({ num: num, month: moisLocal[c] });   // ligne sans date lisible
+          } else missing.push(num);
         });
         _showResults(list.length, found, missing, res.ok, res.viaIndex);
         _status('');
         PASSAGES_VERIF.majBouton();
-        return _loadCoutureItems().then(function () {
-          PASSAGES_VERIF.afficher(list, datesAtelier);   // 2026-09-28 : dates par département
-        });
+        PASSAGES_VERIF.afficher(list, datesAtelier, datesANoter, liveAt ? liveAt.mois : null);
       })
       .then(function () { _busy = false; btn.disabled = false; },
             function (e) { _busy = false; btn.disabled = false; _status(''); showToast('❌ ' + e.message, 'error'); });
@@ -5426,6 +5608,7 @@ var VERIF = (function () {
       + '.vrf-pas-ok{color:#16a34a;font-weight:900}.vrf-pas-ko{color:#dc2626;font-weight:900;font-size:14px}'
       + '.vrf-pas-nom{color:#475569;font-family:"Segoe UI",Arial,sans-serif;font-size:11px}'
       + '.vrf-pas-item{color:#334155;font-family:"Segoe UI",Arial,sans-serif;font-size:10.5px}'
+      + '.vrf-pas-wait{color:#b45309;font-weight:900}.vrf-pas-enc{color:#92400e;font-family:"Segoe UI",Arial,sans-serif;font-size:11px}'
       + '.leg,.etat{font-size:10.5px;color:#475569;margin-top:8px}'
       + '</style></head><body>'
       + '<div class="ban"><b>Vérification des commandes</b><span>' + jour + '</span></div>'
@@ -5434,10 +5617,12 @@ var VERIF = (function () {
       +   '<div class="pill ok"><b>' + esc(nb(1)) + '</b><i>déjà passés</i></div>'
       +   '<div class="pill ko"><b>' + esc(nb(2)) + '</b><i>pas encore passés</i></div>'
       + '</div>'
-      + (tab ? '<h2>Passages dans les départements</h2>' + tab.outerHTML
+      + (tab ? '<h2>Passages dans les départements</h2>'
+             + (document.querySelector('#vrfPassages .vrf-pas-compte') ? '<div class="leg" style="margin:0 0 6px">' + document.querySelector('#vrfPassages .vrf-pas-compte').innerHTML + '</div>' : '')
+             + tab.outerHTML
              + '<div class="leg"><span class="vrf-pas-ok">✓</span> passée, avec sa date · '
              + '<span class="vrf-pas-ko">✗</span> pas encore passée dans ce département '
-             + '(couture : date de sortie)</div>'
+             + '· <span class="vrf-pas-wait">⏳</span> encore en couture</div>'
              + (etat ? '<div class="etat">' + esc(etat.textContent) + '</div>' : '')
              : '<div class="etat">Tableau des passages non disponible.</div>')
       + '<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>'
@@ -5448,7 +5633,7 @@ var VERIF = (function () {
     w.document.close();
   }
 
-  return { open: open, close: close, analyser: analyser, copier: copier, reset: reset, imprimer: imprimer, dateDe: dateDe, itemCoutureDe: itemCoutureDe };
+  return { open: open, close: close, analyser: analyser, copier: copier, reset: reset, imprimer: imprimer, dateDe: dateDe, itemCoutureDe: itemCoutureDe, live: live, fusion: _fusion };
 })();
 window.VERIF = VERIF;
 
@@ -5511,8 +5696,22 @@ var PASSAGES_VERIF = (function () {
     return o;
   }
 
-  function afficher(liste, datesAtelier) {
+  function _enCoursHtml(x) {
+    return '<div class="vrf-pas-enc"><span class="vrf-pas-wait">⏳</span> en couture'
+      + (x.entree ? ' depuis ' + _fr(x.entree) : '')
+      + (x.nom ? ' <span class="vrf-pas-nom">(' + esc(x.nom) + ')</span>' : '')
+      + (x.item ? '<div class="vrf-pas-item">' + esc(x.item) + '</div>' : '')
+      + (x.sortieBrute ? '<div class="vrf-pas-item">⚠️ date de sortie illisible : ' + esc(x.sortieBrute) + '</div>' : '')
+      + '</div>';
+  }
+
+  /* datesAtelier : dates d'atelier déjà vérifiées par VERIF.analyser
+     datesANoter  : celles qui viennent des vraies données (pour compléter l'index)
+     moisLive     : mois encore dans inspectionData (une date d'index dans ces mois
+                    qui n'est pas dans les données est une vieille trace : ignorée) */
+  function afficher(liste, datesAtelier, datesANoter, moisLive) {
     datesAtelier = datesAtelier || {};
+    datesANoter = datesANoter || {};
     var zone = document.getElementById('vrfPassages');
     if (!zone) return;
     if (!liste.length) { zone.classList.remove('show'); return; }
@@ -5527,65 +5726,90 @@ var PASSAGES_VERIF = (function () {
       : fbDb.ref(PASSAGES.NOEUD + '/_rattrapage').once('value')
           .then(function (s) { _etatRattrapage = s.val() || null; })
           .catch(function () { _etatRattrapage = null; });
-    Promise.all([_lire(cles), etat]).then(function () {
-      var nb = 0;
-      var h = '<div class="vrf-pas-titre">📅 Passages dans les départements</div>'
-            + '<div class="vrf-pas-tab"><table><thead><tr><th>Commande</th><th>Date commande</th><th>Insp. Atelier</th>'
-            + '<th>Couture (sortie)</th><th>Insp. Finale</th></tr></thead><tbody>';
+    /* l'index n'est plus qu'un secours : une lecture refusée ne bloque pas le tableau */
+    var lecture = _lire(cles).catch(function (e) { console.warn('[PASSAGES] index illisible :', e && e.message); });
+    Promise.all([lecture, etat]).then(function () {
+      var CL = VERIF.live('inspectionCoutureData'), FL = VERIF.live('inspectionFinaleData');
+      var nAt = 0, nCo = 0, nEnc = 0, nFi = 0;
+      var aNoter = { atelier: [], couture: [], finale: [] };
+      var rows = '';
       liste.forEach(function (num, k) {
-        var e = _cache[cles[k]], v = (e && e.v) || null;
-        if (v) nb++;
-        /* atelier : l'index ET les lignes d'Inspection Atelier déjà en mémoire (page + archives) */
-        var at = _union(v && v.atelier, datesAtelier[cles[k]]);
+        var c = cles[k], e = _cache[c], v = (e && e.v) || null;
+        /* ── Atelier ── */
+        var at = VERIF.fusion(VERIF.fusion({}, datesAtelier[c]), v && v.atelier, moisLive);
+        if (Object.keys(at).length) nAt++;
         var dCmd = (window.VERIF && VERIF.dateDe) ? VERIF.dateDe(num) : '';
-        /* couture : pas de date de sortie -> on montre l'item/matériau entré en couture, à la place */
-        var coutureVal = v && v.couture;
-        var aUneDateSortie = !!(coutureVal && typeof coutureVal === 'object'
-          && Object.keys(coutureVal).some(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); }));
-        var coutureHtml = _dates(coutureVal);
-        if (!aUneDateSortie) {
-          var itmC = (window.VERIF && VERIF.itemCoutureDe) ? VERIF.itemCoutureDe(num) : '';
-          if (itmC) coutureHtml += '<div class="vrf-pas-item">' + esc(itmC) + '</div>';
+        /* ── Couture : chaque morceau de la commande, sorti ou encore en couture ── */
+        var coutureHtml, coFaits;
+        if (CL) {
+          var ce = CL[c] || { faits: {}, enCours: [] };
+          coFaits = ce.faits;
+          var hasF = Object.keys(coFaits).length > 0;
+          coutureHtml = hasF ? _dates(coFaits) : '';
+          if (ce.enCours.length) { nEnc++; coutureHtml += ce.enCours.map(_enCoursHtml).join(''); }
+          if (!hasF && !ce.enCours.length) coutureHtml = '<span class="vrf-pas-ko" title="Pas entrée en couture">✗</span>';
+          if (hasF && !ce.enCours.length) nCo++;
+        } else {
+          coFaits = (v && v.couture) || {};
+          coutureHtml = _dates(coFaits);
+          if (Object.keys(coFaits).some(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); })) nCo++;
         }
-        h += '<tr><td class="vrf-pas-no">' + esc(num) + '</td>'
+        /* ── Finale ── */
+        var fiDates = FL ? (FL[c] || {}) : ((v && v.finale) || {});
+        if (Object.keys(fiDates).some(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); })) nFi++;
+        rows += '<tr><td class="vrf-pas-no">' + esc(num) + '</td>'
            + '<td>' + (dCmd ? esc(dCmd) : '<span class="vrf-pas-ko">—</span>') + '</td>'
            + '<td>' + _dates(at) + '</td>'
            + '<td>' + coutureHtml + '</td>'
-           + '<td>' + _dates(v && v.finale) + '</td></tr>';
-      });
-      h += '</tbody></table></div>';
-      h += '<div class="vrf-pas-info"><span class="vrf-pas-ok">\u2713</span> passée, avec sa date \u00b7 '
-         + '<span class="vrf-pas-ko">\u2717</span> pas encore passée dans ce département'
-         + ' (en couture : \u2717 = pas encore de date de sortie — l’item entré en couture est alors affiché sous le ✗)</div>';
-      /* l'état de l'historique, pour savoir si un \u2717 veut dire « pas passée » ou « pas encore indexée » */
-      if (_etatRattrapage && _etatRattrapage.date && !_aJour(_etatRattrapage)) {
-        h += '<div class="vrf-pas-alerte">\u26a0\ufe0f Les noms de l\u2019historique ne sont pas encore dans l\u2019index : '
-           + 'clique une fois sur \ud83d\udcda Rattrapage des noms, en bas à côté d\u2019Imprimer (compte atelieratp ; tu es connecté avec '
-           + esc(_compte()) + '). Les nouvelles entrées ont déjà leur nom.</div>';
-      } else if (_etatRattrapage && _etatRattrapage.date) {
-        h += '<div class="vrf-pas-info">\ud83d\udcda Historique rattrapé le ' + _fr(String(_etatRattrapage.date).slice(0, 10))
-           + (_etatRattrapage.entrees ? ' (' + _etatRattrapage.entrees + ' dates)' : '') + '.</div>';
-      } else {
-        h += '<div class="vrf-pas-alerte">\u26a0\ufe0f Le rattrapage de l\u2019historique n\u2019a pas encore été fait : '
-           + 'les colonnes Couture et Finale ne montrent que ce qui a été enregistré depuis la mise en ligne. '
-           + 'Clique une fois sur \ud83d\udcda Rattrapage de l\u2019historique, en bas à côté d\u2019Imprimer (compte atelieratp ; tu es connecté avec '
-           + esc(_compte()) + ').</div>';
-      }
-      zone.innerHTML = h;
-      /* les dates d'atelier trouvées dans la page complètent l'index (seulement ce qui manque) */
-      /* seulement les commandes de CETTE liste — jamais toutes les archives */
-      var aNoter = [];
-      cles.forEach(function (c) {
-        var dejaIdx = (_cache[c] && _cache[c].v && _cache[c].v.atelier) || {};
-        Object.keys(datesAtelier[c] || {}).forEach(function (d) {
-          Object.keys(datesAtelier[c][d] || {}).forEach(function (n) {
-            var dj = dejaIdx[d];
-            if (dj && typeof dj === 'object' && dj[n]) return;   // déjà dans l'index : rien à envoyer
-            aNoter.push({ bon: c, date: d, nom: n === '_' ? '' : n });
+           + '<td>' + _dates(fiDates) + '</td></tr>';
+        /* l'index est complété avec ce qui vient des vraies données (seulement ce qui manque) */
+        [['atelier', datesANoter[c]], ['couture', CL ? coFaits : null], ['finale', FL ? fiDates : null]].forEach(function (p) {
+          var dejaIdx = (v && v[p[0]]) || {};
+          Object.keys(p[1] || {}).forEach(function (d) {
+            Object.keys(p[1][d] || {}).forEach(function (n) {
+              var dj = dejaIdx[d];
+              if (dj && typeof dj === 'object' && dj[n]) return;
+              aNoter[p[0]].push({ bon: c, date: d, nom: n === '_' ? '' : n });
+            });
           });
         });
       });
-      PASSAGES.noter('atelier', aNoter);
+      var N = liste.length;
+      var h = '<div class="vrf-pas-titre">📅 Passages dans les départements</div>'
+            + '<div class="vrf-pas-compte">Insp. Atelier <b>' + nAt + '</b>/' + N
+            + ' · Couture sorties au complet <b>' + nCo + '</b>/' + N
+            + (CL ? ' · encore en couture <b>' + nEnc + '</b>' : '')
+            + ' · Insp. Finale <b>' + nFi + '</b>/' + N + '</div>'
+            + '<div class="vrf-pas-tab"><table><thead><tr><th>Commande</th><th>Date commande</th><th>Insp. Atelier</th>'
+            + '<th>Couture</th><th>Insp. Finale</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      h += '<div class="vrf-pas-info"><span class="vrf-pas-ok">✓</span> passée, avec sa date · '
+         + '<span class="vrf-pas-ko">✗</span> pas encore passée dans ce département'
+         + (CL ? ' · <span class="vrf-pas-wait">⏳</span> encore en couture (pas de date de sortie), avec l’item et la couturière'
+               : ' (en couture : ✗ = pas encore de date de sortie)') + '</div>';
+      if (CL && FL) {
+        h += '<div class="vrf-pas-info">✔️ Couture et Finale lues directement dans leurs données : toujours à jour.</div>';
+      } else {
+        h += '<div class="vrf-pas-alerte">⚠️ ' + (!CL && !FL ? 'Couture et Finale' : (!CL ? 'Couture' : 'Finale'))
+           + ' : données illisibles avec ce compte — colonne remplie par l’index (peut garder une vieille date corrigée depuis).</div>';
+      }
+      /* l'état de l'historique, pour savoir si un ✗ d'atelier ancien veut dire « pas passée » ou « pas encore indexée » */
+      if (_etatRattrapage && _etatRattrapage.date && !_aJour(_etatRattrapage)) {
+        h += '<div class="vrf-pas-alerte">⚠️ Les noms de l’historique ne sont pas encore dans l’index : '
+           + 'clique une fois sur 📚 Rattrapage des noms, en bas à côté d’Imprimer (compte atelieratp ; tu es connecté avec '
+           + esc(_compte()) + '). Les nouvelles entrées ont déjà leur nom.</div>';
+      } else if (_etatRattrapage && _etatRattrapage.date) {
+        h += '<div class="vrf-pas-info">📚 Historique rattrapé le ' + _fr(String(_etatRattrapage.date).slice(0, 10))
+           + (_etatRattrapage.entrees ? ' (' + _etatRattrapage.entrees + ' dates)' : '') + '.</div>';
+      } else {
+        h += '<div class="vrf-pas-alerte">⚠️ Le rattrapage de l’historique n’a pas encore été fait : '
+           + 'les mois archivés d’Inspection Atelier ne sont visibles qu’avec un compte qui lit les archives. '
+           + 'Clique une fois sur 📚 Rattrapage de l’historique, en bas à côté d’Imprimer (compte atelieratp ; tu es connecté avec '
+           + esc(_compte()) + ').</div>';
+      }
+      zone.innerHTML = h;
+      PASSAGES.noter('atelier', aNoter.atelier);
+      PASSAGES.noter('couture', aNoter.couture);
+      PASSAGES.noter('finale', aNoter.finale);
     }).catch(function (e) {
       zone.innerHTML = '<div class="vrf-pas-info">⚠️ Dates de passage illisibles (' + esc(e && e.message || '') + ').'
                      + ' Vérifie la règle Firebase du nœud « passagesCommandes ».</div>';
@@ -5631,10 +5855,12 @@ var PASSAGES_VERIF = (function () {
     if (b) { b.disabled = true; b.textContent = '⏳ Rattrapage…'; }
     var maj = {}, n = 0;
     function ajouter(dept, bon, date, nom) {
-      var c = PASSAGES.cle(bon), d = PASSAGES.dateIso(date);
-      if (!c || !d || c.charAt(0) === '_') return;
-      var k = c + '/' + dept + '/' + d + '/' + (PASSAGES.nomCle(nom) || '_');
-      if (!maj[k]) { maj[k] = true; n++; }
+      var d = PASSAGES.dateIso(date);
+      if (!d) return;
+      PASSAGES.bons(bon).forEach(function (c) {
+        var k = c + '/' + dept + '/' + d + '/' + (PASSAGES.nomCle(nom) || '_');
+        if (!maj[k]) { maj[k] = true; n++; }
+      });
     }
     function lignes(noeud) {
       var out = [];
