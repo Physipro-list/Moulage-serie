@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1197-entete-collante]</title>
+<title>PhysiPro — Liste des matériaux [v1199-encodages]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -13464,6 +13464,92 @@ function _cfbOuvrir(buf) {
   return { arbre: arbre(root), lire: lire };
 }
 
+/* v1198 : décode des octets de texte sans se tromper d'encodage —
+   1) BOM UTF-16 / UTF-8 ; 2) <meta charset=…> ou charset= dans un HTML ;
+   3) UTF-8 strict ; 4) sinon windows-1252 (l'ANSI d'Outlook en français).
+   Un « é » lu avec le mauvais encodage donnait des symboles bizarres. */
+function _decoderTexte(u8, charsetIndice, charsetSecours) {
+  if (!u8 || !u8.byteLength) return '';
+  if (u8.byteLength >= 2 && u8[0] === 0xFF && u8[1] === 0xFE) return _msgTexte(u8.subarray(2), true);
+  if (u8.byteLength >= 2 && u8[0] === 0xFE && u8[1] === 0xFF) { var sw = new Uint8Array(u8.byteLength - 2); for (var i = 2; i + 1 < u8.byteLength; i += 2) { sw[i - 2] = u8[i + 1]; sw[i - 1] = u8[i]; } return _msgTexte(sw, true); }
+  if (u8.byteLength >= 3 && u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) u8 = u8.subarray(3);
+  var cs = String(charsetIndice || '').toLowerCase().trim();
+  if (!cs) {
+    var tete = '';
+    for (var k = 0; k < Math.min(u8.byteLength, 4096); k++) tete += String.fromCharCode(u8[k]);
+    var m = /charset\s*=\s*["']?\s*([A-Za-z0-9_\-]+)/i.exec(tete);
+    if (m) cs = m[1].toLowerCase();
+  }
+  cs = _charsetNormal(cs);
+  if (cs && cs !== 'utf-8') { try { return _reparerAccents(new TextDecoder(cs).decode(u8)); } catch (e) {} }
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(u8); }
+  catch (e2) {
+    /* v1199 : code de page enregistré par Outlook dans le .msg (ex. 28591 = iso-8859-1) */
+    var sec = _charsetNormal(charsetSecours);
+    if (sec && sec !== 'utf-8') { try { return new TextDecoder(sec).decode(u8); } catch (e4) {} }
+    try { return new TextDecoder('windows-1252').decode(u8); } catch (e3) { return _msgTexte(u8, false); }
+  }
+}
+
+/* v1199 : noms d'encodage et numéros de code de page Windows → nom compris
+   par le navigateur. iso-8859-1 / latin1 / ascii sont lus en windows-1252
+   (qui les contient tous, et ajoute ’ « » € –). */
+function _codepages() { return { '65001':'utf-8', '1200':'utf-16le', '1201':'utf-16be', '1252':'windows-1252',
+  '28591':'windows-1252', '20127':'windows-1252', '28605':'iso-8859-15', '1250':'windows-1250',
+  '1251':'windows-1251', '28592':'iso-8859-2', '10000':'macintosh', '850':'windows-1252', '863':'windows-1252' }; }
+function _charsetNormal(cs) {
+  cs = String(cs == null ? '' : cs).toLowerCase().trim().replace(/^["']|["']$/g, '');
+  if (!cs) return '';
+  var CP = _codepages();
+  if (CP[cs]) return CP[cs];
+  if (/^(cp|windows-?)?(\d+)$/.test(cs)) { var n = /(\d+)$/.exec(cs)[1]; if (CP[n]) return CP[n]; }
+  if (cs === 'utf8' || cs === 'unicode-1-1-utf-8') return 'utf-8';
+  if (/^(iso[-_]?8859[-_]?1|latin-?1|l1|us-ascii|ascii|ansi|ansi_x3\.4-1968|cp1252|x-cp1252)$/.test(cs)) return 'windows-1252';
+  return cs;
+}
+
+/* v1199 : répare les accents « doublement codés » — du texte UTF-8 lu comme
+   windows-1252 donne « Ã© » au lieu de « é », « Ã¨ » au lieu de « è »,
+   « Ã‰ » au lieu de « É ». Ces lettres-là sont récupérables (contrairement à « � »). */
+function _w1252Inv() { return { 0x20AC:0x80, 0x201A:0x82, 0x0192:0x83, 0x201E:0x84, 0x2026:0x85, 0x2020:0x86, 0x2021:0x87,
+  0x02C6:0x88, 0x2030:0x89, 0x0160:0x8A, 0x2039:0x8B, 0x0152:0x8C, 0x017D:0x8E, 0x2018:0x91, 0x2019:0x92,
+  0x201C:0x93, 0x201D:0x94, 0x2022:0x95, 0x2013:0x96, 0x2014:0x97, 0x02DC:0x98, 0x2122:0x99, 0x0161:0x9A,
+  0x203A:0x9B, 0x0153:0x9C, 0x017E:0x9E, 0x0178:0x9F }; }
+function _reparerAccents(s) {
+  s = String(s == null ? '' : s);
+  var X = '[\\u0080-\\u00BF\\u0152\\u0153\\u0160\\u0161\\u0178\\u017D\\u017E\\u0192\\u02C6\\u02DC\\u2013\\u2014\\u2018-\\u201E\\u2020-\\u2022\\u2026\\u2030\\u2039\\u203A\\u20AC\\u2122]';
+  if (!new RegExp('[\\u00C2-\\u00EF]' + X).test(s)) return s;
+  var INV = _w1252Inv();
+  var octet = function(ch) {
+    var c = ch.charCodeAt(0);
+    if (c < 0x100) return c;
+    return INV[c] != null ? INV[c] : -1;
+  };
+  /* 2 octets (é, è, à, ç, É…) ou 3 octets (’, «, —, €…) */
+  var re = new RegExp('[\\u00C2-\\u00DF]' + X + '|[\\u00E0-\\u00EF]' + X + X, 'g');
+  return s.replace(re, function(m) {
+    var o = [];
+    for (var i = 0; i < m.length; i++) { var b = octet(m[i]); if (b < 0) return m; o.push(b); }
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(o)); } catch (e) { return m; }
+  });
+}
+
+/* v1199 : code de page du message (.msg) — PR_INTERNET_CPID (3FDE) pour le
+   corps HTML, PR_MESSAGE_CODEPAGE (3FFD) pour les textes « 001E ». */
+function _msgCodepages(cfb, t) {
+  var res = { internet: '', message: '' };
+  try {
+    var en = t['__properties_version1.0'];
+    if (!en || en._dossier) return res;
+    var p = cfb.lire(en), dv = new DataView(p.buffer, p.byteOffset, p.byteLength);
+    for (var o = 32; o + 16 <= p.byteLength; o += 16) {
+      var tag = dv.getUint32(o, true), val = dv.getUint32(o + 8, true);
+      if (tag === 0x3FDE0003) res.internet = String(val);
+      else if (tag === 0x3FFD0003) res.message = String(val);
+    }
+  } catch (e) {}
+  return res;
+}
 function _msgTexte(u8, unicode) {
   if (unicode) {
     var s = '';
@@ -13483,7 +13569,11 @@ function _msgProp(cfb, dossier, tag) {
     if (!en || en._dossier) continue;
     var u8 = cfb.lire(en);
     if (/001F$/i.test(k)) return _msgTexte(u8, true);
-    if (/001E$/i.test(k)) return _msgTexte(u8, false);
+    if (/001E$/i.test(k)) {
+      var cp = _charsetNormal(cfb._cpMessage);   // v1199
+      if (cp && cp !== 'windows-1252') { try { return new TextDecoder(cp).decode(u8).replace(/\0+$/, ''); } catch (e) {} }
+      return _msgTexte(u8, false);
+    }
     return u8;
   }
   return null;
@@ -13491,6 +13581,8 @@ function _msgProp(cfb, dossier, tag) {
 
 function _lireMsg(buf) {
   var cfb = _cfbOuvrir(buf), t = cfb.arbre;
+  var cps = _msgCodepages(cfb, t);              // v1199
+  cfb._cpMessage = cps.message;
   var entetes = _msgProp(cfb, t, '007D') || '';
   var mDate = /^Date:\s*(.+)$/mi.exec(entetes);
   var mail = {
@@ -13505,8 +13597,12 @@ function _lireMsg(buf) {
   };
   if (!mail.corps) {
     var html = _msgProp(cfb, t, '1013');
-    if (html && html.byteLength) mail.corps = _courrielHtmlVersTexte(new TextDecoder('utf-8').decode(html));
+    if (html && html.byteLength) mail.corps = _courrielHtmlVersTexte(_decoderTexte(html, '', cps.internet || cps.message));
   }
+  /* v1199 : « Ã© » → « é » partout (objet, noms, corps) */
+  ['objet', 'de', 'a', 'cc', 'corps'].forEach(function(c){ mail[c] = _reparerAccents(mail[c]); });
+  /* v1198 : certains courriels mettent du HTML dans le corps « texte » — on le dépouille */
+  if (/<\/?(html|body|div|p|span|br|b|table)\b[^>]*>/i.test(mail.corps)) mail.corps = _courrielHtmlVersTexte(mail.corps);
   for (var k in t) {
     if (k.indexOf('__attach_version1.0_') !== 0 || !t[k]._dossier) continue;
     var d = t[k]._contenu;
@@ -13589,7 +13685,7 @@ function _emlPartie(texte, mail) {
     return;
   }
   var cs = _emlParam(ct, 'charset') || 'utf-8', txt;
-  try { txt = new TextDecoder(cs.toLowerCase()).decode(octets); } catch (e) { txt = new TextDecoder('utf-8').decode(octets); }
+  txt = _decoderTexte(octets, cs);   // v1198
   if (type === 'text/plain' && !mail._texte) mail._texte = txt;
   else if (type === 'text/html' && !mail._html) mail._html = txt;
 }
@@ -13605,15 +13701,18 @@ function _lireEml(buf) {
   mail.a = h['to'] || ''; mail.cc = h['cc'] || ''; mail.date = h['date'] || '';
   _emlPartie(brut, mail);
   mail.corps = mail._texte || (mail._html ? _courrielHtmlVersTexte(mail._html) : '');
+  ['objet', 'de', 'a', 'cc', 'corps'].forEach(function(c){ mail[c] = _reparerAccents(mail[c]); });   // v1199
   return mail;
 }
 function _courrielHtmlVersTexte(html) {
   var s = String(html || '')
+    .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<\/(p|div|tr|li|h\d)>/gi, '\n').replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<\/(p|div|tr|li|h\d|table)>/gi, '\n').replace(/<br\s*\/?>/gi, '\n')
     .replace(/<[^>]+>/g, '');
   var ta = document.createElement('textarea'); ta.innerHTML = s;
-  return ta.value;
+  return ta.value.replace(/\u00A0/g, ' ').replace(/<\/?(?:b|i|u|p|br|div|span|strong|em|font|a|table|tbody|tr|td|th|html|body|head|meta|o:p|img|ul|ol|li|h\d)\b[^>]*>/gi, '');   // entités décodées, balises résiduelles enlevées
 }
 
 /* ---------- le fil : un message après l'autre ---------- */
@@ -13855,6 +13954,10 @@ function _chargerCourrielDansCarte(f, idx, done) {
       showToast('Courriel illisible : ' + (err && err.message ? err.message : f.name), 'warning');
       done(); return;
     }
+    /* v1199 : s'il reste des « � », le courriel lui-même contient des lettres perdues */
+    if (/�/.test([mail.objet, mail.corps].join(''))) {
+      showToast('Certaines lettres de ce courriel étaient déjà abîmées dans Outlook (�) — à corriger dans « Modif PDF »', 'warning');
+    }
     var doc, pages;
     try { doc = _texteDepuisCourriel(mail); pages = _texteVersPages(doc); }
     catch (err2) { console.error(err2); showToast('Impossible de dessiner le courriel', 'warning'); done(); return; }
@@ -13937,8 +14040,9 @@ function _texteNormaliser(d) {
     taille: parseInt(d.taille, 10) || 100,
     blocs: blocs.filter(Boolean).map(function(b){
       var ch = Array.isArray(b.champs) ? b.champs : (b.champs && typeof b.champs === 'object' ? Object.keys(b.champs).map(function(k){ return b.champs[k]; }) : []);
-      return { champs: ch.filter(Boolean).map(function(c){ return { l: String(c.l || ''), v: String(c.v || '') }; }),
-               texte: String(b.texte || ''), sautAvant: !!b.sautAvant, espaceAvant: parseInt(b.espaceAvant, 10) || 0 };
+      /* v1199 : les cartes déjà enregistrées avec « Ã© » sont réparées à l'ouverture */
+      return { champs: ch.filter(Boolean).map(function(c){ return { l: _reparerAccents(c.l || ''), v: _reparerAccents(c.v || '') }; }),
+               texte: _reparerAccents(b.texte || ''), sautAvant: !!b.sautAvant, espaceAvant: parseInt(b.espaceAvant, 10) || 0 };
     })
   };
 }
@@ -14215,7 +14319,7 @@ function _pdfVersTexte(idx) {
   pdfjsLib.getDocument({ data: bytes }).promise.then(function(pdf){
     var n = pdf.numPages, textes = new Array(n), fait = 0;
     function finir() {
-      var corps = textes.join('\n\n');
+      var corps = textes.join('\n\n').replace(/<\/?(?:b|i|u|p|br|div|span|strong|em|font|a|table|tbody|tr|td|th|html|body|head|meta|o:p|img|ul|ol|li|h\d)\b[^>]*>/gi, '');   // v1198 : balises HTML résiduelles
       if (!corps.replace(/\s+/g, '')) { showToast('Ce PDF ne contient pas de texte lisible (image ou numérisation)', 'warning'); return; }
       var nom = (t.filename || 'Document').replace(/\s*\(PDF p\.\d+\)\.jpg$/i, '').replace(/\.(pdf|jpg)$/i, '');
       t.texte = _texteDepuisCourriel({ objet: nom, corps: corps, pieces: [], sansCartouche: true });
