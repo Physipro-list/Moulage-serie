@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1204-retour-a-gauche]</title>
+<title>PhysiPro — Liste des matériaux [v1208-materiel-a-droite]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -4023,14 +4023,11 @@ body{ background-attachment:scroll !important; }
 .modif-x:hover{ background:#a83a3a; }
 /* la pastille « n pages » et les boutons flottants s'effacent pendant Modif PDF */
 .global-img-zone.modif-on .pdf-page-nav{ display:none; }
-/* v1201 — 2 écrans : la place laissée par le devis parti sur l'autre écran */
-.photo-cards-stack.solo .photo-card.e2-loin .pch-photo{ flex:0 0 auto !important; }
-.photo-cards-stack.solo .e2-place{ flex:0 0 220px; display:flex; align-items:center; justify-content:center; box-sizing:border-box;
-  border:2px dashed rgba(74,142,245,.6); border-radius:8px; margin:6px; background:rgba(74,142,245,.06); }
-.e2-place-int{ display:flex; flex-direction:column; gap:8px; align-items:stretch; text-align:center; padding:10px; }
-.e2-place-titre{ color:#c9d4e3; font-weight:800; font-size:13px; line-height:1.35; margin-bottom:4px; }
-.e2-place button{ height:28px; padding:0 10px; border:1px solid #000; border-radius:5px; background:#4A8EF5; color:#fff; font-family:inherit; font-size:12px; font-weight:800; cursor:pointer; }
-.e2-place button:hover{ filter:brightness(1.15); }
+/* v1208 — 2 écrans : ici il reste le devis (pleine largeur) et l'en-tête ;
+   le matériel, les notes et le catalogue sont dans la fenêtre de l'autre écran */
+body.e2-mode .photo-cards-stack.solo .pch-photo{ flex:1 1 auto !important; }
+body.e2-mode .photo-cards-stack.solo .photo-card-zone{ flex:1 1 auto !important; }
+body.e2-mode .photo-card-header{ zoom:1.1; }
 
 /* v1200 — Modif PDF facile : ligne-guide, zone glissée, panneau, éclair */
 .modif-guide{ position:absolute; height:0; border-top:3px solid #2fa84f; pointer-events:none; z-index:5; display:none; }
@@ -14835,21 +14832,28 @@ function docBarreBascule()  { if (typeof basculerPageFin === 'function') bascule
 
 
 /* ============================================================
-   v1201 — 2 ÉCRANS : LE DEVIS DANS SA PROPRE FENÊTRE
-   Le bouton « 2 écrans » (barre du document) ouvre une deuxième fenêtre
-   qu'on met sur l'autre moniteur. La ZONE du document de la carte active
-   (pages, étampes, Modif PDF) y est DÉPLACÉE telle quelle — ce n'est pas
-   une copie : tout ce qu'on y fait est fait dans la soumission.
-   En bas de cette fenêtre : Item, Étampe, Étampe fin, Annuler, Modif PDF,
-   Agrandir PDF (pleine largeur / page entière), Retirer dernière page et
-   « 1 écran » (ramène le devis ici). Fermer la fenêtre fait pareil.
-   Pour que le code existant trouve la zone dans l'autre fenêtre :
-   getElementById / querySelector(All) cherchent aussi là-bas, et les
-   mouvements de souris et le clavier de là-bas sont relayés ici.
+   v1208 — 2 ÉCRANS (refait) : LE MATÉRIEL PART SUR L'AUTRE ÉCRAN
+   Avant (v1201-1207) le DEVIS partait dans une fenêtre et PhysiPro devait
+   se déplacer à droite en plein écran : Chrome bloquait alors la fenêtre.
+   Maintenant c'est l'inverse, et il n'y a qu'une seule chose à permettre :
+     - PhysiPro NE BOUGE PAS. Il garde le devis, en pleine largeur, avec
+       tout le reste (Item, Étampe, Étampe fin, Modif PDF, PSM / Prix
+       majoré, temps, barre du bas) ;
+     - une fenêtre s'ouvre sur l'AUTRE écran avec DEUX colonnes : le
+       matériel + les notes technicien de l'item actif, et le catalogue.
+       Ce sont les vrais éléments, déplacés (pas une copie).
+   « 1 écran » (dans les deux fenêtres) ou fermer la fenêtre ramène tout.
+   Pour que le code existant les trouve là-bas : getElementById /
+   querySelector(All) cherchent aussi dans la fenêtre 2 ; les puces des
+   notes (sélection, execCommand) agissent dans la fenêtre qui a le focus.
    ============================================================ */
-var _e2 = { win: null, idx: -1, large: false, timer: null, fermeture: false };
+var _e2 = { win: null, idx: -1, timer: null, fermeture: false, droite: null, cat: null, repereDroite: null, repereCat: null };
+var _e2SD = null;   // détails des écrans (permission « fenêtres sur tous les écrans »)
 function _e2Actif() {
-  try { return !!(_e2.win && !_e2.win.closed && _e2.idx >= 0); } catch (e) { return false; }
+  try { return !!(_e2.win && !_e2.win.closed); } catch (e) { return false; }
+}
+function _e2Focus() {
+  try { return _e2Actif() && _e2.win.document.hasFocus(); } catch (e) { return false; }
 }
 var _e2gid = document.getElementById.bind(document);
 var _e2qsa = document.querySelectorAll.bind(document);
@@ -14872,66 +14876,74 @@ var _e2qsa = document.querySelectorAll.bind(document);
     if (!b || !b.length) return a;
     return Array.prototype.slice.call(a).concat(Array.prototype.slice.call(b));
   };
-  /* une question (confirm / alert) posée depuis l'autre fenêtre s'affiche là-bas */
+  /* les puces et l'écriture des notes : dans la fenêtre qui a le focus */
+  var ex = D.execCommand, cr = D.createRange, gs = window.getSelection;
+  D.execCommand = function() {
+    if (_e2Focus()) { var d2 = _e2.win.document; return d2.execCommand.apply(d2, arguments); }
+    return ex.apply(D, arguments);
+  };
+  D.createRange = function() {
+    if (_e2Focus()) return _e2.win.document.createRange();
+    return cr.call(D);
+  };
+  window.getSelection = function() {
+    if (_e2Focus()) return _e2.win.getSelection();
+    return gs.call(window);
+  };
   var conf = window.confirm, al = window.alert;
-  window.confirm = function(m) {
-    try { if (_e2Actif() && _e2.win.document.hasFocus()) return _e2.win.confirm(m); } catch (e) {}
-    return conf.call(window, m);
-  };
-  window.alert = function(m) {
-    try { if (_e2Actif() && _e2.win.document.hasFocus()) return _e2.win.alert(m); } catch (e) {}
-    return al.call(window, m);
-  };
+  window.confirm = function(m) { if (_e2Focus()) return _e2.win.confirm(m); return conf.call(window, m); };
+  window.alert = function(m) { if (_e2Focus()) return _e2.win.alert(m); return al.call(window, m); };
+  /* la liste des écrans, déjà connue si la permission a été donnée */
+  try {
+    if ('getScreenDetails' in window && navigator.permissions) {
+      ['window-management', 'window-placement'].forEach(function(nom){
+        navigator.permissions.query({ name: nom }).then(function(st){
+          if (st.state === 'granted' && !_e2SD) window.getScreenDetails().then(function(sd){ _e2SD = sd; }).catch(function(){});
+        }).catch(function(){});
+      });
+    }
+  } catch (e) {}
 })();
 
 function basculer2Ecrans() {
   if (_e2Actif()) _e2Fermer(); else _e2Ouvrir();
 }
 
+/* l'écran où ira le matériel : l'AUTRE écran, de préférence celui de droite */
+function _e2EcranCible() {
+  if (!_e2SD || !_e2SD.screens || _e2SD.screens.length < 2) return null;
+  var ici = _e2SD.currentScreen;
+  var autres = _e2SD.screens.filter(function(s){ return s !== ici; });
+  autres.sort(function(a, b){ return b.left - a.left; });
+  return autres[0] || null;
+}
+function _e2Placer(w) {
+  var ec = _e2EcranCible();
+  if (!ec || !w) return false;
+  try { w.moveTo(ec.availLeft, ec.availTop); w.resizeTo(ec.availWidth, ec.availHeight); } catch (e) { return false; }
+  return true;
+}
+
 function _e2Ouvrir() {
   var idx = (typeof currentFileTabIdx === 'number') ? currentFileTabIdx : 0;
-  var t = fichiersGlobaux[idx];
-  if (!t || !t.data) { showToast('Ajoute d’abord un devis dans cette soumission', 'warning'); return; }
-  /* v1202 : le devis à GAUCHE, PhysiPro à DROITE.
-     Avec la permission « fenêtres sur tous les écrans » déjà donnée, tout se
-     fait dans le même clic : cette fenêtre passe en plein écran sur l'écran de
-     droite, puis le devis s'ouvre en grand sur celui de gauche. */
-  var ec = _e2Ecrans();
-  var featL, gaucheEc = null;
-  if (ec) {
-    gaucheEc = ec.gauche;
-    if (ec.droite !== ec.ici) _e2MainADroite(ec);
-    featL = 'left=' + gaucheEc.availLeft + ',top=' + gaucheEc.availTop + ',width=' + gaucheEc.availWidth + ',height=' + gaucheEc.availHeight;
-  } else {
-    featL = 'left=' + ((window.screen && screen.availLeft) || 0) + ',top=0,width=' + Math.min(1200, screen.availWidth) + ',height=' + screen.availHeight;
-  }
-  var w = window.open('', 'physiproDevis2', 'popup=yes,' + featL);
-  if (!w) { showToast('La fenêtre a été bloquée : autorise les fenêtres pop-up pour PhysiPro (icône dans la barre d’adresse)', 'warning'); return; }
+  var ec = _e2EcranCible();
+  var feat = ec
+    ? 'left=' + ec.availLeft + ',top=' + ec.availTop + ',width=' + ec.availWidth + ',height=' + ec.availHeight
+    : 'left=' + ((window.screenX || 0) + (window.outerWidth || 0)) + ',top=0,width=' + Math.min(1400, screen.availWidth) + ',height=' + screen.availHeight;
+  var w = window.open('', 'physiproMateriel2', 'popup=yes,' + feat);
+  if (!w) { showToast('Chrome a bloqué la 2e fenêtre : autorise les pop-ups pour PhysiPro (icône à droite de la barre d’adresse), puis reclique', 'warning'); return; }
   _e2.win = w; _e2.fermeture = false;
   var d = w.document;
   d.open();
-  d.write('<!doctype html><html><head><meta charset="utf-8"><title>PhysiPro — Devis</title></head><body class="e2-body">'
-    + '<div id="e2Cadre"><div id="e2Doc" class="photo-cards-stack solo"><div class="photo-card active est-document e2-carte">'
-    + '<div class="photo-card-body e2-corps" id="e2Corps"></div></div></div></div>'
-    + '<div id="e2Barre">'
-    +   '<span class="e2-item">Item :<input type="text" id="e2Item" maxlength="40"></span>'
-    +   '<button type="button" id="e2Etampe" title="Poser la fiche (matériel, quantités, temps, notes)">Étampe</button>'
-    +   '<button type="button" id="e2EtampeFin" title="L’en-tête et une étampe par département sur la dernière page">Étampe fin</button>'
-    +   '<button type="button" id="e2Annuler" title="Annuler la dernière étape sur ce document">Annuler</button>'
-    +   '<button type="button" id="e2Modif" title="Espacer, réduire, supprimer directement sur la feuille">Modif PDF</button>'
-    +   '<span class="e2-sep"></span>'
-    +   '<button type="button" id="e2Agrandir" title="Pleine largeur ↔ page entière à l’écran">Agrandir PDF</button>'
-    +   '<button type="button" id="e2Bascule">Retirer dernière page</button>'
-    +   '<span class="e2-ressort"></span>'
+  d.write('<!doctype html><html><head><meta charset="utf-8"><title>PhysiPro — Matériel</title></head><body class="e2-body">'
+    + '<div id="e2Haut"><span id="e2Titre">Matériel</span><span class="e2-ressort"></span>'
     +   '<button type="button" id="e2Plein" title="Plein écran (sans la barre de Chrome)">⛶ Plein écran</button>'
-    +   '<button type="button" id="e2Retour" class="e2-retour" title="Ramener le devis dans la fenêtre principale">↩ 1 écran</button>'
-    + '</div>'
-    + '<div id="e2Voile"><div class="e2-voile-boite"><div class="e2-voile-icone">⛶</div>'
-    +   '<div class="e2-voile-titre">Clique n’importe où</div>'
-    +   '<div class="e2-voile-sous">pour mettre le devis en plein écran</div></div></div>'
-    + '</body></html>');
+    +   '<button type="button" id="e2Retour" class="e2-retour" title="Tout ramener dans une seule fenêtre">↩ 1 écran</button></div>'
+    + '<div id="e2Colonnes" class="main-3col">'
+    +   '<div id="e2ColMats" class="e2-col"><div class="photo-cards-stack solo"><div class="photo-card active"><div class="photo-card-body" id="e2Mats"></div></div></div></div>'
+    +   '<div id="e2ColCat" class="e2-col"></div>'
+    + '</div></body></html>');
   d.close();
-  /* les styles de PhysiPro, puis ceux de cette fenêtre */
   Array.prototype.forEach.call(_e2qsa('style, link[rel="stylesheet"]'), function(n){
     try { d.head.appendChild(d.importNode(n, true)); } catch (e) {}
   });
@@ -14939,236 +14951,137 @@ function _e2Ouvrir() {
   st.textContent = ''
     + 'html,body.e2-body{ margin:0; height:100%; overflow:hidden; }'
     + 'body.e2-body{ display:flex; flex-direction:column; background:var(--t-bg, #0b1a2e); }'
-    + '#e2Cadre{ flex:1 1 auto; min-height:0; padding:4px 4px 0; box-sizing:border-box; }'
-    + '#e2Doc{ height:100%; box-sizing:border-box; border:2px solid #4A8EF5; border-radius:6px; overflow:hidden; background:#5d6775; }'
-    + '#e2Doc .e2-carte{ display:flex !important; width:100% !important; height:100% !important; max-height:none !important; min-height:0 !important; margin:0 !important; padding:0 !important; border:0 !important; border-radius:0 !important; box-shadow:none !important; background:transparent !important; }'
-    + '#e2Doc .e2-corps{ display:flex !important; flex:1 1 auto !important; width:100% !important; height:100% !important; margin:0 !important; padding:0 !important; }'
-    + '#e2Corps > .photo-card-zone{ flex:1 1 auto !important; width:100% !important; height:100% !important; max-height:none !important; padding:6px !important; box-sizing:border-box !important; background:#5d6775 !important; overflow-y:auto !important; }'
-    + '#e2Corps .pdf-pages > img + img{ margin-top:8px !important; }'
-    + '#e2Corps .pdf-pages img{ box-shadow:0 2px 10px rgba(0,0,0,.45); }'
-    /* page entière (par défaut) : chaque page tient au complet à l'écran */
-    + 'body.e2-body:not(.e2-large) #e2Corps .pdf-pages img{ width:auto !important; height:auto !important; max-width:100% !important; max-height:calc(100vh - 62px) !important; margin-left:auto !important; margin-right:auto !important; }'
-    + '#e2Barre{ flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:4px 8px; background:var(--t-panel, #0f2440); border-top:1px solid rgba(255,255,255,.12); font-family:inherit; }'
-    + '#e2Barre button{ height:30px; padding:0 12px; border:1px solid #000; border-radius:6px; background:#2a4a74; color:#fff; font-family:inherit; font-size:13px; font-weight:800; cursor:pointer; white-space:nowrap; }'
-    + '#e2Barre button:hover{ filter:brightness(1.18); }'
-    + '#e2Barre button:disabled{ opacity:.4; cursor:default; filter:none; }'
-    + '#e2Barre button.active{ background:#4A8EF5; box-shadow:0 0 0 2px #fff inset; }'
-    + '#e2Barre .e2-retour{ background:#5a6b82; }'
-    + '.e2-item{ display:flex; align-items:center; gap:6px; white-space:nowrap; color:#c9d4e3; font-weight:800; font-size:13px; }'
-    + '.e2-item input{ width:150px; height:30px; padding:0 8px; border:1px solid #000; border-radius:6px; background:#1a3354; color:#fff; font-family:inherit; font-size:13px; font-weight:700; }'
-    + '.e2-sep{ width:1px; height:24px; background:rgba(255,255,255,.18); margin:0 4px; }'
+    + '#e2Haut{ flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:4px 8px; background:var(--t-panel, #0f2440); border-bottom:1px solid rgba(255,255,255,.12); }'
+    + '#e2Titre{ color:#e4e8ee; font-weight:800; font-size:15px; padding-left:4px; }'
     + '.e2-ressort{ flex:1; }'
-    + '#e2Voile{ position:fixed; inset:0; z-index:99999; display:flex; align-items:center; justify-content:center; background:rgba(8,18,34,.72); cursor:pointer; font-family:inherit; }'
-    + '#e2Voile.cache{ display:none; }'
-    + '.e2-voile-boite{ background:#4A8EF5; color:#fff; border:2px solid #fff; border-radius:16px; padding:28px 46px; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.6); }'
-    + '.e2-voile-icone{ font-size:54px; line-height:1; margin-bottom:8px; }'
-    + '.e2-voile-titre{ font-size:26px; font-weight:800; }'
-    + '.e2-voile-sous{ font-size:17px; font-weight:600; opacity:.92; margin-top:4px; }'
+    + '#e2Haut button{ height:30px; padding:0 12px; border:1px solid #000; border-radius:6px; background:#2a4a74; color:#fff; font-family:inherit; font-size:13px; font-weight:800; cursor:pointer; }'
+    + '#e2Haut button:hover{ filter:brightness(1.18); }'
+    + '#e2Haut .e2-retour{ background:#5a6b82; }'
     + 'body.e2-plein #e2Plein{ display:none; }'
-    + '.e2-toast{ position:fixed; bottom:70px; left:50%; transform:translateX(-50%); background:rgba(15,23,42,.95); color:#e2e8f0; padding:10px 18px; border-radius:8px; font-size:14px; font-weight:600; z-index:9999; border-left:4px solid #60a5fa; box-shadow:0 4px 16px rgba(0,0,0,.4); opacity:0; transition:opacity .2s; pointer-events:none; max-width:80%; font-family:inherit; }';
+    + '#e2Colonnes{ flex:1 1 auto !important; min-height:0 !important; display:flex !important; gap:0; }'
+    + '.e2-col{ min-width:0; min-height:0; height:100%; display:flex; flex-direction:column; overflow:hidden; }'
+    + '#e2ColMats{ flex:1.5 1 0; border-right:3px solid #4a8ef5; }'
+    + '#e2ColCat{ flex:1 1 0; }'
+    + '#e2ColMats > .photo-cards-stack, #e2ColMats .photo-card, #e2ColMats .photo-card-body{ display:flex !important; flex:1 1 auto !important; width:100% !important; height:100% !important; min-height:0 !important; max-height:none !important; margin:0 !important; padding:0 !important; border:0 !important; border-radius:0 !important; box-shadow:none !important; background:transparent !important; overflow:hidden !important; }'
+    + '#e2Mats > .photo-card-right{ flex:1 1 auto !important; width:100% !important; margin:0 !important; border-left:0 !important; box-shadow:none !important; padding:0 4px !important; zoom:1.35; }'
+    + '#e2ColCat > .col-center{ flex:1 1 auto !important; width:100% !important; max-width:none !important; min-width:0 !important; height:100% !important; zoom:1.2; }';
   d.head.appendChild(st);
   _e2CopierTheme();
-  /* les fonctions de PhysiPro, pour les boutons « onclick » de la zone */
+  /* les fonctions de PhysiPro, pour les « onclick » des éléments déplacés */
   Object.keys(window).forEach(function(k){
     try { if (typeof window[k] === 'function' && !(k in w)) w[k] = function(){ return window[k].apply(window, arguments); }; } catch (e) {}
   });
-  /* souris et clavier de là-bas → relayés ici (déplacer une étampe, Échap, Ctrl+Z…) */
+  /* souris et clavier de là-bas → relayés ici (Échap, Ctrl+Z…) — pas pendant qu'on écrit */
   ['mousemove', 'mouseup', 'keydown', 'keyup'].forEach(function(type){
     d.addEventListener(type, function(ev){
       var cib = ev.target;
-      if (/^key/.test(type) && cib && (cib.tagName === 'INPUT' || cib.tagName === 'TEXTAREA' || cib.isContentEditable)) return;
+      if (/^key/.test(type) && cib && (cib.tagName === 'INPUT' || cib.tagName === 'TEXTAREA' || cib.tagName === 'SELECT' || cib.isContentEditable)) return;
       try {
         var E = /^key/.test(type)
           ? new KeyboardEvent(type, { key: ev.key, code: ev.code, ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, altKey: ev.altKey, metaKey: ev.metaKey, bubbles: true, cancelable: true })
-          : new MouseEvent(type, { clientX: ev.clientX, clientY: ev.clientY, screenX: ev.screenX, screenY: ev.screenY, button: ev.button, buttons: ev.buttons,
-                                   ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, altKey: ev.altKey, metaKey: ev.metaKey, bubbles: true, cancelable: true });
+          : new MouseEvent(type, { clientX: ev.clientX, clientY: ev.clientY, button: ev.button, buttons: ev.buttons, bubbles: true, cancelable: true });
         if (!document.dispatchEvent(E)) ev.preventDefault();
       } catch (e) {}
     });
   });
-  /* les boutons du bas */
-  function cl(id, fn) { var b = d.getElementById(id); if (b) b.addEventListener('click', function(e){ e.preventDefault(); fn(); _e2Synchro(); }); }
-  cl('e2Etampe',    function(){ ouvrirCadreFiche(_e2.idx); });
-  cl('e2EtampeFin', function(){ etamperPageFin(_e2.idx); });
-  cl('e2Annuler',   function(){ if (typeof undoCardCrop === 'function') undoCardCrop(_e2.idx); });
-  cl('e2Modif',     function(){ basculerModifPdf(_e2.idx); });
-  cl('e2Agrandir',  function(){ _e2.large = !_e2.large; d.body.classList.toggle('e2-large', _e2.large); _e2Reposer(); });
-  cl('e2Bascule',   function(){ if (typeof basculerPageFin === 'function') basculerPageFin(_e2.idx); });
-  cl('e2Retour',    function(){ _e2Fermer(); });
-  /* v1203 : plein écran du devis — un clic dans sa fenêtre suffit (le navigateur exige un clic LÀ-BAS) */
+  /* plein écran : Chrome exige un clic DANS la fenêtre — le premier clic, n'importe où, le fait */
   function pleinEcran() {
-    var el = d.documentElement;
-    try { var pr = el.requestFullscreen({ navigationUI: 'hide' }); if (pr && pr.catch) pr.catch(function(){}); } catch (e) {}
-    d.getElementById('e2Voile').classList.add('cache');
+    try { var pr = d.documentElement.requestFullscreen({ navigationUI: 'hide' }); if (pr && pr.catch) pr.catch(function(){}); } catch (e) {}
   }
-  d.getElementById('e2Voile').addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); pleinEcran(); });
-  cl('e2Plein', pleinEcran);
-  d.addEventListener('fullscreenchange', function(){
-    var plein = !!d.fullscreenElement;
-    d.body.classList.toggle('e2-plein', plein);
-    setTimeout(_e2Reposer, 80);
-  });
-  var inp = d.getElementById('e2Item');
-  inp.addEventListener('input', function(){
-    var m = _e2gid('photoItem_' + _e2.idx);
-    if (m) m.value = inp.value;
-    if (typeof updateCardItem === 'function') updateCardItem(_e2.idx, inp.value);
-  });
-  function sauverItem(){ if (typeof enregistrerItem === 'function') enregistrerItem(_e2.idx); }
-  inp.addEventListener('change', sauverItem);
-  inp.addEventListener('keydown', function(e){ if (e.key === 'Enter') inp.blur(); });
-  w.addEventListener('resize', function(){ setTimeout(_e2Reposer, 60); });
+  d.addEventListener('mousedown', function premier(){
+    d.removeEventListener('mousedown', premier, true);
+    if (!d.fullscreenElement) pleinEcran();
+  }, true);
+  d.getElementById('e2Plein').addEventListener('click', pleinEcran);
+  d.getElementById('e2Retour').addEventListener('click', function(){ _e2Fermer(); });
+  d.addEventListener('fullscreenchange', function(){ d.body.classList.toggle('e2-plein', !!d.fullscreenElement); });
   w.addEventListener('pagehide', function(){ if (!_e2.fermeture) _e2Fermer(true); });
-  d.body.classList.toggle('e2-large', _e2.large);
 
+  /* on déplace : le catalogue, puis le matériel + notes de l'item actif */
+  var cat = _e2gid('colCenter');
+  if (cat) {
+    _e2.repereCat = document.createComment('e2-catalogue');
+    cat.parentNode.insertBefore(_e2.repereCat, cat);
+    d.getElementById('e2ColCat').appendChild(d.adoptNode(cat));
+    _e2.cat = cat;
+  }
+  document.body.classList.add('e2-mode');
   _e2Prendre(idx);
+  if (!ec) {
+    /* pas encore la liste des écrans : Chrome la demande (une seule fois), puis la fenêtre s'y place */
+    if ('getScreenDetails' in window) {
+      window.getScreenDetails().then(function(sd){ _e2SD = sd; if (!_e2Placer(_e2.win)) showToast('Glisse la fenêtre du matériel sur l’autre écran', 'info'); })
+        .catch(function(){ showToast('Glisse la fenêtre du matériel sur l’autre écran', 'info'); });
+    } else showToast('Glisse la fenêtre du matériel sur l’autre écran', 'info');
+  } else {
+    _e2Placer(w);
+    showToast('Matériel et catalogue sur l’autre écran — devis ici en grand', 'success');
+  }
   _e2.timer = setInterval(function(){
     try { if (!_e2.win || _e2.win.closed) { _e2Fermer(true); return; } } catch (e) { _e2Fermer(true); return; }
     _e2Synchro();
-  }, 500);
-  if (ec) {
-    try { w.moveTo(gaucheEc.availLeft, gaucheEc.availTop); w.resizeTo(gaucheEc.availWidth, gaucheEc.availHeight); } catch (e) {}
-    showToast('Devis à gauche, PhysiPro à droite', 'success');
-  } else if ('getScreenDetails' in window) {
-    /* première fois : Chrome demande la permission ; ensuite tout est automatique */
-    window.getScreenDetails().then(function(sd){
-      _e2SD = sd;
-      var ec2 = _e2Ecrans();
-      if (!ec2) { showToast('Un seul écran trouvé : le devis est dans sa propre fenêtre', 'info'); return; }
-      if (_e2.win && !_e2.win.closed) { try { _e2.win.moveTo(ec2.gauche.availLeft, ec2.gauche.availTop); _e2.win.resizeTo(ec2.gauche.availWidth, ec2.gauche.availHeight); } catch (e) {} }
-      _e2MainADroite(ec2);   // peut être refusé hors du clic : le bouton « PhysiPro à droite » le refait
-      _e2MajPlace();
-      showToast('Devis à gauche — si PhysiPro n’est pas passé à droite, clique « PhysiPro à droite »', 'info');
-    }).catch(function(){
-      showToast('Devis ouvert — glisse sa fenêtre sur l’écran de gauche (permission des écrans refusée)', 'warning');
-    });
-  } else {
-    showToast('Devis ouvert dans sa fenêtre — glisse-la sur l’écran de gauche', 'success');
-  }
-}
-
-/* ---------- les écrans ---------- */
-var _e2SD = null;          // ScreenDetails, une fois la permission donnée
-var _e2PleinEcranPose = false;
-(function(){
-  try {
-    if (!('getScreenDetails' in window) || !navigator.permissions) return;
-    navigator.permissions.query({ name: 'window-management' }).then(function(st){
-      if (st.state === 'granted') window.getScreenDetails().then(function(sd){ _e2SD = sd; }).catch(function(){});
-    }).catch(function(){});
-  } catch (e) {}
-})();
-/* { gauche, droite, ici } — null s'il n'y a qu'un écran ou pas de permission */
-function _e2Ecrans() {
-  if (!_e2SD || !_e2SD.screens || _e2SD.screens.length < 2) return null;
-  var tri = _e2SD.screens.slice().sort(function(a, b){ return a.left - b.left; });
-  return { gauche: tri[0], droite: tri[tri.length - 1], ici: _e2SD.currentScreen };
-}
-/* cette fenêtre (PhysiPro) en plein écran sur l'écran de droite */
-function _e2MainADroite(ec) {
-  ec = ec || _e2Ecrans();
-  if (!ec) return;
-  var el = document.documentElement;
-  try {
-    var pr = el.requestFullscreen({ navigationUI: 'hide', screen: ec.droite });
-    _e2PleinEcranPose = true;
-    if (pr && pr.catch) pr.catch(function(){ _e2PleinEcranPose = false; });
-  } catch (e) { _e2PleinEcranPose = false; }
-  setTimeout(_e2MajPlace, 600);
-}
-/* le bouton « PhysiPro à droite » n'apparaît que s'il sert */
-function _e2MajPlace() {
-  var b = _e2gid('e2BtnDroite');
-  if (!b) return;
-  var ec = _e2Ecrans();
-  var ok = !!ec;
-  try { ok = ok && _e2SD.currentScreen !== ec.droite; } catch (e) {}
-  b.style.display = ok ? '' : 'none';
-}
-
-/* déplace la zone du document de la carte idx dans la fenêtre 2 */
-function _e2Prendre(idx) {
-  if (!_e2.win) return;
-  var d = _e2.win.document, corps = d.getElementById('e2Corps');
-  var zMain = _e2gid('globalImgZone_' + idx);
-  if (!corps || !zMain) return;
-  if (typeof fermerCadreFiche === 'function' && document.querySelector('.fiche-cadre')) fermerCadreFiche();
-  Array.prototype.slice.call(corps.children).forEach(function(c){ corps.removeChild(c); });
-  var ph = document.createElement('div');
-  ph.className = 'e2-place';
-  ph.innerHTML = '<div class="e2-place-int"><div class="e2-place-titre">Le devis est sur<br>l’autre écran</div>'
-    + '<button type="button" id="e2BtnDroite" onclick="_e2MainADroite()" style="display:none">PhysiPro à droite →</button>'
-    + '<button type="button" onclick="_e2Montrer()">Montrer la fenêtre</button>'
-    + '<button type="button" onclick="_e2Fermer()">↩ Ramener ici</button></div>';
-  zMain.parentNode.insertBefore(ph, zMain);
-  corps.appendChild(d.adoptNode(zMain));
-  _e2.idx = idx;
-  Array.prototype.forEach.call(_e2qsa('.photo-card.e2-loin'), function(c){ c.classList.remove('e2-loin'); });
-  var carte = _e2gid('photoCard_' + idx);
-  if (carte) carte.classList.add('e2-loin');
-  if (_modifIdx === idx && typeof _modifPanneauOuvrir === 'function') _modifPanneauOuvrir();
-  _e2Reposer();
-  _e2Synchro();
-  setTimeout(_e2MajPlace, 0);
+  }, 700);
+  setTimeout(_e2Elargir, 30);
   if (typeof _majDocBarre === 'function') _majDocBarre();
 }
-/* ramène la zone de la fenêtre 2 dans sa carte */
-function _e2Rendre() {
-  var idx = _e2.idx; if (idx < 0) return;
-  var ph = _e2qsa('.e2-place');
-  var z = null;
-  try { z = _e2.win ? _e2.win.document.getElementById('globalImgZone_' + idx) : null; } catch (e) {}
-  _e2.idx = -1;
-  if (typeof fermerCadreFiche === 'function') { try { fermerCadreFiche(); } catch (e) {} }
-  if (!_e2gid('globalImgZone_' + idx)) {
-    var noeud = null;
-    if (z) { try { noeud = document.adoptNode(z); } catch (e) { noeud = null; } }
-    if (!noeud) {
-      noeud = document.createElement('div');
-      noeud.className = 'item-img-zone global-img-zone photo-card-zone';
-      noeud.id = 'globalImgZone_' + idx; noeud.tabIndex = 0;
-      noeud.innerHTML = '<div class="item-img-placeholder" id="globalImgPlaceholder_' + idx + '">Ctrl+V pour coller<br>ou glisser un fichier ici</div>';
-    }
-    var place = ph.length ? ph[0] : null;
-    if (place && place.parentNode) place.parentNode.insertBefore(noeud, place);
-  }
-  Array.prototype.forEach.call(ph, function(p){ if (p.parentNode) p.parentNode.removeChild(p); });
+
+/* le matériel + notes de la carte idx part dans la fenêtre 2 */
+function _e2Prendre(idx) {
+  if (!_e2Actif()) return;
+  var d = _e2.win.document, cible = d.getElementById('e2Mats');
   var carte = _e2gid('photoCard_' + idx);
-  if (carte) carte.classList.remove('e2-loin');
-  if (typeof _renderCardZone === 'function') _renderCardZone(idx);
-  if (_modifIdx === idx && typeof _modifPanneauOuvrir === 'function') _modifPanneauOuvrir();
-  if (typeof _ajusterLargeurPhoto === 'function') setTimeout(function(){ _ajusterLargeurPhoto(idx); }, 0);
+  var droite = carte ? carte.querySelector('.photo-card-right') : null;
+  if (!cible || !droite) return;
+  _e2RendreDroite();
+  _e2.repereDroite = document.createComment('e2-materiel');
+  droite.parentNode.insertBefore(_e2.repereDroite, droite);
+  cible.appendChild(d.adoptNode(droite));
+  _e2.droite = droite; _e2.idx = idx;
+  _e2Synchro();
+  if (typeof _ajusterEspaceNote === 'function') setTimeout(function(){ _ajusterEspaceNote(idx); }, 0);
+}
+/* le matériel + notes reviennent dans leur carte (si elle existe encore) */
+function _e2RendreDroite() {
+  var r = _e2.droite, rep = _e2.repereDroite;
+  _e2.droite = null; _e2.repereDroite = null;
+  if (!r) return;
+  var noeud;
+  try { noeud = document.adoptNode(r); } catch (e) { noeud = null; }
+  if (noeud && rep && rep.parentNode && rep.ownerDocument === document && document.documentElement.contains(rep)) {
+    rep.parentNode.insertBefore(noeud, rep);
+  } else if (noeud && noeud.parentNode) {
+    noeud.parentNode.removeChild(noeud);   // la carte a été refaite : l'ancien est périmé
+  }
+  if (rep && rep.parentNode) rep.parentNode.removeChild(rep);
 }
 function _e2Fermer(dejaFermee) {
-  if (!_e2.win && _e2.idx < 0) return;
+  if (!_e2.win && !_e2.droite && !_e2.cat) return;
   _e2.fermeture = true;
   if (_e2.timer) { clearInterval(_e2.timer); _e2.timer = null; }
   var w = _e2.win;
-  _e2Rendre();
-  _e2.win = null;
-  try { if (w && !w.closed && !dejaFermee) w.close(); } catch (e) {}
-  /* PhysiPro revient à sa place d'avant (on sort du plein écran qu'on a posé) */
-  /* v1204 : et il revient sur l'écran de GAUCHE */
-  var actif = !!(navigator.userActivation && navigator.userActivation.isActive);
-  function aGauche() {
-    var ec = _e2Ecrans();
-    if (!ec || !actif) return;
-    try { if (_e2SD.currentScreen === ec.gauche) return; } catch (e) { return; }
-    /* il était à droite AVANT « 2 écrans » : on le pose à gauche (clic fait ici) */
-    try { var pr = document.documentElement.requestFullscreen({ navigationUI: 'hide', screen: ec.gauche }); if (pr && pr.catch) pr.catch(function(){}); } catch (e) {}
+  _e2RendreDroite();
+  if (_e2.cat) {
+    var c = _e2.cat; _e2.cat = null;
+    try { c = document.adoptNode(c); } catch (e) {}
+    if (_e2.repereCat && _e2.repereCat.parentNode) { _e2.repereCat.parentNode.insertBefore(c, _e2.repereCat); _e2.repereCat.parentNode.removeChild(_e2.repereCat); }
+    _e2.repereCat = null;
   }
-  if (_e2PleinEcranPose && document.fullscreenElement) {
-    try { document.exitFullscreen().then(function(){ setTimeout(aGauche, 150); }).catch(function(){}); } catch (e) {}
-  } else aGauche();
-  _e2PleinEcranPose = false;
+  _e2.win = null; _e2.idx = -1;
+  document.body.classList.remove('e2-mode');
+  try { if (w && !w.closed && !dejaFermee) w.close(); } catch (e) {}
+  if (typeof _ajusterToutesLesPhotos === 'function') setTimeout(_ajusterToutesLesPhotos, 30);
+  if (typeof _ajusterEspaceNoteToutes === 'function') setTimeout(_ajusterEspaceNoteToutes, 60);
+  if (typeof _modifIdx !== 'undefined' && _modifIdx >= 0 && typeof _modifConstruire === 'function') setTimeout(function(){ _modifConstruire(_modifIdx); }, 80);
   if (typeof _majDocBarre === 'function') _majDocBarre();
-  showToast('Devis ramené sur cet écran', 'info');
+  showToast('Tout est revenu dans une seule fenêtre', 'info');
 }
-function _e2Montrer() { try { if (_e2.win && !_e2.win.closed) _e2.win.focus(); } catch (e) {} }
-/* après un changement de taille : la largeur et le calque Modif suivent */
-function _e2Reposer() {
-  if (!_e2Actif()) return;
-  if (_modifIdx === _e2.idx && typeof _modifConstruire === 'function') _modifConstruire(_e2.idx);
+/* ici, le devis prend toute la largeur */
+function _e2Elargir() {
+  for (var i = 0; i < fichiersGlobaux.length; i++) {
+    var c = _e2gid('photoCard_' + i);
+    if (c) c.style.setProperty('--photo-col', '100%');
+  }
+  if (typeof _modifIdx !== 'undefined' && _modifIdx >= 0 && typeof _modifConstruire === 'function') _modifConstruire(_modifIdx);
 }
 function _e2CopierTheme() {
   if (!_e2.win) return;
@@ -15177,62 +15090,66 @@ function _e2CopierTheme() {
     d.documentElement.className = h.className;
     d.documentElement.setAttribute('style', h.getAttribute('style') || '');
     Array.prototype.forEach.call(h.attributes, function(a){ if (/^data-/.test(a.name)) d.documentElement.setAttribute(a.name, a.value); });
-    var garde = d.body.classList.contains('e2-large'), plein = d.body.classList.contains('e2-plein');
-    d.body.className = (document.body.className || '') + ' e2-body' + (garde ? ' e2-large' : '') + (plein ? ' e2-plein' : '');
+    var plein = d.body.classList.contains('e2-plein');
+    d.body.className = String(document.body.className || '').replace(/\be2-mode\b/, '') + ' e2-body' + (plein ? ' e2-plein' : '');
   } catch (e) {}
 }
-/* l'état des boutons du bas suit celui des boutons de la carte */
 function _e2Synchro() {
   if (!_e2Actif()) return;
-  var d = _e2.win.document, idx = _e2.idx;
-  function copie(idE2, idMain) {
-    var a = d.getElementById(idE2), b = _e2gid(idMain);
-    if (!a) return;
-    a.classList.toggle('active', !!(b && b.classList.contains('active')));
-    if (b) a.disabled = !!b.disabled;
-  }
-  copie('e2Etampe', 'btnAnnot_fiche_' + idx);
-  copie('e2EtampeFin', 'btnEtampeFin_' + idx);
-  copie('e2Annuler', 'btnUndoCrop_' + idx);
-  var bm = d.getElementById('e2Modif'); if (bm) bm.classList.toggle('active', _modifIdx === idx);
-  var ba = d.getElementById('e2Agrandir'); if (ba) ba.classList.toggle('active', !!_e2.large);
-  var bb = d.getElementById('e2Bascule'), mb = _e2gid('docBarreBascule');
-  if (bb && mb) { bb.textContent = mb.textContent; bb.disabled = mb.disabled; bb.title = mb.title; }
-  var inp = d.getElementById('e2Item'), mi = _e2gid('photoItem_' + idx);
-  if (inp && mi && d.activeElement !== inp) { inp.value = mi.value; inp.placeholder = mi.placeholder || ''; }
-  var nom = (mi && (mi.value || mi.placeholder)) || 'Devis';
-  if (d.title !== 'PhysiPro — ' + nom) d.title = 'PhysiPro — ' + nom;
+  var d = _e2.win.document, mi = _e2gid('photoItem_' + _e2.idx);
+  var nom = (mi && (mi.value || mi.placeholder)) || ('Item ' + (_e2.idx + 1));
+  var t = d.getElementById('e2Titre');
+  if (t && t.textContent !== 'Matériel — ' + nom) t.textContent = 'Matériel — ' + nom;
+  if (d.title !== 'PhysiPro — Matériel — ' + nom) d.title = 'PhysiPro — Matériel — ' + nom;
   _e2CopierTheme();
 }
 
 /* le reste de PhysiPro tient compte de la fenêtre 2 */
 (function(){
-  /* la carte reconstruite : sa nouvelle zone repart là-bas */
+  /* les cartes refaites : le nouveau matériel de l'item actif repart là-bas */
   if (typeof _ensurePhotoCards === 'function') {
     var epc = _ensurePhotoCards;
     _ensurePhotoCards = function() {
       var r = epc.apply(this, arguments);
-      if (_e2Actif() && _e2gid('globalImgZone_' + _e2.idx)) _e2Prendre(_e2.idx);
-      return r;
-    };
-  }
-  /* changer d'Item : la fenêtre 2 montre le devis de la carte active */
-  if (typeof setActiveCard === 'function') {
-    var sac = setActiveCard;
-    setActiveCard = function(idx) {
-      var r = sac.apply(this, arguments);
-      if (_e2Actif() && idx !== _e2.idx && fichiersGlobaux[idx]) {
-        var w = _e2.win; _e2Rendre(); _e2.win = w; _e2Prendre(idx);
+      if (_e2Actif()) {
+        var carte = _e2gid('photoCard_' + _e2.idx);
+        if (carte && carte.querySelector('.photo-card-right')) _e2Prendre(_e2.idx);
+        setTimeout(_e2Elargir, 0);
       }
       return r;
     };
   }
-  /* la colonne du document reste étroite ici : le matériel prend la place */
+  /* changer d'Item : la fenêtre 2 montre le matériel de l'item actif */
+  if (typeof setActiveCard === 'function') {
+    var sac = setActiveCard;
+    setActiveCard = function(idx) {
+      var r = sac.apply(this, arguments);
+      if (_e2Actif() && idx !== _e2.idx && fichiersGlobaux[idx]) _e2Prendre(idx);
+      return r;
+    };
+  }
+  /* le devis garde toute la largeur ici */
   if (typeof _ajusterLargeurPhoto === 'function') {
     var alp = _ajusterLargeurPhoto;
     _ajusterLargeurPhoto = function(idx) {
-      if (_e2Actif() && idx === _e2.idx) return;
+      if (_e2Actif()) { var c = _e2gid('photoCard_' + idx); if (c) c.style.setProperty('--photo-col', '100%'); return; }
       return alp.apply(this, arguments);
+    };
+  }
+  /* la carte cherche son matériel : il peut être dans la fenêtre 2 */
+  if (typeof _ajusterEspaceNote === 'function') {
+    var aen = _ajusterEspaceNote;
+    _ajusterEspaceNote = function(idx) {
+      if (_e2Actif() && idx === _e2.idx && _e2.droite) {
+        var note = document.getElementById('photoNote_' + idx), col = _e2.droite.querySelector('.photo-card-mats-col');
+        if (!note || !col) return;
+        var reserve = ENTETE_MATS_PX + ESPACE_NOTE_PX;
+        col.style.minHeight = reserve + 'px';
+        if (note.scrollHeight <= note.clientHeight + 1) return;
+        col.style.minHeight = Math.max(ENTETE_MATS_PX, reserve - (note.scrollHeight - note.clientHeight)) + 'px';
+        return;
+      }
+      return aen.apply(this, arguments);
     };
   }
   if (typeof _majDocBarre === 'function') {
@@ -15241,10 +15158,6 @@ function _e2Synchro() {
       var r = mdb.apply(this, arguments);
       var b = _e2gid('docBarre2Ecrans');
       if (b) { b.classList.toggle('actif', _e2Actif()); b.textContent = _e2Actif() ? '1 écran' : '2 écrans'; }
-      if (_e2Actif()) {
-        var int = _e2gid('docBarreInt'); if (int) { int.style.marginLeft = ''; int.style.width = ''; }
-        _e2Synchro();
-      }
       return r;
     };
   }
@@ -15256,7 +15169,11 @@ function _e2Synchro() {
       if (_e2Actif()) {
         try {
           var d = _e2.win.document, el = d.getElementById('e2Toast');
-          if (!el) { el = d.createElement('div'); el.id = 'e2Toast'; el.className = 'e2-toast'; d.body.appendChild(el); }
+          if (!el) {
+            el = d.createElement('div'); el.id = 'e2Toast';
+            el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,.95);color:#e2e8f0;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;z-index:9999;border-left:4px solid #60a5fa;box-shadow:0 4px 16px rgba(0,0,0,.4);opacity:0;transition:opacity .2s;pointer-events:none;max-width:80%;font-family:inherit;';
+            d.body.appendChild(el);
+          }
           el.style.borderLeftColor = kind === 'success' ? '#22c55e' : (kind === 'warning' ? '#f59e0b' : '#60a5fa');
           el.textContent = msg; el.style.opacity = '1';
           if (e2Timer) clearTimeout(e2Timer);
@@ -15266,9 +15183,9 @@ function _e2Synchro() {
       return r;
     };
   }
-  /* la fenêtre principale se ferme ou se recharge : la fenêtre 2 aussi */
   window.addEventListener('pagehide', function(){ try { if (_e2.win && !_e2.win.closed) _e2.win.close(); } catch (e) {} });
 })();
+
 </script>
 
   <!-- ============================================================
