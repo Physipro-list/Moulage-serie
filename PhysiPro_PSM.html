@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1211-lanceur-2-ecrans]</title>
+<title>PhysiPro — Liste des matériaux [v1212-tourner-lanceur]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -4288,6 +4288,7 @@ body{ background-attachment:scroll !important; }
       <div class="doc-barre" id="docBarre"><div class="doc-barre-int" id="docBarreInt">
         <button type="button" id="docBarreAgrandir" onclick="docBarreAgrandir()" title="Agrandir le document sur toute la largeur — recliquer pour revenir">Agrandir PDF</button>
         <button type="button" id="docBarreBascule" onclick="docBarreBascule()">Retirer dernière page</button>
+        <button type="button" id="docBarreTourner" onclick="tournerPage(currentFileTabIdx)" title="Tourner la page active d'un quart de tour (sens horaire) — Annuler la remet">Tourner</button>
         <button type="button" id="docBarre2Ecrans" onclick="basculer2Ecrans()" title="Ouvrir le devis dans sa propre fenêtre, en grand, pour le mettre sur l'autre écran — recliquer pour le ramener ici">2 écrans</button>
       </div></div>
       <div class="col-footer-actions footer-left-bar">
@@ -11497,6 +11498,36 @@ function _rotateGlobalImage(cardIdx) {
   );
 }
 
+/* v1212 — TOURNER LA PAGE ACTIVE du document d'un quart de tour (sens horaire).
+   Qualité de page gardée (pas la compression des photos) ; annulable par Annuler. */
+function tournerPage(idx) {
+  if (typeof idx !== 'number') idx = (typeof currentFileTabIdx === 'number') ? currentFileTabIdx : 0;
+  var t = fichiersGlobaux[idx];
+  if (!t || !t.data || String(t.type || '').indexOf('image/') !== 0) { showToast('Rien à tourner : ajoute d’abord une image ou un PDF', 'warning'); return; }
+  var avant = t.data;
+  var img = new Image();
+  img.onload = function() {
+    var w = img.naturalWidth, h = img.naturalHeight;
+    var c = document.createElement('canvas');
+    c.width = h; c.height = w;
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.translate(h, 0); ctx.rotate(Math.PI / 2); ctx.drawImage(img, 0, 0);
+    var q = 0.9, d = c.toDataURL('image/jpeg', q);
+    while (d.length > 600000 && q > 0.6) { q -= 0.05; d = c.toDataURL('image/jpeg', q); }
+    _histoEmpiler(t, _histoEtape(t, avant, 'rotation'));
+    _setCardData(idx, d);
+    if (idx === currentFileTabIdx && typeof imageGlobale !== 'undefined') imageGlobale = d;
+    _renderGlobalImage();
+    if (typeof _updateUndoButtons === 'function') _updateUndoButtons();
+    if (!_midFirebaseLoading) _saveGlobalImage();
+    var multi = Array.isArray(t.pages) && t.pages.length > 1;
+    showToast(multi ? 'Page ' + ((t.pageIdx || 0) + 1) + ' tournée (clique une page pour choisir laquelle tourner)' : 'Image tournée', 'success');
+  };
+  img.onerror = function(){ showToast('Impossible de tourner cette image', 'warning'); };
+  img.src = avant;
+}
+
 function _compressItemImg(dataUrl, cb) {
   var img = new Image();
   img.onload = function() {
@@ -14867,9 +14898,15 @@ var _e2SD = null;   // détails des écrans (permission « fenêtres sur tous le
     }
   } catch (e) {}
 })();
-/* l'écran du devis : un AUTRE écran que celui de PhysiPro, de préférence à gauche */
+/* l'écran du devis : un AUTRE écran que celui de PhysiPro, de préférence à gauche.
+   v1212 : sinon, celui que le lanceur PSM_2_ecrans.bat a lu dans Windows (#2ecrans=x,y,l,h) */
+function _e2EcranLanceur() {
+  var m = /2ecrans=(-?\d+),(-?\d+),(\d+),(\d+)/.exec(location.hash || '');
+  if (!m) return null;
+  return { availLeft: +m[1], availTop: +m[2], availWidth: +m[3], availHeight: +m[4], left: +m[1], lanceur: true };
+}
 function _e2EcranDevis() {
-  if (!_e2SD || !_e2SD.screens || _e2SD.screens.length < 2) return null;
+  if (!_e2SD || !_e2SD.screens || _e2SD.screens.length < 2) return _e2EcranLanceur();
   var ici = _e2SD.currentScreen;
   var autres = _e2SD.screens.filter(function(s){ return s !== ici; });
   autres.sort(function(a, b){ return a.left - b.left; });
@@ -14952,6 +14989,7 @@ function _e2Ouvrir() {
     +   '<span class="e2-sep"></span>'
     +   '<button type="button" id="e2Agrandir" title="Pleine largeur ↔ page entière à l’écran">Agrandir PDF</button>'
     +   '<button type="button" id="e2Bascule">Retirer dernière page</button>'
+    +   '<button type="button" id="e2Tourner" title="Tourner la page active d’un quart de tour — Annuler la remet">Tourner</button>'
     +   '<span class="e2-ressort"></span>'
     +   '<button type="button" id="e2Plein" title="Plein écran (sans la barre de Chrome)">⛶ Plein écran</button>'
     +   '<button type="button" id="e2Retour" class="e2-retour" title="Ramener le devis dans la fenêtre principale">↩ 1 écran</button>'
@@ -15024,6 +15062,7 @@ function _e2Ouvrir() {
   cl('e2Agrandir',  function(){ _e2.large = !_e2.large; d.body.classList.toggle('e2-large', _e2.large); _e2Reposer(); });
   cl('e2Bascule',   function(){ if (typeof basculerPageFin === 'function') basculerPageFin(_e2.idx); });
   cl('e2Retour',    function(){ _e2Fermer(); });
+  cl('e2Tourner',   function(){ tournerPage(_e2.idx); });
   function pleinEcran() {
     try { var pr = d.documentElement.requestFullscreen({ navigationUI: 'hide' }); if (pr && pr.catch) pr.catch(function(){}); } catch (e) {}
   }
@@ -15056,7 +15095,7 @@ function _e2Ouvrir() {
   document.body.classList.add('e2-mode');
   try { localStorage.setItem('psm2ecrans', '1'); } catch (e) {}
   var gaucheOk = true;
-  try { gaucheOk = !ec || ec.left < _e2SD.currentScreen.left; } catch (e) {}
+  try { gaucheOk = !ec || ec.lanceur || ec.left < _e2SD.currentScreen.left; } catch (e) {}
   if (ec && !gaucheOk) { _e2Placer(w); showToast('Ton PhysiPro est sur l’écran de gauche : glisse-le une fois sur celui de droite, Chrome s’en souviendra', 'warning'); }
   else if (ec) { _e2Placer(w); showToast('Devis sur l’autre écran', 'success'); }
   else if ('getScreenDetails' in window) {
@@ -15252,7 +15291,9 @@ function _e2Synchro() {
     };
     var avecEcrans = function() {
       if (_e2SD || !('getScreenDetails' in window)) { lancer(); return; }
-      window.getScreenDetails().then(function(sd){ _e2SD = sd; lancer(); }).catch(lancer);
+      var fait = false, une = function(){ if (!fait) { fait = true; lancer(); } };
+      window.getScreenDetails().then(function(sd){ _e2SD = sd; une(); }).catch(une);
+      setTimeout(une, 2500);   // la question de Chrome reste ouverte : on n'attend pas plus
     };
     if (document.readyState === 'complete') setTimeout(avecEcrans, 600);
     else window.addEventListener('load', function(){ setTimeout(avecEcrans, 600); });
