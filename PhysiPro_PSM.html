@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1218-boutons-pagefin]</title>
+<title>PhysiPro — Liste des matériaux [v1219-items-glissiere]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -4144,6 +4144,16 @@ body.e2-mode #docBarre, body.e2-mode #btnPleinEcran{ display:none !important; }
 .cat-dept-row{ flex-shrink:0; display:flex; padding:4px 8px 2px; }
 .cat-dept-row .topbar-dept{ flex:1; display:flex; gap:4px; }
 .cat-dept-row .topbar-dept-btn{ flex:1; height:24px !important; font-size:11px !important; }
+
+/* v1219 : rangée d'items qui défile (glissière), le « + » reste visible à sa droite */
+.topbar .soumission-center{ gap:4px !important; }
+.topbar .soum-tabs{ flex:0 1 auto !important; min-width:0 !important; max-width:100% !important; overflow-x:auto !important; overflow-y:hidden !important;
+  padding:3px 2px 0 2px !important; }
+.topbar .soum-tabs::-webkit-scrollbar{ height:6px; }
+.topbar .soum-tabs::-webkit-scrollbar-thumb{ background:rgba(165,171,181,.55); border-radius:3px; }
+.topbar .soum-tabs::-webkit-scrollbar-thumb:hover{ background:rgba(200,206,216,.8); }
+.topbar .soum-tabs::-webkit-scrollbar-track{ background:rgba(255,255,255,.05); border-radius:3px; }
+.topbar .soumission-center > .soum-tab-add{ flex:0 0 auto; }
 </style>
 </head>
 <body>
@@ -7580,7 +7590,7 @@ var currentItemIdxParDept = { atelier: 0 };
 // ========== FICHIERS GLOBAUX (onglets) ==========
 // Structure : fichiersGlobaux = [{ name: 'Email', data: dataURL, type: 'image/jpeg', filename: 'photo.jpg' }, ...]
 // currentFileTabIdx : index de l'onglet actif (partagé entre dépts)
-var MAX_FILE_TABS = 10;
+var MAX_FILE_TABS = 30;   // v1219 : 10 -> 30, la rangée d'items défile
 var DEFAULT_FILE_TABS = 1;   // v1047 : UNE seule fenêtre au départ (pleine largeur) ; le ➕ (ou une photo) en ajoute
 // note : v1007 — texte « Notes pour technicien » propre à chaque carte.
 // LOCAL SEULEMENT : jamais envoyé à Firebase (voir _saveGlobalImage), sert au PDF final.
@@ -8111,9 +8121,15 @@ function _renderSoumTabs() {
             +   '<span class="soum-tab-dot"></span><span class="soum-tab-nom">Soumission ' + (i + 1) + '</span>'
             + '</button>';
     }
-    html += '<button class="soum-tab-add" id="soumTabAdd" onclick="addFileTab()" '
-          +         'title="Créer une nouvelle soumission">＋</button>';
     bar.innerHTML = html;
+    /* v1219 : le « ＋ » vit À CÔTÉ de la rangée qui défile — il reste toujours visible */
+    if (!document.getElementById('soumTabAdd')) {
+      var add = document.createElement('button');
+      add.className = 'soum-tab-add'; add.id = 'soumTabAdd';
+      add.title = 'Ajouter un item'; add.textContent = '＋';
+      add.onclick = function(){ addFileTab(); };
+      bar.parentNode.insertBefore(add, bar.nextSibling);
+    }
   }
   if (typeof _assurerItems === 'function') _assurerItems();       // v1117
   if (typeof _majNomsOnglets === 'function') _majNomsOnglets();   // v1115
@@ -15039,9 +15055,12 @@ function _e2Ouvrir() {
     + '<div id="e2Cadre"><div id="e2Doc" class="photo-cards-stack solo"><div class="photo-card active est-document e2-carte">'
     + '<div class="photo-card-body e2-corps" id="e2Corps"></div></div></div></div>'
     + '<div id="e2Barre">'
+    /* v1219 : Fichier et Téléphone encadrés ensemble sous « Téléchargement » */
+    +   '<div class="e2-groupe e2-telech"><span class="e2-groupe-titre">Téléchargement</span>'
     +   '<button type="button" id="e2Fichier" title="Choisir un ou plusieurs fichiers (image, PDF, courriel Outlook, Word, Excel…)">Fichier</button>'
     +   '<input type="file" id="e2FichierInput" multiple accept="image/*,application/pdf,.msg,.eml,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip" style="display:none">'
     +   '<button type="button" id="e2Tel" title="Demander une ou plusieurs photos au téléphone">Téléphone</button>'
+    +   '</div>'
     +   '<span class="e2-sep"></span>'
     +   '<button type="button" id="e2Etampe" title="Poser la fiche (matériel, quantités, temps, notes)">Étampe</button>'
     +   '<button type="button" id="e2EtampeFin" title="L’en-tête et une étampe par département sur la dernière page">Étampe fin</button>'
@@ -15052,7 +15071,7 @@ function _e2Ouvrir() {
     +   '<button type="button" id="e2Bascule">Retirer dernière page</button>'
     +   '<button type="button" id="e2Tourner" title="Tourner la page active d’un quart de tour — Annuler la remet">Tourner</button>'
     +   '<span class="e2-ressort"></span>'
-    +   '<button type="button" id="e2Plein" title="Plein écran (sans la barre de Chrome)">⛶ Plein écran</button>'
+    /* v1219 : bouton Plein écran retiré (Agrandir PDF suffit ; le premier clic met toujours la fenêtre en plein écran) */
     +   '<button type="button" id="e2Retour" class="e2-retour" title="Ramener le devis dans la fenêtre principale">↩ 1 écran</button>'
     + '</div></body></html>');
   d.close();
@@ -15076,7 +15095,7 @@ function _e2Ouvrir() {
     + '#e2Haut{ flex:0 0 auto; display:flex; align-items:center; padding:3px 10px; background:var(--t-panel, #0f2440); border-bottom:1px solid rgba(255,255,255,.12); }'
     /* v1218 : barre plus basse et plus sobre — boutons fantômes, accent bleu pour l'étampe */
     + '#e2Barre{ flex:0 0 auto; display:flex; align-items:center; gap:4px; padding:4px 8px; background:var(--t-panel, #0f2440); border-top:1px solid rgba(255,255,255,.10); font-family:inherit; }'
-    + '#e2Barre button{ height:24px; padding:0 10px; border:1px solid rgba(255,255,255,.16); border-radius:4px; background:rgba(255,255,255,.05); color:#dce5f1; font-family:inherit; font-size:11.5px; font-weight:600; letter-spacing:.2px; cursor:pointer; white-space:nowrap; transition:background .12s, border-color .12s; }'
+    + '#e2Barre button{ height:22px; padding:0 9px; border:1px solid rgba(255,255,255,.16); border-radius:4px; background:rgba(255,255,255,.05); color:#dce5f1; font-family:inherit; font-size:11px; font-weight:600; letter-spacing:.2px; cursor:pointer; white-space:nowrap; transition:background .12s, border-color .12s; }'
     + '#e2Barre button:hover{ background:rgba(255,255,255,.13); border-color:rgba(255,255,255,.30); color:#fff; }'
     + '#e2Barre button:disabled{ opacity:.35; cursor:default; background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.16); }'
     + '#e2Barre button.active{ background:#4A8EF5; border-color:#4A8EF5; color:#fff; }'
@@ -15085,6 +15104,10 @@ function _e2Ouvrir() {
     + '#e2Barre .e2-retour{ background:transparent; color:#aab8cc; }'
     + '.e2-item{ display:flex; align-items:center; gap:6px; white-space:nowrap; color:#9fb0c6; font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.5px; }'
     + '.e2-item input{ width:150px; height:22px; padding:0 8px; border:1px solid rgba(255,255,255,.16); border-radius:4px; background:rgba(255,255,255,.06); color:#fff; font-family:inherit; font-size:12px; font-weight:600; text-transform:none; letter-spacing:0; }'
+    + '.e2-groupe{ display:flex; align-items:center; gap:4px; padding:2px 4px 2px 8px; border:1px solid rgba(56,189,160,.55); border-radius:5px; background:rgba(56,189,160,.08); }'
+    + '.e2-groupe-titre{ font-size:9.5px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:#7fdcc4; margin-right:4px; white-space:nowrap; }'
+    + '#e2Barre .e2-telech button{ background:rgba(56,189,160,.22); border-color:rgba(56,189,160,.65); color:#e6fbf5; }'
+    + '#e2Barre .e2-telech button:hover{ background:rgba(56,189,160,.40); border-color:#38bda0; color:#fff; }'
     + '.e2-sep{ width:1px; height:16px; background:rgba(255,255,255,.16); margin:0 6px; }'
     + '.e2-ressort{ flex:1; }'
     + 'body.e2-plein #e2Plein{ display:none; }'
@@ -15385,6 +15408,19 @@ function _e2Synchro() {
   }
 })();
 
+
+/* v1219 : la molette sur la rangée d'items la fait glisser de gauche à droite */
+(function(){
+  function brancher(){
+    var bar = document.getElementById('soumTabs');
+    if (!bar) return;
+    bar.addEventListener('wheel', function(e){
+      if (bar.scrollWidth <= bar.clientWidth) return;
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { bar.scrollLeft += e.deltaY; e.preventDefault(); }
+    }, { passive:false });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', brancher); else brancher();
+})();
 </script>
 
   <!-- ============================================================
