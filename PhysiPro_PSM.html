@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1220-pagefin-moitie]</title>
+<title>PhysiPro — Liste des matériaux [v1221-pagefin-codes]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -10624,8 +10624,8 @@ function _ficheLignes(idx) {
   var tarifPose = true;
 
   /* v1107 : et seulement les matériaux de ce département. */
-  var mats = _matsDuDept(t);
-  if (mats.length) {
+  var mats = _pageFinVierge ? [] : _matsDuDept(t);
+  if (mats.length || _pageFinTempsVide) {
     /* v1091 : la ligne de titre devient la RANGÉE D'EN-TÊTES des quatre
        colonnes — Code, Matériel, Qté, Unité — chacune au-dessus de la
        sienne. « Matériel » sert d'en-tête à la colonne des noms. */
@@ -10658,6 +10658,12 @@ function _ficheLignes(idx) {
                gauche: (m.name || ''), uneLigne: true,
                qte: q, unite: inf.court });
     });
+    /* v1221 : dernière page — des rangées vides pour écrire des codes à la main */
+    if (_pageFinTempsVide) {
+      for (var rv = 0; rv < (mats.length ? 3 : 4); rv++) {
+        L.push({ type: 'ligne', trait: true, code: '', gauche: '', uneLigne: true, qte: '', unite: '', vide: true });
+      }
+    }
   }
   /* v1077 : l'ancienne ligne TEMPS en fin de liste est retirée — elle est
      maintenant en tête de fiche, voir plus haut. */
@@ -10672,7 +10678,7 @@ function _ficheLignes(idx) {
      On traite maintenant les balises OUVRANTES aussi, et les <li> d'une
      liste à puces deviennent des lignes préfixées d'un point.
      ============================================================ */
-  var note = (t[_champNote()] || '')   /* v1109 : la note du département */
+  var note = (_pageFinVierge ? '' : (t[_champNote()] || ''))   /* v1109 : la note du département */
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<li[^>]*>/gi, '\n\u2022 ')
     .replace(/<\/li>/gi, '\n')
@@ -10686,6 +10692,17 @@ function _ficheLignes(idx) {
   if (lignesNote.length) {
     L.push({ type: 'titre', txt: _titreNoteFiche() });   // v1109
     lignesNote.forEach(function(p){ L.push({ type: 'para', txt: p }); });
+  } else if (_pageFinTempsVide) {
+    L.push({ type: 'titre', txt: _titreNoteFiche() });   // v1221 : note à écrire à la main
+  }
+  /* v1221 : dernière page — lignes vides sous la note */
+  if (_pageFinTempsVide) {
+    for (var nv = 0; nv < (lignesNote.length ? 1 : 2); nv++) L.push({ type: 'para', txt: '', vide: true });
+  }
+  /* v1221 : fiche vide — pas d'initiales, une ligne NOM à signer */
+  if (_pageFinVierge) {
+    L.push({ type: 'ligne', gauche: 'NOM :', droite: '_______________________   Date : __________' });
+    return L;
   }
   /* v1082 : pastille de signature au bas des notes — DC ou MA. */
   /* v1083 : pastille avec les initiales ET la date du jour où l'on étampe. */
@@ -10827,6 +10844,9 @@ function _fichePlan(ctx, L, W, fs) {
       var bas = (e.nom || '') + (e.date ? '   ' + e.date : '');
       if (ctx.measureText(bas).width + fs * 2.9 + fs * 0.6 > maxG) largeurOk = false;
       plan.push({ e: e, y: h }); h += fs * 1.45;
+    } else if (e.type === 'para' && e.vide) {   // v1221 : ligne vide à écrire
+      h += m.inter * 0.45;   // plus haute, pour l'écriture à la main
+      plan.push({ e: { type: 'para', txt: '', trait: true }, y: h }); h += m.inter;
     } else if (e.type === 'para') {
       ctx.font = _fichePol(fs, false);
       _ficheWrap(ctx, e.txt, maxG).forEach(function(ln){
@@ -10843,6 +10863,7 @@ function _fichePlan(ctx, L, W, fs) {
         /* ligne de temps : le libellé et la valeur doivent tenir côte à côte */
         if (ctx.measureText(e.gauche || '').width + largeurD > maxG) largeurOk = false;
       }
+      if (e.vide) h += m.inter * 0.45;   // v1221 : rangée vide plus haute, pour écrire à la main
       var retrait = e.code != null ? m.colC : 0;
       /* le nom s'arrête une demi-gouttière AVANT le trait de la colonne QTÉ */
       var dispo = maxG - largeurD - retrait - (e.unite != null ? m.gout * 0.6 : 0);
@@ -12812,6 +12833,7 @@ function exportCostXlsm() {
 var PAGE_FIN_W = 1700, PAGE_FIN_H = 2200;   // lettre 8,5 × 11 po à 200 ppp
 var PAGE_FIN_VIERGE = 'vierge';
 var _pageFinTempsVide = false;   // v1220 : vrai pendant le dessin de la dernière page
+var _pageFinVierge = false;      // v1221 : vrai pour un département sans rien (fiche à remplir à la main)
 var PAGE_FIN_MARGE = 80;                    // ≈ 0,4 po
 var PAGE_FIN_ECART = 34;                    // entre deux étampes
 var _pageFinBlancCache = null;
@@ -13023,8 +13045,9 @@ function etamperPageFin(idx) {
     _pageFinTempsVide = true;
     /* une seule taille d'écriture pour toutes les étampes, la plus petite trouvée */
     var fs = FS_MAX_FIN;
-    depts.forEach(function(d) {
+    tous.forEach(function(d) {   // v1221 : les quatre, remplis ou non
       currentDept = d;
+      _pageFinVierge = depts.indexOf(d) < 0;
       var p = _ficheChoisirPlan(ctx, _ficheLignes(idx), wDemi, H_MAX_ETAMPE);
       fs = Math.min(fs, p.m.fs);
       if (p.h > H_MAX_ETAMPE + 1) deborde = true;
@@ -13036,14 +13059,11 @@ function etamperPageFin(idx) {
         var d = tous[r * 2 + col];
         if (!d) continue;
         var x = X + col * (wDemi + PAGE_FIN_ECART);
-        if (depts.indexOf(d) >= 0) {
-          currentDept = d;
-          var hU = _ficheDessiner(ctx, idx, x, yLigne, wDemi, Infinity, fs);
-          hLigne = Math.max(hLigne, hU);
-        } else {
-          _pageFinCaseTemps(ctx, x, yLigne, wDemi, H_CASE_TEMPS, 'TEMPS ' + DEPTS[d].label.toUpperCase());
-          hLigne = Math.max(hLigne, H_CASE_TEMPS);
-        }
+        /* v1221 : un département vide reçoit la même fiche, à remplir à la main */
+        currentDept = d;
+        _pageFinVierge = depts.indexOf(d) < 0;
+        var hU = _ficheDessiner(ctx, idx, x, yLigne, wDemi, Infinity, fs);
+        hLigne = Math.max(hLigne, hU);
       }
       yLigne += hLigne + PAGE_FIN_ECART;
     }
@@ -13052,6 +13072,7 @@ function etamperPageFin(idx) {
     currentDept = deptAvant;
     _ficheSignatureForcee = sigAvant;
     _pageFinTempsVide = false;
+    _pageFinVierge = false;
   }
 
   var q = 0.90, out = c.toDataURL('image/jpeg', q);
