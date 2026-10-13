@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1219-items-glissiere]</title>
+<title>PhysiPro — Liste des matériaux [v1220-pagefin-moitie]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -10614,6 +10614,9 @@ function _ficheLignes(idx) {
            droiteTitre: 'Item : ' + nomItem });
   if (aTemps) {
     L.push({ type: 'ligne', gauche: 'Temps de production', droite: tps + ' min' });
+  } else if (_pageFinTempsVide) {
+    /* v1220 : sur la dernière page, temps pas encore connu — ligne à remplir à la main */
+    L.push({ type: 'ligne', gauche: 'Temps de production', droite: '__________ min' });
   }
   L.push({ type: 'separateur' });
   /* le tarif a désormais sa propre ligne : plus besoin de le reporter sur la
@@ -12808,6 +12811,7 @@ function exportCostXlsm() {
    ============================================================ */
 var PAGE_FIN_W = 1700, PAGE_FIN_H = 2200;   // lettre 8,5 × 11 po à 200 ppp
 var PAGE_FIN_VIERGE = 'vierge';
+var _pageFinTempsVide = false;   // v1220 : vrai pendant le dessin de la dernière page
 var PAGE_FIN_MARGE = 80;                    // ≈ 0,4 po
 var PAGE_FIN_ECART = 34;                    // entre deux étampes
 var _pageFinBlancCache = null;
@@ -12938,7 +12942,7 @@ function _pageFinCaseTemps(ctx, x, y, w, h, titre) {
   ctx.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
   ctx.textBaseline = 'top';
   ctx.fillStyle = '#1d4ed8';
-  var fs = 44;
+  var fs = 36;   // v1220 : 44 -> 36, au niveau des étampes
   ctx.font = _fichePol(fs, true);
   while (fs > 20 && ctx.measureText(titre).width > w - 40) { fs -= 2; ctx.font = _fichePol(fs, true); }
   ctx.fillText(titre, x + 20, y + 18);
@@ -12971,10 +12975,7 @@ function etamperPageFin(idx) {
   }
   setActiveCard(idx);
   var depts = DEPT_ORDRE.filter(function(d){ return _deptAContenu(t, d); });
-  if (!depts.length) {
-    showToast('Rien à étamper : aucun temps, matériel ni note dans cette soumission', 'warning');
-    return;
-  }
+  /* v1220 : même sans rien de rempli, la page sort avec les quatre cases à remplir */
   if (t.pageFin && t.pageFin !== PAGE_FIN_VIERGE
       && !confirm('Redessiner la dernière page ?\nCe qui est déjà étampé dessus sera remplacé.')) return;
 
@@ -12999,77 +13000,59 @@ function etamperPageFin(idx) {
      ============================================================ */
   /* v1183 : une bande est réservée au bas pour les cases « Temps … » des
      départements qui n'ont rien dans la soumission (Couture, Métal, CNC) */
-  var sansContenu = ['couture', 'metal', 'cnc'].filter(function(d){ return depts.indexOf(d) < 0; });
-  /* v1218 — mise en page plus compacte :
-     - 1 ou 2 départements remplis : leurs étampes dans une colonne à GAUCHE
-       (≈ 64 % de la largeur, donc une écriture plus petite) et les cases
-       « Temps … » vides empilées à leur DROITE, alignées sur le haut.
-     - 3 départements remplis : la grille 2 × 2 habituelle, la case vide
-       prend la 4e place (en bas à droite).
-     - 4 départements : la grille 2 × 2. */
-  var H_CASE_TEMPS = 300;   // v1218 : 340 -> 300 (la ligne NOM reste)
+  /* ============================================================
+     v1220 — GRILLE FIXE 2 × 2, CHAQUE CASE = LA MOITIÉ DE LA LARGEUR
+     Les quatre départements ont toujours leur place, dans l'ordre :
+       Atelier | Couture
+       Métal   | CNC
+     - rempli (temps, matériel ou note) : son étampe, écriture réduite ;
+       sans temps saisi, une ligne « Temps de production ____ min » vide
+       est ajoutée pour l'écrire à la main ;
+     - vide : une case « TEMPS … » avec la ligne min et la ligne NOM.
+     Chaque ligne de la grille se pose juste sous la précédente.
+     ============================================================ */
+  var H_CASE_TEMPS = 300;
+  var H_MAX_ETAMPE = 820;     // une étampe ne dépasse pas ≈ 37 % de la feuille
+  var FS_MAX_FIN = 34;        // écriture un peu plus petite qu'avant
   var wDemi = (W - PAGE_FIN_ECART) / 2;
-  var cases, casesVides = [];
-  if (sansContenu.length && depts.length <= 2) {
-    var wD = Math.round(W * 0.34), wG = W - wD - PAGE_FIN_ECART;
-    var hPile = sansContenu.length * H_CASE_TEMPS + (sansContenu.length - 1) * PAGE_FIN_ECART;
-    var hG = Math.min(hDispo, Math.max(hPile, 1000));
-    var hUne = (hG - (depts.length - 1) * PAGE_FIN_ECART) / depts.length;
-    cases = depts.map(function(d, k) {
-      return { x: X, y: y0 + k * (hUne + PAGE_FIN_ECART), w: wG, h: hUne };
-    });
-    sansContenu.forEach(function(d, k) {
-      casesVides.push({ d: d, x: X + wG + PAGE_FIN_ECART, y: y0 + k * (H_CASE_TEMPS + PAGE_FIN_ECART), w: wD, h: H_CASE_TEMPS });
-    });
-  } else {
-    var hMoitie = (hDispo - PAGE_FIN_ECART) / 2;
-    cases = depts.map(function(d, k) {
-      if (depts.length <= 2) return { x: X, y: y0 + k * (hMoitie + PAGE_FIN_ECART), w: W, h: hMoitie };
-      return { x: X + (k % 2) * (wDemi + PAGE_FIN_ECART),
-               y: y0 + Math.floor(k / 2) * (hMoitie + PAGE_FIN_ECART), w: wDemi, h: hMoitie };
-    });
-    sansContenu.forEach(function(d, k) {   // 3 remplis : la case vide en 4e place
-      casesVides.push({ d: d, x: X + wDemi + PAGE_FIN_ECART, y: y0 + hMoitie + PAGE_FIN_ECART, w: wDemi, h: H_CASE_TEMPS });
-    });
-  }
+  var tous = DEPT_ORDRE.slice(0, 4);
 
-  /* chaque département dessine SA fiche : on prête le département en cours
-     le temps du dessin, puis on le rend — les fonctions de la fiche le
-     lisent pour le titre, le temps, le matériel, la note et les initiales */
-  var deptAvant = currentDept, sigAvant = _ficheSignatureForcee, deborde = false, yBas = y0;
+  var deptAvant = currentDept, sigAvant = _ficheSignatureForcee, deborde = false;
   try {
     _ficheSignatureForcee = null;
-    var fs = Infinity;
-    depts.forEach(function(d, k) {
+    _pageFinTempsVide = true;
+    /* une seule taille d'écriture pour toutes les étampes, la plus petite trouvée */
+    var fs = FS_MAX_FIN;
+    depts.forEach(function(d) {
       currentDept = d;
-      var p = _ficheChoisirPlan(ctx, _ficheLignes(idx), cases[k].w, cases[k].h);
+      var p = _ficheChoisirPlan(ctx, _ficheLignes(idx), wDemi, H_MAX_ETAMPE);
       fs = Math.min(fs, p.m.fs);
-      if (p.h > cases[k].h + 1) deborde = true;
+      if (p.h > H_MAX_ETAMPE + 1) deborde = true;
     });
-    var basLigne = [y0, y0];   // v1218 : bas réel de chaque ligne / colonne déjà dessinée
-    depts.forEach(function(d, k) {
-      currentDept = d;
-      /* v1218 : on resserre — chaque étampe se pose juste sous la précédente
-         au lieu d'attendre le milieu de la feuille */
-      if (depts.length <= 2 && k > 0) cases[k].y = Math.min(cases[k].y, basLigne[0] + PAGE_FIN_ECART);
-      if (depts.length >= 3 && k >= 2) cases[k].y = Math.min(cases[k].y, Math.max(basLigne[0], basLigne[1]) + PAGE_FIN_ECART);
-      var hU = _ficheDessiner(ctx, idx, cases[k].x, cases[k].y, cases[k].w, Infinity, fs);
-      if (hU > cases[k].h + 1) deborde = true;
-      yBas = Math.max(yBas, cases[k].y + hU);
-      if (depts.length <= 2) basLigne[0] = cases[k].y + hU;
-      else if (k < 2) basLigne[k] = cases[k].y + hU;
-    });
-    /* la case vide de la grille suit la 2e ligne */
-    if (depts.length >= 3 && casesVides.length && cases[2]) casesVides[0].y = cases[2].y;
+    var yLigne = y0;
+    for (var r = 0; r < 2; r++) {
+      var hLigne = 0;
+      for (var col = 0; col < 2; col++) {
+        var d = tous[r * 2 + col];
+        if (!d) continue;
+        var x = X + col * (wDemi + PAGE_FIN_ECART);
+        if (depts.indexOf(d) >= 0) {
+          currentDept = d;
+          var hU = _ficheDessiner(ctx, idx, x, yLigne, wDemi, Infinity, fs);
+          hLigne = Math.max(hLigne, hU);
+        } else {
+          _pageFinCaseTemps(ctx, x, yLigne, wDemi, H_CASE_TEMPS, 'TEMPS ' + DEPTS[d].label.toUpperCase());
+          hLigne = Math.max(hLigne, H_CASE_TEMPS);
+        }
+      }
+      yLigne += hLigne + PAGE_FIN_ECART;
+    }
+    if (yLigne - PAGE_FIN_ECART > PAGE_FIN_H - PAGE_FIN_MARGE) deborde = true;
   } finally {
     currentDept = deptAvant;
     _ficheSignatureForcee = sigAvant;
+    _pageFinTempsVide = false;
   }
-
-  /* v1218 : les cases « Temps … » vides, à droite des étampes */
-  casesVides.forEach(function(cv) {
-    _pageFinCaseTemps(ctx, cv.x, cv.y, cv.w, cv.h, 'TEMPS ' + DEPTS[cv.d].label.toUpperCase());
-  });
 
   var q = 0.90, out = c.toDataURL('image/jpeg', q);
   while (out.length > 420000 && q > 0.70) { q -= 0.05; out = c.toDataURL('image/jpeg', q); }
@@ -13077,7 +13060,7 @@ function etamperPageFin(idx) {
   _renderGlobalImage();
   setActiveCard(idx);
   if (!_midFirebaseLoading) _saveGlobalImage();
-  var noms = depts.map(function(d){ return DEPTS[d].label; }).join(', ');
+  var noms = depts.length ? depts.map(function(d){ return DEPTS[d].label; }).join(', ') : 'cases à remplir seulement';
   showToast(deborde
     ? 'Dernière page étampée (' + noms + ') — beaucoup de contenu : une case déborde un peu'
     : 'Dernière page étampée : ' + noms, 'success');
