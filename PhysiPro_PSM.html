@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro — Liste des matériaux [v1221-pagefin-codes]</title>
+<title>PhysiPro — Liste des matériaux [v1222-x-pages]</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
@@ -4154,6 +4154,13 @@ body.e2-mode #docBarre, body.e2-mode #btnPleinEcran{ display:none !important; }
 .topbar .soum-tabs::-webkit-scrollbar-thumb:hover{ background:rgba(200,206,216,.8); }
 .topbar .soum-tabs::-webkit-scrollbar-track{ background:rgba(255,255,255,.05); border-radius:3px; }
 .topbar .soumission-center > .soum-tab-add{ flex:0 0 auto; }
+
+/* v1222 : le ✕ de chaque page */
+.page-x{ position:absolute; z-index:6; height:22px; padding:0 8px; border:1px solid rgba(0,0,0,.55); border-radius:4px;
+  background:rgba(201,75,75,.82); color:#fff; font-family:inherit; font-size:11px; font-weight:700; letter-spacing:.2px;
+  cursor:pointer; opacity:.55; transition:opacity .12s, background .12s; box-shadow:0 1px 4px rgba(0,0,0,.35); }
+.page-x:hover{ opacity:1; background:#c94b4b; }
+.global-img-zone.modif-on .page-x{ display:none; }
 </style>
 </head>
 <body>
@@ -13107,7 +13114,9 @@ function exporterPdfEtampes(imprimer) {   // v1181 : true = bouton Imprimer
     /* v1178 : la dernière page (feuille d'étampes) suit le document de sa
        carte. En recto verso, elle tombe au dos de la dernière feuille quand
        le document a un nombre impair de pages. */
-    if (t.pageFin && t.data && t.type && t.type.indexOf('image/') === 0) {
+    /* v1222 : une dernière page encore BLANCHE (jamais étampée) ne sort plus —
+       c'était la page vide entre deux soumissions */
+    if (t.pageFin && t.pageFin !== PAGE_FIN_VIERGE && t.data && t.type && t.type.indexOf('image/') === 0) {
       feuilles.push({ src: _pageFinSrc(t), soum: i + 1, page: -1, total: 0 });
     }
     /* v1182 — RECTO VERSO : chaque carte commence sur une feuille neuve.
@@ -15424,6 +15433,94 @@ function _e2Synchro() {
     }, { passive:false });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', brancher); else brancher();
+})();
+
+/* ============================================================
+   v1222 — UN ✕ SUR CHAQUE PAGE DU DOCUMENT
+   Chaque page affichée (pages d'un PDF, photo seule, dernière page) reçoit
+   un petit « ✕ Page » en haut à gauche. Un clic retire CETTE page de la
+   soumission (avec confirmation). Les boutons sont posés par-dessus la
+   pile, à la position de chaque image, et suivent quand la taille change.
+   ============================================================ */
+function _poserXPages(idx) {
+  var zone = _zoneOf(idx);
+  if (!zone) return;
+  Array.prototype.slice.call(zone.querySelectorAll('.page-x')).forEach(function(b){ b.remove(); });
+  var t = fichiersGlobaux[idx];
+  if (!t || !t.data || !t.type || t.type.indexOf('image/') !== 0) return;
+  var piles = zone.querySelectorAll('.pdf-pages');
+  var pile = piles.length ? piles[piles.length - 1] : null;
+  if (!pile) return;
+  var D = zone.ownerDocument;
+  var imgs = Array.prototype.slice.call(pile.querySelectorAll('img.pdf-page-img'));
+  var n = 0;
+  imgs.forEach(function(im){
+    if (!im.offsetWidth) return;
+    var fin = im.classList.contains('page-fin');
+    var no = fin ? -1 : n++;
+    var hote = im.offsetParent || zone;
+    var b = D.createElement('button');
+    b.type = 'button';
+    b.className = 'page-x';
+    b.textContent = '✕ Page';
+    b.title = fin ? 'Retirer la dernière page' : 'Retirer cette page (page ' + (no + 1) + ')';
+    b.style.left = (im.offsetLeft + 8) + 'px';
+    b.style.top  = (im.offsetTop + 8) + 'px';
+    b.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+    b.addEventListener('click', function(e){
+      e.stopPropagation(); e.preventDefault();
+      if (fin) basculerPageFin(idx); else _retirerPage(idx, no);
+    });
+    hote.appendChild(b);
+  });
+  /* suit les changements de taille (Agrandir PDF, fenêtre, images chargées) */
+  if (!pile._xObs && D.defaultView && D.defaultView.ResizeObserver) {
+    var tm = null;
+    pile._xObs = new D.defaultView.ResizeObserver(function(){
+      clearTimeout(tm); tm = setTimeout(function(){ _poserXPages(idx); }, 60);
+    });
+    pile._xObs.observe(pile);
+  }
+  imgs.forEach(function(im){
+    if (!im.complete) im.addEventListener('load', function(){ _poserXPages(idx); }, { once: true });
+  });
+}
+
+function _retirerPage(idx, n) {
+  var t = fichiersGlobaux[idx];
+  if (!t) return;
+  var multi = Array.isArray(t.pages) && t.pages.length > 1;
+  if (!multi) {
+    if (!confirm('Retirer ce document de la soumission ?')) return;
+    t.data = ''; t.type = ''; t.filename = '';
+    t.photos = []; t.photoIdx = 0; t.history = [];
+    t.pages = null; t.pageIdx = 0;
+    t.dataPdfOriginal = ''; t.pageFin = ''; t.texte = null;
+  } else {
+    if (!confirm('Retirer la page ' + (n + 1) + ' sur ' + t.pages.length + ' ?'
+        + (t.texte ? '\n\nLe texte modifiable (Modif PDF) de ce document sera abandonné.' : ''))) return;
+    t.pages.splice(n, 1);
+    if (t.texte) { t.texte = null; t._zones = null; }
+    if ((t.pageIdx || 0) > n || (t.pageIdx || 0) >= t.pages.length) t.pageIdx = Math.max(0, (t.pageIdx || 0) - 1);
+    t.data = t.pages[t.pageIdx || 0];
+    t.history = [];   // les étapes d'annulation visaient les anciens numéros de page
+    var base = (t.filename || 'document').replace(/\s*\(PDF p\.\d+\)\.jpg$/i, '').replace(/\.jpg$/i, '');
+    t.filename = base + ' (PDF p.' + ((t.pageIdx || 0) + 1) + ').jpg';
+  }
+  if (_modifIdx === idx && typeof _modifQuitter === 'function') _modifQuitter();
+  _renderGlobalImage();
+  setActiveCard(idx);
+  if (!_midFirebaseLoading) _saveGlobalImage();
+  showToast('Page retirée', 'info');
+}
+
+(function(){
+  if (typeof _renderCardZone !== 'function') return;
+  var orig = _renderCardZone;
+  _renderCardZone = function(idx) {
+    orig.apply(this, arguments);
+    setTimeout(function(){ _poserXPages(idx); }, 0);
+  };
 })();
 </script>
 
