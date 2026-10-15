@@ -8,6 +8,24 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1863 - TOUT DANS MOULAGE : COMPTEUR, SAUVEGARDE ONEDRIVE, PHOTOSENDER
+    ═════════════════════════════════════════════════════════════════
+    • PhysiPro_Conso.js est intégré dans la page (même position, avant le
+      SDK Firebase). Le fichier séparé n'est plus requis.
+    • BackupStation intégrée : une fois par jour, sur PC, Valérie ou Cassie
+      voit un panneau centré « Cliquez pour sauvegarder ». La première qui
+      le fait règle la journée pour les deux (moulageSettings/
+      sauvegardeOneDrive). « Plus tard » = rappel dans 3 h. Bouton aussi
+      dans Réglages. Seulement Moulage + chat + photos (plus de JSON des
+      anciens modules). Une fiche n'est refaite que si elle a changé
+      (oneDrive.sig) ; photos gardées dans le cache du PC.
+    • Le drapeau oneDrive n'est posé qu'après l'écriture du Fiche.html, et
+      _isExpedieArchive exige maintenant une copie complète faite après
+      l'expédition : rien n'est effaçable avant d'être dans OneDrive.
+    • PhotoSender intégré (téléphone) : une demande de photo du PC ouvre un
+      écran plein « Photo demandée » sur le téléphone connecté au même
+      compte. Ancien bloc mort (photoResponses, 'pending') retiré.
+
     v1862 - MOULAGE SEUL EN LIGNE (décision de Daniel, 2026-10-14)
     ════════════════════════════════════════════════════════════════════
     • PhysiPro_Nav.js n'est plus chargé et le menu du logo est retiré :
@@ -1510,7 +1528,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1862</title>
+  <title>PhysiPro Moulages v1863</title>
   
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -1550,8 +1568,351 @@
     document.head.appendChild(manifestLink);
   </script>
   
-  <!-- v1859 : compteur de téléchargement Firebase (AVANT le SDK) -->
-  <script src="PhysiPro_Conso.js"></script>
+  <!-- v1863 : compteur de téléchargement Firebase (ex-PhysiPro_Conso.js), intégré — AVANT le SDK -->
+  <script>
+/* ================================================================
+   PhysiPro_Conso.js \u2014 v1.3 (2026-09-30)
+   COMPTEUR DE T\u00c9L\u00c9CHARGEMENT FIREBASE, PARTAG\u00c9 PAR TOUTES LES PAGES
+
+   \u00c0 inclure AVANT les scripts Firebase de chaque page :
+       (intégré directement dans la page depuis Moulage v1863)
+
+   Ce qu'il fait :
+   1. Compte les octets RE\u00c7US de la Realtime Database par cette page
+      (messages WebSocket + lectures REST vers firebaseio.com). C'est
+      ce que Firebase facture sous \u00ab T\u00e9l\u00e9chargements \u00bb.
+   2. Aux 15 minutes, ajoute ce qui a \u00e9t\u00e9 re\u00e7u depuis la derni\u00e8re fois
+      au TOTAL DU JOUR, partag\u00e9 par tous les postes :
+         consoTotal/<date>                 un seul nombre (octets)
+         consoDetail/<date>/<poste_page>   le d\u00e9tail, pour trouver
+                                           quelle page consomme
+      L'op\u00e9ration co\u00fbte ~200 octets : n\u00e9gligeable.
+   3. Pr\u00e8s de la limite : bandeau orange d'avertissement.
+      \u00c0 la limite : la page se D\u00c9CONNECTE de Firebase (goOffline) et
+      un \u00e9cran rouge explique pourquoi. Plus rien n'est t\u00e9l\u00e9charg\u00e9
+      jusqu'au changement de jour Firebase (minuit heure du Pacifique,
+      soit 3 h du matin au Qu\u00e9bec).
+   4. Daniel (atelieratp@physipro.com) voit une petite pastille en bas
+      \u00e0 gauche avec le total du jour ; un clic ouvre le d\u00e9tail par
+      page. Lui seul peut \u00ab Continuer quand m\u00eame \u00bb apr\u00e8s l'arr\u00eat.
+
+   v1.2 : chaque octet recu est aussi classe par NOEUD Firebase (le premier
+      morceau du chemin : serieCommandes, privateChat, inspectionData...),
+      pour voir QUOI coute cher dans chaque page. Le detail (clic sur la
+      pastille) montre les 3 plus gros noeuds sous chaque page.
+
+   LIMITES : un estim\u00e9. Firebase compte aussi un peu d'enveloppe
+   r\u00e9seau, et seules les pages qui incluent ce fichier sont compt\u00e9es.
+   ================================================================ */
+(function () {
+  'use strict';
+
+  /* ---------------- R\u00c9GLAGES ---------------- */
+  var QUOTA_MO        = 360;   // quota gratuit quotidien de Firebase
+  var AVERTIR_MO      = 315;   // bandeau orange \u00e0 partir d'ici (v1.3 : 270 -> 315, trop t\u00f4t)
+  var ARRETER_MO      = 330;   // d\u00e9connexion \u00e0 partir d'ici (marge de 30 Mo : le total n'est connu qu'aux 15 min)
+  var ENVOI_MS        = 15 * 60 * 1000;  // mise \u00e0 jour du total aux 15 min
+  var ADMIN           = 'atelieratp@physipro.com';
+
+  var MO = 1024 * 1024;
+  if (window.__physiproConso) return;          // d\u00e9j\u00e0 charg\u00e9
+  var C = window.__physiproConso = { octets: 0, envoyes: 0, total: null, arrete: false,
+                                     noeuds: {}, noeudsEnvoyes: {} };   // v1.2
+
+  /* jour Firebase = date du Pacifique */
+  function jour() {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles',
+        year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    } catch (e) { return new Date().toISOString().slice(0, 10); }
+  }
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  var PAGE = (location.pathname.split('/').pop() || 'index.html').replace(/\.html?$/i, '') || 'index';
+  var POSTE = lsGet('physiproPoste');
+  if (!POSTE) { POSTE = 'p' + Math.random().toString(36).slice(2, 8); lsSet('physiproPoste', POSTE); }
+  var CLE_DETAIL = (POSTE + '_' + PAGE).replace(/[.#$\[\]\/]/g, '_');
+
+  /* ---------------- 1. COMPTAGE ---------------- */
+  function compter(n) { if (n > 0) C.octets += n; }
+  /* v1.2 : classement par noeud. Un gros message Firebase arrive en plusieurs
+     morceaux : d'abord le NOMBRE de morceaux, puis les morceaux. On les
+     recolle pour lire le chemin ("p":"serieCommandes/...") au debut. */
+  function noeudDe(txt) {
+    var m = /"p":"\/?([^"\/]*)/.exec(txt.slice(0, 400));
+    var n = m ? (m[1] || '(racine)') : '(reponses)';
+    return n.replace(/[.#$\[\]\/]/g, '_').slice(0, 60);
+  }
+  function classer(txt, n) {
+    try { var k = noeudDe(txt); C.noeuds[k] = (C.noeuds[k] || 0) + n; } catch (e) {}
+  }
+  function suivreSocket(s) {
+    var reste = 0, tampon = '', total = 0;
+    s.addEventListener('message', function (ev) {
+      var n = taille(ev.data);
+      compter(n);
+      if (typeof ev.data !== 'string') return;
+      try {
+        if (reste > 0) {
+          tampon += ev.data; total += n; reste--;
+          if (reste === 0) { classer(tampon, total); tampon = ''; total = 0; }
+        } else if (/^\d{1,4}$/.test(ev.data)) {
+          reste = parseInt(ev.data, 10); tampon = ''; total = n;
+        } else {
+          classer(ev.data, n);
+        }
+      } catch (e) {}
+    });
+  }
+  function taille(d) {
+    if (typeof d === 'string') return d.length;
+    if (d && typeof d.byteLength === 'number') return d.byteLength;
+    if (d && typeof d.size === 'number') return d.size;
+    return 0;
+  }
+  var WS = window.WebSocket;
+  if (WS) {
+    var WS2 = function (url, prot) {
+      var s = (prot === undefined) ? new WS(url) : new WS(url, prot);
+      if (/firebaseio\.com|firebasedatabase\.app/i.test(String(url))) {
+        suivreSocket(s);
+      }
+      return s;
+    };
+    WS2.prototype = WS.prototype;
+    ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(function (k) { WS2[k] = WS[k]; });
+    window.WebSocket = WS2;
+  }
+  if (window.fetch) {
+    var F = window.fetch;
+    window.fetch = function (input, init) {
+      var url = (typeof input === 'string') ? input : (input && input.url) || '';
+      var p = F.apply(this, arguments);
+      if (/firebaseio\.com|firebasedatabase\.app/i.test(url)) {
+        p.then(function (r) {
+          try { r.clone().arrayBuffer().then(function (b) {
+            compter(b.byteLength);
+            try {   /* v1.2 : lecture REST -> noeud = debut du chemin de l'adresse */
+              var ch = decodeURIComponent(String(url).replace(/^https?:\/\/[^\/]+\/?/, '').split(/[?#]/)[0]).replace(/\.json$/, '');
+              var k = ((ch.split('/')[0] || '(racine)') + ' (REST)').replace(/[.#$\[\]\/]/g, '_');
+              C.noeuds[k] = (C.noeuds[k] || 0) + b.byteLength;
+            } catch (e) {}
+          }); } catch (e) {}
+        }).catch(function () {});
+      }
+      return p;
+    };
+  }
+
+  /* ---------------- 2. INTERFACE ---------------- */
+  function el(id) { return document.getElementById(id); }
+  function mo(o) { return (o / MO).toFixed(o < 10 * MO ? 1 : 0) + ' Mo'; }
+  function estAdmin() {
+    try { var u = window.firebase && firebase.auth && firebase.auth().currentUser;
+          return !!(u && String(u.email || '').toLowerCase() === ADMIN); } catch (e) { return false; }
+  }
+  function style() {
+    if (el('pcStyle')) return;
+    var s = document.createElement('style'); s.id = 'pcStyle';
+    s.textContent =
+      '#pcPastille{position:fixed;left:8px;bottom:8px;z-index:2147483000;background:#04152c;color:#fff;' +
+      'font:700 11px Segoe UI,Arial,sans-serif;padding:4px 9px;border-radius:12px;cursor:pointer;opacity:.85;' +
+      'box-shadow:0 2px 6px rgba(0,0,0,.3)}#pcPastille:hover{opacity:1}' +
+      '#pcBande{position:fixed;left:0;right:0;top:0;z-index:2147483001;background:#e65100;color:#fff;' +
+      'font:700 14px Segoe UI,Arial,sans-serif;padding:9px 44px 9px 14px;text-align:center;box-shadow:0 3px 10px rgba(0,0,0,.3)}' +
+      '#pcBande button{position:absolute;right:8px;top:5px;background:rgba(255,255,255,.25);border:0;color:#fff;' +
+      'font:700 16px sans-serif;width:28px;height:28px;border-radius:6px;cursor:pointer}' +
+      '#pcArret{position:fixed;inset:0;z-index:2147483002;background:rgba(120,10,10,.94);color:#fff;display:flex;' +
+      'align-items:center;justify-content:center;font-family:Segoe UI,Arial,sans-serif;text-align:center;padding:20px}' +
+      '#pcArret .b{max-width:560px}#pcArret h2{font-size:26px;margin:0 0 12px}#pcArret p{font-size:16px;line-height:1.5;margin:8px 0}' +
+      '#pcArret button{margin-top:18px;background:#fff;color:#8b0000;border:0;border-radius:8px;padding:10px 20px;' +
+      'font:800 14px Segoe UI,Arial,sans-serif;cursor:pointer}' +
+      '#pcDetail{position:fixed;left:8px;bottom:36px;z-index:2147483000;background:#fff;color:#11243a;border:1px solid #cfd9e6;' +
+      'border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.25);font:12px Segoe UI,Arial,sans-serif;padding:10px 12px;' +
+      'max-height:60vh;overflow:auto;min-width:260px}#pcDetail table{border-collapse:collapse;width:100%}' +
+      '#pcDetail td{padding:2px 6px;border-bottom:1px solid #eef2f6}#pcDetail td.n{text-align:right;font-weight:700}';
+    (document.head || document.documentElement).appendChild(s);
+  }
+  function pastille() {
+    if (!document.body || !estAdmin()) return;
+    style();
+    var p = el('pcPastille');
+    if (!p) {
+      p = document.createElement('div'); p.id = 'pcPastille';
+      p.title = 'T\u00e9l\u00e9chargement Firebase aujourd\u2019hui (tous les postes) \u2014 cliquer pour le d\u00e9tail';
+      p.onclick = basculerDetail;
+      document.body.appendChild(p);
+    }
+    var t = (C.total == null) ? null : C.total + (C.octets - C.envoyes);
+    p.textContent = '\u2601 ' + (t == null ? '\u2026' : mo(t) + ' / ' + QUOTA_MO + ' Mo') + '  \u00b7  cette page ' + mo(C.octets);
+    p.style.background = (t != null && t >= AVERTIR_MO * MO) ? '#b3261e' : '#04152c';
+  }
+  /* v1.2 : les 3 plus gros noeuds d'une page, en petit sous son nom */
+  function gros(n) {
+    var k = Object.keys(n || {}).sort(function (a, b) { return n[b] - n[a]; }).slice(0, 3);
+    if (!k.length) return '';
+    return '<br><span style="color:#b3261e;font-size:11px">' +
+      k.map(function (x) { return x + ' ' + mo(n[x]); }).join(' \u00b7 ') + '</span>';
+  }
+  function basculerDetail() {
+    var d = el('pcDetail');
+    if (d) { d.parentNode.removeChild(d); return; }
+    d = document.createElement('div'); d.id = 'pcDetail'; d.textContent = 'Lecture\u2026';
+    document.body.appendChild(d);
+    try {
+      firebase.database().ref('consoDetail/' + jour()).once('value').then(function (s) {
+        var v = s.val() || {}, lignes = Object.keys(v).map(function (k) { return [k, v[k] && v[k].o || 0, v[k] && v[k].u || '', v[k] && v[k].n || {}]; });
+        lignes.sort(function (a, b) { return b[1] - a[1]; });
+        var h = '<b>Aujourd\u2019hui par poste et page</b><table>';
+        lignes.forEach(function (l) {
+          h += '<tr><td>' + l[0].replace(/^p[a-z0-9]{6}_/, '') + '<br><span style="color:#8d9cb0">' + l[2] +
+               ' \u00b7 ' + l[0].slice(0, 7) + '</span>' + gros(l[3]) + '</td><td class="n">' + mo(l[1]) + '</td></tr>';
+        });
+        d.innerHTML = h + '</table>';
+      }).catch(function (e) { d.textContent = 'Lecture impossible : ' + e.message; });
+    } catch (e) { d.textContent = 'Firebase indisponible.'; }
+  }
+  function bande(t) {
+    if (!document.body || el('pcBande') || lsGet('pcBandeVue') === jour()) return;
+    style();
+    var b = document.createElement('div'); b.id = 'pcBande';
+    b.innerHTML = '\u26a0\ufe0f Firebase : ' + mo(t) + ' t\u00e9l\u00e9charg\u00e9s aujourd\u2019hui sur ' + QUOTA_MO +
+      ' Mo gratuits. \u00c0 ' + ARRETER_MO + ' Mo, les logiciels se mettent en pause jusqu\u2019\u00e0 3 h du matin.' +
+      '<button type="button" title="Fermer">\u00d7</button>';
+    b.querySelector('button').onclick = function () { lsSet('pcBandeVue', jour()); b.parentNode.removeChild(b); };
+    document.body.appendChild(b);
+  }
+
+  /* ---------------- 3. ARR\u00caT ---------------- */
+  function deconnecter() {
+    try {
+      (window.firebase && firebase.apps || []).forEach(function (a) {
+        try { a.database().goOffline(); } catch (e) {}
+      });
+    } catch (e) {}
+  }
+  function arreter(t) {
+    if (lsGet('pcOutrepasse') === jour()) return;     // Daniel a choisi de continuer
+    C.arrete = true;
+    lsSet('pcArret', jour());
+    deconnecter();
+    if (!document.body) { document.addEventListener('DOMContentLoaded', function () { arreter(t); }); return; }
+    if (el('pcArret')) return;
+    style();
+    var o = document.createElement('div'); o.id = 'pcArret';
+    o.innerHTML = '<div class="b"><h2>\u26d4 Pause Firebase</h2>' +
+      '<p>Les logiciels PhysiPro ont t\u00e9l\u00e9charg\u00e9 <b>' + (t ? mo(t) : 'plus de ' + ARRETER_MO + ' Mo') +
+      '</b> aujourd\u2019hui, tout pr\u00e8s des ' + QUOTA_MO + ' Mo gratuits par jour.</p>' +
+      '<p>Pour \u00e9viter des frais, cette page est d\u00e9connect\u00e9e de Firebase jusqu\u2019au changement de jour ' +
+      '(3 h du matin, heure du Qu\u00e9bec). Ce qui est d\u00e9j\u00e0 \u00e0 l\u2019\u00e9cran reste visible, mais rien n\u2019est enregistr\u00e9.</p>' +
+      '<p>Avise Daniel.</p>' +
+      (estAdmin() ? '<button type="button" id="pcContinuer">Continuer quand m\u00eame aujourd\u2019hui (frais possibles)</button>' : '') +
+      '</div>';
+    document.body.appendChild(o);
+    var b = el('pcContinuer');
+    if (b) b.onclick = function () {
+      lsSet('pcOutrepasse', jour()); lsSet('pcArret', '');
+      C.arrete = false; o.parentNode.removeChild(o);
+      try { (firebase.apps || []).forEach(function (a) { try { a.database().goOnline(); } catch (e) {} }); } catch (e) {}
+    };
+  }
+
+  /* ---------------- 4. TOTAL PARTAG\u00c9 ---------------- */
+  var jourEnCours = jour();
+  function envoyer() {
+    if (C.arrete || !window.firebase || !firebase.apps || !firebase.apps.length) return;
+    var u = null;
+    try { u = firebase.auth && firebase.auth().currentUser; } catch (e) {}
+    if (!u) return;
+    var j = jour();
+    if (j !== jourEnCours) { jourEnCours = j; C.total = null; }
+    var delta = C.octets - C.envoyes, db;
+    try { db = firebase.database(); } catch (e) { return; }
+    var deja = C.envoyes;
+    C.envoyes = C.octets;
+    db.ref('consoTotal/' + j).transaction(function (v) { return (v || 0) + delta; }, function (err, ok, snap) {
+      if (err) { C.envoyes = deja; return; }                       // on r\u00e9essaiera
+      C.total = (snap && snap.val()) || 0;
+      verifier();
+    }, false);
+    var dn = {};                                           // v1.2 : ce qui reste a envoyer, par noeud
+    Object.keys(C.noeuds).forEach(function (k) {
+      var d = C.noeuds[k] - (C.noeudsEnvoyes[k] || 0);
+      if (d > 0) { dn[k] = d; C.noeudsEnvoyes[k] = C.noeuds[k]; }
+    });
+    if (delta > 0) {
+      db.ref('consoDetail/' + j + '/' + CLE_DETAIL).transaction(function (v) {
+        v = v || { o: 0 }; v.o = (v.o || 0) + delta; v.u = u.email || ''; v.t = Date.now();
+        v.n = v.n || {};                                   // v1.2 : par noeud
+        Object.keys(dn).forEach(function (k) { v.n[k] = (v.n[k] || 0) + dn[k]; });
+        return v;
+      }, function (err) {
+        if (err) Object.keys(dn).forEach(function (k) { C.noeudsEnvoyes[k] = (C.noeudsEnvoyes[k] || 0) - dn[k]; });
+      }, false);
+    }
+  }
+  function verifier() {
+    var t = (C.total || 0) + (C.octets - C.envoyes);
+    if (t >= ARRETER_MO * MO) arreter(t);
+    else if (t >= AVERTIR_MO * MO) bande(t);
+    pastille();
+  }
+
+  /* au d\u00e9marrage : si la pause est d\u00e9j\u00e0 en vigueur aujourd'hui sur ce poste,
+     on se d\u00e9connecte d\u00e8s que Firebase existe, avant de t\u00e9l\u00e9charger quoi que ce soit */
+  var deja = (lsGet('pcArret') === jour() && lsGet('pcOutrepasse') !== jour());
+  if (deja && !window.firebase) {
+    /* Pause d\u00e9j\u00e0 en vigueur : on attrape Firebase au moment o\u00f9 son script le
+       cr\u00e9e, et chaque application est mise hors ligne d\u00e8s son ouverture --
+       avant la toute premi\u00e8re connexion, donc sans rien t\u00e9l\u00e9charger. */
+    try {
+      var _fb;
+      Object.defineProperty(window, 'firebase', { configurable: true,
+        get: function () { return _fb; },
+        set: function (v) {
+          _fb = v;
+          if (v && v.initializeApp && !v.__pcEnrobe) {
+            var ini = v.initializeApp;
+            v.initializeApp = function () {
+              var app = ini.apply(this, arguments);
+              try { app.database().goOffline(); } catch (e) {}
+              return app;
+            };
+            v.__pcEnrobe = true;
+          }
+        } });
+    } catch (e) {}
+  }
+  var essais = 0;
+  var attente = setInterval(function () {
+    essais++;
+    if (window.firebase && firebase.apps && firebase.apps.length) {
+      if (deja) { arreter(null); clearInterval(attente); return; }
+      try {
+        if (firebase.auth && firebase.auth().currentUser) {
+          clearInterval(attente);
+          setTimeout(envoyer, 15000);           // premier point apr\u00e8s le chargement initial
+          setInterval(envoyer, ENVOI_MS);
+          setInterval(pastille, 30000);
+        }
+      } catch (e) {}
+    }
+    if (essais > 600) clearInterval(attente);   // 5 min sans connexion : on abandonne
+  }, deja ? 20 : 500);
+  /* v1.1 : une page laissee ouverte toute la nuit reprend TOUTE SEULE au
+     changement de jour Firebase (3 h du matin) -- pas besoin de recharger. */
+  setInterval(function () {
+    if (!C.arrete || lsGet('pcArret') === jour()) return;
+    C.arrete = false; C.total = null;
+    var o = el('pcArret'); if (o) o.parentNode.removeChild(o);
+    try { (window.firebase && firebase.apps || []).forEach(function (a) { try { a.database().goOnline(); } catch (e) {} }); } catch (e) {}
+    location.reload();          // recharge proprement pour repartir avec des donnees a jour
+  }, 60000);
+  window.addEventListener('pagehide', function () { try { envoyer(); } catch (e) {} });
+  C.envoyerMaintenant = envoyer;
+})();
+  </script>
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -6411,6 +6772,46 @@ html.force-mobile .mobile-home-badge.has-count { display: flex; }
 html.force-mobile body { zoom: 1 !important; height: 100vh !important; }
 html.force-mobile .main-container, html.force-mobile .fiche-container { height: 100vh !important; }
 
+/* ═══ v1863 — Sauvegarde OneDrive intégrée (panneau centré) ═══ */
+.sauv-overlay { display:none; position:fixed; inset:0; background:rgba(2,6,23,0.72); z-index:100005; align-items:center; justify-content:center; padding:16px; }
+.sauv-overlay.active { display:flex; }
+.sauv-box { background:#1e293b; border:2px solid #3b82f6; border-radius:16px; padding:24px 26px; width:100%; max-width:460px; box-shadow:0 20px 60px rgba(0,0,0,0.6); color:#e2e8f0; text-align:center; }
+.sauv-title { font-size:20px; font-weight:800; color:#fff; margin-bottom:6px; }
+.sauv-last { font-size:12px; color:#94a3b8; margin-bottom:12px; }
+.sauv-info { font-size:13px; color:#cbd5e1; line-height:1.5; margin-bottom:14px; }
+.sauv-bar { height:8px; background:#0f172a; border-radius:4px; overflow:hidden; margin-bottom:8px; }
+.sauv-fill { height:100%; width:0; background:linear-gradient(90deg,#3b82f6,#22c55e); transition:width .3s; }
+.sauv-status { font-size:12px; color:#cbd5e1; min-height:18px; margin-bottom:14px; line-height:1.45; }
+.sauv-status.ok { color:#4ade80; font-weight:700; }
+.sauv-status.err { color:#fca5a5; font-weight:700; background:rgba(127,29,29,0.45); border:1px solid #ef4444; border-radius:8px; padding:8px; }
+.sauv-btns { display:flex; gap:10px; }
+.sauv-btn { flex:1; padding:13px 10px; border-radius:10px; border:none; font-size:14px; font-weight:700; cursor:pointer; }
+.sauv-btn.go { flex:2; background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; }
+.sauv-btn.later { background:#334155; color:#e2e8f0; }
+.sauv-btn:disabled { opacity:.5; cursor:default; }
+.sauv-link { margin-top:12px; background:none; border:none; color:#93c5fd; font-size:12px; cursor:pointer; text-decoration:underline; }
+
+/* ═══ v1863 — Photo demandée (PhotoSender intégré, téléphone) ═══ */
+.ps-overlay { display:none; position:fixed; inset:0; background:#020617; z-index:100006; flex-direction:column; color:#e2e8f0; }
+.ps-overlay.active { display:flex; }
+.ps-head { display:flex; align-items:center; gap:10px; padding:10px 12px; background:#1e293b; border-bottom:1px solid #334155; }
+.ps-head-txt { flex:1; min-width:0; }
+.ps-title { font-size:16px; font-weight:800; color:#fff; }
+.ps-sub { font-size:12px; color:#94a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ps-close { width:40px; height:40px; border-radius:50%; border:none; background:#334155; color:#fff; font-size:18px; }
+.ps-cam { flex:1; min-height:0; position:relative; background:#000; }
+.ps-cam video { width:100%; height:100%; object-fit:contain; display:block; }
+.ps-thumbs { display:flex; gap:8px; overflow-x:auto; padding:8px 12px; min-height:16px; }
+.ps-thumb { position:relative; flex:0 0 auto; }
+.ps-thumb img { width:64px; height:64px; object-fit:cover; border-radius:8px; border:2px solid #3b82f6; display:block; }
+.ps-thumb button { position:absolute; top:-6px; right:-6px; width:22px; height:22px; border-radius:50%; border:none; background:#ef4444; color:#fff; font-size:12px; line-height:22px; padding:0; }
+.ps-actions { display:flex; gap:10px; padding:10px 12px calc(10px + env(safe-area-inset-bottom)); background:#1e293b; }
+.ps-actions button, .ps-actions label { flex:1; padding:14px 8px; border-radius:12px; border:none; font-size:15px; font-weight:700; text-align:center; cursor:pointer; }
+.ps-shoot { background:#3b82f6; color:#fff; }
+.ps-pick { background:#334155; color:#e2e8f0; }
+.ps-send { background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; }
+.ps-send:disabled { opacity:.45; }
+
 </style>
 </head>
 <body>
@@ -7121,6 +7522,14 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           <button class="settings-btn" onclick="openExpediesModal()" style="width:100%;">📦 Gérer les expédiés</button>
         </div>
 
+        <!-- SECTION : Sauvegarde OneDrive (v1863) — Valérie, Cassie, admin -->
+        <div class="settings-section" id="sauvSettingsSection" style="display:none;">
+          <div class="settings-section-title">💾 Sauvegarde OneDrive</div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:8px;line-height:1.4;">Copie des fiches Moulage, du chat et des photos dans le dossier OneDrive. Le panneau s'ouvre seul une fois par jour ; ce bouton permet de la refaire à la main (seules les fiches changées sont recopiées).</div>
+          <div id="sauvSettingsLast" style="font-size:11px;color:#cbd5e1;margin-bottom:8px;"></div>
+          <button class="settings-btn primary" onclick="sauvegardeOuvrir()" style="width:100%;">💾 Sauvegarder maintenant</button>
+        </div>
+
         <!-- SECTION : Photos — optimisation unique (v1791) -->
         <div class="settings-section">
           <div class="settings-section-title">🖼️ Photos — Optimisation</div>
@@ -7599,7 +8008,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261019;
+    var APP_VERSION = 20261020;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -12374,7 +12783,12 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
     // ═══════════ MOULAGES EXPÉDIÉS — gestion / rétention (v1727) ═══════════
     // Éligible à l'effacement = expédié ('Envoyé au shipping') ET archivé OneDrive. Les DEUX.
-    function _isExpedieArchive(c){ return !!(c && c.expedie && c.oneDrive && c.oneDrive.archived); }
+    // v1863 — en plus : copie COMPLÈTE (aucune photo manquante) et faite APRÈS l'expédition
+    function _isExpedieArchive(c){
+      if (!(c && c.expedie && c.oneDrive && c.oneDrive.archived && c.oneDrive.complete)) return false;
+      var tExp = _parseExpDate(c);
+      return !tExp || (Number(c.oneDrive.at) || 0) >= tExp;
+    }
     function _parseExpDate(c){
       var s = (c && c.expedie) || '';
       if (s === true || s === 'true') return 0;
@@ -16976,6 +17390,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           
           // Initialiser les notifications
           initNotifications();
+
+          // v1863 — sauvegarde OneDrive quotidienne (Valérie / Cassie, PC)
+          try { if (window.sauvegardeDemarrer) sauvegardeDemarrer(); } catch(e) { console.warn('sauvegardeDemarrer:', e && e.message); }
           
           // Annonce unique (s'affiche une seule fois par compte)
           setTimeout(function(){ checkAnnonce(); }, 800);
@@ -17951,7 +18368,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     }
 
     // ═══ v1845 — « photoResponses » : ÉCRIT, JAMAIS RELU ═══
-    // L'ancien circuit photo a été retiré en v1675, mais sendCapturedPhoto()
+    // L'ancien circuit photo a été retiré en v1675, mais sendCapturedPhoto() (retiré en v1863)
     // pousse TOUJOURS dans photoResponses/<id> un objet contenant « data » :
     // la photo complète, en base64. Plus aucune ligne du programme ne lit ce
     // nœud. Ce sont donc des photos de bénéficiaires qui s'empilent dans la
@@ -22405,217 +22822,177 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     }
     window.mobileHomeRefresh = mobileHomeRefresh;
     
-    // === ÉCOUTER LES DEMANDES DE PHOTO ===
-    let activePhotoRequests = {};
+    // ═══════════════════════════════════════════════════════════════════
+    // v1863 — PHOTOSENDER INTÉGRÉ (téléphone)
+    // Remplace l'app PhotoSender.html. Le PC (MChat.requestMobilePhoto)
+    // écrit photoRequests/<jobId> {status:'waiting', requestedByEmail…}.
+    // Le téléphone connecté AU MÊME COMPTE l'affiche plein écran, prend
+    // les photos et répond dans le même nœud {status:'done', photo|photos}.
+    // Requête ciblée par requestedByEmail (index déjà dans les règles) :
+    // seules MES demandes descendent, jamais celles des autres.
+    // ═══════════════════════════════════════════════════════════════════
     let photoRequestsListenerActive = false;
-    
+    let _psRef = null;            // requête Firebase
+    let _psReq = null;            // demande affichée {jobId, ...}
+    let _psStream = null;         // flux caméra
+    let _psPhotos = [];           // dataURL en attente d'envoi
+    let _psIgnored = {};          // jobId_timestamp fermés avec ✕
+    let _psSending = false;
+
     function startPhotoRequestsListener() {
-      if (photoRequestsListenerActive || !firebaseDb) return;
+      if (photoRequestsListenerActive || !firebaseDb || !currentUser || !currentUser.email) return;
+      if (!isMobileView()) return;
       photoRequestsListenerActive = true;
-      
-      // v1859 — seulement les demandes en attente : le nœud porte des photos en base64
-      const ref = firebaseDb.ref('photoRequests').orderByChild('status').equalTo('pending');
-      
-      ref.on('child_added', (snap) => {
-        const req = snap.val();
-        if (req && req.status === 'pending') {
-          activePhotoRequests[snap.key] = req;
-          renderPhotoRequests();
-          updatePhotoRequestsBadge();
-        }
-      });
-      
-      ref.on('child_removed', (snap) => {
-        delete activePhotoRequests[snap.key];
-        renderPhotoRequests();
-        updatePhotoRequestsBadge();
-      });
-      
-      ref.on('child_changed', (snap) => {
-        const req = snap.val();
-        if (req && req.status !== 'pending') {
-          delete activePhotoRequests[snap.key];
-        } else if (req) {
-          activePhotoRequests[snap.key] = req;
-        }
-        renderPhotoRequests();
-        updatePhotoRequestsBadge();
-      });
-    }
-    
-    function updatePhotoRequestsBadge() {
-      const count = Object.keys(activePhotoRequests).length;
-      const badge = document.getElementById('photoRequestsBadge');
-      if (badge) {
-        badge.textContent = count;
-        badge.classList.toggle('has-count', count > 0);
-      }
-    }
-    
-    function renderPhotoRequests() {
-      const container = document.getElementById('sendPhotoList');
-      if (!container) return;
-      
-      const requests = Object.entries(activePhotoRequests);
-      if (requests.length === 0) {
-        container.innerHTML = '<div class="send-photo-empty">✅ Aucune demande en attente</div>';
-        return;
-      }
-      
-      container.innerHTML = requests.map(([id, req]) => {
-        const timeAgo = getTimeAgo(req.timestamp);
-        const typeIcon = req.messageType?.includes('Question') ? '❓' :
-                         req.messageType?.includes('Discussion') ? '💬' :
-                         req.messageType?.includes('Épinglé') ? '📌' :
-                         req.messageType?.includes('thread') ? '↩️' :
-                         req.module === 'psm' ? '📋' : '📷';
-        return `
-          <div class="photo-request-card" onclick="openSendPhotoCamera('${id}')">
-            <div class="photo-request-card-dot"></div>
-            <div class="photo-request-card-type">${typeIcon} ${req.messageType || req.module || 'Photo'}</div>
-            <div class="photo-request-card-name">${escapeHtml(req.jobName || 'N/A')}</div>
-            <div class="photo-request-card-order">#${escapeHtml(req.jobOrder || '---')}</div>
-            <div class="photo-request-card-by">Demandé par ${escapeHtml(req.requestedBy || '?')} · ${timeAgo}</div>
-          </div>
-        `;
-      }).join('');
-    }
-    
-    // === CAMÉRA MOBILE ===
-    let sendPhotoRequestId = null;
-    let sendPhotoStream = null;
-    let sendPhotoCapturedData = null;
-    let sendPhotoCount = 0;
-    
-    function openSendPhotoCamera(requestId) {
-      sendPhotoRequestId = requestId;
-      sendPhotoCapturedData = null;
-      sendPhotoCount = 0;
-      
-      document.getElementById('sendPhotoCamera').classList.add('active');
-      document.getElementById('sendPhotoCameraPreview').classList.remove('has-photo');
-      document.getElementById('sendPhotoCaptureBtn').style.display = '';
-      document.getElementById('sendPhotoSendBtn').style.display = 'none';
-      
-      const counter = document.getElementById('sendPhotoCounter');
-      if (counter) { counter.style.display = 'none'; counter.textContent = '📷 0 envoyée(s)'; }
-      
-      const video = document.getElementById('sendPhotoCameraVideo');
-      video.style.display = '';
-      
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-        .then(stream => {
-          sendPhotoStream = stream;
-          video.srcObject = stream;
-        })
-        .catch(err => {
-          console.error('Camera error:', err);
-          showToast('❌ Impossible d\'accéder à la caméra', 'error');
-          closeSendPhotoCamera();
+      const myEmail = String(currentUser.email).toLowerCase();
+      _psRef = firebaseDb.ref('photoRequests').orderByChild('requestedByEmail').equalTo(currentUser.email);
+      _psRef.on('value', function(snap) {
+        const all = snap.val() || {};
+        const mine = [];
+        Object.keys(all).forEach(function(jobId) {
+          const r = all[jobId];
+          if (!r) return;
+          if ((r.status === 'waiting' || r.status === 'answering') &&
+              String(r.requestedByEmail || '').toLowerCase() === myEmail &&
+              !_psIgnored[jobId + '_' + r.timestamp]) {
+            mine.push(Object.assign({ jobId: jobId }, r));
+          }
         });
-    }
-    window.openSendPhotoCamera = openSendPhotoCamera;
-    
-    function capturePhoto() {
-      const video = document.getElementById('sendPhotoCameraVideo');
-      const canvas = document.getElementById('sendPhotoCameraCanvas');
-      const preview = document.getElementById('sendPhotoCameraPreview');
-      
-      const MAX = 1200;
-      let w = video.videoWidth, h = video.videoHeight;
-      if (w > MAX || h > MAX) {
-        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-        else { w = Math.round(w * MAX / h); h = MAX; }
-      }
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(video, 0, 0, w, h);
-      
-      sendPhotoCapturedData = canvas.toDataURL('image/jpeg', 0.60);
-      preview.src = sendPhotoCapturedData;
-      preview.classList.add('has-photo');
-      video.style.display = 'none';
-      
-      document.getElementById('sendPhotoCaptureBtn').style.display = 'none';
-      document.getElementById('sendPhotoSendBtn').style.display = '';
-      
-      // Pause camera but don't stop (for retaking)
-      if (sendPhotoStream) {
-        sendPhotoStream.getTracks().forEach(t => t.enabled = false);
-      }
-    }
-    window.capturePhoto = capturePhoto;
-    
-    function sendCapturedPhoto() {
-      if (!sendPhotoRequestId || !sendPhotoCapturedData || !firebaseDb) return;
-      
-      const userName = getUserDisplayName(currentUser?.email || '');
-      const btn = document.getElementById('sendPhotoSendBtn');
-      if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
-      
-      firebaseDb.ref('photoResponses/' + sendPhotoRequestId).push({
-        data: sendPhotoCapturedData,
-        sentBy: currentUser?.email || '',
-        sentByName: userName,
-        timestamp: Date.now()
-      }).then(() => {
-        sendPhotoCount++;
-        showToast('📸 Photo ' + sendPhotoCount + ' envoyée!', 'success');
-        
-        // Update counter
-        const counter = document.getElementById('sendPhotoCounter');
-        if (counter) {
-          counter.style.display = 'block';
-          counter.textContent = '📷 ' + sendPhotoCount + ' envoyée(s)';
+        mine.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
+        // La demande affichée a été annulée / traitée par le PC → fermer
+        if (_psReq && !_psSending && !mine.some(function(r) { return r.jobId === _psReq.jobId && r.timestamp === _psReq.timestamp; })) {
+          _psClose(true);
+          showToast('📷 Demande de photo terminée ou annulée', 'info');
         }
-        
-        // Reset to capture mode for another photo
-        sendPhotoCapturedData = null;
-        document.getElementById('sendPhotoCameraPreview').classList.remove('has-photo');
-        document.getElementById('sendPhotoCaptureBtn').style.display = '';
-        document.getElementById('sendPhotoSendBtn').style.display = 'none';
-        if (btn) { btn.disabled = false; btn.textContent = '➤ Envoyer'; }
-        
-        // Re-enable camera
-        const video = document.getElementById('sendPhotoCameraVideo');
-        video.style.display = '';
-        if (sendPhotoStream) {
-          sendPhotoStream.getTracks().forEach(t => t.enabled = true);
-        } else {
-          // Re-open camera if stream was lost
-          navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-            .then(stream => { sendPhotoStream = stream; video.srcObject = stream; })
-            .catch(() => {});
-        }
-      }).catch(err => {
-        showToast('❌ Erreur: ' + err.message, 'error');
-        if (btn) { btn.disabled = false; btn.textContent = '➤ Envoyer'; }
+        if (!_psReq && mine.length) _psOpen(mine[0]);
       });
     }
-    window.sendCapturedPhoto = sendCapturedPhoto;
-    
-    // Terminer la session photo (marquer comme complété)
-    function finishSendPhotos() {
-      if (sendPhotoRequestId && firebaseDb) {
-        firebaseDb.ref('photoRequests/' + sendPhotoRequestId).update({ status: 'fulfilled' });
-      }
-      if (sendPhotoCount > 0) {
-        showToast('✅ ' + sendPhotoCount + ' photo(s) envoyée(s)', 'success');
-      }
-      closeSendPhotoCamera();
+
+    function _psOpen(req) {
+      _psReq = req;
+      _psPhotos = [];
+      _psSending = false;
+      firebaseDb.ref('photoRequests/' + req.jobId).update({ status: 'answering' }).catch(function(){});
+      const ov = document.getElementById('psOverlay');
+      if (!ov) return;
+      document.getElementById('psTitle').textContent = '📷 Photo demandée' + (req.order ? ' — #' + req.order : '');
+      document.getElementById('psSub').textContent = (req.client || '') + (req.requestedBy ? ' · par ' + req.requestedBy : '');
+      _psRender();
+      ov.classList.add('active');
+      _psStartCam();
     }
-    window.finishSendPhotos = finishSendPhotos;
-    
-    function closeSendPhotoCamera() {
-      if (sendPhotoStream) {
-        sendPhotoStream.getTracks().forEach(t => t.stop());
-        sendPhotoStream = null;
+
+    async function _psStartCam() {
+      const wrap = document.getElementById('psCamWrap');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { if (wrap) wrap.style.display = 'none'; return; }
+      try {
+        _psStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+          audio: false
+        });
+        if (!_psReq) { _psStopCam(); return; }
+        const v = document.getElementById('psVideo');
+        v.srcObject = _psStream;
+        try { await v.play(); } catch (e) {}
+        if (wrap) wrap.style.display = '';
+      } catch (e) {
+        console.warn('Caméra:', e && e.message);
+        if (wrap) wrap.style.display = 'none';
       }
-      sendPhotoCapturedData = null;
-      sendPhotoRequestId = null;
-      sendPhotoCount = 0;
-      document.getElementById('sendPhotoCamera').classList.remove('active');
     }
-    window.closeSendPhotoCamera = closeSendPhotoCamera;
+
+    function _psStopCam() {
+      if (_psStream) { _psStream.getTracks().forEach(function(t) { t.stop(); }); _psStream = null; }
+      const v = document.getElementById('psVideo');
+      if (v) v.srcObject = null;
+    }
+
+    // Même gabarit que PhotoSender (mode normal) : 1200 px, JPEG 60 %
+    // abaissé par pas de 5 % jusqu'à 45 % pour rester sous ~120 Ko.
+    function _psEncode(src, w, h) {
+      const MAX = 1200;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; } else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(src, 0, 0, w, h);
+      let q = 0.60, out = c.toDataURL('image/jpeg', q);
+      while (out.length > 120000 && q > 0.45) { q -= 0.05; out = c.toDataURL('image/jpeg', q); }
+      return out;
+    }
+
+    function psCapture() {
+      const v = document.getElementById('psVideo');
+      if (!v || !v.videoWidth) { showToast('⏳ Caméra pas encore prête', 'info'); return; }
+      _psPhotos.push(_psEncode(v, v.videoWidth, v.videoHeight));
+      _psRender();
+    }
+    window.psCapture = psCapture;
+
+    function psFiles(input) {
+      const files = Array.from((input && input.files) || []);
+      files.forEach(function(f) {
+        if (!f.type || f.type.indexOf('image') !== 0) return;
+        const url = URL.createObjectURL(f);
+        const img = new Image();
+        img.onload = function() {
+          _psPhotos.push(_psEncode(img, img.naturalWidth, img.naturalHeight));
+          URL.revokeObjectURL(url);
+          _psRender();
+        };
+        img.onerror = function() { URL.revokeObjectURL(url); };
+        img.src = url;
+      });
+      if (input) input.value = '';
+    }
+    window.psFiles = psFiles;
+
+    function psRemove(i) { _psPhotos.splice(i, 1); _psRender(); }
+    window.psRemove = psRemove;
+
+    function _psRender() {
+      const th = document.getElementById('psThumbs');
+      if (th) th.innerHTML = _psPhotos.map(function(p, i) {
+        return '<div class="ps-thumb"><img src="' + p + '" alt=""><button onclick="psRemove(' + i + ')">✕</button></div>';
+      }).join('');
+      const b = document.getElementById('psSendBtn');
+      if (b) {
+        b.disabled = !_psPhotos.length || _psSending;
+        b.textContent = _psSending ? '⏳ Envoi…' : (_psPhotos.length ? '➤ Envoyer ' + _psPhotos.length + ' photo' + (_psPhotos.length > 1 ? 's' : '') : '➤ Envoyer');
+      }
+    }
+
+    async function psSend() {
+      if (!_psReq || !_psPhotos.length || _psSending) return;
+      _psSending = true; _psRender();
+      const myEmail = String(currentUser.email || '').toLowerCase();
+      const payload = { status: 'done', sentBy: getUserDisplayName(myEmail) || myEmail, sentByEmail: myEmail, timestamp: Date.now() };
+      if (_psPhotos.length === 1) payload.photo = _psPhotos[0]; else payload.photos = _psPhotos.slice();
+      const n = _psPhotos.length;
+      try {
+        await firebaseDb.ref('photoRequests/' + _psReq.jobId).update(payload);
+        _psClose(true);
+        showToast('📸 ' + n + ' photo' + (n > 1 ? 's' : '') + ' envoyée' + (n > 1 ? 's' : '') + ' au PC', 'success');
+      } catch (e) {
+        _psSending = false; _psRender();
+        showToast('❌ Envoi impossible : ' + (e && e.message ? e.message : e), 'error');
+      }
+    }
+    window.psSend = psSend;
+
+    function _psClose(silent) {
+      _psStopCam();
+      _psReq = null; _psPhotos = []; _psSending = false;
+      const ov = document.getElementById('psOverlay');
+      if (ov) ov.classList.remove('active');
+    }
+
+    // ✕ : ignorer cette demande sur ce téléphone (le PC l'annulera après 3 min)
+    function psDismiss() {
+      if (_psReq) _psIgnored[_psReq.jobId + '_' + _psReq.timestamp] = 1;
+      _psClose(true);
+    }
+    window.psDismiss = psDismiss;
     // ═══════════════════════════════════════════════════════════
     
     // v1588: initMobileView appelé seulement si pas déjà initialisé (fallback de sécurité)
@@ -26074,10 +26451,21 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   </div>
 <!-- v1862 : PhysiPro_Nav.js retiré — Moulage est le seul programme en ligne -->
 
-<script>
+<!-- v1863 : Photo demandée (PhotoSender intégré, téléphone) -->
+<div class="ps-overlay" id="psOverlay">
+  <div class="ps-head">
+    <div class="ps-head-txt"><div class="ps-title" id="psTitle">📷 Photo demandée</div><div class="ps-sub" id="psSub"></div></div>
+    <button class="ps-close" onclick="psDismiss()" title="Fermer">✕</button>
+  </div>
+  <div class="ps-cam" id="psCamWrap"><video id="psVideo" autoplay playsinline muted></video></div>
+  <div class="ps-thumbs" id="psThumbs"></div>
+  <div class="ps-actions">
+    <button class="ps-shoot" onclick="psCapture()">📸 Photo</button>
+    <label class="ps-pick">🖼️ Galerie<input type="file" accept="image/*" multiple style="display:none" onchange="psFiles(this)"></label>
+    <button class="ps-send" id="psSendBtn" onclick="psSend()" disabled>➤ Envoyer</button>
+  </div>
+</div>
 
-
-</script>
 
 <!-- MCHAT overlays -->
 <div class="qchat-zoom-overlay" id="qchatZoomOverlay">
@@ -26174,6 +26562,496 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     if(ov) ov.classList.remove('active'); if(img) img.src='';
   };
   document.addEventListener('keydown', function(e){ if(e.key==='Escape') window.closePhotoViewer(); });
+})();
+</script>
+<!-- v1863 : SAUVEGARDE ONEDRIVE INTÉGRÉE (remplace PhysiPro_BackupStation.html) -->
+<script>
+(function(){
+  'use strict';
+  // ═══════════════════════════════════════════════════════════════════
+  // Une fois par jour, Valérie OU Cassie (la première qui ouvre Moulage
+  // sur son PC) voit un panneau centré « Cliquez pour sauvegarder ».
+  // Le clic est obligatoire : le navigateur n'autorise l'écriture dans un
+  // dossier du PC qu'après un geste de la personne.
+  //
+  // • Marqueur partagé moulageSettings/sauvegardeOneDrive {date,…} : dès
+  //   que l'une a fini, l'autre n'est plus dérangée ce jour-là.
+  // • « Plus tard » → le panneau revient 3 h plus tard.
+  // • Seulement ce qui sert encore : les fiches Moulage + leur chat
+  //   (chats/<id>/messages) + photos. Une fiche n'est refaite QUE si elle
+  //   a changé (signature gardée dans moulages/<id>/oneDrive.sig, partagée
+  //   entre les deux postes). Les photos déjà transférées restent dans le
+  //   cache du PC (IndexedDB « bkPhotoCache », le même que BackupStation).
+  // • Le drapeau oneDrive n'est posé QU'APRÈS l'écriture du Fiche.html :
+  //   aucun effacement d'un expédié n'est possible avant (voir
+  //   _isExpedieArchive).
+  // ═══════════════════════════════════════════════════════════════════
+  var SAUV_EMAILS = ['valerie18@videotron.ca', 'simdut@physipro.com'];
+  var SAUV_ADMINS = ['atelieratp@physipro.com', 'danielboom@videotron.ca'];
+  var MARK_PATH = 'moulageSettings/sauvegardeOneDrive';
+  var REPORT_H = 3;
+  var VERIF_MIN = 30;
+  var SIG_V = 'v30';
+
+  var dirH = null, enCours = false, timerVerif = null, demarre = false;
+
+  function email(){ try { return String((firebase.auth().currentUser || {}).email || '').toLowerCase(); } catch(e){ return ''; } }
+  function estAuto(){ return SAUV_EMAILS.indexOf(email()) >= 0; }
+  function estPermis(){ return estAuto() || SAUV_ADMINS.indexOf(email()) >= 0; }
+  function pcOK(){ return !!window.showDirectoryPicker && !(typeof isMobileView === 'function' && isMobileView()); }
+  function aujourdhui(){ var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function sH(s){ var h = 0; for (var i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return h.toString(36); }
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function sanFolder(s){ return (String(s == null ? '' : s).replace(/[\\\/:*?"<>|]/g,'-').replace(/\s+/g,' ').trim().substring(0,120)) || 'sans-nom'; }
+  function sanFile(s){ return (String(s == null ? '' : s).replace(/[\\\/:*?"<>|]/g,'_').replace(/\s+/g,' ').trim().substring(0,120)) || 'fichier'; }
+  function colName(id){ var c = {colRobot:'⚙️ Robot',colDegauchage:'🪚 Dégauchage',colEssayage:'👔 Essayage',colAtelier:'🔧 Atelier',colCouture:'🧵 Couture',colPeinture:'🎨 Peinture',colExpedition:'📦 Expédition',colAttente:'⏳ En attente'}; return c[id] || id || '—'; }
+  function stable(v){
+    if (v === null || typeof v !== 'object') return JSON.stringify(v);
+    if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
+    return '{' + Object.keys(v).sort().map(function(k){ return JSON.stringify(k) + ':' + stable(v[k]); }).join(',') + '}';
+  }
+  var PUSH = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+  function pushTs(k){ if (typeof k !== 'string' || k.length !== 20) return Infinity; var t = 0; for (var i = 0; i < 8; i++) { var p = PUSH.indexOf(k.charAt(i)); if (p < 0) return Infinity; t = t * 64 + p; } return t; }
+  function nomTs(n){ var m = String(n).match(/1[5-9]\d{11}/); return m ? Number(m[0]) : Infinity; }
+
+  // ── IndexedDB : mêmes bases que BackupStation (dossier + cache photos) ──
+  function idbOuvrir(nom, store){ return new Promise(function(res){ try { var q = indexedDB.open(nom, 1); q.onupgradeneeded = function(){ try { q.result.createObjectStore(store); } catch(e){} }; q.onsuccess = function(){ res(q.result); }; q.onerror = function(){ res(null); }; } catch(e){ res(null); } }); }
+  var _db = {};
+  function idb(nom, store){ if (!_db[nom]) _db[nom] = idbOuvrir(nom, store); return _db[nom]; }
+  function idbGet(nom, store, k){ return idb(nom, store).then(function(d){ return new Promise(function(res){ if (!d) return res(null); try { var r = d.transaction(store,'readonly').objectStore(store).get(k); r.onsuccess = function(){ res(r.result == null ? null : r.result); }; r.onerror = function(){ res(null); }; } catch(e){ res(null); } }); }); }
+  function idbSet(nom, store, k, v){ return idb(nom, store).then(function(d){ return new Promise(function(res){ if (!d) return res(); try { var t = d.transaction(store,'readwrite'); t.objectStore(store).put(v, k); t.oncomplete = function(){ res(); }; t.onerror = function(){ res(); }; } catch(e){ res(); } }); }); }
+  function cGet(k){ return idbGet('bkPhotoCache', 'ph', k); }
+  function cSet(k, v){ return idbSet('bkPhotoCache', 'ph', k, v); }
+
+  function blobB64(b){ return new Promise(function(res){ try { var r = new FileReader(); r.onload = function(){ res(r.result); }; r.onerror = function(){ res(null); }; r.readAsDataURL(b); } catch(e){ res(null); } }); }
+  function b64Blob(d){ try { var p = String(d).split(','); var m = (p[0].match(/data:([^;]+)/) || [])[1] || 'application/octet-stream'; var bin = atob(p[1]); var u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], {type: m}); } catch(e){ return null; } }
+
+  async function lireCles(chemin){
+    var base = String(firebase.app().options.databaseURL || '').replace(/\/$/, '');
+    var jeton = await firebase.auth().currentUser.getIdToken();
+    var r = await fetch(base + '/' + chemin + '.json?shallow=true&auth=' + encodeURIComponent(jeton));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return Object.keys((await r.json()) || {}).sort();
+  }
+
+  // ── Dossier OneDrive ──
+  async function chargerDossier(){ if (dirH) return dirH; dirH = await idbGet('PBkp', 's', 'd'); return dirH; }
+  async function choisirDossier(){
+    try {
+      dirH = await window.showDirectoryPicker({ id: 'physipro-bkp', mode: 'readwrite' });
+      await idbSet('PBkp', 's', 'd', dirH);
+      return true;
+    } catch(e){ if (e && e.name !== 'AbortError') showToast('❌ ' + e.message, 'error'); return false; }
+  }
+  async function permission(){
+    if (!dirH) return false;
+    try {
+      if (await dirH.queryPermission({ mode: 'readwrite' }) === 'granted') return true;
+      return (await dirH.requestPermission({ mode: 'readwrite' })) === 'granted';
+    } catch(e){ return false; }
+  }
+
+  // ── Panneau centré ──
+  function el(id){ return document.getElementById(id); }
+  function panneau(){
+    var ov = el('sauvOverlay');
+    if (ov) return ov;
+    ov = document.createElement('div');
+    ov.id = 'sauvOverlay';
+    ov.className = 'sauv-overlay';
+    ov.innerHTML = '<div class="sauv-box">'
+      + '<div class="sauv-title">💾 Sauvegarde OneDrive</div>'
+      + '<div class="sauv-last" id="sauvBoxLast"></div>'
+      + '<div class="sauv-info" id="sauvBoxInfo">Copie quotidienne des fiches Moulage, du chat et des photos dans le dossier OneDrive.</div>'
+      + '<div class="sauv-bar"><div class="sauv-fill" id="sauvFill"></div></div>'
+      + '<div class="sauv-status" id="sauvStatus"></div>'
+      + '<div class="sauv-btns">'
+      +   '<button class="sauv-btn later" id="sauvLater" onclick="sauvegardePlusTard()">Plus tard</button>'
+      +   '<button class="sauv-btn go" id="sauvGo" onclick="sauvegardeLancer()">💾 Cliquez pour sauvegarder</button>'
+      + '</div>'
+      + '<button class="sauv-link" id="sauvDir" onclick="sauvegardeChangerDossier()">📂 Changer de dossier</button>'
+      + '</div>';
+    document.body.appendChild(ov);
+    return ov;
+  }
+  function statut(t, cls){ var s = el('sauvStatus'); if (s) { s.textContent = t || ''; s.className = 'sauv-status' + (cls ? ' ' + cls : ''); } }
+  function barre(p){ var f = el('sauvFill'); if (f) f.style.width = Math.max(0, Math.min(100, p)) + '%'; }
+  function texteDernier(m){
+    if (!m || !m.date) return 'Aucune sauvegarde enregistrée.';
+    var qui = m.par ? (typeof getUserDisplayName === 'function' ? getUserDisplayName(m.par) : m.par) : '';
+    return 'Dernière sauvegarde : ' + m.date + (m.at ? ' à ' + new Date(m.at).toLocaleTimeString('fr-CA', {hour:'2-digit', minute:'2-digit'}) : '') + (qui ? ' par ' + qui : '') + (m.manquantes ? ' — ⚠️ ' + m.manquantes + ' photo(s) manquante(s)' : '');
+  }
+  async function lireMarqueur(){ try { return (await firebaseDb.ref(MARK_PATH).once('value')).val() || null; } catch(e){ return null; } }
+
+  async function montrer(m){
+    var ov = panneau();
+    el('sauvBoxLast').textContent = texteDernier(m);
+    await chargerDossier();
+    el('sauvBoxInfo').innerHTML = dirH
+      ? 'Dossier : <b>' + esc(dirH.name) + '</b>. Copie des fiches Moulage, du chat et des photos.'
+      : 'Première fois sur ce poste : au clic, choisissez le <b>même dossier OneDrive</b> que l\'ancienne BackupStation (celui qui contient « Moulages »).';
+    statut('');
+    barre(0);
+    el('sauvGo').disabled = false;
+    el('sauvLater').disabled = false;
+    el('sauvDir').style.display = dirH ? '' : 'none';
+    ov.classList.add('active');
+  }
+  function fermer(){ var ov = el('sauvOverlay'); if (ov) ov.classList.remove('active'); }
+
+  // ── Vérification périodique (pas de panneau si déjà fait aujourd'hui) ──
+  async function verifier(){
+    if (enCours || !estAuto() || !pcOK()) return;
+    var ov = el('sauvOverlay');
+    if (ov && ov.classList.contains('active')) return;
+    var rep = 0; try { rep = Number(localStorage.getItem('sauv_reporte') || 0); } catch(e){}
+    if (rep > Date.now()) return;
+    var m = await lireMarqueur();
+    afficherReglage(m);
+    if (m && m.date === aujourdhui()) return;
+    if (m && m.enCours && m.enCours.par !== email() && Date.now() - (m.enCours.at || 0) < 20 * 60000) return;
+    montrer(m);
+  }
+
+  window.sauvegardePlusTard = function(){
+    try { localStorage.setItem('sauv_reporte', String(Date.now() + REPORT_H * 3600000)); } catch(e){}
+    fermer();
+    showToast('💾 Rappel de sauvegarde dans ' + REPORT_H + ' h', 'info');
+  };
+  window.sauvegardeChangerDossier = async function(){
+    if (enCours) return;
+    if (await choisirDossier()) { el('sauvBoxInfo').innerHTML = 'Dossier : <b>' + esc(dirH.name) + '</b>.'; el('sauvDir').style.display = ''; }
+  };
+  window.sauvegardeOuvrir = async function(){
+    if (!pcOK()) { showToast('💾 La sauvegarde se fait sur PC (Chrome ou Edge)', 'error'); return; }
+    if (typeof closeSettingsModal === 'function') { try { closeSettingsModal(null, true); } catch(e){} }
+    montrer(await lireMarqueur());
+  };
+
+  window.sauvegardeLancer = async function(){
+    if (enCours) return;
+    await chargerDossier();
+    if (!dirH || !(await permission())) {
+      if (!(await choisirDossier())) { statut('Aucun dossier choisi.', 'err'); return; }
+      if (!(await permission())) { statut('Permission refusée pour ce dossier.', 'err'); return; }
+    }
+    enCours = true;
+    el('sauvGo').disabled = true;
+    el('sauvLater').disabled = true;
+    el('sauvDir').style.display = 'none';
+    try { firebaseDb.ref(MARK_PATH + '/enCours').set({ par: email(), at: Date.now() }).catch(function(){}); } catch(e){}
+    var r = null;
+    try { r = await sauvegarder(); }
+    catch(e){ statut('❌ Erreur : ' + (e && e.message ? e.message : e), 'err'); console.error('Sauvegarde OneDrive:', e); }
+    enCours = false;
+    el('sauvLater').disabled = false;
+    el('sauvLater').textContent = 'Fermer';
+    if (!r) { el('sauvGo').disabled = false; try { firebaseDb.ref(MARK_PATH + '/enCours').remove().catch(function(){}); } catch(e){} return; }
+    var m = { date: aujourdhui(), at: Date.now(), par: email(), fiches: r.faites, total: r.total, manquantes: r.manquantes, erreurs: r.erreurs };
+    try { await firebaseDb.ref(MARK_PATH).set(m); } catch(e){ console.warn('Marqueur sauvegarde:', e && e.message); }
+    try { localStorage.removeItem('sauv_reporte'); } catch(e){}
+    afficherReglage(m);
+    el('sauvBoxLast').textContent = texteDernier(m);
+    barre(100);
+    if (r.manquantes || r.erreurs) {
+      statut('⚠️ Sauvegarde faite, mais ' + (r.manquantes ? r.manquantes + ' photo(s) non copiée(s)' : '') + (r.manquantes && r.erreurs ? ' et ' : '') + (r.erreurs ? r.erreurs + ' fiche(s) en erreur' : '') + '. Ces moulages ne seront pas effaçables tant que ce n\'est pas réglé. Réessayez plus tard ; si ça persiste, avisez Daniel.', 'err');
+    } else {
+      statut('✅ Sauvegarde terminée : ' + r.faites + ' fiche(s) mise(s) à jour, ' + (r.total - r.faites) + ' déjà à jour.', 'ok');
+      setTimeout(fermer, 6000);
+    }
+  };
+
+  // ── Sauvegarde ──
+  async function sauvegarder(){
+    var cards = (typeof cardsData !== 'undefined' && cardsData) ? cardsData : {};
+    var root = await dirH.getDirectoryHandle('Moulages', { create: true });
+
+    // fauteuils rattachés → listés dans la fiche du moulage parent
+    var fauteuils = {};
+    Object.keys(cards).forEach(function(id){ var c = cards[id]; if (c && c.isFauteuil && c.fauteuilPour) (fauteuils[c.fauteuilPour] = fauteuils[c.fauteuilPour] || []).push(c); });
+
+    var ids = Object.keys(cards).filter(function(id){ var c = cards[id]; return c && !c.isNote && !c.isFauteuil && (c.order || c.name); });
+
+    // photoArchives : clés seulement, puis le cardId de chaque nouvelle clé (quelques octets)
+    statut('Lecture des archives photo…');
+    var archParCarte = {}, archMaxTs = 0;
+    try {
+      var ak = await lireCles('photoArchives');
+      for (var a = 0; a < ak.length; a++) {
+        var k = ak[a];
+        archMaxTs = Math.max(archMaxTs, pushTs(k) === Infinity ? 0 : pushTs(k));
+        var cid = await cGet('pac:' + k);
+        if (!cid) { try { cid = (await firebaseDb.ref('photoArchives/' + k + '/cardId').once('value')).val() || '-'; await cSet('pac:' + k, cid); } catch(e){ cid = null; } }
+        if (cid && cid !== '-') (archParCarte[cid] = archParCarte[cid] || []).push(k);
+      }
+    } catch(e){ console.warn('photoArchives:', e && e.message); }
+
+    var res = { total: ids.length, faites: 0, manquantes: 0, erreurs: 0 };
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i], card = cards[id];
+      barre(i / ids.length * 100);
+      statut('Fiche ' + (i + 1) + ' / ' + ids.length + ' — #' + (card.order || '') + ' ' + (card.name || ''));
+      try {
+        var r = await sauverFiche(root, id, card, fauteuils[id] || [], archParCarte[id] || [], archMaxTs);
+        if (r.faite) res.faites++;
+        res.manquantes += r.manquantes;
+      } catch(e){
+        res.erreurs++;
+        console.warn('Sauvegarde #' + (card.order || id) + ':', e && e.message);
+      }
+    }
+    return res;
+  }
+
+  async function sauverFiche(root, id, card, fauts, archKeys, archMaxTs){
+    var order = card.order || '';
+    var folder = sanFolder((order || 'SANS-NUM') + ' - ' + (card.name || 'Sans nom'));
+    var od = card.oneDrive || {};
+
+    // Signature : la fiche (sans les champs de suivi) + clés du chat + photos Storage + archives + fauteuils
+    var copie = {};
+    Object.keys(card).forEach(function(k){ if (k !== 'oneDrive' && k !== 'localModifiedAt' && k !== 'updatedAt' && k.charAt(0) !== '_') copie[k] = card[k]; });
+    var chatKeys = [];
+    try { chatKeys = await lireCles('chats/' + id + '/messages'); } catch(e){ throw new Error('chat illisible (' + e.message + ')'); }
+    var sbItems = [];
+    if (order) { try { sbItems = (await storage.ref('photos/moulages/' + order).listAll()).items; } catch(e){ throw new Error('photos illisibles (' + e.message + ')'); } }
+    var sbNoms = sbItems.map(function(it){ return it.name; }).sort();
+    var sig = SIG_V + '|' + sH(stable(copie)) + '|' + sH(chatKeys.join(',')) + '|' + sH(sbNoms.join(',')) + '|' + sH(archKeys.join(',')) + '|' + sH(stable(fauts));
+    if (od.archived && od.sig === sig) return { faite: false, manquantes: 0 };
+
+    var mf = await root.getDirectoryHandle(folder, { create: true });
+
+    // 1re passe sur un poste : une fiche déjà archivée par BackupStation et
+    // inchangée depuis est adoptée telle quelle (aucun téléchargement).
+    if (od.archived && od.complete && !od.sig && od.at) {
+      var tCarte = Math.max(Number(card.updatedAt) || 0, Number(card.localModifiedAt) || 0);
+      var neuf = tCarte === 0 || tCarte > od.at
+        || chatKeys.some(function(k){ return pushTs(k) > od.at; })
+        || sbNoms.some(function(n){ return nomTs(n) > od.at; })
+        || archMaxTs > od.at;
+      var existe = false;
+      try { await mf.getFileHandle('Fiche.html'); existe = true; } catch(e){}
+      if (!neuf && existe) {
+        await firebaseDb.ref('moulages/' + id + '/oneDrive/sig').set(sig);
+        return { faite: false, manquantes: 0 };
+      }
+    }
+
+    // Chat complet : seulement si les clés ont changé depuis la dernière copie sur ce poste
+    var msgs = [];
+    if (chatKeys.length) {
+      var cc = await cGet('chat:' + id);
+      if (cc && cc.k === sH(chatKeys.join(','))) msgs = cc.m || [];
+      else {
+        var v = (await firebaseDb.ref('chats/' + id + '/messages').once('value')).val() || {};
+        msgs = Object.keys(v).map(function(k){ return v[k]; }).filter(Boolean).sort(function(a, b){ return (a.timestamp || 0) - (b.timestamp || 0); });
+        await cSet('chat:' + id, { k: sH(chatKeys.join(',')), m: msgs });
+      }
+    }
+
+    // Photos → base64 (cache local : jamais re-téléchargées)
+    var manq = 0, map = {};
+    async function parUrl(u){
+      if (typeof u !== 'string') return null;
+      if (u.indexOf('data:') === 0) return u;
+      if (!/^https?:/i.test(u)) return null;
+      if (map[u]) return map[u];
+      var ck = 'url:' + sH(u), b = await cGet(ck);
+      if (!b) {
+        try { var rp = await fetch(u); if (!rp.ok) throw new Error('HTTP ' + rp.status); b = await blobB64(await rp.blob()); }
+        catch(e){ try { b = await blobB64(await storage.refFromURL(u).getBlob()); } catch(e2){ b = null; } }
+        if (b) await cSet(ck, b);
+      }
+      if (!b) { manq++; return null; }
+      map[u] = b;
+      return b;
+    }
+    var galerie = [];
+    for (var s = 0; s < sbItems.length; s++) {
+      var it = sbItems[s], ck = 'sb:' + it.name, b = await cGet(ck);
+      if (!b) {
+        try {
+          var bl = null;
+          if (it.getBlob) { try { bl = await it.getBlob(); } catch(e){ bl = null; } }
+          if (!bl) { var rp = await fetch(await it.getDownloadURL()); if (!rp.ok) throw new Error('HTTP ' + rp.status); bl = await rp.blob(); }
+          b = await blobB64(bl);
+          if (b) await cSet(ck, b);
+        } catch(e){ b = null; }
+      }
+      if (b) galerie.push(b); else manq++;
+    }
+    // photos d'archive mobile
+    for (var a = 0; a < archKeys.length; a++) {
+      var pa = await cGet('pa:' + archKeys[a]);
+      if (!pa) { try { pa = (await firebaseDb.ref('photoArchives/' + archKeys[a]).once('value')).val(); if (pa) await cSet('pa:' + archKeys[a], pa); } catch(e){ pa = null; } }
+      if (!pa) { manq++; continue; }
+      var lst = pa.photos || [];
+      for (var p = 0; p < lst.length; p++) { var x = lst[p] && (lst[p].url || lst[p].data); var bx = await parUrl(x); if (bx) galerie.push(bx); }
+    }
+    // historique
+    var histo = {};
+    if (card.historique && typeof card.historique === 'object') {
+      var hk = Object.keys(card.historique);
+      for (var h = 0; h < hk.length; h++) { var e = card.historique[hk[h]]; if (e && e.photo) { var bh = await parUrl(e.photo); if (bh) histo[e.photo] = bh; } }
+    }
+    // chat : images + fichiers joints (dossier Fichiers/, écrits une seule fois)
+    var fichiersDir = null, chatOut = [];
+    for (var m = 0; m < msgs.length; m++) {
+      var msg = msgs[m], imgs = [];
+      if (msg.image) imgs.push(msg.image);
+      if (msg.images) imgs = imgs.concat(Array.isArray(msg.images) ? msg.images : Object.keys(msg.images).map(function(k){ return msg.images[k]; }));
+      var ph = [];
+      for (var q = 0; q < imgs.length; q++) { var bi = await parUrl(imgs[q]); if (bi) { ph.push(bi); galerie.push(bi); } }
+      var fj = [];
+      var fl = msg.files ? (Array.isArray(msg.files) ? msg.files : Object.keys(msg.files).map(function(k){ return msg.files[k]; })) : [];
+      for (var f = 0; f < fl.length; f++) {
+        var fo = fl[f]; if (!fo) continue;
+        var nom = sanFile((msg.timestamp || m) + '_' + (fo.name || ('fichier' + f)));
+        try {
+          if (!fichiersDir) fichiersDir = await mf.getDirectoryHandle('Fichiers', { create: true });
+          var deja = false;
+          try { await fichiersDir.getFileHandle(nom); deja = true; } catch(e){}
+          if (!deja) {
+            var blob = null;
+            if (fo.dataUrl) blob = b64Blob(fo.dataUrl);
+            else if (fo.url) { try { var rf = await fetch(fo.url); if (rf.ok) blob = await rf.blob(); } catch(e){ try { blob = await storage.refFromURL(fo.url).getBlob(); } catch(e2){ blob = null; } } }
+            if (!blob) throw new Error('fichier');
+            var wf = await (await fichiersDir.getFileHandle(nom, { create: true })).createWritable();
+            await wf.write(blob); await wf.close();
+          }
+          fj.push(nom);
+        } catch(e){ manq++; }
+      }
+      chatOut.push({ msg: msg, ph: ph, fj: fj });
+    }
+    // anciens messages intégrés à la carte (card.messages)
+    var vieux = [];
+    var cm = card.messages ? (Array.isArray(card.messages) ? card.messages : Object.keys(card.messages).map(function(k){ return card.messages[k]; })) : [];
+    for (var o = 0; o < cm.length; o++) {
+      var om = cm[o]; if (!om) continue;
+      var oi = [], ophs = [];
+      if (om.image) oi.push(om.image);
+      if (om.images && om.images.length) oi = oi.concat(om.images);
+      for (var z = 0; z < oi.length; z++) { var bo = await parUrl(oi[z]); if (bo) { ophs.push(bo); galerie.push(bo); } }
+      vieux.push({ msg: om, ph: ophs });
+    }
+
+    var html = construireFiche(card, galerie, histo, chatOut, vieux, fauts);
+    var w = await (await mf.getFileHandle('Fiche.html', { create: true })).createWritable();
+    await w.write(new Blob([html], { type: 'text/html' }));
+    await w.close();
+
+    // Drapeau posé SEULEMENT après l'écriture réussie du fichier
+    var uniq = {}; galerie.forEach(function(g){ uniq[sH(g)] = 1; });
+    await firebaseDb.ref('moulages/' + id + '/oneDrive').set({
+      archived: true,
+      complete: manq === 0,
+      nbPhotos: Object.keys(uniq).length,
+      nbManquantes: manq,
+      folder: folder,
+      date: aujourdhui(),
+      at: Date.now(),
+      sig: manq === 0 ? sig : '',
+      par: email()
+    });
+    return { faite: true, manquantes: manq };
+  }
+
+  function nettoyerHtml(h){
+    return String(h).replace(new RegExp('<scr' + 'ipt[\\s\\S]*?</scr' + 'ipt>', 'gi'), '').replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  }
+
+  function construireFiche(card, galerie, histo, chatOut, vieux, fauts){
+    var infos = [['N° Commande',card.order],['Bénéficiaire',card.name],['Client',card.client],['Région',card.region],['Intervenant',card.intervenant],['Représentante',card.representante],['PO',card.po],['Soumission',card.soumission],['Item',card.item],['Étape',card.etat],['Statut',colName(card.colonne)],['Raison attente',card.raisonAttente],['Rush',(card.rush === 'YES' || card.rush === true) ? 'OUI' : ''],['Date reçue',card.dateRecue],['Date livraison',card.dateLivraison],['Date essayage',card.dateEssayage],['Date expédition',card.dateExpedition],['Expédié',(typeof card.expedie === 'string') ? card.expedie : (card.expedie ? 'oui' : '')],['Créé le',card.createdAt]];
+    var rows = infos.filter(function(r){ return r[1] !== undefined && r[1] !== null && r[1] !== ''; }).map(function(r){ return '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td></tr>'; }).join('');
+    var DEPT = {robot:'Robot',degauchage:'Dégauchage',essayage:'Essayage',atelier:'Atelier',couture:'Couture',peinture:'Peinture',expedition:'Expédition',attente:'En attente'};
+    var CHAMP = {entree:'Entrée',sortie:'Sortie',heure:'Heure',date:'Date'};
+    var suivi = '';
+    if (card.tracking && typeof card.tracking === 'object') {
+      var tk = Object.keys(card.tracking);
+      if (tk.length) suivi = '<h2>Suivi de production</h2><table class="info">' + tk.map(function(k){
+        var v = card.tracking[k], lab = DEPT[k] || (k.charAt(0).toUpperCase() + k.slice(1)), det = '';
+        if (v && typeof v === 'object') det = Object.keys(v).filter(function(f){ return v[f] !== '' && v[f] != null; }).map(function(f){ return (CHAMP[f] || f) + ' : ' + esc(v[f]); }).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+        else det = esc(v);
+        return det ? '<tr><th>' + esc(lab) + '</th><td>' + det + '</td></tr>' : '';
+      }).join('') + '</table>';
+    }
+    var fautHtml = fauts.length ? '<h2>Fauteuils rattachés (' + fauts.length + ')</h2><table class="info">' + fauts.map(function(f){
+      return '<tr><th>' + esc(f.fauteuilNom || f.name || 'Fauteuil') + '</th><td>' + esc([f.fauteuilPret ? 'prêt' : '', f.fauteuilPretDate || '', f.notes ? String(f.notes).replace(/<[^>]+>/g, ' ') : ''].filter(Boolean).join(' · ')) + '</td></tr>';
+    }).join('') + '</table>' : '';
+    var notes = '';
+    if (card.notes) { var nv = String(card.notes); notes = '<h2>Notes</h2><div class="notes">' + (/<[a-z][\s\S]*>/i.test(nv) ? nettoyerHtml(nv) : esc(nv).replace(/\n/g, '<br>')) + '</div>'; }
+    var hist = '';
+    if (card.historique && typeof card.historique === 'object') {
+      var he = Object.keys(card.historique).map(function(k){ return card.historique[k]; }).filter(Boolean).sort(function(a, b){ return (b.timestamp || 0) - (a.timestamp || 0); });
+      if (he.length) hist = '<h2>Historique des actions (' + he.length + ')</h2>' + he.map(function(e){
+        var q = e.timestamp ? new Date(e.timestamp).toLocaleString('fr-CA') : '';
+        return '<div class="hi"><div class="ha">' + esc(e.action || '') + '</div>' + (e.note ? '<div class="hn">' + esc(String(e.note)).replace(/\n/g, '<br>') + '</div>' : '') + (e.photo && histo[e.photo] ? '<img class="z hp" src="' + histo[e.photo] + '" loading="lazy">' : '') + '<div class="hm">' + esc(e.parNom || '') + (q ? ' · ' + esc(q) : '') + '</div></div>';
+      }).join('');
+    }
+    var TL = { conversation: '💬 Conversation', reply: '↩️ Réponse', pinned: '📌 Épinglé', normal: '💬 Note', problem: '❓ Questionnement', solution: '✅ Réponse' };
+    function bulle(o){
+      var m = o.msg, t = m.type || 'normal';
+      var corps = m.contentHtml ? nettoyerHtml(m.contentHtml) : (m.content ? esc(m.content).replace(/\n/g, '<br>') : '');
+      var q = m.timestamp ? new Date(m.timestamp).toLocaleString('fr-CA') : (m.date || '');
+      var ph = (o.ph || []).map(function(s){ return '<img class="z" src="' + s + '" loading="lazy">'; }).join('');
+      var fj = (o.fj || []).map(function(n){ return '<a href="Fichiers/' + encodeURIComponent(n) + '">📎 ' + esc(n) + '</a>'; }).join('');
+      return '<div class="msg t-' + esc(t) + '"><div class="mh"><span class="ty">' + (TL[t] || '💬') + '</span><span class="wh">' + esc(m.authorName || m.author || m.nom || '') + '</span>' + (m.sansEssayage ? '<span class="se">sans essayage</span>' : '') + '<span class="dt">' + esc(q) + '</span></div>' + (corps ? '<div class="bd">' + corps + '</div>' : '') + (ph ? '<div class="ph">' + ph + '</div>' : '') + (fj ? '<div class="fj">' + fj + '</div>' : '') + '</div>';
+    }
+    var chat = '<h2>Notes &amp; Chat (' + chatOut.length + ')</h2>' + (chatOut.length ? chatOut.map(bulle).join('') : '<div class="empty">Aucun message</div>');
+    var anc = vieux.length ? '<h2>Anciennes discussions (' + vieux.length + ')</h2>' + vieux.map(bulle).join('') : '';
+    var vu = {}, gal = galerie.filter(function(g){ var k = sH(g); if (vu[k]) return false; vu[k] = 1; return true; });
+    var galHtml = gal.length ? '<div class="gal">' + gal.map(function(s){ return '<img class="z" src="' + s + '" loading="lazy">'; }).join('') + '</div>' : '<div class="empty">Aucune photo</div>';
+    var titre = esc((card.order || '') + (card.name ? ' — ' + card.name : ''));
+    return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + titre + '</title><style>'
+      + '*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:20px;line-height:1.5}'
+      + '.wrap{max-width:900px;margin:0 auto}h1{font-size:22px;color:#fff;margin-bottom:4px}.sub{color:#94a3b8;font-size:13px;margin-bottom:18px}'
+      + 'h2{font-size:15px;color:#fbbf24;margin:22px 0 8px;border-bottom:1px solid #1e293b;padding-bottom:4px}'
+      + 'table.info{width:100%;border-collapse:collapse;background:#1e293b;border-radius:8px;overflow:hidden}'
+      + 'table.info th{text-align:left;width:170px;padding:7px 12px;color:#93c5fd;font-size:12px;font-weight:600;vertical-align:top;border-bottom:1px solid #0f172a}'
+      + 'table.info td{padding:7px 12px;font-size:13px;border-bottom:1px solid #0f172a;word-break:break-word}'
+      + '.notes{background:#1e293b;border-radius:8px;padding:12px;font-size:13px}.notes img{max-width:100%}'
+      + '.msg{background:#1e293b;border-left:3px solid #475569;border-radius:6px;padding:9px 12px;margin-bottom:8px}'
+      + '.msg.t-pinned{border-left-color:#3b82f6}.msg.t-reply,.msg.t-solution{border-left-color:#22c55e}.msg.t-problem{border-left-color:#f59e0b}.msg.t-conversation{border-left-color:#a78bfa}'
+      + '.mh{display:flex;gap:10px;align-items:center;font-size:11px;margin-bottom:4px;flex-wrap:wrap}.ty{font-weight:700}.wh{color:#93c5fd}.dt{color:#64748b;margin-left:auto}.se{background:#7c2d12;color:#fed7aa;border-radius:4px;padding:0 5px}'
+      + '.bd{font-size:13px;word-break:break-word}.bd img{max-width:100%}'
+      + '.hi{background:#1e293b;border-left:3px solid #14b8a6;border-radius:6px;padding:9px 12px;margin-bottom:8px}.ha{font-size:13px;font-weight:600;color:#fff}.hn{font-size:12px;color:#94a3b8;margin-top:3px}.hm{font-size:11px;color:#64748b;margin-top:5px}.hp{display:block;width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid #334155;margin-top:6px}'
+      + '.ph{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.ph img{height:90px;border-radius:4px;border:1px solid #334155;object-fit:cover}'
+      + '.fj{display:flex;flex-direction:column;gap:3px;margin-top:6px;font-size:12px}.fj a{color:#93c5fd}'
+      + '.gal{display:flex;flex-wrap:wrap;gap:8px}.gal img{height:130px;border-radius:6px;border:1px solid #334155;object-fit:cover}'
+      + '.z{cursor:zoom-in}.lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;cursor:zoom-out;align-items:center;justify-content:center;padding:16px}'
+      + '.lb.show{display:flex}.lb img{max-width:96vw;max-height:96vh;border-radius:6px}'
+      + '.empty{color:#64748b;font-style:italic;font-size:13px;padding:6px 0}.foot{margin-top:24px;color:#475569;font-size:11px;text-align:center}'
+      + '</style></head><body><div class="wrap">'
+      + '<h1>' + titre + '</h1><div class="sub">Archive PhysiPro — Moulage</div>'
+      + '<h2>Informations</h2><table class="info">' + rows + '</table>'
+      + suivi + fautHtml + notes + chat + anc + hist
+      + '<h2>Photos (' + gal.length + ')</h2>' + galHtml
+      + '<div class="foot">Sauvegarde PhysiPro Moulage — ' + esc(new Date().toLocaleString('fr-CA')) + '</div></div>'
+      + '<div class="lb" id="lb"><img id="lbi" alt=""></div>'
+      + '<scr' + 'ipt>document.addEventListener("click",function(e){var t=e.target,lb=document.getElementById("lb");if(t&&t.classList&&t.classList.contains("z")){document.getElementById("lbi").src=t.src;lb.classList.add("show");return;}if(lb&&lb.classList.contains("show"))lb.classList.remove("show");});document.addEventListener("keydown",function(e){if(e.key==="Escape"){var lb=document.getElementById("lb");if(lb)lb.classList.remove("show");}});</scr' + 'ipt>'
+      + '</body></html>';
+  }
+
+  // ── Réglages : section visible pour Valérie, Cassie et l'admin ──
+  function afficherReglage(m){
+    var sec = el('sauvSettingsSection');
+    if (!sec) return;
+    sec.style.display = (estPermis() && pcOK()) ? '' : 'none';
+    var t = el('sauvSettingsLast');
+    if (t && m !== undefined) t.textContent = texteDernier(m);
+  }
+
+  // Appelé après la connexion (onAuthStateChanged)
+  window.sauvegardeDemarrer = function(){
+    afficherReglage();
+    if (demarre || !estPermis() || !pcOK()) return;
+    demarre = true;
+    lireMarqueur().then(afficherReglage);
+    if (!estAuto()) return;
+    setTimeout(verifier, 20000);
+    timerVerif = setInterval(verifier, VERIF_MIN * 60000);
+  };
 })();
 </script>
 </body>
