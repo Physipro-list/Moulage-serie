@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhysiPro 📷 Mes photos v3</title>
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  PhysiPro — MES PHOTOS v3 (2026-10-19)
+  v3 : consommation minimale garantie.
+       • Les photos arrivent en lots (lots/<id>) ; seuls les lots reçus
+         sont effacés, puis le nœud vide est retiré. Un envoi qui arrive
+         pendant le ménage n'est jamais perdu ni retéléchargé.
+       • Une seule fenêtre « Mes photos » écoute à la fois : une 2e
+         fenêtre ouverte ne retélécharge pas les mêmes photos.
+       • Les photos ne sont gardées nulle part : ni dans Firebase (effacées
+         dès réception), ni dans le navigateur (vignettes en mémoire,
+         perdues à la fermeture). Seul le fichier dans Téléchargements reste.
+  v2 : reçoit aussi les photos envoyées par le bouton « 📷 Mes photos »
+       du menu téléphone (Moulage v1868), sans demande du PC. Si ce
+       programme est fermé, elles attendent et arrivent à l'ouverture.
+
+  Petit programme séparé, pour Daniel seulement : un clic sur
+  « Demander une photo » ouvre la caméra sur son téléphone (Moulage,
+  PhotoSender intégré v1863), et les photos reviennent ici, enregistrées
+  dans le dossier Téléchargements.
+
+  • Questionnement n'est PAS touché : ce programme est le seul lien.
+  • Même mécanisme que la demande de photo du chat Moulage :
+      photoRequests/<clé perso>  {status:'waiting', requestedByEmail…}
+    Le téléphone connecté au MÊME compte répond dans le même nœud
+    {status:'done', photo|photos}.
+  • Coût Firebase : une demande vide = quelques octets. Chaque photo
+    (~120 Ko, ~160 Ko en base64) est téléchargée UNE fois ici, puis le
+    nœud est effacé. Rien ne reste dans Firebase.
+  • Tant qu'aucune demande n'est en cours, l'écoute ne télécharge rien.
+  ═══════════════════════════════════════════════════════════════════
+-->
+<meta name="theme-color" content="#04152c">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='5' y='25' width='90' height='60' rx='10' fill='%234a8ef5'/><circle cx='50' cy='55' r='18' fill='%23fff' opacity='.3'/><circle cx='50' cy='55' r='12' fill='%23fff'/><circle cx='50' cy='55' r='6' fill='%234a8ef5'/><rect x='30' y='15' width='26' height='14' rx='4' fill='%234a8ef5'/><circle cx='78' cy='36' r='5' fill='%2322c55e'/></svg>">
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:#04152c; --bg2:#091e3a; --bg3:#0f2847;
+    --blue:#3b82f6; --blue-l:#60a5fa; --green:#22c55e; --red:#ef4444; --amber:#f59e0b;
+    --text:#e2e8f0; --dim:#94a3b8; --border:rgba(59,130,246,0.25);
+  }
+  html, body { min-height:100%; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:15px; }
+  .hidden { display:none !important; }
+
+  .top { display:flex; align-items:center; justify-content:space-between; padding:12px 18px;
+    background:linear-gradient(to bottom,#04152c 0%,#4a8ef5 100%); box-shadow:0 2px 6px rgba(0,0,0,.45); }
+  .top-t { font-size:17px; font-weight:800; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6); }
+  .top-u { font-size:11px; color:rgba(255,255,255,.8); text-align:right; }
+  .top-u button { margin-top:3px; background:rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.3);
+    color:#fff; border-radius:6px; font-size:10px; padding:2px 8px; cursor:pointer; }
+
+  .wrap { max-width:560px; margin:0 auto; padding:26px 18px 40px; display:flex; flex-direction:column; gap:16px; }
+
+  /* Connexion */
+  .card { background:var(--bg2); border:1px solid var(--border); border-radius:16px; padding:24px; }
+  .login h1 { font-size:20px; text-align:center; margin-bottom:6px; }
+  .login p { font-size:13px; color:var(--dim); text-align:center; margin-bottom:18px; }
+  .login input { width:100%; padding:13px 14px; margin-bottom:10px; border:1.5px solid var(--border);
+    border-radius:10px; background:var(--bg3); color:var(--text); font-size:15px; outline:none; }
+  .login input:focus { border-color:var(--blue); }
+  .login button { width:100%; padding:14px; border:none; border-radius:10px; cursor:pointer;
+    background:linear-gradient(135deg,var(--blue),#2563eb); color:#fff; font-size:15px; font-weight:700; }
+  .err { color:#fca5a5; font-size:12px; text-align:center; min-height:18px; margin-top:8px; }
+
+  /* Bouton principal */
+  .big { width:100%; min-height:120px; border:none; border-radius:22px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    background:linear-gradient(145deg,#3b82f6 0%,#1d4ed8 100%); color:#fff;
+    box-shadow:0 12px 30px rgba(59,130,246,.4), inset 0 1px 0 rgba(255,255,255,.28);
+    transition:transform .12s, filter .12s; }
+  .big:hover { filter:brightness(1.08); }
+  .big:active { transform:scale(.98); }
+  .big:disabled { filter:grayscale(.4) brightness(.8); cursor:default; }
+  .big .ico { font-size:44px; line-height:1; }
+  .big .lab { font-size:21px; font-weight:800; letter-spacing:.3px; }
+
+  .etat { text-align:center; font-size:15px; font-weight:600; line-height:1.5; min-height:46px; padding:4px 8px; }
+  .etat.att { color:var(--amber); }
+  .etat.tel { color:var(--blue-l); }
+  .etat.ok  { color:var(--green); }
+  .etat.bad { color:#fca5a5; }
+  .etat small { display:block; font-size:12px; font-weight:400; color:var(--dim); margin-top:3px; }
+
+  .cancel { align-self:center; background:rgba(239,68,68,.15); border:1.5px solid rgba(239,68,68,.5);
+    color:#fca5a5; border-radius:10px; padding:9px 22px; font-size:13px; font-weight:700; cursor:pointer; }
+
+  .pulse { animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
+
+  /* Photos reçues */
+  .recues h2 { font-size:12px; font-weight:800; color:var(--dim); text-transform:uppercase;
+    letter-spacing:.5px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
+  .recues h2 button { background:none; border:none; color:var(--dim); font-size:11px; cursor:pointer; text-decoration:underline; text-transform:none; }
+  .grille { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:8px; }
+  .grille a { display:block; aspect-ratio:1; border-radius:10px; overflow:hidden; border:2px solid var(--border); }
+  .grille a:hover { border-color:var(--blue); }
+  .grille img { width:100%; height:100%; object-fit:cover; display:block; }
+  .vide { font-size:12px; color:var(--dim); font-style:italic; text-align:center; padding:10px; }
+
+  .aide { font-size:12px; color:var(--dim); line-height:1.6; }
+  .aide b { color:var(--text); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-t">📷 Mes photos</div>
+  <div class="top-u hidden" id="topUser"><span id="topNom"></span><br><button onclick="deconnexion()">Déconnexion</button></div>
+</header>
+
+<div class="wrap">
+
+  <!-- Connexion -->
+  <div class="card login hidden" id="ecranLogin">
+    <h1>Connexion PhysiPro</h1>
+    <p>Même compte que Moulage sur ton téléphone.</p>
+    <input type="email" id="loginEmail" placeholder="Courriel" autocomplete="username">
+    <input type="password" id="loginMdp" placeholder="Mot de passe" autocomplete="current-password"
+           onkeydown="if(event.key==='Enter')connexion()">
+    <button id="loginBtn" onclick="connexion()">Se connecter</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+
+  <!-- Refus (autre compte) -->
+  <div class="card hidden" id="ecranRefus" style="text-align:center">
+    <div style="font-size:40px;margin-bottom:8px">🔒</div>
+    <div style="font-weight:700;margin-bottom:6px">Programme réservé</div>
+    <div class="aide">Ce programme n'est pas ouvert à ce compte.</div>
+  </div>
+
+  <!-- Principal -->
+  <div class="hidden" id="ecranMain" style="display:flex;flex-direction:column;gap:16px">
+    <button class="big" id="btnDemander" onclick="demander()">
+      <span class="ico">📷</span>
+      <span class="lab">Demander une photo</span>
+    </button>
+    <div class="etat" id="etat">Clique, puis prends tes photos sur ton téléphone.<small>Moulage doit être ouvert sur le téléphone, avec ton compte.</small></div>
+    <button class="cancel hidden" id="btnAnnuler" onclick="annuler()">Annuler la demande</button>
+
+    <div class="card recues">
+      <h2><span>Reçues pendant cette session</span><button id="btnVider" class="hidden" onclick="viderListe()">vider la liste</button></h2>
+      <div class="grille" id="grille"></div>
+      <div class="vide" id="vide">Aucune photo pour l'instant.</div>
+    </div>
+
+    <div class="aide">
+      Les photos sont enregistrées automatiquement dans ton dossier <b>Téléchargements</b>.
+      Si le navigateur demande d'autoriser plusieurs téléchargements, réponds <b>Autoriser</b>.
+      Clique une vignette pour la télécharger de nouveau.<br>
+      Tu peux aussi partir du <b>téléphone</b> : menu « 📷 Mes photos » dans Moulage.
+      Les photos arrivent ici dès que ce programme est ouvert.
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══ FIREBASE (même projet que Moulage) ═══
+const _k = ['AIza','SyCk','7bqV','nx08','Kz1f','Vq1W','24Au','W854','KY9j','Pno'];
+firebase.initializeApp({
+  apiKey: _k.join(''),
+  authDomain: "liste-des-moulages-physipro.firebaseapp.com",
+  databaseURL: "https://liste-des-moulages-physipro-default-rtdb.firebaseio.com",
+  projectId: "liste-des-moulages-physipro",
+  storageBucket: "liste-des-moulages-physipro.firebasestorage.app",
+  messagingSenderId: "24566847562",
+  appId: "1:24566847562:web:db492bdd33116373e0eeb3"
+});
+const auth = firebase.auth();
+const db = firebase.database();
+
+// Comptes autorisés à se servir de ce programme
+const PERMIS = ['atelieratp@physipro.com'];
+
+const DELAI_MAX_MIN = 5;      // une demande sans réponse s'annule seule après 5 min
+
+let reqRef = null;            // photoRequests/<clé perso>
+let reqCb = null;             // écouteur 'value'
+let minuterie = null;
+let enAttente = false;
+let recues = [];              // { dataUrl, nom } — mémoire seulement
+
+function $(id){ return document.getElementById(id); }
+function montrer(id, oui){ $(id).classList.toggle('hidden', !oui); }
+
+// Clé du nœud : propre à l'utilisateur, sans caractères interdits par Firebase
+function cleDemande(email){
+  return 'perso_' + btoa(String(email).toLowerCase()).replace(/[^A-Za-z0-9]/g, '');
+}
+
+// ═══ CONNEXION ═══
+auth.onAuthStateChanged(function(u){
+  if (!u) {
+    arreterEcoute();
+    montrer('ecranLogin', true); montrer('ecranMain', false); montrer('ecranRefus', false); montrer('topUser', false);
+    $('ecranMain').style.display = 'none';
+    return;
+  }
+  montrer('ecranLogin', false);
+  montrer('topUser', true);
+  $('topNom').textContent = u.email;
+  if (PERMIS.indexOf(String(u.email).toLowerCase()) === -1) {
+    montrer('ecranRefus', true);
+    $('ecranMain').style.display = 'none';
+    return;
+  }
+  montrer('ecranRefus', false);
+  $('ecranMain').classList.remove('hidden');
+  $('ecranMain').style.display = 'flex';
+  uneSeuleFenetre(function(){ demarrerEcoute(u.email); });
+});
+
+// Une 2e fenêtre « Mes photos » n'écoute pas : les mêmes photos ne sont
+// jamais téléchargées deux fois sur le même PC.
+let canal = null;
+function uneSeuleFenetre(siLibre){
+  if (!window.BroadcastChannel) { siLibre(); return; }
+  if (!canal) {
+    canal = new BroadcastChannel('physipro-mesphotos');
+    canal.onmessage = function(e){ if (e.data === 'qui' && reqRef) canal.postMessage('moi'); };
+  }
+  let occupee = false;
+  const ecoute = function(e){ if (e.data === 'moi') occupee = true; };
+  canal.addEventListener('message', ecoute);
+  canal.postMessage('qui');
+  setTimeout(function(){
+    canal.removeEventListener('message', ecoute);
+    if (occupee) {
+      $('btnDemander').disabled = true;
+      afficherEtat('bad', '⚠️ « Mes photos » est déjà ouvert dans une autre fenêtre', 'Utilise l\'autre fenêtre, ou ferme-la puis recharge celle-ci.');
+    } else siLibre();
+  }, 400);
+}
+
+async function connexion(){
+  const email = $('loginEmail').value.trim(), mdp = $('loginMdp').value;
+  $('loginErr').textContent = '';
+  if (!email || !mdp) { $('loginErr').textContent = 'Remplis les deux champs.'; return; }
+  $('loginBtn').disabled = true; $('loginBtn').textContent = 'Connexion…';
+  try {
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    await auth.signInWithEmailAndPassword(email, mdp);
+  } catch (e) {
+    $('loginErr').textContent = (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found')
+      ? 'Courriel ou mot de passe incorrect.' : (e.message || 'Erreur de connexion.');
+  }
+  $('loginBtn').disabled = false; $('loginBtn').textContent = 'Se connecter';
+}
+
+function deconnexion(){
+  if (enAttente) annuler(true);
+  auth.signOut();
+}
+
+// ═══ ÉCOUTE DU NŒUD PERSONNEL ═══
+// Vide la plupart du temps : rien n'est téléchargé tant qu'il n'y a pas de demande.
+function demarrerEcoute(email){
+  arreterEcoute();
+  reqRef = db.ref('photoRequests/' + cleDemande(email));
+  reqCb = reqRef.on('value', function(snap){
+    const d = snap.val();
+
+    if (!d) {                                   // nœud vide
+      if (enAttente) finAttente();
+      return;
+    }
+
+    if (d.status === 'waiting') {
+      // Une vieille demande restée là (PC fermé pendant l'attente) : on la retire
+      if (!enAttente && d.timestamp && Date.now() - d.timestamp > DELAI_MAX_MIN * 60000) {
+        reqRef.remove().catch(function(){});
+        return;
+      }
+      afficherEtat('att', '⏳ Demande envoyée — ouvre Moulage sur ton téléphone', 'La caméra va s\'ouvrir toute seule.');
+      return;
+    }
+
+    if (d.status === 'answering') {
+      enAttente = true;
+      afficherEtat('tel', '📱 Caméra ouverte sur le téléphone…', 'Prends tes photos, puis touche « Envoyer ».');
+      montrer('btnAnnuler', true);
+      $('btnDemander').disabled = true;
+      return;
+    }
+
+    if (d.status === 'done') {
+      // Rassembler : réponse à une demande (photo/photos) + envois du téléphone (lots)
+      const liste = [], effacer = { photo: null, photos: null };
+      if (d.photo) liste.push(d.photo);
+      if (d.photos) (Array.isArray(d.photos) ? d.photos : Object.values(d.photos)).forEach(function(x){ liste.push(x); });
+      if (d.lots) Object.keys(d.lots).forEach(function(k){
+        const lot = d.lots[k];
+        (Array.isArray(lot) ? lot : Object.values(lot || {})).forEach(function(x){ liste.push(x); });
+        effacer['lots/' + k] = null;
+      });
+      // N'effacer QUE ce qui vient d'être reçu (un lot arrivé entre-temps reste intact)
+      reqRef.update(effacer).then(retirerSiVide).catch(function(){});
+      if (liste.length) recevoir(liste.filter(Boolean));
+      return;
+    }
+
+    // annulée ou état inconnu : on nettoie
+    retirerSiVide();
+  }, function(err){
+    afficherEtat('bad', '❌ Lecture refusée par Firebase', err && err.message ? err.message : '');
+  });
+}
+
+// Retire le nœud seulement s'il ne reste plus aucune photo dedans.
+// La transaction ne voit qu'un nœud déjà vidé (quelques octets).
+function retirerSiVide(){
+  if (!reqRef) return;
+  reqRef.transaction(function(cur){
+    if (cur && (cur.lots || cur.photo || cur.photos)) return;   // photos arrivées entre-temps : on laisse
+    if (cur && (cur.status === 'waiting' || cur.status === 'answering')) return;
+    return null;
+  }, function(){}, false).catch(function(){});
+}
+
+function arreterEcoute(){
+  if (reqRef && reqCb) reqRef.off('value', reqCb);
+  reqRef = null; reqCb = null;
+}
+
+// ═══ DEMANDE ═══
+async function demander(){
+  const u = auth.currentUser;
+  if (!u || !reqRef || enAttente) return;
+  enAttente = true;
+  $('btnDemander').disabled = true;
+  montrer('btnAnnuler', true);
+  afficherEtat('att', '⏳ Envoi de la demande…', '');
+  try {
+    await reqRef.set({
+      jobId: cleDemande(u.email),
+      order: '',
+      client: 'Mes photos — envoi vers le PC',
+      requestedBy: 'Daniel',
+      requestedByEmail: u.email,       // le téléphone filtre exactement sur ce champ
+      status: 'waiting',
+      timestamp: Date.now(),
+      perso: true
+    });
+    clearTimeout(minuterie);
+    minuterie = setTimeout(function(){
+      if (enAttente) { annuler(true); afficherEtat('bad', '⌛ Pas de réponse du téléphone après ' + DELAI_MAX_MIN + ' min', 'Demande annulée. Vérifie que Moulage est ouvert sur le téléphone.'); }
+    }, DELAI_MAX_MIN * 60000);
+  } catch (e) {
+    finAttente();
+    afficherEtat('bad', '❌ Demande refusée par Firebase', e && e.message ? e.message : '');
+  }
+}
+
+function annuler(silencieux){
+  if (reqRef) reqRef.remove().catch(function(){});   // le téléphone ferme sa caméra
+  finAttente();
+  if (!silencieux) afficherEtat('', 'Demande annulée.', '');
+}
+
+function finAttente(){
+  enAttente = false;
+  clearTimeout(minuterie);
+  $('btnDemander').disabled = false;
+  montrer('btnAnnuler', false);
+}
+
+// ═══ RÉCEPTION ═══
+function recevoir(liste){
+  finAttente();
+  if (!liste.length) return;
+  const d = new Date(), p = function(n){ return n < 10 ? '0' + n : n; };
+  const base = 'Photo_' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '_' + p(d.getHours()) + 'h' + p(d.getMinutes()) + p(d.getSeconds());
+  liste.forEach(function(dataUrl, i){
+    const nom = base + (liste.length > 1 ? '_' + (i + 1) : '') + '.jpg';
+    recues.unshift({ dataUrl: dataUrl, nom: nom });
+    setTimeout(function(){ telecharger(dataUrl, nom); }, i * 700);   // espacé : Chrome bloque les rafales
+  });
+  rendreGrille();
+  const n = liste.length;
+  afficherEtat('ok', '✅ ' + n + ' photo' + (n > 1 ? 's' : '') + ' enregistrée' + (n > 1 ? 's' : '') + ' dans Téléchargements', 'Clique « Demander une photo » pour en prendre d\'autres.');
+}
+
+function telecharger(dataUrl, nom){
+  const a = document.createElement('a');
+  a.href = dataUrl; a.download = nom;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+function rendreGrille(){
+  const g = $('grille');
+  g.innerHTML = '';
+  recues.forEach(function(r){
+    const a = document.createElement('a');
+    a.href = r.dataUrl; a.download = r.nom; a.title = r.nom;
+    const img = document.createElement('img');
+    img.src = r.dataUrl; img.alt = r.nom;
+    a.appendChild(img); g.appendChild(a);
+  });
+  montrer('vide', recues.length === 0);
+  montrer('btnVider', recues.length > 0);
+}
+
+function viderListe(){ recues = []; rendreGrille(); }
+
+function afficherEtat(cls, texte, sous){
+  const e = $('etat');
+  e.className = 'etat' + (cls ? ' ' + cls : '') + ((cls === 'att' || cls === 'tel') ? ' pulse' : '');
+  e.innerHTML = '';
+  e.appendChild(document.createTextNode(texte));
+  if (sous) { const s = document.createElement('small'); s.textContent = sous; e.appendChild(s); }
+}
+
+// Fermer la page pendant une attente : on retire la demande (le téléphone se referme)
+window.addEventListener('pagehide', function(){
+  if (enAttente && reqRef) { try { reqRef.remove(); } catch(e){} }
+});
+</script>
+</body>
+</html>
