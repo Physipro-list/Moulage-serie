@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro 📷 Mes photos v3</title>
+<title>PhysiPro 📷 Mes photos v4</title>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  PhysiPro — MES PHOTOS v3 (2026-10-19)
+  PhysiPro — MES PHOTOS v4 (2026-10-19)
+  v4 : la consommation de la page (Firebase reçu) s'affiche dans le titre.
   v3 : consommation minimale garantie.
        • Les photos arrivent en lots (lots/<id>) ; seuls les lots reçus
          sont effacés, puis le nœud vide est retiré. Un envoi qui arrive
@@ -116,7 +117,7 @@
 <body>
 
 <header class="top">
-  <div class="top-t">📷 Mes photos</div>
+  <div class="top-t">📷 Mes photos <span id="conso" style="font-size:12px;font-weight:600;color:#bfdbfe;margin-left:8px;">☁ 0 Ko reçu</span></div>
   <div class="top-u hidden" id="topUser"><span id="topNom"></span><br><button onclick="deconnexion()">Déconnexion</button></div>
 </header>
 
@@ -271,6 +272,7 @@ function demarrerEcoute(email){
   reqRef = db.ref('photoRequests/' + cleDemande(email));
   reqCb = reqRef.on('value', function(snap){
     const d = snap.val();
+    try { compterRecu(d ? JSON.stringify(d).length : 4); } catch(e){}
 
     if (!d) {                                   // nœud vide
       if (enAttente) finAttente();
@@ -327,6 +329,14 @@ function retirerSiVide(){
     if (cur && (cur.status === 'waiting' || cur.status === 'answering')) return;
     return null;
   }, function(){}, false).catch(function(){});
+}
+
+// Consommation : octets reçus de Firebase par cette page (photos + petits états)
+let octetsRecus = 0;
+function compterRecu(n){
+  octetsRecus += n;
+  const el = $('conso');
+  if (el) el.textContent = '☁ ' + (octetsRecus < 1048576 ? Math.round(octetsRecus / 1024) + ' Ko' : (octetsRecus / 1048576).toFixed(1) + ' Mo') + ' reçu';
 }
 
 function arreterEcoute(){

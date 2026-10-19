@@ -8,6 +8,29 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1871 - LE MENU S'AFFICHE EN PREMIER, ET UNE SEULE FOIS
+    ═════════════════════════════════════════════════════════════════
+    • Le menu « Moulage / Mes photos » apparaissait seulement APRÈS le
+      chargement des cartes : on voyait Moulage, puis l'écran reculait au
+      menu (même si on avait déjà touché « Moulage »).
+    • Maintenant il s'affiche dès l'ouverture de la page (d'après le
+      dernier compte connecté sur ce téléphone) et n'est plus jamais
+      réaffiché tout seul : seul « ☰ Menu » y ramène.
+    • « Mes photos » touché avant la fin de la connexion : la caméra
+      s'ouvre dès que la connexion est confirmée.
+
+    v1870 - CAMÉRA DU TÉLÉPHONE : LE BOUTON PHOTO RÉPOND TOUJOURS
+    ═════════════════════════════════════════════════════════════════
+    • Cause du « rien ne se passe » : quand la caméra n'était pas encore
+      prête, le message s'affichait en toast… DERRIÈRE l'écran caméra.
+      Les messages s'affichent maintenant dans l'écran caméra lui-même.
+    • « 📸 Prendre une photo » attend la caméra (jusqu'à 3 s) au lieu de
+      refuser ; si l'aperçu ne démarre pas, l'appareil photo du téléphone
+      s'ouvre à la place.
+    • Mode « Mes photos » : plus de bouton Galerie — seulement « Prendre
+      une photo » et « Envoyer ». Le titre affiche la consommation Firebase
+      (cette page + total du jour). Les demandes ordinaires sont inchangées.
+
     v1869 - « MES PHOTOS » : UN SEUL TÉLÉCHARGEMENT, RIEN NE RESTE
     ═════════════════════════════════════════════════════════════════
     • Touche UNIQUEMENT l'envoi « 📷 Mes photos » du téléphone de Daniel.
@@ -1586,7 +1609,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1869</title>
+  <title>PhysiPro Moulages v1871</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -5716,6 +5739,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 .sauv-btn:disabled { opacity:.5; cursor:default; }
 .sauv-link { margin-top:12px; background:none; border:none; color:#93c5fd; font-size:12px; cursor:pointer; text-decoration:underline; }
 
+/* ═══ v1870 — message dans l'écran caméra + mode « Mes photos » ═══ */
+.ps-msg { min-height: 20px; padding: 2px 12px 6px; text-align: center; font-size: 14px; font-weight: 700; color: #fbbf24; }
+.ps-msg.ok { color: #4ade80; }
+.ps-msg.err { color: #fca5a5; }
+.ps-overlay.perso .ps-pick { display: none; }
+.ps-conso { display: block; font-size: 11px; font-weight: 600; color: #93c5fd; margin-top: 1px; }
+
 /* ═══ v1868 — Menu personnel du téléphone (Moulage / Mes photos) ═══ */
 .mobile-home-btn.mesphotos-btn { background: linear-gradient(135deg, #22c55e, #15803d); display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .mesphotos-sub { font-size: 12px; font-weight: 500; opacity: .85; }
@@ -5796,6 +5826,21 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     <button class="mobile-home-btn mesphotos-btn" id="mobileMesPhotosBtn" onclick="openMesPhotosPhone()" style="display:none;">📷 Mes photos<span class="mesphotos-sub">envoi vers mon PC</span></button>
     <button class="mobile-home-refresh" id="mobileHomeRefreshBtn" onclick="mobileHomeRefresh()" style="margin-top:16px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.3);color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">🔄</button>
   </div>
+
+  <script>
+  // v1871 — menu « Moulage / Mes photos » affiché AVANT tout le reste,
+  // d'après le dernier compte connecté sur ce téléphone.
+  (function(){
+    try {
+      var em = (localStorage.getItem('physipro_user_email') || '').toLowerCase();
+      if (em === 'atelieratp@physipro.com' && window.isMobileView && isMobileView()) {
+        document.getElementById('mobileHomeScreen').classList.add('active');
+        document.getElementById('mobileMesPhotosBtn').style.display = '';
+        window._menuPersoAuto = true;   // déjà montré : on ne le réaffiche plus tout seul
+      }
+    } catch(e) {}
+  })();
+  </script>
 
   <!-- ===== PAGE ENVOYER PHOTO (RETIRÉ) ===== -->
 
@@ -6870,7 +6915,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261026;
+    var APP_VERSION = 20261028;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -15097,6 +15142,16 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           // Masquer l'écran de connexion
           hideLoginScreen();
 
+          // v1871 — menu perso tout de suite (une seule fois), avant de charger les cartes
+          if (_estMenuPerso()) {
+            if (!window._menuPersoAuto) { window._menuPersoAuto = true; showMobileHomeMenu(); }
+            else {   // déjà affiché par le script du début : compléter les boutons
+              var _mb = document.getElementById('mobileMenuBtn'); if (_mb) _mb.style.display = '';
+              var _pb = document.getElementById('mobileMesPhotosBtn'); if (_pb) _pb.style.display = '';
+            }
+            if (window._mesPhotosEnAttente) { window._mesPhotosEnAttente = false; setTimeout(openMesPhotosPhone, 0); }
+          }
+
           // Mettre à jour l'affichage utilisateur
           updateUserDisplay(user);
 
@@ -15121,8 +15176,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           if (isMobileView()) {
             // v1868 — Daniel : menu Moulage / Mes photos ; les autres : direct aux cartes
             const hs = document.getElementById('mobileHomeScreen');
-            if (_estMenuPerso()) showMobileHomeMenu();
-            else if (hs) hs.classList.remove('active');
+            if (!_estMenuPerso() && hs) hs.classList.remove('active');   // v1871 : le menu perso n'est plus réaffiché ici
             // Un seul appel renderMobileCards après que les données soient chargées
             if (typeof renderMobileCards === 'function' && Object.keys(cardsData).length > 0) {
               renderMobileCards();
@@ -20031,6 +20085,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     window.showMobileHomeMenu = showMobileHomeMenu;
 
     function openMesPhotosPhone() {
+      if (!currentUser) {                          // v1871 — connexion pas encore confirmée
+        window._mesPhotosEnAttente = true;
+        showToast('⏳ Connexion en cours — la caméra va s\'ouvrir', 'info');
+        return;
+      }
       if (!_estMenuPerso() || !firebaseDb) return;
       if (_psReq) return;                         // une caméra est déjà ouverte
       _psReq = { jobId: _clePerso(currentUser.email), perso: true, timestamp: Date.now() };
@@ -20038,13 +20097,34 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       _psSending = false;
       const ov = document.getElementById('psOverlay');
       if (!ov) { _psReq = null; return; }
-      document.getElementById('psTitle').textContent = '📷 Mes photos';
       document.getElementById('psSub').textContent = 'Envoi vers « Mes photos » sur ton PC';
+      ov.classList.add('perso');
+      _psMsg('');
+      _psConsoTitre();
+      clearInterval(_psConsoTimer);
+      _psConsoTimer = setInterval(_psConsoTitre, 3000);
       _psRender();
       ov.classList.add('active');
       _psStartCam();
     }
     window.openMesPhotosPhone = openMesPhotosPhone;
+
+    // v1870 — consommation Firebase dans le titre « Mes photos »
+    // (compteur intégré de la page : ce que CE téléphone a téléchargé, et le total du jour)
+    let _psConsoTimer = null;
+    function _psConsoTitre() {
+      const t = document.getElementById('psTitle');
+      if (!t) return;
+      const C = window.__physiproConso;
+      const mo = function(o) { return (o / 1048576).toFixed(o < 10485760 ? 1 : 0) + ' Mo'; };
+      t.textContent = '📷 Mes photos';
+      if (!C) return;
+      const total = (C.total == null) ? null : C.total + (C.octets - C.envoyes);
+      const sp = document.createElement('span');
+      sp.className = 'ps-conso';
+      sp.textContent = '☁ cette page ' + mo(C.octets) + (total == null ? '' : ' · aujourd\'hui ' + mo(total) + ' / 360 Mo');
+      t.appendChild(sp);
+    }
 
     // ═══════════════════════════════════════════════════════════════════
     // v1863 — PHOTOSENDER INTÉGRÉ (téléphone)
@@ -20145,11 +20225,39 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       return out;
     }
 
-    function psCapture() {
-      const v = document.getElementById('psVideo');
-      if (!v || !v.videoWidth) { showToast('⏳ Caméra pas encore prête', 'info'); return; }
+    // v1870 — message DANS l'écran caméra (un toast restait caché derrière)
+    function _psMsg(t, cls) {
+      const el = document.getElementById('psMsg');
+      if (el) { el.textContent = t || ''; el.className = 'ps-msg' + (cls ? ' ' + cls : ''); }
+    }
+
+    let _psRepli = false;   // l'aperçu n'a pas répondu : le prochain appui ouvre l'appareil photo du téléphone
+
+    function _psPrendre(v) {
       _psPhotos.push(_psEncode(v, v.videoWidth, v.videoHeight));
       _psRender();
+      const n = _psPhotos.length;
+      _psMsg('✅ ' + n + ' photo' + (n > 1 ? 's' : '') + ' — touche « Envoyer » quand tu as fini', 'ok');
+    }
+
+    async function psCapture() {
+      const v = document.getElementById('psVideo');
+      const wrap = document.getElementById('psCamWrap');
+      // Pas d'aperçu possible : appareil photo du téléphone, tout de suite (geste conservé)
+      if (_psRepli || (wrap && wrap.classList.contains('nocam'))) {
+        _psRepli = false;
+        document.getElementById('psCamInput').click();
+        return;
+      }
+      if (v && v.videoWidth) { _psPrendre(v); return; }
+      // Aperçu en démarrage : on l'attend jusqu'à 3 s au lieu de refuser
+      _psMsg('⏳ Caméra en démarrage…');
+      if (!_psStream) _psStartCam();
+      for (let i = 0; i < 30 && !(v && v.videoWidth); i++) await new Promise(function(r){ setTimeout(r, 100); });
+      if (!_psReq) return;
+      if (v && v.videoWidth) { _psPrendre(v); return; }
+      _psRepli = true;
+      _psMsg('⚠️ La caméra ne répond pas — touche encore « Prendre une photo » pour utiliser l\'appareil photo du téléphone', 'err');
     }
     window.psCapture = psCapture;
 
@@ -20163,6 +20271,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           _psPhotos.push(_psEncode(img, img.naturalWidth, img.naturalHeight));
           URL.revokeObjectURL(url);
           _psRender();
+          const n = _psPhotos.length;   // v1870
+          _psMsg('✅ ' + n + ' photo' + (n > 1 ? 's' : '') + ' — touche « Envoyer » quand tu as fini', 'ok');
         };
         img.onerror = function() { URL.revokeObjectURL(url); };
         img.src = url;
@@ -20211,7 +20321,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           showToast('📸 ' + n + ' photo' + (n > 1 ? 's' : '') + ' envoyée' + (n > 1 ? 's' : '') + ' vers ton PC', 'success');
         } catch (e) {
           _psSending = false; _psRender();
-          showToast('❌ Envoi impossible : ' + (e && e.message ? e.message : e), 'error');
+          _psMsg('❌ Envoi impossible : ' + (e && e.message ? e.message : e), 'err');
         }
         return;
       }
@@ -20221,13 +20331,16 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         showToast('📸 ' + n + ' photo' + (n > 1 ? 's' : '') + ' envoyée' + (n > 1 ? 's' : '') + ' au PC', 'success');
       } catch (e) {
         _psSending = false; _psRender();
-        showToast('❌ Envoi impossible : ' + (e && e.message ? e.message : e), 'error');
+        _psMsg('❌ Envoi impossible : ' + (e && e.message ? e.message : e), 'err');
       }
     }
     window.psSend = psSend;
 
     function _psClose(silent) {
       _psStopCam();
+      _psMsg(''); _psRepli = false;   // v1870
+      clearInterval(_psConsoTimer); _psConsoTimer = null;
+      const ovp = document.getElementById('psOverlay'); if (ovp) ovp.classList.remove('perso');
       _psReq = null; _psPhotos = []; _psSending = false;
       const ov = document.getElementById('psOverlay');
       if (ov) ov.classList.remove('active');
@@ -23468,8 +23581,10 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   </div>
   <div class="ps-cam" id="psCamWrap"><video id="psVideo" autoplay playsinline muted></video><div class="ps-nocam">Caméra non disponible ici — utilisez « 🖼️ Galerie » pour choisir ou prendre une photo.</div></div>
   <div class="ps-thumbs" id="psThumbs"></div>
+  <div class="ps-msg" id="psMsg"></div>
+  <input type="file" id="psCamInput" accept="image/*" capture="environment" style="display:none" onchange="psFiles(this)">
   <div class="ps-actions">
-    <button class="ps-shoot" onclick="psCapture()">📸 Photo</button>
+    <button class="ps-shoot" onclick="psCapture()">📸 Prendre une photo</button>
     <label class="ps-pick">🖼️ Galerie<input type="file" accept="image/*" multiple style="display:none" onchange="psFiles(this)"></label>
     <button class="ps-send" id="psSendBtn" onclick="psSend()" disabled>➤ Envoyer</button>
   </div>
