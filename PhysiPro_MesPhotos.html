@@ -3,10 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PhysiPro 📷 Mes photos v5</title>
+<title>PhysiPro 📷 Mes photos v6</title>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  PhysiPro — MES PHOTOS v5 (2026-10-19)
+  PhysiPro — MES PHOTOS v6 (2026-10-19)
+  v6 : à l'ouverture, efface de Firebase toutes les vieilles demandes de
+       photo jamais faites (en attente / en cours depuis plus de 10 min,
+       ou annulées), de tous les comptes. Ces demandes sont petites (sans
+       photo) : le ménage coûte quelques Ko.
   v5 : les photos arrivent DIRECTEMENT dans ce programme, en grand.
        Plus de téléchargement automatique dans Téléchargements.
        Clic sur une photo = plein écran, avec « 💾 Enregistrer » et
@@ -249,7 +253,7 @@ auth.onAuthStateChanged(function(u){
   montrer('ecranRefus', false);
   $('ecranMain').classList.remove('hidden');
   $('ecranMain').style.display = 'flex';
-  uneSeuleFenetre(function(){ demarrerEcoute(u.email); });
+  uneSeuleFenetre(function(){ demarrerEcoute(u.email); menageVieillesDemandes(); });
 });
 
 // Une 2e fenêtre « Mes photos » n'écoute pas : les mêmes photos ne sont
@@ -366,6 +370,32 @@ function compterRecu(n){
   octetsRecus += n;
   const el = $('conso');
   if (el) el.textContent = '☁ ' + (octetsRecus < 1048576 ? Math.round(octetsRecus / 1024) + ' Ko' : (octetsRecus / 1048576).toFixed(1) + ' Mo') + ' reçu';
+}
+
+// ═══ MÉNAGE : vieilles demandes jamais faites ═══
+// Lit seulement les demandes « waiting », « answering » et « cancelled »
+// (index status) : elles ne contiennent pas de photo, donc très peu de données.
+let menageFait = false;
+async function menageVieillesDemandes(){
+  if (menageFait) return; menageFait = true;
+  const limite = Date.now() - 10 * 60000;
+  const effacer = {}; let n = 0;
+  for (const st of ['waiting', 'answering', 'cancelled']) {
+    try {
+      const snap = await db.ref('photoRequests').orderByChild('status').equalTo(st).once('value');
+      const v = snap.val() || {};
+      try { compterRecu(JSON.stringify(v).length); } catch(e){}
+      Object.keys(v).forEach(function(k){
+        const r = v[k] || {};
+        if (st === 'cancelled' || !r.timestamp || r.timestamp < limite) { effacer[k] = null; n++; }
+      });
+    } catch (e) { console.warn('Ménage ' + st + ':', e && e.message); }
+  }
+  if (!n) return;
+  try {
+    await db.ref('photoRequests').update(effacer);
+    if (!enAttente) afficherEtat('', '🧹 ' + n + ' vieille' + (n > 1 ? 's' : '') + ' demande' + (n > 1 ? 's' : '') + ' de photo effacée' + (n > 1 ? 's' : ''), 'Clique « Demander une photo » quand tu es prêt.');
+  } catch (e) { console.warn('Ménage :', e && e.message); }
 }
 
 function arreterEcoute(){

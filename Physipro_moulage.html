@@ -8,6 +8,18 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1873 - VIEILLES DEMANDES DE PHOTO EFFACÉES
+    ═════════════════════════════════════════════════════════════════
+    • Sur le téléphone, une demande de photo de plus de 10 min (jamais
+      faite, PC fermé…) ou annulée est effacée de Firebase au lieu
+      d'ouvrir la caméra. Elle n'est plus retéléchargée à chaque ouverture.
+
+    v1872 - « MES PHOTOS » : PLUS DE MENTION DE LA GALERIE
+    ═════════════════════════════════════════════════════════════════
+    • En mode « Mes photos », le message au centre de l'écran caméra ne
+      parle plus de « Galerie » ; il invite à appuyer sur « 📸 Prendre une
+      photo ». Les demandes ordinaires gardent leur message.
+
     v1871 - LE MENU S'AFFICHE EN PREMIER, ET UNE SEULE FOIS
     ═════════════════════════════════════════════════════════════════
     • Le menu « Moulage / Mes photos » apparaissait seulement APRÈS le
@@ -1609,7 +1621,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1871</title>
+  <title>PhysiPro Moulages v1873</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -5744,6 +5756,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 .ps-msg.ok { color: #4ade80; }
 .ps-msg.err { color: #fca5a5; }
 .ps-overlay.perso .ps-pick { display: none; }
+.ps-nocam-perso { display: none; }
+.ps-overlay.perso .ps-nocam-std { display: none; }
+.ps-overlay.perso .ps-nocam-perso { display: inline; }
 .ps-conso { display: block; font-size: 11px; font-weight: 600; color: #93c5fd; margin-top: 1px; }
 
 /* ═══ v1868 — Menu personnel du téléphone (Moulage / Mes photos) ═══ */
@@ -6915,7 +6930,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261028;
+    var APP_VERSION = 20261030;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -20152,9 +20167,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       _psRef.on('value', function(snap) {
         const all = snap.val() || {};
         const mine = [];
+        const _maint = Date.now();
         Object.keys(all).forEach(function(jobId) {
           const r = all[jobId];
           if (!r) return;
+          // v1873 — vieille demande jamais faite (PC fermé, etc.) : on l'efface
+          // au lieu d'ouvrir la caméra pour rien. Plus de 10 min, ou annulée.
+          const _age = r.timestamp ? _maint - r.timestamp : 0;
+          if (r.status === 'cancelled' || _age > 600000) {
+            firebaseDb.ref('photoRequests/' + jobId).remove().catch(function(){});
+            return;
+          }
           if ((r.status === 'waiting' || r.status === 'answering') &&
               String(r.requestedByEmail || '').toLowerCase() === myEmail &&
               !_psIgnored[jobId + '_' + r.timestamp]) {
@@ -23579,7 +23602,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     <div class="ps-head-txt"><div class="ps-title" id="psTitle">📷 Photo demandée</div><div class="ps-sub" id="psSub"></div></div>
     <button class="ps-close" onclick="psDismiss()" title="Fermer">✕</button>
   </div>
-  <div class="ps-cam" id="psCamWrap"><video id="psVideo" autoplay playsinline muted></video><div class="ps-nocam">Caméra non disponible ici — utilisez « 🖼️ Galerie » pour choisir ou prendre une photo.</div></div>
+  <div class="ps-cam" id="psCamWrap"><video id="psVideo" autoplay playsinline muted></video><div class="ps-nocam"><span class="ps-nocam-std">Caméra non disponible ici — utilisez « 🖼️ Galerie » pour choisir ou prendre une photo.</span><span class="ps-nocam-perso">Appuie sur « 📸 Prendre une photo ».</span></div></div>
   <div class="ps-thumbs" id="psThumbs"></div>
   <div class="ps-msg" id="psMsg"></div>
   <input type="file" id="psCamInput" accept="image/*" capture="environment" style="display:none" onchange="psFiles(this)">
