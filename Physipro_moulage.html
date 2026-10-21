@@ -8,6 +8,38 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1876 - CENTRE « IRDPQ » PARTOUT + TEXTES QUI DISPARAISSAIENT DU CHAT
+    ═════════════════════════════════════════════════════════════════
+    CENTRE (signalé par Marie-Soleil) :
+    • La liste déroulante du Centre n'avait pas de case vide. Quand le
+      centre de la carte n'était pas (encore) dans la liste du poste, le
+      navigateur affichait le 1er choix : IRDPQ. La liste du poste ne
+      contient que les centres de base tant que la liste Firebase n'est pas
+      arrivée (elle arrive APRÈS les cartes), donc à l'ouverture du
+      logiciel, presque tout montrait IRDPQ chez certains. Le vrai centre
+      n'était pas changé dans la carte — seulement mal affiché (mais le
+      re-choisir par erreur l'aurait écrasé).
+    • Maintenant (fiche, tableau, téléphone ; aussi REP, Région,
+      Intervenant, Item) : la valeur RÉELLE de la carte est toujours
+      affichée, même absente de la liste ; une carte sans centre montre
+      une case vide.
+    CHAT (pertes d'écriture signalées) :
+    • Un message tapé PENDANT que le précédent partait était effacé à la
+      confirmation du premier (réseau lent, téléphone) — brouillon compris.
+      Corrigé : seul le texte réellement envoyé est retiré.
+    • Une modification de message (✏️) en cours était effacée dès que
+      quelqu'un d'autre ouvrait la fiche (le fil se redessinait). Le
+      redessin attend maintenant la fin de la modification.
+    • Modifier un ancien message mis en forme ne changeait rien à
+      l'écran (l'ancienne version restait affichée). Corrigé.
+    • Cliquer « Répondre » effaçait le texte en cours. Il reste.
+    • La copie automatique des anciens fils (chatV2 → chats) pouvait
+      ÉCRASER un message écrit pendant la copie. Elle n'ajoute plus que
+      ce qui manque, sans jamais rien remplacer.
+    • Un message pas encore reçu par le serveur après 8 s affiche un
+      avertissement, et fermer la page dans ce temps-là demande
+      confirmation (sinon le message était perdu).
+
     v1875 - DÉPLACEMENT DES CARTES RÉPARÉ + SAUVEGARDE ONEDRIVE AUTOMATIQUE
     ═════════════════════════════════════════════════════════════════
     • Glisser une carte déplaçait seulement le TEXTE : le navigateur
@@ -1649,7 +1681,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1875</title>
+  <title>PhysiPro Moulages v1876</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -6964,7 +6996,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261032;
+    var APP_VERSION = 20261033;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -7323,6 +7355,18 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     };
 
     // Convertit une région vers le nom complet
+    // v1876 — options d'une liste déroulante : la valeur RÉELLE de la carte est
+    //   toujours présente et choisie, même si elle manque dans la liste du
+    //   poste (sinon le navigateur affichait le 1er choix, p. ex. IRDPQ).
+    function optionsListe(liste, valeur, avecVide) {
+      var v = (valeur == null) ? '' : String(valeur);
+      var e = function(t){ return String(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); };
+      var h = avecVide ? '<option value=""' + (v === '' ? ' selected' : '') + '></option>' : '';
+      if (v !== '' && (liste || []).indexOf(v) === -1) h += '<option value="' + e(v) + '" selected>' + e(v) + '</option>';
+      (liste || []).forEach(function(c){ h += '<option value="' + e(c) + '"' + (c === v ? ' selected' : '') + '>' + e(c) + '</option>'; });
+      return h;
+    }
+
     function normalizeRegion(region) {
       return REGION_MAP[region] || region || 'Québec';
     }
@@ -11786,17 +11830,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           <td><input class="robot-input" value="${escapeHtml(d.order)}" onchange="updateField('${cardId}','order',this.value)"></td>
           <td><input class="robot-input" value="${escapeHtml(d.soumission)}" onchange="updateField('${cardId}','soumission',this.value)"></td>
           <td><input class="robot-input" value="${escapeHtml(d.po)}" onchange="updateField('${cardId}','po',this.value)"></td>
-          <td><select class="robot-select" onchange="updateField('${cardId}','client',this.value)"><option value="">--</option>${CENTRES.map(c=>`<option ${c===d.client?'selected':''}>${c}</option>`).join('')}</select></td>
+          <td><select class="robot-select" onchange="updateField('${cardId}','client',this.value)">${optionsListe(CENTRES, d.client, true).replace('<option value=""','<option value=""').replace('></option>','>--</option>')}</select></td>
           <td><select class="robot-select ${etatClass}" onchange="updateField('${cardId}','etat',this.value)">${ETATS.map(e=>`<option ${e===d.etat?'selected':''}>${e}</option>`).join('')}</select></td>
           <td class="robot-rang">${idx+1}</td>
-          <td><select class="robot-select" onchange="updateField('${cardId}','region',this.value)">${REGIONS.map(r=>`<option ${r===normalizeRegion(d.region)?'selected':''}>${r}</option>`).join('')}</select></td>
-          <td><select class="robot-select" onchange="updateField('${cardId}','item',this.value)"><option value="">--</option>${ITEMS.map(i=>`<option ${i===d.item?'selected':''}>${i}</option>`).join('')}</select></td>
+          <td><select class="robot-select" onchange="updateField('${cardId}','region',this.value)">${optionsListe(REGIONS, normalizeRegion(d.region), false)}</select></td>
+          <td><select class="robot-select" onchange="updateField('${cardId}','item',this.value)">${optionsListe(ITEMS, d.item, true).replace('></option>','>--</option>')}</select></td>
           <td><div class="robot-date-cell ${d.dateRecue?'':'empty'}" onclick="openCalendar(this,'dateRecue','${cardId}')">${d.dateRecue||'--'}</div></td>
           <td><div class="robot-date-cell ${d.dateLivraison?'':'empty'}" onclick="openCalendar(this,'dateLivraison','${cardId}')">${d.dateLivraison||'--'}</div></td>
           <td><div class="robot-date-cell ${d.dateEssayage?'':'empty'}" onclick="openCalendar(this,'dateEssayage','${cardId}')">${d.dateEssayage||'--'}</div></td>
           <td><div class="robot-date-cell robot-date-max ${d.datePinneeImportante?'':'empty'}" onclick="openCalendar(this,'datePinneeImportante','${cardId}')" title="Date maximale de départ (doit partir avant)">${d.datePinneeImportante||'--'}</div></td>
-          <td><select class="robot-select" onchange="updateField('${cardId}','intervenant',this.value)"><option value="">--</option>${INTERVENANTS.map(i=>`<option ${i===d.intervenant?'selected':''}>${i}</option>`).join('')}</select></td>
-          <td><select class="robot-select" onchange="updateField('${cardId}','representante',this.value)"><option value="">--</option>${REPRESENTANTES.map(r=>`<option ${r===d.representante?'selected':''}>${r}</option>`).join('')}</select></td>
+          <td><select class="robot-select" onchange="updateField('${cardId}','intervenant',this.value)">${optionsListe(INTERVENANTS, d.intervenant, true).replace('></option>','>--</option>')}</select></td>
+          <td><select class="robot-select" onchange="updateField('${cardId}','representante',this.value)">${optionsListe(REPRESENTANTES, d.representante, true).replace('></option>','>--</option>')}</select></td>
           <td><select class="robot-select robot-select-small" onchange="updateField('${cardId}','file',this.value)"><option ${fileValue==='YES'?'selected':''}>YES</option><option ${fileValue==='NO'?'selected':''}>NO</option></select></td>
           <td><input class="robot-input" style="width:50px;text-align:center;" value="${escapeHtml(angleValue)}" onchange="updateField('${cardId}','angle',this.value)" placeholder="90"></td>
           <td><select class="robot-select robot-select-small ${rushClass}" onchange="updateField('${cardId}','rush',this.value)"><option ${d.rush==='NO'?'selected':''}>NO</option><option ${d.rush==='YES'?'selected':''}>YES</option></select></td>
@@ -12114,16 +12158,16 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       document.getElementById('ficheBeneficiaireValue').innerHTML = `<input value="${escapeHtml(d.name)}" onchange="updateField('${cardId}','name',this.value)">`;
 
       document.getElementById('ficheFieldsList').innerHTML = `
-        <div class="fiche-line"><span class="fl-label">Centre</span><span class="fl-val fiche-field-with-btn"><select onchange="updateField('${cardId}','client',this.value)">${CENTRES.map(c=>`<option ${c===d.client?'selected':''}>${c}</option>`).join('')}</select><button class="fiche-field-manage-btn" onclick="openListManager('CENTRES')" title="Gérer">⚙️</button></span></div>
-        <div class="fiche-line"><span class="fl-label">REP</span><span class="fl-val fiche-field-with-btn fl-rep"><select onchange="updateField('${cardId}','representante',this.value)"><option value=""></option>${REPRESENTANTES.map(r=>`<option ${r===d.representante?'selected':''}>${r}</option>`).join('')}</select><button class="fiche-field-manage-btn" onclick="openListManager('REPRESENTANTES')" title="Gérer">⚙️</button></span></div>
+        <div class="fiche-line"><span class="fl-label">Centre</span><span class="fl-val fiche-field-with-btn"><select onchange="updateField('${cardId}','client',this.value)">${optionsListe(CENTRES, d.client, true)}</select><button class="fiche-field-manage-btn" onclick="openListManager('CENTRES')" title="Gérer">⚙️</button></span></div>
+        <div class="fiche-line"><span class="fl-label">REP</span><span class="fl-val fiche-field-with-btn fl-rep"><select onchange="updateField('${cardId}','representante',this.value)">${optionsListe(REPRESENTANTES, d.representante, true)}</select><button class="fiche-field-manage-btn" onclick="openListManager('REPRESENTANTES')" title="Gérer">⚙️</button></span></div>
         <div class="fiche-num3">
           <div class="fnum"><span class="fnum-lbl">Cmd</span><input value="${escapeHtml(d.order)}" onchange="updateField('${cardId}','order',this.value)"></div>
           <div class="fnum"><span class="fnum-lbl">Soum</span><input value="${escapeHtml(getLast8Digits(d.soumission))}" onchange="updateField('${cardId}','soumission',this.value)" title="Valeur complète: ${escapeHtml(d.soumission || '')}"></div>
           <div class="fnum"><span class="fnum-lbl">PO</span><input value="${escapeHtml(d.po)}" onchange="updateField('${cardId}','po',this.value)"></div>
         </div>
-        <div class="fiche-line"><span class="fl-label">Région</span><span class="fl-val fiche-field-with-btn"><select onchange="updateField('${cardId}','region',this.value)">${REGIONS.map(r=>`<option ${r===normalizeRegion(d.region)?'selected':''}>${r}</option>`).join('')}</select><button class="fiche-field-manage-btn" onclick="openListManager('REGIONS')" title="Gérer les régions">⚙️</button></span></div>
-          <div class="fiche-line"><span class="fl-label">Intervenant</span><span class="fl-val fiche-field-with-btn"><select onchange="updateField('${cardId}','intervenant',this.value)"><option value=""></option>${INTERVENANTS.map(i=>`<option ${i===d.intervenant?'selected':''}>${i}</option>`).join('')}</select><button class="fiche-field-manage-btn" onclick="openListManager('INTERVENANTS')" title="Gérer">⚙️</button></span></div>
-          <div class="fiche-line"><span class="fl-label">Item</span><span class="fl-val fiche-field-with-btn"><select onchange="updateField('${cardId}','item',this.value)"><option value=""></option>${ITEMS.map(i=>`<option ${i===d.item?'selected':''}>${i}</option>`).join('')}</select><button class="fiche-field-manage-btn" onclick="openListManager('ITEMS')" title="Gérer">⚙️</button></span></div>
+        <div class="fiche-line"><span class="fl-label">Région</span><span class="fl-val fiche-field-with-btn"><select onchange="updateField('${cardId}','region',this.value)">${optionsListe(REGIONS, normalizeRegion(d.region), false)}</select><button class="fiche-field-manage-btn" onclick="openListManager('REGIONS')" title="Gérer les régions">⚙️</button></span></div>
+          <div class="fiche-line"><span class="fl-label">Intervenant</span><span class="fl-val fiche-field-with-btn"><select onchange="updateField('${cardId}','intervenant',this.value)">${optionsListe(INTERVENANTS, d.intervenant, true)}</select><button class="fiche-field-manage-btn" onclick="openListManager('INTERVENANTS')" title="Gérer">⚙️</button></span></div>
+          <div class="fiche-line"><span class="fl-label">Item</span><span class="fl-val fiche-field-with-btn"><select onchange="updateField('${cardId}','item',this.value)">${optionsListe(ITEMS, d.item, true)}</select><button class="fiche-field-manage-btn" onclick="openListManager('ITEMS')" title="Gérer">⚙️</button></span></div>
           <div class="fiche-line"><span class="fl-label">Date Reçue</span><span class="fl-val date-field" onclick="openCalendar(this,'dateRecue')">${formatDateDisplay(d.dateRecue)||'Sélectionner...'}</span></div>
           <div class="fiche-line"><span class="fl-label">Date Livraison</span><span class="fl-val date-field" onclick="openCalendar(this,'dateLivraison')">${formatDateDisplay(d.dateLivraison)||'Sélectionner...'}</span></div>
           <div class="fiche-line"><span class="fl-label">Fab-moulage</span><span class="fl-val date-field" onclick="openCalendar(this,'dateEssayage')">${formatDateDisplay(d.dateEssayage)||'Sélectionner...'}</span></div>
@@ -18934,7 +18978,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             <span class="mobile-fiche-label">🏢 Centre <button class="mobile-fiche-manage-btn" onclick="event.stopPropagation();openListManager('CENTRES')">⚙️</button></span>
             <span class="mobile-fiche-value">
               <select onchange="updateMobileField('${cardId}', 'client', this.value)">
-                ${CENTRES.map(c => `<option ${c === d.client ? 'selected' : ''}>${c}</option>`).join('')}
+                ${optionsListe(CENTRES, d.client, true)}
               </select>
             </span>
           </div>
@@ -18944,8 +18988,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             <span class="mobile-fiche-label">👩‍💼 Représentante <button class="mobile-fiche-manage-btn" onclick="event.stopPropagation();openListManager('REPRESENTANTES')">⚙️</button></span>
             <span class="mobile-fiche-value">
               <select onchange="updateMobileField('${cardId}', 'representante', this.value)">
-                <option value=""></option>
-                ${REPRESENTANTES.map(r => `<option ${r === d.representante ? 'selected' : ''}>${r}</option>`).join('')}
+                ${optionsListe(REPRESENTANTES, d.representante, true)}
               </select>
             </span>
           </div>
@@ -18963,7 +19006,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               <span class="mobile-fiche-label">🌍 Région <button class="mobile-fiche-manage-btn" onclick="event.stopPropagation();openListManager('REGIONS')">⚙️</button></span>
               <span class="mobile-fiche-value">
                 <select onchange="updateMobileField('${cardId}', 'region', this.value)">
-                  ${REGIONS.map(r => `<option ${r === normalizeRegion(d.region) ? 'selected' : ''}>${r}</option>`).join('')}
+                  ${optionsListe(REGIONS, normalizeRegion(d.region), false)}
                 </select>
               </span>
             </div>
@@ -18972,8 +19015,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               <span class="mobile-fiche-label">🩺 Intervenant <button class="mobile-fiche-manage-btn" onclick="event.stopPropagation();openListManager('INTERVENANTS')">⚙️</button></span>
               <span class="mobile-fiche-value">
                 <select onchange="updateMobileField('${cardId}', 'intervenant', this.value)">
-                  <option value=""></option>
-                  ${INTERVENANTS.map(i => `<option ${i === d.intervenant ? 'selected' : ''}>${i}</option>`).join('')}
+                  ${optionsListe(INTERVENANTS, d.intervenant, true)}
                 </select>
               </span>
             </div>
@@ -18982,8 +19024,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
               <span class="mobile-fiche-label">📦 Item <button class="mobile-fiche-manage-btn" onclick="event.stopPropagation();openListManager('ITEMS')">⚙️</button></span>
               <span class="mobile-fiche-value">
                 <select onchange="updateMobileField('${cardId}', 'item', this.value)">
-                  <option value=""></option>
-                  ${ITEMS.map(i => `<option ${i === d.item ? 'selected' : ''}>${i}</option>`).join('')}
+                  ${optionsListe(ITEMS, d.item, true)}
                 </select>
               </span>
             </div>
@@ -20738,7 +20779,22 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           if (_cs.exists()) return; // déjà migré ou déjà des messages → ne rien faire
           return database.ref('moulages/' + jobId + '/chatV2').once('value').then(function(_old){
             var _v = _old.val();
-            if (_v) return database.ref('chats/' + jobId).set(_v);
+            if (!_v || typeof _v !== 'object') return;
+            // v1876 — AJOUT seulement, jamais set() sur tout le fil : un message
+            //   écrit pendant la copie était écrasé. Chaque élément est posé à
+            //   son propre chemin ; ce qui existe déjà n'est pas touché.
+            return database.ref('chats/' + jobId).once('value').then(function(_now){
+              var cur = _now.val() || {}, upd = {};
+              Object.keys(_v).forEach(function(k){
+                var val = _v[k];
+                if (val && typeof val === 'object' && !Array.isArray(val)) {
+                  Object.keys(val).forEach(function(k2){
+                    if (!(cur[k] && cur[k][k2] !== undefined)) upd[k + '/' + k2] = val[k2];
+                  });
+                } else if (cur[k] === undefined) upd[k] = val;
+              });
+              if (Object.keys(upd).length) return database.ref('chats/' + jobId).update(upd);
+            });
           });
         }).then(function(){
           database.ref('chats/' + jobId + '/extraDests').once('value').then(function(_es){
@@ -20850,9 +20906,14 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
 
       // ---- Render ----
+      var _renderEnAttente = false;   // v1876
       function render() {
         var container = document.getElementById('qchatMessages');
         if (!container) return;
+        // v1876 — une modification ✏️ en cours n'est plus effacée quand le fil
+        //   se met à jour (vu par quelqu'un, nouveau message…) : on attend.
+        if (container.querySelector('.qmsg-content[contenteditable="true"]')) { _renderEnAttente = true; return; }
+        _renderEnAttente = false;
         var myEmail = getMyEmail();
 
         var h = '';
@@ -21662,7 +21723,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
       function replyTo(msgId) {
         _replyToId = msgId;
+        var _garde = _getComposeText();   // v1876 — le texte en cours ne s'efface plus
         openCompose('reply');
+        if (_garde) {
+          var ta = document.getElementById('qchatComposeText');
+          if (ta) { if (ta.tagName === 'TEXTAREA') ta.value = _garde; else ta.innerText = _garde; }
+          _saveDraft();
+        }
       }
 
       function closeCompose() {
@@ -21675,7 +21742,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
 
       // v1652: le ✕ efface / annule une réponse mais garde la fenêtre ouverte
-      function cancelCompose() { _replyToId = null; openCompose('conversation'); }
+      function cancelCompose() { _replyToId = null; openCompose('conversation'); _clearDraft(); }   // v1876 — ✕ efface aussi le brouillon
 
       // v1656: Entrée = envoyer; Shift+Entrée = nouvelle ligne
       function composeKeydown(e) {
@@ -22781,15 +22848,30 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         if (_mailWanted) msgData.emailedTo = _mailNames.map(function(n){ return n.split(' ')[0]; }).join(', ');
 
         var _jobAtSend = _currentJobId;   // v1821 — la carte visée au moment de l'envoi
-        database.ref('chats/' + _currentJobId + '/messages').push().set(msgData)
+        var _texteEnvoye = text;          // v1876
+        _envoisEnAttente++;
+        var _confirme = false;
+        var _alerteLente = setTimeout(function(){
+          if (!_confirme && typeof showToast === 'function')
+            showToast('⏳ Message pas encore reçu par le serveur (réseau lent) — NE FERMEZ PAS la page', 'warning');
+        }, 8000);
+        database.ref('chats/' + _jobAtSend + '/messages').push().set(msgData)
           .then(function() {
+            _confirme = true; clearTimeout(_alerteLente); _envoisEnAttente = Math.max(0, _envoisEnAttente - 1);
             _replyToId = null;
-            _clearDraft(_jobAtSend);     // v1821 — envoi confirmé : le brouillon peut partir
-            openCompose('conversation'); // v1652: reste ouverte, prête pour le message suivant
+            // v1876 — on n'efface QUE ce qui est parti. Avant, un message tapé
+            //   pendant l'envoi (réseau lent) était effacé, brouillon compris.
+            var _dr = ''; try { _dr = localStorage.getItem(_draftKey(_jobAtSend)) || ''; } catch(e){}
+            if (!_dr || _dr.trim() === _texteEnvoye) _clearDraft(_jobAtSend);
+            if (_currentJobId === _jobAtSend) {
+              var _maintenant = _getComposeText();
+              if (!_maintenant || _maintenant === _texteEnvoye) openCompose('conversation'); // v1652: reste ouverte
+              else { _composeImages = []; _composeFiles = []; _composeSE = false; _composeThumbMap = {}; _renderSEBadge(); updateComposeImagePreview(); _saveDraft(); }
+            }
             if (typeof showToast === 'function') showToast('\ud83d\udce4 Message envoyé', 'success');
             // Notifications (cloche): destinataires choisis + TOUJOURS Valérie & Daniel
             if (typeof createNotification === 'function') {
-              var card = cardsData[_currentJobId] || {};
+              var card = cardsData[_jobAtSend] || {};
               var cardName = '#' + (card.order || '') + (card.name ? ' ' + card.name : '');
               // v1820 — FILET FINAL : une seule notification par COURRIEL.
               //   Même si deux cases du modal visaient la même personne
@@ -22806,7 +22888,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
                 createNotification({
                   to: em, toName: n.split(' ')[0],
                   from: myEmail, fromName: myName,
-                  cardId: _currentJobId, cardName: cardName,
+                  cardId: _jobAtSend, cardName: cardName,
                   messageType: _notifType,
                   messageContent: _notifContent,
                   hasImage: _notifHasImg,
@@ -22825,8 +22907,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
             _emailRepWanted = false;
             _mailDests = [];
           })
-          .catch(function(e) { if (typeof showToast === 'function') showToast('\u274c Erreur: ' + e.message, 'error'); });
+          .catch(function(e) {
+            _confirme = true; clearTimeout(_alerteLente); _envoisEnAttente = Math.max(0, _envoisEnAttente - 1);
+            if (typeof showToast === 'function') showToast('\u274c Message NON envoyé (gardé en brouillon) : ' + e.message, 'error');
+          });
       }
+
+      // v1876 — fermer la page pendant qu'un message n'est pas confirmé = message perdu
+      var _envoisEnAttente = 0;
+      window.addEventListener('beforeunload', function(ev){
+        if (_envoisEnAttente > 0) { ev.preventDefault(); ev.returnValue = 'Un message du chat n\'est pas encore envoyé.'; return ev.returnValue; }
+      });
 
       // ---- Envoi d'un message précis par courriel (optionnel, via l'icône ✉️) ----
       function emailMsg(id) {
@@ -22867,6 +22958,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var msg = _messages.find(function(e){ return e[0]===id; });
         if (!msg) return;
         var original = msg[1].content || '';
+        // v1876 — un ancien message mis en forme (contentHtml) s'édite en texte
+        el.dataset.originalHtml = el.innerHTML;
+        if (msg[1].contentHtml) el.innerText = (el.innerText || '').trim() || original;
         el.contentEditable = 'true';
         el.focus();
         el.style.outline = '2px solid #3b82f6';
@@ -22885,12 +22979,14 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         var container = btn.parentNode.parentNode;
         var el = container.querySelector('.qmsg-content');
         if (el) {
-          el.textContent = el.dataset.original || '';
+          if (el.dataset.originalHtml !== undefined) el.innerHTML = el.dataset.originalHtml;
+          else el.textContent = el.dataset.original || '';
           el.contentEditable = 'false';
           el.style.outline = '';
           el.style.padding = '';
         }
         btn.parentNode.remove();
+        if (_renderEnAttente) render();   // v1876
       }
 
       function saveEdit(btn, id) {
@@ -22902,15 +22998,21 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
         var database = getDb();
         if (database && _currentJobId) {
-          database.ref('chats/' + _currentJobId + '/messages/' + id + '/content').set(newText);
-          database.ref('chats/' + _currentJobId + '/messages/' + id + '/edited').set(true);
-          database.ref('chats/' + _currentJobId + '/messages/' + id + '/editedAt').set(new Date().toISOString());
-          if (typeof showToast === 'function') showToast('\u270f\ufe0f Modifié', 'success');
+          // v1876 — une seule écriture ; contentHtml retiré, sinon l'ancienne
+          //   version mise en forme restait affichée par-dessus la modification
+          database.ref('chats/' + _currentJobId + '/messages/' + id).update({
+            content: newText, contentHtml: null, edited: true, editedAt: new Date().toISOString()
+          }).then(function(){
+            if (typeof showToast === 'function') showToast('\u270f\ufe0f Modifié', 'success');
+          }).catch(function(e){
+            if (typeof showToast === 'function') showToast('❌ Modification NON enregistrée : ' + (e && e.message ? e.message : e), 'error');
+          });
         }
         el.contentEditable = 'false';
         el.style.outline = '';
         el.style.padding = '';
         btn.parentNode.remove();
+        if (_renderEnAttente) render();   // v1876
       }
 
       // ---- Image selection & annotations ----
