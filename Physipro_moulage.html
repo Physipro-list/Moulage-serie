@@ -8,6 +8,15 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1879 - STATISTIQUES : « IMPRIMER TOUT » VA À L'IMPRIMANTE
+    ═════════════════════════════════════════════════════════════════
+    • L'impression passait par un iframe caché : Chrome n'y offrait que
+      « Enregistrer en PDF ». Elle s'ouvre maintenant dans un onglet
+      d'impression, comme le Calendrier des départs (qui imprime bien) :
+      la boîte d'impression propose les vraies imprimantes.
+    • Les boutons « Imprimer » de chaque section sont retirés : chaque
+      section garde seulement « Copier ». « Imprimer tout » reste en haut.
+
     v1878 - STATISTIQUES : COPIER + IMPRIMER PARTOUT, PLACEMENT REVU
     ═════════════════════════════════════════════════════════════════
     • Chaque section (Robot, Dégauchage, Essayage, Atelier, Couture,
@@ -1707,7 +1716,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1878</title>
+  <title>PhysiPro Moulages v1879</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7033,7 +7042,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261035;
+    var APP_VERSION = 20261036;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -9860,8 +9869,6 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
                   '<span class="statBtns">' +
                     '<button type="button" class="statCop" data-col="' + id + '"' + (n ? '' : ' disabled') +
                       ' title="Copier les numéros de cette section">⧉ Copier</button>' +
-                    '<button type="button" class="statImp" data-col="' + id + '"' + (n ? '' : ' disabled') +
-                      ' title="Imprimer cette section">🖨 Imprimer</button>' +
                   '</span>' +
                 '</div>';
       if (!n) return H + '</div>';
@@ -9928,8 +9935,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       });
     }
 
-    // v1878 — impression d'une section ou de tout, sur une feuille lettre propre.
-    //   Iframe caché : pas de fenêtre surgissante à autoriser.
+    // v1878 — impression sur une feuille lettre propre.
+    // v1879 — dans un onglet (comme le Calendrier des départs) : l'iframe caché
+    //   ne proposait que « Enregistrer en PDF », pas les imprimantes.
     function _statImprimer(st, id){
       var secs = STAT_DEPTS.concat([[STAT_AUTRE, '⚠️ Colonne inconnue']]).filter(function(d){
         return (id === '_tout' || d[0] === id) && st.cols[d[0]].length;
@@ -9971,18 +9979,18 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         '.grille{display:grid;grid-template-columns:repeat(4,1fr);gap:3px 10px;padding:0 8px}' +
         '.no{font-size:12px;padding:2px 0;border-bottom:1px solid #e3e9f0;break-inside:avoid}' +
         '.no i{font-style:normal;font-size:10px;color:#5a6f86;margin-left:5px}';
-      var f = document.createElement('iframe');
-      f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
-      document.body.appendChild(f);
-      var doc = f.contentWindow.document;
-      doc.open();
-      doc.write('<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>' + _statEch(titre) +
-                '</title><style>' + css + '</style></head><body>' + B + '</body></html>');
-      doc.close();
-      setTimeout(function(){
-        try { f.contentWindow.focus(); f.contentWindow.print(); } catch(e){ alert('Impression impossible.'); }
-        setTimeout(function(){ f.remove(); }, 60000);
-      }, 300);
+      var w = window.open('', '_blank');
+      if (!w){
+        if (typeof showToast === 'function') showToast('⚠️ Le navigateur a bloqué la fenêtre d\'impression — autorise les pop-ups', 'error');
+        else alert('Le navigateur a bloqué la fenêtre d\'impression — autorise les pop-ups.');
+        return;
+      }
+      w.document.open();
+      w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>' + _statEch(titre) +
+                '</title><style>' + css + '</style></head><body>' + B +
+                '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},350);};</scr' + 'ipt>' +
+                '</body></html>');
+      w.document.close();
     }
 
     function fermerStats(){
