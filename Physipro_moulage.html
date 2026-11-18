@@ -8,6 +8,20 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1884 - AJOUTS AUX ARCHIVES : COPIE AU CLIC + BOUTON « COPIER MAINTENANT »
+    ═════════════════════════════════════════════════════════════════
+    • Daniel voyait « en attente de la sauvegarde » sans que rien ne se
+      copie : la copie en arrière-plan exige que Chrome ait GARDÉ l'accès au
+      dossier OneDrive (sinon il faut un clic pour le redemander).
+    • Sur un poste de sauvegarde (Valérie, Cassie, Daniel), « Enregistrer »
+      demande l'accès au dossier dans le même clic puis copie TOUT DE SUITE
+      dans Ajouts.html ; le message dit clairement si c'est copié ou non,
+      et pourquoi.
+    • Bouton « 💾 Copier maintenant dans l'archive » quand des ajouts
+      attendent (postes de sauvegarde seulement).
+    • La fenêtre relit le moulage dans Firebase à l'ouverture : « en
+      attente » est à jour même si un autre poste a déjà copié.
+
     v1883 - AJOUTS AUX ARCHIVES : SAUVEGARDE OCCASIONNELLE TOUT DE SUITE
     ═════════════════════════════════════════════════════════════════
     • Dès qu'un ajout est enregistré (PC ou téléphone), un poste de
@@ -1769,7 +1783,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1883</title>
+  <title>PhysiPro Moulages v1884</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -5923,6 +5937,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 .aj-cam { flex:1; padding:14px 8px; border:none; border-radius:10px; background:#4A8EF5; color:#fff; font-size:14px; font-weight:800; cursor:pointer; }
 .aj-cam.alt { background:#334155; color:#e2e8f0; }
 .aj-att { font-size:10.5px; font-weight:700; color:#fbbf24; margin-left:6px; }
+.aj-copier { width:100%; margin-bottom:8px; padding:10px; border:none; border-radius:8px; background:#22c55e; color:#fff; font-size:13px; font-weight:800; cursor:pointer; }
+.aj-copier:disabled { opacity:.5; cursor:default; }
 .aj-thumbs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
 .aj-th { position:relative; }
 .aj-th img { height:70px; border-radius:6px; border:1px solid #334155; display:block; }
@@ -7126,7 +7142,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261040;
+    var APP_VERSION = 20261041;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -24775,7 +24791,45 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         + ((e.photos || []).length ? '<div class="gal">' + e.photos.map(function(p){ return '<img src="' + esc(p.url) + '" loading="lazy">'; }).join('') + '</div>' : '')
         + '</div>';
     });
+    if (att.length && estPermis() && pcOK()) html = '<button class="aj-copier" id="ajCopier">💾 Copier maintenant dans l\'archive OneDrive</button>' + html;
     el('ajOld').innerHTML = html || '<div class="aj-vide">Aucun ajout pour l\'instant.</div>';
+    var bc = el('ajCopier'); if (bc) bc.onclick = function(){ ajCopierMaintenant(false); };
+  }
+  // Accès au dossier OneDrive dans un clic (redemande l'autorisation à Chrome au besoin)
+  async function ajAccesClic(){
+    if (!estPermis() || !pcOK()) return { ok: false, pourquoi: 'poste' };
+    try { await chargerDossier(); } catch(e){}
+    if (!dirH) return { ok: false, pourquoi: 'dossier' };
+    return (await permission()) ? { ok: true } : { ok: false, pourquoi: 'refus' };
+  }
+  function ajPourquoi(r){
+    if (r.pourquoi === 'dossier') return 'ce poste n\'a pas encore de dossier de sauvegarde (Réglages › 💾 Sauvegarde OneDrive › « Sauvegarder maintenant », puis choisir le dossier « Back up logiciel »).';
+    if (r.pourquoi === 'refus') return 'Chrome n\'a pas donné l\'accès au dossier OneDrive (choisir « Autoriser à chaque visite »).';
+    return 'il sera copié par le poste de Valérie, Cassie ou Daniel (Moulage ouvert), sinon à la sauvegarde du jour.';
+  }
+  // Copie de CE moulage dans Ajouts.html (acces = déjà vérifié dans le même clic)
+  async function ajCopierMaintenant(dejaOK){
+    if (aj.busy || !aj.id) return;
+    aj.busy = true; var bc = el('ajCopier'); if (bc) bc.disabled = true;
+    try {
+      var acc = dejaOK ? { ok: true } : await ajAccesClic();
+      if (!acc.ok) { ajStatut('⏳ Pas copié tout de suite : ' + ajPourquoi(acc), 'err'); return false; }
+      ajStatut('Copie dans l\'archive OneDrive…');
+      var root = await dirH.getDirectoryHandle('Moulages', { create: true });
+      var r = await ajTraiterUn(root, aj.id);
+      if (r.occupe) { ajStatut('⏳ Un autre poste est en train de le copier — rouvrir dans un instant.'); return false; }
+      if (r.manq) { ajStatut('⏳ ' + r.manq + ' photo(s) pas encore disponible(s) dans Firebase — nouvel essai à la prochaine copie.', 'err'); return false; }
+      var g = archivedGhosts && archivedGhosts[aj.id];
+      ajStatut(r.n ? ('✅ Copié dans l\'archive OneDrive (' + ((g && g.ajouts && g.ajouts.dossier) || 'Moulages') + '\\Ajouts.html)') : '✅ Rien en attente : tout est déjà dans l\'archive.', 'ok');
+      ajAfficherDeja();
+      if (typeof renderArchivedSearchNotice === 'function' && _archLastQ) renderArchivedSearchNotice(_archLastQ, _archLastBox);
+      return true;
+    } catch(e){
+      ajStatut('❌ Copie OneDrive : ' + ((e && e.message) || e), 'err');
+      return false;
+    } finally {
+      aj.busy = false; var b2 = el('ajCopier'); if (b2) b2.disabled = false;
+    }
   }
 
   window.ouvrirAjoutArchive = function(id){
@@ -24791,6 +24845,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     el('ajGo').disabled = false;
     ajMiniatures(); ajStatut(''); ajAfficherDeja();
     ov.classList.add('active');
+    // v1884 — relire le moulage (petit) : « en attente » à jour même si un autre poste a copié
+    firebaseDb.ref('moulagesExpediees/' + id).once('value').then(function(sn){
+      var v = sn.val();
+      if (!v || aj.id !== id) return;
+      if (archivedGhosts) archivedGhosts[id] = v;
+      aj.g = v; ajAfficherDeja();
+    }).catch(function(){});
   };
   function ajFermer(){
     if (aj.busy) return;
@@ -24804,8 +24865,10 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     var note = el('ajNote').value.trim();
     if (!aj.photos.length && !note) { ajStatut('Ajoute au moins une photo ou une note.', 'err'); return; }
     if (!aj.g.order && aj.photos.length) { ajStatut('Ce moulage n\'a pas de numéro : photos impossibles (note seulement).', 'err'); return; }
+    // v1884 — poste de sauvegarde : on redemande l'accès au dossier MAINTENANT (dans le clic), avant les envois
     aj.busy = true; el('ajGo').disabled = true;
-    var envoyees = [];
+    var acces = await ajAccesClic();
+    var envoyees = [], fini = false;
     try {
       var t0 = Date.now();
       for (var i = 0; i < aj.photos.length; i++) {
@@ -24828,9 +24891,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       aj.g.ajoutsAttente[k] = entree;
       aj.photos.forEach(function(p){ URL.revokeObjectURL(p.u); }); aj.photos = [];
       el('ajNote').value = ''; ajMiniatures(); ajAfficherDeja();
-      ajStatut('✅ Enregistré — copié dans l\'archive OneDrive dès qu\'un poste de sauvegarde (Valérie, Cassie ou Daniel) a Moulage ouvert, sinon à la sauvegarde du jour.', 'ok');
       showToast('✅ Ajout enregistré pour l\'archive #' + (aj.g.order || ''), 'success');
       if (typeof renderArchivedSearchNotice === 'function' && _archLastQ) renderArchivedSearchNotice(_archLastQ, _archLastBox);
+      fini = true;
     } catch(e){
       // rien d'à moitié : les photos déjà envoyées sont retirées
       for (var j = 0; j < envoyees.length; j++) { try { await storage.ref(envoyees[j].path).delete(); } catch(e2){} }
@@ -24839,6 +24902,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     } finally {
       aj.busy = false; el('ajGo').disabled = false;
     }
+    if (!fini) return;
+    if (acces.ok) await ajCopierMaintenant(true);
+    else ajStatut('✅ Enregistré. Pas encore dans OneDrive : ' + ajPourquoi(acces), acces.pourquoi === 'poste' ? 'ok' : 'err');
   }
 
   // ── Côté sauvegarde : écrire Ajouts.html puis vider Firebase ──
