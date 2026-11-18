@@ -8,6 +8,18 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1883 - AJOUTS AUX ARCHIVES : SAUVEGARDE OCCASIONNELLE TOUT DE SUITE
+    ═════════════════════════════════════════════════════════════════
+    • Dès qu'un ajout est enregistré (PC ou téléphone), un poste de
+      sauvegarde (Valérie, Cassie ou Daniel) qui a Moulage ouvert et
+      l'accès OneDrive déjà autorisé le copie TOUT DE SUITE dans
+      Ajouts.html, en arrière-plan — seulement ce moulage-là. La
+      sauvegarde quotidienne reste la même et sert de filet.
+    • Verrou moulageSettings/ajoutsArchives/<id> {par,at,tok} (transaction)
+      : deux postes ne copient jamais le même ajout deux fois ; un ajout
+      fait pendant la copie n'est pas perdu (seules les entrées copiées
+      sont retirées de Firebase).
+
     v1882 - AJOUTS AUX ARCHIVES : MÊME FONCTIONNEMENT QU'UNE CARTE (REMPLACE v1880-81)
     ═════════════════════════════════════════════════════════════════
     • Plus d'écriture directe dans OneDrive depuis la fenêtre, plus de
@@ -1757,7 +1769,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1882</title>
+  <title>PhysiPro Moulages v1883</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7114,7 +7126,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261039;
+    var APP_VERSION = 20261040;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -11845,7 +11857,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           + (g.nbPhotos ? (' · ' + g.nbPhotos + ' photo(s)') : '')
           + (g.client ? (' · ' + escapeHtml(g.client)) : '')
           + (g.ajouts && g.ajouts.n ? (' · <span class="arch-aj-n">📎 ' + g.ajouts.n + ' ajout(s)</span>') : '')
-          + (g.ajoutsAttente ? (' · <span class="arch-aj-n">⏳ ' + Object.keys(g.ajoutsAttente).length + ' en attente</span>') : '')
+          + (g.ajoutsAttente && Object.keys(g.ajoutsAttente).length ? (' · <span class="arch-aj-n">⏳ ' + Object.keys(g.ajoutsAttente).length + ' en attente</span>') : '')
           + '<span class="arch-aj-btn">➕ photos / notes</span></div>';
       });
       box.innerHTML = html;
@@ -24807,12 +24819,16 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       var entree = { at: t0, date: ajMaintenant(t0), auteur: ajAuteur(), par: email(), note: note, photos: envoyees };
       var k = firebaseDb.ref('moulagesExpediees/' + aj.id + '/ajoutsAttente').push().key;
       await firebaseDb.ref('moulagesExpediees/' + aj.id + '/ajoutsAttente/' + k).set(entree);
-      await firebaseDb.ref(AJ_REPERE + '/' + aj.id).set(true);
+      // repère « à copier » ; si un poste est en train de copier, on garde son verrou et on lui dit « encore »
+      await firebaseDb.ref(AJ_REPERE + '/' + aj.id).transaction(function(v){
+        if (v && typeof v === 'object' && v.at && Date.now() - v.at <= 10 * 60000) { v.encore = true; return v; }
+        return true;
+      });
       aj.g.ajoutsAttente = aj.g.ajoutsAttente || {};
       aj.g.ajoutsAttente[k] = entree;
       aj.photos.forEach(function(p){ URL.revokeObjectURL(p.u); }); aj.photos = [];
       el('ajNote').value = ''; ajMiniatures(); ajAfficherDeja();
-      ajStatut('✅ Enregistré — sera copié dans l\'archive OneDrive à la prochaine sauvegarde.', 'ok');
+      ajStatut('✅ Enregistré — copié dans l\'archive OneDrive dès qu\'un poste de sauvegarde (Valérie, Cassie ou Daniel) a Moulage ouvert, sinon à la sauvegarde du jour.', 'ok');
       showToast('✅ Ajout enregistré pour l\'archive #' + (aj.g.order || ''), 'success');
       if (typeof renderArchivedSearchNotice === 'function' && _archLastQ) renderArchivedSearchNotice(_archLastQ, _archLastBox);
     } catch(e){
@@ -24851,61 +24867,130 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       + '<scr' + 'ipt>document.addEventListener("click",function(e){var t=e.target,lb=document.getElementById("lb");if(t&&t.classList&&t.classList.contains("z")){document.getElementById("lbi").src=t.src;lb.classList.add("show");return;}if(lb&&lb.classList.contains("show"))lb.classList.remove("show");});document.addEventListener("keydown",function(e){if(e.key==="Escape"){var lb=document.getElementById("lb");if(lb)lb.classList.remove("show");}});</scr' + 'ipt>'
       + '</body></html>';
   }
-  async function ajTraiterUn(root, id){
-    var g = (await firebaseDb.ref('moulagesExpediees/' + id).once('value')).val();
-    var att = ajListe(g && g.ajoutsAttente);
-    if (!g || !att.length) { await firebaseDb.ref(AJ_REPERE + '/' + id).remove(); return { n: 0, manq: 0 }; }
-    // photos → base64 ; s'il en manque une, on n'efface RIEN (nouvel essai à la prochaine sauvegarde)
-    var manq = 0, entrees = '';
-    for (var a = att.length - 1; a >= 0; a--) {
-      var e = att[a], imgs = [];
-      var ph = e.photos || [];
-      for (var p = 0; p < ph.length; p++) {
-        var b = null;
-        try { b = await blobB64(await storage.ref(ph[p].path).getBlob()); }
-        catch(x){ try { var r = await fetch(ph[p].url); if (r.ok) b = await blobB64(await r.blob()); } catch(x2){ b = null; } }
-        if (b) imgs.push(b); else manq++;
-      }
-      entrees += '<div class="hi"><div class="ha">' + esc(e.date || '') + ' · ' + esc(e.auteur || '') + '</div>'
-        + (e.note ? '<div class="bd">' + esc(e.note).replace(/\n/g, '<br>') + '</div>' : '')
-        + (imgs.length ? '<div class="gal">' + imgs.map(function(s){ return '<img class="z" src="' + s + '" loading="lazy">'; }).join('') + '</div>' : '')
-        + '</div>';
-    }
-    if (manq) return { n: 0, manq: manq };
-    var mf = await ajDossier(root, g);
-    var ancien = null;
-    try { ancien = await (await (await mf.getFileHandle('Ajouts.html')).getFile()).text(); }
-    catch(x){ if (!x || x.name !== 'NotFoundError') throw x; }
-    var base = (ancien && ancien.indexOf(AJ_LST) >= 0) ? ancien : ajCoquille(g);
-    var i = base.indexOf(AJ_LST) + AJ_LST.length;
-    var nouveau = base.slice(0, i) + entrees + base.slice(i);
-    var blob = new Blob([nouveau], { type: 'text/html' });
-    var fh = await mf.getFileHandle('Ajouts.html', { create: true });
-    var w = await fh.createWritable(); await w.write(blob); await w.close();
-    if ((await fh.getFile()).size !== blob.size) throw new Error('Ajouts.html : vérification échouée');
-    // Écrit et vérifié dans OneDrive → on vide Firebase
-    var n = (nouveau.match(/<div class="hi">/g) || []).length;
-    for (var c = 0; c < att.length; c++) {
-      var lp = att[c].photos || [];
-      for (var q = 0; q < lp.length; q++) { try { await storage.ref(lp[q].path).delete(); } catch(x){} }
-    }
-    var maj = { ajoutsAttente: null, ajouts: { n: n, dernier: aujourdhui(), dossier: mf.name } };
-    await firebaseDb.ref('moulagesExpediees/' + id).update(maj);
-    await firebaseDb.ref(AJ_REPERE + '/' + id).remove();
-    if (typeof archivedGhosts !== 'undefined' && archivedGhosts && archivedGhosts[id]) { delete archivedGhosts[id].ajoutsAttente; archivedGhosts[id].ajouts = maj.ajouts; }
-    return { n: att.length, manq: 0 };
+  // Verrou : un seul poste copie un moulage à la fois (transaction sur le repère)
+  async function ajVerrou(id){
+    var tok = Math.random().toString(36).slice(2), r;
+    try {
+      r = await firebaseDb.ref(AJ_REPERE + '/' + id).transaction(function(v){
+        if (v === null) return null;
+        if (v === true || !v.at || Date.now() - v.at > 10 * 60000) return { par: email(), at: Date.now(), tok: tok };
+        return;   // un autre poste est dessus
+      });
+    } catch(e){ return null; }
+    var v = r && r.committed && r.snapshot ? r.snapshot.val() : null;
+    return (v && v.tok === tok) ? tok : null;
   }
-  async function ajTraiterTout(root){
+  // Libère le verrou ; si un nouvel ajout est arrivé pendant la copie, le repère reste à « true »
+  async function ajLiberer(id, tok, encore){
+    try {
+      await firebaseDb.ref(AJ_REPERE + '/' + id).transaction(function(v){
+        if (v && v.tok === tok) return (encore || v.encore) ? true : null;
+        return;   // déjà remis à true par un nouvel ajout : on n'y touche pas
+      });
+    } catch(e){}
+  }
+
+  async function ajTraiterUn(root, id){
+    var tok = await ajVerrou(id);
+    if (!tok) return { n: 0, manq: 0, occupe: true };
+    try {
+      var g = (await firebaseDb.ref('moulagesExpediees/' + id).once('value')).val();
+      var att = ajListe(g && g.ajoutsAttente);
+      if (!g || !att.length) { await ajLiberer(id, tok, false); return { n: 0, manq: 0 }; }
+      // photos → base64 ; s'il en manque une, on n'efface RIEN (nouvel essai plus tard)
+      var manq = 0, entrees = '';
+      for (var a = att.length - 1; a >= 0; a--) {
+        var e = att[a], imgs = [];
+        var ph = e.photos || [];
+        for (var p = 0; p < ph.length; p++) {
+          var b = null;
+          try { b = await blobB64(await storage.ref(ph[p].path).getBlob()); }
+          catch(x){ try { var r = await fetch(ph[p].url); if (r.ok) b = await blobB64(await r.blob()); } catch(x2){ b = null; } }
+          if (b) imgs.push(b); else manq++;
+        }
+        entrees += '<div class="hi"><div class="ha">' + esc(e.date || '') + ' · ' + esc(e.auteur || '') + '</div>'
+          + (e.note ? '<div class="bd">' + esc(e.note).replace(/\n/g, '<br>') + '</div>' : '')
+          + (imgs.length ? '<div class="gal">' + imgs.map(function(s){ return '<img class="z" src="' + s + '" loading="lazy">'; }).join('') + '</div>' : '')
+          + '</div>';
+      }
+      if (manq) { await ajLiberer(id, tok, true); return { n: 0, manq: manq }; }
+      var mf = await ajDossier(root, g);
+      var ancien = null;
+      try { ancien = await (await (await mf.getFileHandle('Ajouts.html')).getFile()).text(); }
+      catch(x){ if (!x || x.name !== 'NotFoundError') throw x; }
+      var base = (ancien && ancien.indexOf(AJ_LST) >= 0) ? ancien : ajCoquille(g);
+      var i = base.indexOf(AJ_LST) + AJ_LST.length;
+      var nouveau = base.slice(0, i) + entrees + base.slice(i);
+      var blob = new Blob([nouveau], { type: 'text/html' });
+      var fh = await mf.getFileHandle('Ajouts.html', { create: true });
+      var w = await fh.createWritable(); await w.write(blob); await w.close();
+      if ((await fh.getFile()).size !== blob.size) throw new Error('Ajouts.html : vérification échouée');
+      // Écrit et vérifié dans OneDrive → on retire de Firebase SEULEMENT ce qui vient d'être copié
+      var n = (nouveau.match(/<div class="hi">/g) || []).length;
+      for (var c = 0; c < att.length; c++) {
+        var lp = att[c].photos || [];
+        for (var q = 0; q < lp.length; q++) { try { await storage.ref(lp[q].path).delete(); } catch(x){} }
+      }
+      var info = { n: n, dernier: aujourdhui(), dossier: mf.name };
+      var maj = { ajouts: info };
+      att.forEach(function(x){ maj['ajoutsAttente/' + x._k] = null; });
+      await firebaseDb.ref('moulagesExpediees/' + id).update(maj);
+      await ajLiberer(id, tok, false);
+      if (typeof archivedGhosts !== 'undefined' && archivedGhosts && archivedGhosts[id]) {
+        var gl = archivedGhosts[id];
+        if (gl.ajoutsAttente) { att.forEach(function(x){ delete gl.ajoutsAttente[x._k]; }); if (!Object.keys(gl.ajoutsAttente).length) delete gl.ajoutsAttente; }
+        gl.ajouts = info;
+      }
+      var ov = el('ajOverlay');
+      if (ov && ov.classList.contains('active') && aj.id === id) ajAfficherDeja();
+      return { n: att.length, manq: 0 };
+    } catch(e){
+      await ajLiberer(id, tok, true);
+      throw e;
+    }
+  }
+  async function ajTraiterTout(root, seulsNouveaux){
     var res = { faits: 0, manquantes: 0, erreurs: 0 };
-    var ids = [];
-    try { ids = Object.keys((await firebaseDb.ref(AJ_REPERE).once('value')).val() || {}); }
+    var rep = {};
+    try { rep = (await firebaseDb.ref(AJ_REPERE).once('value')).val() || {}; }
     catch(e){ console.warn('Ajouts archives:', e && e.message); return res; }
+    var ids = Object.keys(rep).filter(function(k){ return !seulsNouveaux || rep[k] === true; });
     for (var i = 0; i < ids.length; i++) {
-      statut('Ajouts aux archives ' + (i + 1) + ' / ' + ids.length + '…');
+      if (!seulsNouveaux) statut('Ajouts aux archives ' + (i + 1) + ' / ' + ids.length + '…');
       try { var r = await ajTraiterUn(root, ids[i]); res.faits += r.n; res.manquantes += r.manq; }
       catch(e){ res.erreurs++; console.warn('Ajouts archive ' + ids[i] + ':', e && e.message); }
     }
     return res;
+  }
+
+  // v1883 — Sauvegarde occasionnelle : sur un poste de sauvegarde (Valérie, Cassie, Daniel),
+  //   un nouvel ajout est copié dans OneDrive tout de suite, en arrière-plan, si l'accès au
+  //   dossier est déjà autorisé (« Autoriser à chaque visite »). Sinon : sauvegarde du jour.
+  var ajAutoEnCours = false, ajAutoEncore = false, ajAutoTimer = null;
+  async function ajAuto(){
+    if (ajAutoEnCours) { ajAutoEncore = true; return; }
+    if (enCours) { ajAutoTimer = setTimeout(ajAuto, 60000); return; }   // la sauvegarde du jour s'en charge
+    ajAutoEnCours = true;
+    try {
+      if (!(await permissionSilencieuse())) return;
+      var root = await dirH.getDirectoryHandle('Moulages', { create: true });
+      var r = await ajTraiterTout(root, true);
+      if (r.faits) { pastille('Ajout copié dans l\'archive OneDrive (' + r.faits + ')', 'ok'); setTimeout(function(){ pastille(''); }, 6000); }
+    } catch(e){ console.warn('Sauvegarde occasionnelle des ajouts:', e && e.message); }
+    finally {
+      ajAutoEnCours = false;
+      if (ajAutoEncore) { ajAutoEncore = false; ajAutoTimer = setTimeout(ajAuto, 2000); }
+    }
+  }
+  function ajEcouter(){
+    try {
+      firebaseDb.ref(AJ_REPERE).on('value', function(snap){
+        var v = snap.val() || {};
+        if (!Object.keys(v).some(function(k){ return v[k] === true; })) return;
+        clearTimeout(ajAutoTimer);
+        ajAutoTimer = setTimeout(ajAuto, 3000);
+      });
+    } catch(e){ console.warn('Écoute des ajouts:', e && e.message); }
   }
 
   // Appelé après la connexion (onAuthStateChanged)
@@ -24914,6 +24999,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     if (demarre || !estPermis() || !pcOK()) return;
     demarre = true;
     lireMarqueur().then(afficherReglage);
+    ajEcouter();   // v1883 — ajouts aux archives copiés tout de suite
     if (!estAuto()) return;
     setTimeout(verifier, 20000);
     timerVerif = setInterval(verifier, VERIF_MIN * 60000);
