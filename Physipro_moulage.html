@@ -8,6 +8,24 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1894 - ÉTAT DES MOULAGES : « 📷 PRENDRE DES PHOTOS » ET « 🎥 FILMER » + LIMITE GRATUITE
+    ════════════════════════════════════════════════════
+    • Deux boutons clairs dans chaque dossier : « 📷 Prendre des photos » et
+      « 🎥 Filmer » (avec le téléphone). Même demande photoRequests/etat_<id> ;
+      mode:'video' ouvre sur le téléphone un enregistreur 720p (2 Mb/s).
+    • LIMITE GRATUITE FIREBASE (règle de Daniel : ne plus jamais payer) : le
+      PC lit le total du jour du compteur intégré et fixe la durée et le poids
+      maximum de la vidéo pour rester sous 300 Mo (le compteur avertit à 315
+      et coupe à 330, quota 360). Le téléphone COUPE l'enregistrement avant
+      la limite et l'affiche ; une vidéo plus lourde n'est pas envoyée. 20 Mo
+      et 60 s au plus de toute façon. Pas assez de marge → pas de vidéo, avec
+      avertissement. Le PC revérifie avant de télécharger (sinon : demain),
+      et ajoute la vidéo téléchargée au compteur.
+    • La vidéo transite par Storage (photos/moulages/<n°>/etat/), le PC la
+      range dans le dossier « Situation » (OneDrive) puis l'efface.
+    • Une réponse du téléphone (photo ou vidéo) n'est plus effacée par le
+      ménage de 10 min du téléphone : le PC la reprend à l'ouverture.
+
     v1893 - ÉTAT DES MOULAGES : PHOTO DEMANDÉE AU TÉLÉPHONE COMME POUR UNE FICHE
     ════════════════════════════════════════════════════
     • Daniel n'a pas besoin de l'État des moulages sur le téléphone : l'écran
@@ -1883,7 +1901,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1893</title>
+  <title>PhysiPro Moulages v1894</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7245,7 +7263,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261050;
+    var APP_VERSION = 20261051;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -20691,6 +20709,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     }
 
     function _psOpen(req) {
+      // v1894 — État des moulages : une demande de VIDÉO ouvre l'enregistreur (limite gratuite surveillée)
+      if (req && req.mode === 'video' && typeof window.etatFilmer === 'function') { window.etatFilmer(req); return; }
       _psReq = req;
       _psPhotos = [];
       _psSending = false;
@@ -20844,6 +20864,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         }
         return;
       }
+      // v1894 — État des moulages : la réponse reste jusqu'à ce que le PC la range (plus de ménage à 10 min)
+      if (String(_psReq.jobId).indexOf('etat_') === 0) payload.requestedByEmail = null;
       try {
         await firebaseDb.ref('photoRequests/' + _psReq.jobId).update(payload);
         _psClose(true);
@@ -25262,6 +25284,23 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   .et-tel{display:flex; flex-direction:column; gap:6px; width:338px}
   .et-tel button{border:1.5px solid #4A8EF5; border-radius:4px; background:#fff; color:#1f4fa3; font:inherit; font-size:12.5px; font-weight:700; padding:7px; cursor:pointer}
   .et-tel button:hover{background:#eaf2fd}
+  .et-tel-t{font-size:10.5px; font-weight:800; letter-spacing:1.2px; color:#5a6f8a}
+  .et-tel button[data-tel="video"]{border-color:#0f766e; color:#0f766e}
+  .et-tel button[data-tel="video"]:hover{background:#ecfdf5}
+  .etr-ov{position:fixed; inset:0; z-index:100070; display:none; flex-direction:column; background:#000; color:#fff; font-family:-apple-system,'Segoe UI',Arial,sans-serif}
+  .etr-ov.on{display:flex}
+  .etr-tete{padding:12px 16px; background:#04152C}
+  .etr-tete b{display:block; font-size:17px}
+  .etr-tete span{font-size:13px; color:#9fb6d8}
+  .etr-ov video{flex:1; width:100%; min-height:0; object-fit:contain; background:#000}
+  .etr-msg{padding:8px 16px; font-size:14px; min-height:20px; color:#cbd5e1}
+  .etr-msg.err{color:#fdba74; font-weight:700}
+  .etr-bas{display:flex; align-items:center; justify-content:space-between; padding:10px 20px 24px}
+  .etr-bas button{background:rgba(255,255,255,.15); border:0; color:#fff; border-radius:10px; padding:10px 14px; font-size:15px}
+  .etr-rond{width:72px; height:72px; border-radius:50% !important; padding:0 !important; border:4px solid #fff !important; background:#dc2626 !important}
+  .etr-rond.rec{border-radius:16px !important; width:60px; height:60px}
+  .etr-rond:disabled{opacity:.4}
+  .etr-temps{font-size:15px; font-weight:700; min-width:110px; text-align:right}
   .et-dem{background:#fff7ed; color:#9a3412; font-size:12.5px; font-weight:600; padding:6px 12px; border-bottom:1px solid #fed7aa; display:flex; gap:10px; align-items:center}
   .et-dem button{margin-left:auto; border:1px solid #fdba74; background:#fff; color:#9a3412; border-radius:4px; font:inherit; font-size:11.5px; padding:2px 8px; cursor:pointer}
   .et-plus{width:100%; border:1.5px dashed #4A8EF5; border-radius:4px; background:#f3f7fe; color:#1f4fa3; padding:10px; font:inherit; font-size:14px; font-weight:700; cursor:pointer}
@@ -25364,6 +25403,28 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       setTimeout(dessiner, 5000);
     });
   }
+
+  /* ═════════ BUDGET FIREBASE (v1894) ═════════
+     Le compteur intégré de Moulage (window.__physiproConso) additionne ce que
+     TOUS les postes téléchargent dans la journée (consoTotal/<jour>) : il
+     avertit à 315 Mo et coupe à 330 Mo, sous le quota gratuit de 360 Mo.
+     Une vidéo n'est demandée, et n'est téléchargée, que si elle tient sous
+     BUDGET_MO avec une marge ; sinon elle est coupée ou remise au lendemain. */
+  var MO = 1024 * 1024;
+  var BUDGET_MO = 300;                 // on reste sous l'avertissement du compteur (315 Mo)
+  var MARGE_MO = 10;
+  var VID_TEL_MAX = 20 * MO;           // une vidéo du téléphone : 20 Mo au plus (aussi la limite d'un courriel)
+  var REC_MAX_S = 60, REC_BPS = 2000000;   // 720p, ≈ 15 Mo la minute
+  function jourConso(){ try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch(e){ return new Date().toISOString().slice(0, 10); } }
+  async function consoJour(){
+    var C = window.__physiproConso || {};
+    if (C.total != null) return C.total + ((C.octets || 0) - (C.envoyes || 0));
+    try { var v = (await firebaseDb.ref('consoTotal/' + jourConso()).once('value')).val() || 0; return v + ((C.octets || 0) - (C.envoyes || 0)); }
+    catch(e){ return null; }
+  }
+  function compterOctets(n){ var C = window.__physiproConso; if (C && n > 0) C.octets += n; }   // le téléchargement Storage n'est pas vu par le compteur : on l'ajoute
+  async function resteOctets(){ var t = await consoJour(); return t == null ? null : (BUDGET_MO - MARGE_MO) * MO - t; }
+  function mo(o){ return (o / MO).toFixed(o < 10 * MO ? 1 : 0) + ' Mo'; }
 
   /* ═════════ DOSSIER ONEDRIVE : le MÊME que la sauvegarde de Moulage ═════════
      Le dossier « Back up logiciel » choisi pour la sauvegarde (Valérie, Cassie,
@@ -25575,9 +25636,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       +   '<button type="button" class="et-x" title="Retirer cette situation (réglée)">×</button></div>'
       + (s.dossier ? '<div class="et-dos" title="Dossier OneDrive de la situation">📁 ' + esc(s.dossier.replace(/\//g, ' › ')) + '</div>' : '')
       + '<textarea class="e-txt" rows="2" placeholder="Détail, ce qui reste à faire, qui l’attend…">' + esc(s.txt) + '</textarea>'
-      + (DEMS[s.id] ? '<div class="et-dem">⏳ Photo demandée au téléphone — la caméra s’ouvre dans Moulage sur ton téléphone<button type="button" class="et-dem-ann">Annuler</button></div>' : '')
+      + (DEMS[s.id] ? '<div class="et-dem">' + (DEMS[s.id].status === 'done' ? '📥 Reçu du téléphone — rangement dans OneDrive…' : (DEMS[s.id].mode === 'video' ? '⏳ Vidéo demandée au téléphone (' + (DEMS[s.id].maxSec || '') + ' s ou ' + mo(DEMS[s.id].maxOctets || 0) + ' au plus)' : '⏳ Photos demandées au téléphone') + ' — Moulage ouvert sur ton téléphone') + '<button type="button" class="et-dem-ann">Annuler</button></div>' : '')
       + '<div class="et-medias">' + m + '<button type="button" class="et-aj">+ Photos / vidéo<br><small>ou Ctrl+V / glisser ici</small></button>'
-      +   '<div class="et-tel"><button type="button" data-tel="photo">📱 Prendre une photo avec le téléphone</button></div></div></div>';
+      +   '<div class="et-tel"><span class="et-tel-t">AVEC LE TÉLÉPHONE</span><button type="button" data-tel="photo">📷 Prendre des photos</button><button type="button" data-tel="video">🎥 Filmer</button></div></div></div>';
   }
   function grandir(t){ t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
   function rendre(){
@@ -25871,7 +25932,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         rendre(); sauver(); return;
       }
       if (t.closest('.et-aj')) { var inp = el('etFichiers'); inp._cible = s.id; inp.click(); }
-      if (t.closest('button[data-tel]')) { lireChamps(); if (!s.cmd) { marque('Écris d’abord le numéro de commande'); var c0 = d.querySelector('.e-cmd'); if (c0) c0.focus(); return; } demanderPhoto(s); return; }   // v1893
+      var bt = t.closest('button[data-tel]');
+      if (bt) { lireChamps(); if (!s.cmd) { marque('Écris d’abord le numéro de commande'); var c0 = d.querySelector('.e-cmd'); if (c0) c0.focus(); return; } if (DEMS[s.id]) { marque('Une demande est déjà en cours pour ce dossier'); return; } demanderPhoto(s, bt.getAttribute('data-tel')); return; }   // v1893-v1894
       if (t.classList.contains('et-dem-ann')) { annulerDemande(s.id); return; }
     });
     el('etFichiers').onchange = function(){ ajouterMedias(this._cible, this.files); this.value = ''; };
@@ -25929,14 +25991,26 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
      n'est propre à l'État des moulages. */
   var DEMS = {}, SUIVIS = {};   // id du dossier → demande en cours / écoute Firebase
   function nomMoi(){ try { return (typeof getUserDisplayName === 'function' && getUserDisplayName(moi())) || moi(); } catch(e){ return moi(); } }
-  function demanderPhoto(s){
+  async function demanderPhoto(s, mode){
     if (!s.cmd) { marque('Écris d’abord le numéro de commande'); return; }
     var id = 'etat_' + s.id;
     var req = { jobId: id, order: s.cmd, client: s.ben || nomMoulage(s.cmd) || '', requestedBy: nomMoi(),
                 requestedByEmail: (typeof currentUser !== 'undefined' && currentUser && currentUser.email) || moi(), status: 'waiting', timestamp: Date.now() };
+    if (mode === 'video') {   // v1894 : la vidéo doit tenir dans ce qui reste de gratuit aujourd'hui
+      var reste = await resteOctets();
+      var maxOct = Math.min(VID_TEL_MAX, reste == null ? 10 * MO : reste);
+      if (maxOct < 3 * MO) {
+        alert('Pas de vidéo aujourd’hui : la limite gratuite de Firebase est presque atteinte'
+          + (reste == null ? '.' : ' (il reste ' + mo(Math.max(0, reste)) + ' avant ' + BUDGET_MO + ' Mo).')
+          + '\n\nPrends des photos à la place, ou filme demain.');
+        return;
+      }
+      req.mode = 'video'; req.maxOctets = Math.floor(maxOct);
+      req.maxSec = Math.max(10, Math.min(REC_MAX_S, Math.floor(maxOct * 8 / (REC_BPS + 64000))));
+    }
     firebaseDb.ref('photoRequests/' + id).set(req).then(function(){
       DEMS[s.id] = req; suivre(s.id); rendre();
-      toast('📷 Demande envoyée au téléphone', 'info');
+      toast(mode === 'video' ? '🎥 Demande de vidéo envoyée au téléphone (' + req.maxSec + ' s ou ' + mo(req.maxOctets) + ' au plus)' : '📷 Demande de photos envoyée au téléphone', 'info');
     }).catch(function(e){ marque('⚠ Demande pas envoyée : ' + ((e && e.message) || e)); });
   }
   function finDemande(sitId){
@@ -25962,8 +26036,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           if (ok) { ref.remove().catch(function(){}); finDemande(sitId); }
         });
       }
+      if (d.status === 'done' && d.video && !occupe) {   // v1894
+        occupe = true; DEMS[sitId] = d;
+        recevoirVideo(sitId, d.video).then(function(ok){
+          occupe = false;
+          if (ok) { ref.remove().catch(function(){}); finDemande(sitId); }
+        });
+      }
     });
-    SUIVIS[sitId] = { ref: ref, cb: cb, minuterie: setTimeout(function(){ if (DEMS[sitId] && DEMS[sitId].status !== 'done') annulerDemande(sitId); }, 10 * 60000) };
+    SUIVIS[sitId] = { ref: ref, cb: cb, minuterie: setTimeout(function(){ if (DEMS[sitId] && DEMS[sitId].status === 'waiting') annulerDemande(sitId); }, 10 * 60000) };
   }
   async function recevoirPhotos(sitId, photos){
     try {
@@ -25988,19 +26069,149 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       return true;
     } catch(e){ console.error('Photos du téléphone :', e); toast('⚠ Photos du téléphone : ' + ((e && e.message) || e), 'warning'); return false; }
   }
-  /* à l'ouverture du feuillet : les demandes encore en cours (ou déjà répondues) sont reprises */
-  async function reprendreDemandes(){
+  /* v1894 : la vidéo du téléphone (Storage) → OneDrive, SEULEMENT si elle tient dans la limite gratuite du jour */
+  async function recevoirVideo(sitId, v){
     try {
-      var em = (typeof currentUser !== 'undefined' && currentUser && currentUser.email) || moi();
-      var v = (await firebaseDb.ref('photoRequests').orderByChild('requestedByEmail').equalTo(em).once('value')).val() || {};
-      Object.keys(v).forEach(function(k){
-        if (k.indexOf('etat_') !== 0 || !v[k]) return;
-        var sitId = k.slice(5);
-        if (v[k].status === 'cancelled') { firebaseDb.ref('photoRequests/' + k).remove().catch(function(){}); return; }
-        DEMS[sitId] = v[k]; suivre(sitId);
-      });
-    } catch(e){ console.warn('Demandes au téléphone :', e && e.message); }
+      if (!(await acces(false))) { toast('🎥 Vidéo reçue du téléphone — ouvre l’État des moulages pour la ranger dans OneDrive', 'info'); return false; }
+      if (!E) await charger();
+      var s = sitDe(sitId);
+      if (!s) { try { await storage.ref(v.path).delete(); } catch(x){} toast('🎥 Le dossier de cette vidéo a été retiré du feuillet — vidéo effacée', 'warning'); return true; }
+      var reste = await resteOctets();
+      if (reste != null && (v.taille || 0) > reste) { toast('⚠️ Limite gratuite de Firebase presque atteinte : la vidéo (' + mo(v.taille || 0) + ') sera récupérée demain', 'warning'); return false; }
+      var b = null;
+      try { b = await storage.ref(v.path).getBlob(); compterOctets(b.size); }
+      catch(x){ try { var r = await fetch(v.url); if (r.ok) b = await r.blob(); } catch(x2){ b = null; } }   // fetch : déjà compté par le compteur
+      if (!b) { toast('⏳ Vidéo pas encore disponible — nouvel essai à la prochaine ouverture', 'info'); return false; }
+      lireChamps();
+      await assurerDossier(s);
+      var d = await dirChemin(s.dossier, true), nom = nomLibre('video', ext('', v.type || b.type));
+      await ecrire(d, nom, b);
+      var ch = s.dossier + '/' + nom; URLS[ch] = URL.createObjectURL(b);
+      s.videos.push({ nom: ch, poster: await affiche(URLS[ch]), taille: b.size, orig: 'téléphone' });
+      await sauverMaintenant();
+      try { await storage.ref(v.path).delete(); } catch(x){}
+      if (ouverte()) rendre();
+      toast('🎥 Vidéo du téléphone ajoutée au dossier ' + s.cmd + ' (' + mo(b.size) + ')' + (v.coupe ? ' — coupée pour rester sous la limite' : ''), 'success');
+      return true;
+    } catch(e){ console.error('Vidéo du téléphone :', e); toast('⚠ Vidéo du téléphone : ' + ((e && e.message) || e), 'warning'); return false; }
   }
+  /* à l'ouverture du feuillet : les demandes encore en cours (ou déjà répondues) sont reprises */
+  async function reprendreDemandes(){   // v1894 : une lecture par dossier du feuillet (quelques octets chacune)
+    for (var i = 0; i < E.sits.length; i++) {
+      var sitId = E.sits[i].id, k = 'etat_' + sitId;
+      try {
+        var v = (await firebaseDb.ref('photoRequests/' + k).once('value')).val();
+        if (!v) continue;
+        if (v.status === 'cancelled') { firebaseDb.ref('photoRequests/' + k).remove().catch(function(){}); continue; }
+        DEMS[sitId] = v; suivre(sitId);
+      } catch(e){ console.warn('Demandes au téléphone :', e && e.message); }
+    }
+    if (ouverte()) { lireChamps(); rendre(); }
+  }
+
+
+  /* ═════════ TÉLÉPHONE : FILMER UNE DEMANDE DU PC (v1894) ═════════
+     Appelé par la caméra de Moulage (_psOpen) quand la demande porte mode:'video'.
+     720p à 2 Mb/s ; arrêt automatique à maxSec OU dès que le poids approche
+     maxOctets (fixé par le PC d'après le budget du jour) — avec avertissement.
+     La vidéo transite par Storage (photos/moulages/<n°>/etat/) ; le PC la
+     range dans OneDrive puis l'efface. */
+  var FILM = null;
+  window.etatFilmer = async function(req){
+    if (!req || (FILM && FILM.jobId === req.jobId)) return;
+    if (FILM) return;
+    var maxOct = Math.min(Number(req.maxOctets) || VID_TEL_MAX, VID_TEL_MAX), maxSec = Math.min(Number(req.maxSec) || REC_MAX_S, REC_MAX_S);
+    var ref = firebaseDb.ref('photoRequests/' + req.jobId);
+    FILM = { jobId: req.jobId, flux: null, rec: null, morceaux: [], poids: 0, minuterie: null, annule: false, coupe: '' };
+    ref.update({ status: 'answering' }).catch(function(){});
+    var ov = el('etrOv');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'etrOv'; ov.className = 'etr-ov';
+      ov.innerHTML = '<div class="etr-tete"><b id="etrTitre"></b><span id="etrSous"></span></div><video id="etrVue" autoplay muted playsinline></video>'
+        + '<div class="etr-msg" id="etrMsg"></div>'
+        + '<div class="etr-bas"><button type="button" id="etrAnn">Annuler</button><button type="button" class="etr-rond" id="etrRec" title="Filmer"></button><span class="etr-temps" id="etrTemps">0:00</span></div>';
+      document.body.appendChild(ov);
+    }
+    el('etrTitre').textContent = '🎥 Vidéo demandée — #' + (req.order || '');
+    el('etrSous').textContent = (req.client || '') + ' · ' + maxSec + ' s ou ' + mo(maxOct) + ' au plus';
+    function msg(t, c){ var m = el('etrMsg'); m.textContent = t || ''; m.className = 'etr-msg' + (c ? ' ' + c : ''); }
+    msg('Appuie sur le bouton rouge pour filmer.');
+    function fermer(){
+      if (!FILM) return;
+      clearInterval(FILM.minuterie);
+      if (FILM.flux) FILM.flux.getTracks().forEach(function(t){ t.stop(); });
+      el('etrVue').srcObject = null; ov.classList.remove('on'); el('etrRec').classList.remove('rec'); el('etrRec').disabled = false;
+      try { ref.off('value', ecoute); } catch(e){}
+      FILM = null;
+    }
+    // le PC annule (ou la demande disparaît) → on ferme
+    var ecoute = ref.on('value', function(sn){ var d = sn.val(); if (FILM && (!d || d.status === 'cancelled') && !FILM.envoi) { FILM.annule = true; if (FILM.rec && FILM.rec.state !== 'inactive') FILM.rec.stop(); fermer(); showToast('🎥 Demande de vidéo annulée', 'info'); } });
+    var cv = { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
+    try { FILM.flux = await navigator.mediaDevices.getUserMedia({ video: cv, audio: true }); }
+    catch(e){ try { FILM.flux = await navigator.mediaDevices.getUserMedia({ video: cv, audio: false }); } catch(e2){ msg('❌ Caméra impossible : ' + (e2 && e2.message || e2), 'err'); ov.classList.add('on'); return; } }
+    if (!FILM) return;
+    ov.classList.add('on'); el('etrVue').srcObject = FILM.flux;
+    var types = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    var mime = types.filter(function(t){ try { return MediaRecorder.isTypeSupported(t); } catch(e){ return false; } })[0] || '';
+    el('etrAnn').onclick = function(){
+      if (!FILM) return;
+      FILM.annule = true;
+      if (FILM.rec && FILM.rec.state !== 'inactive') FILM.rec.stop();
+      ref.update({ status: 'cancelled' }).catch(function(){});
+      fermer();
+    };
+    el('etrRec').onclick = function(){
+      if (!FILM) return;
+      if (FILM.rec && FILM.rec.state === 'recording') { FILM.rec.stop(); return; }
+      if (FILM.rec) return;
+      FILM.morceaux = []; FILM.poids = 0;
+      try { FILM.rec = new MediaRecorder(FILM.flux, mime ? { mimeType: mime, videoBitsPerSecond: REC_BPS, audioBitsPerSecond: 64000 } : { videoBitsPerSecond: REC_BPS }); }
+      catch(e){ FILM.rec = new MediaRecorder(FILM.flux); }
+      FILM.rec.ondataavailable = function(ev){
+        if (!ev.data || !ev.data.size || !FILM) return;
+        FILM.morceaux.push(ev.data); FILM.poids += ev.data.size;
+        FILM.dernier = Math.max(FILM.dernier || 0, ev.data.size);
+        // coupé AVANT la limite : on prévoit la seconde suivante (et le dernier morceau écrit à l'arrêt)
+        if (FILM.poids + 2.5 * FILM.dernier >= maxOct * 0.95 && FILM.rec.state === 'recording') { FILM.coupe = 'poids'; FILM.rec.stop(); }
+      };
+      FILM.rec.onstop = function(){ envoyerFilm(); };
+      FILM.rec.start(500);   // morceaux d'une demi-seconde : l'arrêt tombe plus juste
+      var debut = Date.now(); el('etrRec').classList.add('rec'); msg('● Enregistrement…');
+      FILM.minuterie = setInterval(function(){
+        if (!FILM) return;
+        var s = Math.floor((Date.now() - debut) / 1000);
+        el('etrTemps').textContent = Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2) + ' / ' + Math.floor(maxSec / 60) + ':' + ('0' + maxSec % 60).slice(-2) + '  ·  ' + mo(FILM.poids);
+        if (s >= maxSec && FILM.rec.state === 'recording') { FILM.coupe = 'temps'; FILM.rec.stop(); }
+      }, 250);
+    };
+    async function envoyerFilm(){
+      if (!FILM || FILM.annule) { fermer(); return; }
+      clearInterval(FILM.minuterie); el('etrRec').classList.remove('rec'); el('etrRec').disabled = true;
+      var type = (FILM.rec.mimeType || mime || 'video/webm').split(';')[0];
+      var b = new Blob(FILM.morceaux, { type: type });
+      if (!b.size) { msg('Vidéo vide — rien envoyé.', 'err'); setTimeout(fermer, 2500); return; }
+      if (b.size > maxOct) { msg('⚠️ Vidéo trop lourde (' + mo(b.size) + ') : pas envoyée pour ne pas dépasser la limite gratuite.', 'err'); ref.update({ status: 'cancelled' }).catch(function(){}); setTimeout(fermer, 5000); return; }
+      if (FILM.coupe) msg('⚠️ Vidéo coupée à ' + (FILM.coupe === 'poids' ? mo(b.size) : maxSec + ' s') + ' pour rester sous la limite gratuite de Firebase. Envoi…', 'err');
+      else msg('Envoi de la vidéo (' + mo(b.size) + ')…');
+      FILM.envoi = true;
+      var chemin = 'photos/moulages/' + String(req.order || 'sans-numero').replace(/[.#$\[\]\/\s]/g, '-') + '/etat/' + Date.now() + '.' + ext('', type);
+      try {
+        var sref = storage.ref(chemin);
+        await new Promise(function(res, rej){
+          var task = sref.put(b, { contentType: type });
+          task.on('state_changed', function(sn){ msg((FILM && FILM.coupe ? '⚠️ Coupée pour rester sous la limite — ' : '') + 'Envoi ' + Math.round(100 * sn.bytesTransferred / (sn.totalBytes || 1)) + ' %'); }, rej, res);
+        });
+        await ref.update({ status: 'done', requestedByEmail: null, timestamp: Date.now(),
+                           video: { path: chemin, url: await sref.getDownloadURL(), type: type, taille: b.size, coupe: FILM.coupe || '' } });
+        showToast('🎥 Vidéo envoyée au PC (' + mo(b.size) + ')', 'success');
+        fermer();
+      } catch(e){
+        try { await storage.ref(chemin).delete(); } catch(x){}
+        if (FILM) FILM.envoi = false;
+        msg('❌ Envoi impossible : ' + ((e && (e.code || e.message)) || e), 'err'); el('etrRec').disabled = false; FILM && (FILM.rec = null);
+      }
+    }
+  };
 
   /* ═════════ DÉMARRAGE : après la connexion ═════════ */
   /* v1890 : tout de suite, d'après le dernier compte connecté sur ce poste */
