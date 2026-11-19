@@ -8,6 +8,17 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1889 - ÉTAT DES MOULAGES : BÉNÉFICIAIRE, DESTINATAIRES EN HAUT, NOMBRE DE DOSSIERS
+    ════════════════════════════════════════════════════
+    • Chaque dossier en suivi : No de commande + BÉNÉFICIAIRE (rempli
+      d'après le moulage, modifiable) ; aussi dans le courriel et Situation.html.
+    • Les cases Marie-Soleil / Marie-Pier de chaque dossier sont RETIRÉES :
+      les boutons du haut choisissent à qui part le courriel (l'une, l'autre
+      ou les deux — un seul courriel adressé aux deux).
+    • La phrase d'introduction compte les dossiers : « Voici les 3 dossiers
+      de moulage… », « Voici 1 dossier de moulage… » ; au pluriel (vous)
+      quand le courriel va aux deux.
+
     v1888 - ÉTAT DES MOULAGES : EN-TÊTE PLUS BAS (logo de la même grosseur)
     ════════════════════════════════════════════════════
     • Marges du haut et du bas de l'en-tête réduites (26/22 → 12/10 px),
@@ -1833,7 +1844,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1888</title>
+  <title>PhysiPro Moulages v1889</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7194,7 +7205,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261045;
+    var APP_VERSION = 20261046;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -25188,6 +25199,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   .et-sit.cible{box-shadow:0 0 0 3px #22c55e}
   .et-sit-tete{display:flex; align-items:center; gap:10px; background:#04152C; color:#fff; padding:7px 10px}
   .et-sit-tete .no{font-size:11px; font-weight:800; color:#9fb6d8}
+  .et-sit-tete input.e-ben{border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; border-radius:4px; font:inherit; font-size:13.5px; font-weight:700; padding:4px 8px; width:170px; flex:0 0 170px}
+  .et-sit-tete input.e-ben::placeholder{color:rgba(255,255,255,.45)}
+  .et-intro{font-size:14.5px; line-height:1.6; margin-bottom:4px}
   .et-sit-tete input.e-cmd{border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; border-radius:4px; font:inherit; font-size:13.5px; font-weight:700; padding:4px 8px; width:120px; flex:0 0 120px}
   .et-sit-tete input.e-cmd::placeholder{color:rgba(255,255,255,.45)}
   .et-pour input{width:auto; margin:0}
@@ -25261,7 +25275,6 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   var REPRISE_MIN = 5;                                               // nouvel essai de réception aux 5 min (sans clic)
   var REPS = { ms: { nom: 'Marie-Soleil Riverin', courriel: 'mariesoleilr@physipro.com' },
                mp: { nom: 'Marie-Pier Languedoc', courriel: 'mplanguedoc@physipro.com' } };
-  var INTRO = 'Voici les dossiers de moulage qui sont en attente d’un suivi de ta part. Si tu as des questions, fais-nous signe : nous allons communiquer avec toi pour y répondre.';
   var FIN = 'Merci, et bonne fin de semaine!';
   var SITUATIONS_DEFAUT = ['En attente de réponse', 'En attente d’approbation du client', 'Soumission à faire pour le rehaut',
     'Besoin de réponse de la couture', 'En attente de matériel', 'Moulage à refaire'];
@@ -25279,6 +25292,18 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   function pcOK(){ return !!window.showDirectoryPicker && !mobile(); }
   function toast(m, t){ if (typeof showToast === 'function') showToast(m, t || 'info'); }
   function prenom(k){ return REPS[k].nom.split(' ')[0]; }
+  /* v1889 : à qui part le courriel (boutons du haut) et la phrase qui compte les dossiers */
+  function dest(){ var l = (E && Array.isArray(E.qui) ? E.qui : []).filter(function(k){ return REPS[k]; }); return l.length ? l : ['ms']; }
+  function nomsDest(l){ var p = l.map(prenom); return p.length > 1 ? p.slice(0, -1).join(', ') + ' et ' + p[p.length - 1] : p[0]; }
+  function sitsPleines(){ return E.sits.filter(function(s){ return s.cmd || s.ben || s.sit || s.txt || s.photos.length || s.videos.length; }); }
+  function texteIntro(l, n){
+    var plur = l.length > 1, part = plur ? 'de votre part' : 'de ta part';
+    var debut = n === 0 ? 'Aucun dossier de moulage n\u2019est en attente d\u2019un suivi ' + part + ' cette semaine.'
+              : n === 1 ? 'Voici 1 dossier de moulage qui est en attente d\u2019un suivi ' + part + '.'
+              : 'Voici les ' + n + ' dossiers de moulage qui sont en attente d\u2019un suivi ' + part + '.';
+    return debut + (plur ? ' Si vous avez des questions, faites-nous signe : nous allons communiquer avec vous pour y r\u00e9pondre.'
+                         : ' Si tu as des questions, fais-nous signe : nous allons communiquer avec toi pour y r\u00e9pondre.');
+  }
   function sanFile(s){ return (String(s == null ? '' : s).replace(/[\\\/:*?"<>|#\[\]$.]/g, '-').replace(/\s+/g, '_').trim().substring(0, 60)) || 'x'; }
   function sanFolder(s){ return (String(s == null ? '' : s).replace(/[\\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().substring(0, 120)) || 'sans-nom'; }
   function cmdCle(s){ return String(s || '').replace(/\s+/g, '').toUpperCase(); }
@@ -25398,17 +25423,17 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   /* ═════════ DOSSIER DU MOULAGE + DOSSIER « Situation AAAA-MM-JJ » ═════════
      Back up logiciel\Moulages\<numéro> - <nom>\Situation 2026-11-19\
      (le même dossier que l'archive du moulage : rien n'y est jamais effacé) */
-  async function dossierMoulage(cmd){
+  async function dossierMoulage(cmd, ben){
     var root = await racine.getDirectoryHandle('Moulages', { create: true });
-    var nom = sanFolder(String(cmd).trim() + ' - ' + (nomMoulage(cmd) || 'Sans nom'));
+    var nom = sanFolder(String(cmd).trim() + ' - ' + (nomMoulage(cmd) || ben || 'Sans nom'));
     try { return { h: await root.getDirectoryHandle(nom), nom: nom }; } catch(e){}
     var pre = sanFolder(String(cmd).trim()) + ' - ';
     for await (var d of root.values()) { if (d.kind === 'directory' && d.name.indexOf(pre) === 0) return { h: d, nom: d.name }; }
     return { h: await root.getDirectoryHandle(nom, { create: true }), nom: nom };
   }
   /* la situation OUVERTE de ce moulage (sans « reglee.txt »), sinon une nouvelle, datée d'aujourd'hui */
-  async function dossierSituation(cmd){
-    var m = await dossierMoulage(cmd), best = null;
+  async function dossierSituation(cmd, ben){
+    var m = await dossierMoulage(cmd, ben), best = null;
     for await (var d of m.h.values()) {
       if (d.kind !== 'directory' || !/^Situation /.test(d.name)) continue;
       var reglee = false; try { await d.getFileHandle('reglee.txt'); reglee = true; } catch(e){}
@@ -25422,7 +25447,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   }
   async function assurerDossier(s){
     if (s.dossier || !String(s.cmd || '').trim()) return !!s.dossier;
-    s.dossier = await dossierSituation(s.cmd);
+    s.dossier = await dossierSituation(s.cmd, s.ben);
     s.creee = s.creee || cleJour(new Date());
     return true;
   }
@@ -25431,7 +25456,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   async function ecrireResume(s, reglee){
     if (!s.dossier) return;
     var rel = function(n){ var c = chemin(n); return c.indexOf(s.dossier + '/') === 0 ? encodeURI(c.slice(s.dossier.length + 1)) : '../../../' + encodeURI(c); };
-    var nm = nomMoulage(s.cmd);
+    var nm = s.ben || nomMoulage(s.cmd);
     var html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Situation — ' + esc(s.cmd) + (nm ? ' — ' + esc(nm) : '') + '</title><style>'
       + 'body{margin:0;background:#dfe4ec;font-family:Segoe UI,Arial,sans-serif;color:#04152C}.f{max-width:860px;margin:20px auto;background:#fff;box-shadow:0 4px 18px rgba(4,21,44,.18)}'
       + '.t{background:#04152C;color:#fff;padding:18px 24px}.t b{font-size:20px}.t div{color:#7CB0F8;font-size:13px;margin-top:4px}.c{padding:18px 24px}.p{display:inline-block;background:#e6effd;color:#1f4fa3;font-weight:700;padding:3px 10px;border-radius:10px}'
@@ -25450,15 +25475,15 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   }
 
   /* ═════════ L'ÉTAT (État des moulages\etat.json — PC de Daniel) ═════════ */
-  var E = null, qui = 'ms', choisie = null, minut = null;
+  var E = null, choisie = null, minut = null;
   var URLS = {}, DATAS = {};   // chemin → URL d'affichage / dataURL (photos, pour le courriel)
-  function nouvelleSit(cmd){ return { id: nouvelId(), cmd: cmd || '', sit: '', txt: '', pour: { ms: true, mp: true }, photos: [], videos: [] }; }
+  function nouvelleSit(cmd){ return { id: nouvelId(), cmd: cmd || '', ben: '', sit: '', txt: '', photos: [], videos: [] }; }
   function base(v){
     v = v || {};
     var l = lundiDe(new Date()), cle = cleJour(l);
     var e = {
       semaine: v.semaine || '', lundi: v.lundi || '',
-      intro: typeof v.intro === 'string' && !/de notre côté/.test(v.intro) ? v.intro : INTRO,
+      qui: Array.isArray(v.qui) && v.qui.length ? v.qui.slice() : ['ms'],   // v1889 : destinataires choisis en haut
       fin: typeof v.fin === 'string' ? v.fin : FIN,
       sits: Array.isArray(v.sits) ? v.sits.filter(Boolean) : [],
       situations: Array.isArray(v.situations) && v.situations.length ? v.situations : SITUATIONS_DEFAUT.slice(),
@@ -25468,7 +25493,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     e.sits.forEach(function(s){
       s.photos = Array.isArray(s.photos) ? s.photos.filter(Boolean) : [];
       s.videos = Array.isArray(s.videos) ? s.videos.filter(function(x){ return x && x.nom; }) : [];
-      s.pour = s.pour || { ms: true, mp: true };
+      delete s.pour; s.ben = s.ben || '';
     });
     if (!e.sits.length) e.sits.push(nouvelleSit());
     return e;
@@ -25519,6 +25544,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         s = vide || nouvelleSit(); if (!vide) E.sits.push(s); s.cmd = a.cmd;
       }
       if (!s.dossier && a.dossier) { s.dossier = a.dossier; s.creee = s.creee || a.creee || cleJour(new Date()); }
+      if (!s.ben) s.ben = a.nomMoulage || nomMoulage(a.cmd);   // v1889
       if (a.note) s.txt = s.txt ? s.txt + '\n' + a.note : a.note;
       Array.prototype.push.apply(s.photos, a.photos || []);
       Array.prototype.push.apply(s.videos, a.videos || []);
@@ -25534,8 +25560,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     var ov = el('etOv'); if (ov) return ov;
     ov = document.createElement('div'); ov.id = 'etOv'; ov.className = 'et-ov';
     ov.innerHTML = '<div class="et-barre">'
-      + '<span class="t">ÉTAT DES MOULAGES</span><span class="lbl">Copie pour :</span>'
-      + '<button type="button" class="qui on" data-qui="ms">Marie-Soleil</button><button type="button" class="qui" data-qui="mp">Marie-Pier</button>'
+      + '<span class="t">ÉTAT DES MOULAGES</span><span class="lbl">Envoyer à :</span>'
+      + '<button type="button" class="qui" data-qui="ms" title="Le courriel part à Marie-Soleil (clic pour ajouter / retirer)">Marie-Soleil</button><button type="button" class="qui" data-qui="mp" title="Le courriel part à Marie-Pier (clic pour ajouter / retirer)">Marie-Pier</button>'
       + '<span class="lbl">Copie à :</span><span class="et-extras" id="etExtras"></span>'
       + '<span class="et-ajq"><button type="button" class="ajq" id="etAjQui" title="Ajouter une personne en copie du courriel">+ Ajouter</button>'
       +   '<span class="et-ajq-boite" id="etAjBoite"><input type="text" id="etAjNom" placeholder="Nom (ex. Orders)"><input type="text" id="etAjMail" placeholder="Courriel (ex. orders@physipro.com)">'
@@ -25564,11 +25590,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         + '<span class="tag">VIDÉO' + (v.taille > VID_COURRIEL ? ' · ' + Math.round(v.taille / 1048576) + ' Mo' : '') + '</span><button type="button" class="mx" data-vk="' + k + '" title="Retirer cette vidéo du feuillet (elle reste dans OneDrive)">×</button></div>';
     }).join('');
     var nm = nomMoulage(s.cmd);
-    return '<div class="et-sit' + (s.id === choisie ? ' choisie' : '') + (s.pour[qui] ? '' : ' horscopie') + '" data-id="' + s.id + '">'
+    return '<div class="et-sit' + (s.id === choisie ? ' choisie' : '') + '" data-id="' + s.id + '">'
       + '<div class="et-sit-tete"><span class="no">' + (n + 1) + '</span>'
-      +   '<input class="e-cmd" type="text" placeholder="No de commande" value="' + esc(s.cmd) + '" spellcheck="false" autocomplete="off"' + (nm ? ' title="' + esc(nm) + '"' : '') + '>'
+      +   '<input class="e-cmd" type="text" placeholder="No de commande" value="' + esc(s.cmd) + '" spellcheck="false" autocomplete="off">'
+      +   '<input class="e-ben" type="text" placeholder="Bénéficiaire" value="' + esc(s.ben || nm) + '" spellcheck="false" autocomplete="off" title="Bénéficiaire (rempli d\u2019après le moulage)">'
       +   '<span class="et-sitlbl">SITUATION</span><select class="e-sit' + (s.sit ? '' : ' vide') + '">' + optionsSit(s.sit) + '</select>'
-      +   '<span class="et-pour"><label><input type="checkbox" data-p="ms"' + (s.pour.ms ? ' checked' : '') + '>' + prenom('ms') + '</label><label><input type="checkbox" data-p="mp"' + (s.pour.mp ? ' checked' : '') + '>' + prenom('mp') + '</label></span>'
       +   '<button type="button" class="et-x" title="Retirer cette situation (réglée)">×</button></div>'
       + (s.dossier ? '<div class="et-dos" title="Dossier OneDrive de la situation">📁 ' + esc(s.dossier.replace(/\//g, ' › ')) + '</div>' : '')
       + '<textarea class="e-txt" rows="2" placeholder="Détail, ce qui reste à faire, qui l’attend…">' + esc(s.txt) + '</textarea>'
@@ -25580,15 +25606,14 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     f.innerHTML = '<div class="et-tete"><div class="marque"><img src="' + LOGO + '" alt="PhysiPro"><small>ATELIER · FABRICATION MOULAGE</small></div>'
       + '<div class="droite"><div class="titre">État des moulages</div><input type="text" id="etSemaine" value="' + esc(E.semaine) + '" spellcheck="false"></div></div>'
       + '<div class="et-filet"></div><div class="et-corps">'
-      + '<div class="et-bonjour">Bonjour ' + esc(prenom(qui)) + ',</div><textarea id="etIntro" rows="2">' + esc(E.intro) + '</textarea>'
+      + '<div class="et-bonjour" id="etBonjour">Bonjour ' + esc(nomsDest(dest())) + ',</div><div class="et-intro" id="etIntroTxt" title="Phrase automatique : le nombre de dossiers se met à jour tout seul">' + esc(texteIntro(dest(), sitsPleines().length)) + '</div>'
       + '<div class="et-section">DOSSIERS EN SUIVI</div><div id="etSits">' + E.sits.map(htmlSit).join('') + '</div>'
       + '<button type="button" class="et-plus" id="etPlus">+ Ajouter une situation</button>'
       + '<textarea id="etFin" rows="1" style="margin-top:22px">' + esc(E.fin) + '</textarea>'
       + '<div class="et-signature"><b>Daniel Charest</b><br>Atelier · Fabrication des coussins<br><span>atelieratp@physipro.com</span></div>'
       + '</div><div class="et-pied"></div>';
     Array.prototype.forEach.call(f.querySelectorAll('textarea'), grandir);
-    var b = el('etEnvoyer'); if (b && !b._occupe) b.textContent = 'Envoyer l’email à ' + prenom(qui);
-    Array.prototype.forEach.call(document.querySelectorAll('#etOv .qui'), function(x){ x.classList.toggle('on', x.getAttribute('data-qui') === qui); });
+    majDest();
     rendreExtras(); remplirMedias();
   }
   function remplirMedias(){
@@ -25607,14 +25632,21 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       return '<button type="button" class="' + (x.on ? 'on' : '') + '" data-k="' + k + '" title="' + esc(x.courriel) + (x.on ? ' — en copie' : ' — pas en copie (clic pour l’ajouter)') + '">' + esc(x.nom || x.courriel) + '<i data-x="' + k + '" title="Retirer">×</i></button>';
     }).join('');
   }
+  function majDest(){
+    var l = dest();
+    var b = el('etEnvoyer'); if (b && !b._occupe) b.textContent = 'Envoyer l\u2019email \u00e0 ' + nomsDest(l);
+    Array.prototype.forEach.call(document.querySelectorAll('#etOv .qui'), function(x){ x.classList.toggle('on', l.indexOf(x.getAttribute('data-qui')) >= 0); });
+    var bj = el('etBonjour'); if (bj) bj.textContent = 'Bonjour ' + nomsDest(l) + ',';
+    var it = el('etIntroTxt'); if (it) it.textContent = texteIntro(l, sitsPleines().length);
+  }
   function lireChamps(){
     var f = el('etFeuille'); if (!f || !E) return;
     var se = el('etSemaine'); if (se) E.semaine = se.value;
-    var it = el('etIntro'); if (it) E.intro = it.value;
     var fi = el('etFin'); if (fi) E.fin = fi.value;
     Array.prototype.forEach.call(f.querySelectorAll('.et-sit'), function(d){
       var s = sitDe(d.getAttribute('data-id')); if (!s) return;
       s.cmd = d.querySelector('.e-cmd').value.trim();
+      var be = d.querySelector('.e-ben'); if (be) s.ben = be.value.trim();
       var sv = d.querySelector('.e-sit').value; if (sv !== '__nouv') s.sit = sv;
       s.txt = d.querySelector('.e-txt').value.replace(/\s+$/, '');
     });
@@ -25665,9 +25697,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
 
   /* ═════════ LE COURRIEL (et la fiche) ═════════ */
   function nomVideo(s, v, n){ return ('Commande_' + (s.cmd || 'sans-numero') + (n ? '_' + (n + 1) : '') + '_video.' + ext(v.nom)).replace(/[^\w.\-]+/g, '-'); }
-  function courriel(k, fiche){
+  function courriel(l, fiche){
     var P = "Segoe UI,Helvetica,Arial,sans-serif", W = 816, M = 36, C = W - 2 * M, LP = Math.floor((C - 24 - 12) / 2);
-    var sits = E.sits.filter(function(s){ return s.pour[k] && (s.cmd || s.sit || s.txt || s.photos.length || s.videos.length); });
+    var sits = sitsPleines();
     var aJoindre = [], H = [];
     H.push('<table cellpadding="0" cellspacing="0" border="0" width="' + W + '" style="width:' + W + 'px;border-collapse:collapse;font-family:' + P + ';color:#04152C;background:#ffffff">');
     H.push('<tr><td bgcolor="#04152C" style="background:#04152C;background-image:linear-gradient(180deg,#04152C 0%,#0d2d5c 55%,#4A8EF5 140%);padding:12px ' + M + 'px 10px"><table cellpadding="0" cellspacing="0" border="0" width="100%"><tr>'
@@ -25675,12 +25707,12 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       + '<td valign="middle" align="right" style="text-align:right;font-family:' + P + '"><div style="font-size:22px;font-weight:bold;color:#ffffff">État des moulages</div><div style="font-size:13px;font-weight:bold;color:#7CB0F8;margin-top:4px">' + esc(E.semaine) + '</div></td>'
       + '</tr></table></td></tr>');
     H.push('<tr><td bgcolor="#4A8EF5" style="background:#4A8EF5;height:4px;line-height:4px;font-size:0">&nbsp;</td></tr>');
-    H.push('<tr><td style="padding:26px ' + M + 'px 4px;font-family:' + P + ';font-size:14.5px;line-height:1.6;color:#04152C"><div style="font-size:16px;font-weight:bold;margin-bottom:8px">Bonjour ' + esc(prenom(k)) + ',</div>' + br(E.intro) + '</td></tr>');
+    H.push('<tr><td style="padding:26px ' + M + 'px 4px;font-family:' + P + ';font-size:14.5px;line-height:1.6;color:#04152C"><div style="font-size:16px;font-weight:bold;margin-bottom:8px">Bonjour ' + esc(nomsDest(l)) + ',</div>' + esc(texteIntro(l, sits.length)) + '</td></tr>');
     H.push('<tr><td style="padding:16px ' + M + 'px 8px"><div style="font-family:' + P + ';font-size:12px;font-weight:bold;letter-spacing:1.8px;color:#4A8EF5;border-bottom:2px solid #4A8EF5;padding-bottom:5px">DOSSIERS EN SUIVI</div></td></tr>');
     if (!sits.length) H.push('<tr><td style="padding:8px ' + M + 'px;font-family:' + P + ';font-size:14px;color:#5a6f8a">Aucun dossier en suivi cette semaine.</td></tr>');
     sits.forEach(function(s, n){
       var t = '<table cellpadding="0" cellspacing="0" border="0" width="' + C + '" style="width:' + C + 'px;border-collapse:collapse;border:1px solid #d5dde8">'
-        + '<tr><td bgcolor="#04152C" style="background:#04152C;padding:8px 12px;font-family:' + P + ';font-size:13.5px;font-weight:bold;color:#ffffff"><span style="color:#9fb6d8;font-size:11px;letter-spacing:1px">' + (n + 1) + '&nbsp;&nbsp;COMMANDE&nbsp;</span>' + esc(s.cmd || '—') + '</td>'
+        + '<tr><td bgcolor="#04152C" style="background:#04152C;padding:8px 12px;font-family:' + P + ';font-size:13.5px;font-weight:bold;color:#ffffff"><span style="color:#9fb6d8;font-size:11px;letter-spacing:1px">' + (n + 1) + '&nbsp;&nbsp;COMMANDE&nbsp;</span>' + esc(s.cmd || '—') + ((s.ben || nomMoulage(s.cmd)) ? '<span style="color:#9fb6d8;font-size:11px;letter-spacing:1px">&nbsp;&nbsp;&middot;&nbsp;&nbsp;B&Eacute;N&Eacute;FICIAIRE&nbsp;</span>' + esc(s.ben || nomMoulage(s.cmd)) : '') + '</td>'
         + '<td bgcolor="#04152C" align="right" style="background:#04152C;padding:8px 12px;text-align:right">' + (s.sit ? '<span style="display:inline-block;background:#e6effd;color:#1f4fa3;font-family:' + P + ';font-weight:bold;font-size:12px;padding:3px 10px;border-radius:10px">' + esc(s.sit) + '</span>' : '&nbsp;') + '</td></tr>';
       if (s.txt) t += '<tr><td colspan="2" style="padding:10px 12px;font-family:' + P + ';font-size:14px;line-height:1.55;color:#04152C">' + br(s.txt) + '</td></tr>';
       var cases = s.photos.map(function(p){ return { img: DATAS[chemin(p)] }; });
@@ -25713,9 +25745,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     H.push('<tr><td style="padding:20px ' + M + 'px 6px;font-family:' + P + ';font-size:14.5px;line-height:1.6;color:#04152C">' + br(E.fin) + '</td></tr>');
     H.push('<tr><td style="padding:4px ' + M + 'px 28px;font-family:' + P + ';font-size:13.5px;line-height:1.5;color:#04152C"><b>Daniel Charest</b><br>Atelier · Fabrication des coussins<br><span style="color:#4A8EF5">atelieratp@physipro.com</span></td></tr>');
     H.push('<tr><td bgcolor="#04152C" style="background:#04152C;height:8px;line-height:8px;font-size:0">&nbsp;</td></tr></table>');
-    var T = ['Bonjour ' + prenom(k) + ',', '', E.intro, '', 'DOSSIERS EN SUIVI — ' + E.semaine];
+    var T = ['Bonjour ' + nomsDest(l) + ',', '', texteIntro(l, sits.length), '', 'DOSSIERS EN SUIVI — ' + E.semaine];
     sits.forEach(function(s, n){
-      T.push(''); T.push((n + 1) + ') Commande ' + (s.cmd || '—') + (s.sit ? ' — ' + s.sit : ''));
+      T.push(''); T.push((n + 1) + ') Commande ' + (s.cmd || '—') + ((s.ben || nomMoulage(s.cmd)) ? ' — bénéficiaire ' + (s.ben || nomMoulage(s.cmd)) : '') + (s.sit ? ' — ' + s.sit : ''));
       if (s.txt) T.push(s.txt);
       if (s.photos.length) T.push('(' + s.photos.length + ' photo' + (s.photos.length > 1 ? 's' : '') + ')');
       s.videos.forEach(function(v, j){ T.push('(vidéo jointe : ' + nomVideo(s, v, s.videos.length > 1 ? j : 0) + ')'); });
@@ -25727,17 +25759,18 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   async function envoyer(b){
     lireChamps();
     var manq = [];
-    E.sits.forEach(function(s){ if (s.pour[qui]) s.photos.forEach(function(n){ if (!DATAS[chemin(n)]) manq.push(n); }); });
+    var l = dest();
+    E.sits.forEach(function(s){ s.photos.forEach(function(n){ if (!DATAS[chemin(n)]) manq.push(n); }); });
     if (manq.length) { marque('Préparation des photos…'); for (var i = 0; i < manq.length; i++) await dataDe(manq[i]); }
-    var c = courriel(qui, false);
-    if (!c.nb && !confirm('Aucune situation n’est cochée pour ' + prenom(qui) + '. Envoyer quand même ?')) return;
+    var c = courriel(l, false);
+    if (!c.nb && !confirm('Aucun dossier en suivi. Envoyer quand même ?')) return;
     var cc = enCopie();
-    var url = 'mailto:' + adresse(qui) + '?subject=' + encodeURIComponent('État des moulages — ' + E.semaine) + (cc.length ? '&cc=' + cc.join(';') : '');
+    var url = 'mailto:' + l.map(adresse).join(';') + '?subject=' + encodeURIComponent('État des moulages — ' + E.semaine) + (cc.length ? '&cc=' + cc.join(';') : '');
     function ouvrir(){
       var a = document.createElement('a'); a.href = url; a.style.display = 'none'; document.body.appendChild(a); a.click(); a.remove();
       b._occupe = true; b.textContent = '✓ Copié — fais Ctrl+V dans le courriel';
-      setTimeout(function(){ b._occupe = false; b.textContent = 'Envoyer l’email à ' + prenom(qui); }, 3500);
-      assurerTous().catch(function(){}).then(function(){ ficheEnvoi(qui); });
+      setTimeout(function(){ b._occupe = false; majDest(); }, 3500);
+      assurerTous().catch(function(){}).then(function(){ ficheEnvoi(l); });
       if (c.videos.length) {
         c.videos.forEach(function(o, i){
           setTimeout(function(){ urlDe(o.v.nom).then(function(u){ if (!u) return; var a2 = document.createElement('a'); a2.href = u; a2.download = o.nom; a2.style.display = 'none'; document.body.appendChild(a2); a2.click(); a2.remove(); }); }, 900 * (i + 1));
@@ -25762,14 +25795,14 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     }
     secours();
   }
-  async function ficheEnvoi(k){
+  async function ficheEnvoi(l){
     try {
-      var c = courriel(k, true), d = new Date();
-      var nom = cleJour(d) + '_' + ('0' + d.getHours()).slice(-2) + 'h' + ('0' + d.getMinutes()).slice(-2) + '_' + sanFile(prenom(k)) + '.html';
+      var c = courriel(l, true), d = new Date();
+      var nom = cleJour(d) + '_' + ('0' + d.getHours()).slice(-2) + 'h' + ('0' + d.getMinutes()).slice(-2) + '_' + sanFile(l.map(prenom).join('-')) + '.html';
       var cc = enCopie();
-      var html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>État des moulages — ' + esc(prenom(k)) + ' — ' + esc(E.semaine) + '</title>'
+      var html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>État des moulages — ' + esc(nomsDest(l)) + ' — ' + esc(E.semaine) + '</title>'
         + '<style>body{margin:0;background:#dfe4ec;font-family:Segoe UI,Arial,sans-serif}.env{width:816px;margin:18px auto 8px;font-size:12.5px;color:#334155}.f{width:816px;margin:0 auto 30px;box-shadow:0 4px 18px rgba(4,21,44,.18)}</style></head><body>'
-        + '<div class="env">Envoyé le ' + cleJour(d) + ' à ' + heure(d) + ' à <b>' + esc(REPS[k].nom) + '</b> (' + esc(adresse(k)) + ')' + (cc.length ? ' — copie : ' + esc(cc.join(', ')) : '') + '</div>'
+        + '<div class="env">Envoyé le ' + cleJour(d) + ' à ' + heure(d) + ' à <b>' + esc(l.map(function(k){ return REPS[k].nom + ' (' + adresse(k) + ')'; }).join(', ')) + '</b>' + (cc.length ? ' — copie : ' + esc(cc.join(', ')) : '') + '</div>'
         + '<div class="f">' + c.html + '</div></body></html>';
       await ecrire(dFiches, nom, new Blob([html], { type: 'text/html' }));
       marque('Fiche enregistrée : Fiches\\' + nom);
@@ -25780,7 +25813,12 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   function brancher(ov){
     el('etFermer').onclick = fermer;
     el('etEnvoyer').onclick = function(){ envoyer(this); };
-    Array.prototype.forEach.call(ov.querySelectorAll('.qui'), function(x){ x.onclick = function(){ lireChamps(); qui = x.getAttribute('data-qui'); rendre(); }; });
+    Array.prototype.forEach.call(ov.querySelectorAll('.qui'), function(x){ x.onclick = function(){
+      var k = x.getAttribute('data-qui'), l = dest().slice(), i = l.indexOf(k);
+      if (i >= 0) { if (l.length === 1) return; l.splice(i, 1); } else l.push(k);   // au moins une
+      E.qui = ['ms', 'mp'].filter(function(z){ return l.indexOf(z) >= 0; });
+      majDest(); sauver();
+    }; });
     var boite = el('etAjBoite');
     function fermerAj(){ boite.classList.remove('on'); }
     el('etAjQui').onclick = function(e){ e.stopPropagation(); if (boite.classList.toggle('on')) { el('etAjNom').value = ''; el('etAjMail').value = ''; el('etAjErr').textContent = ''; el('etAjNom').focus(); } };
@@ -25804,7 +25842,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       var q = E.extras[+bb.getAttribute('data-k')]; if (q) { q.on = !q.on; rendreExtras(); sauver(); }
     };
     ov.addEventListener('click', function(){ if (boite.classList.contains('on')) fermerAj(); });
-    ov.addEventListener('input', function(e){ if (e.target.tagName === 'TEXTAREA') grandir(e.target); lireChamps(); sauver(); });
+    ov.addEventListener('input', function(e){ if (e.target.tagName === 'TEXTAREA') grandir(e.target); lireChamps(); majDest(); sauver(); });
     ov.addEventListener('change', function(e){
       var t = e.target;
       if (t.classList && t.classList.contains('e-sit')) {
@@ -25816,15 +25854,18 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         }
         s0.sit = t.value; t.classList.toggle('vide', !t.value); sauver(); return;
       }
+      if (t.classList && t.classList.contains('e-ben')) {   // v1889 : bénéficiaire écrit → le dossier peut porter son nom
+        var d3 = t.closest('.et-sit'), s3 = d3 && sitDe(d3.getAttribute('data-id'));
+        lireChamps();
+        if (s3 && s3.cmd && s3.ben && !s3.dossier) assurerDossier(s3).then(function(){ rendre(); sauver(); }).catch(function(er){ marque('\u26a0 Dossier : ' + ((er && er.message) || er)); });
+        return;
+      }
       if (t.classList && t.classList.contains('e-cmd')) {   // numéro entré : le dossier « Situation » du moulage est créé
         var d2 = t.closest('.et-sit'), s2 = d2 && sitDe(d2.getAttribute('data-id'));
         lireChamps();
-        if (s2 && s2.cmd && !s2.dossier) assurerDossier(s2).then(function(){ rendre(); sauver(); }).catch(function(er){ marque('⚠ Dossier : ' + ((er && er.message) || er)); });
+        if (s2 && s2.cmd && !s2.ben && nomMoulage(s2.cmd)) { s2.ben = nomMoulage(s2.cmd); var be2 = d2.querySelector('.e-ben'); if (be2) be2.value = s2.ben; sauver(); }   // v1889
+        if (s2 && s2.cmd && !s2.dossier && (s2.ben || nomMoulage(s2.cmd))) assurerDossier(s2).then(function(){ rendre(); sauver(); }).catch(function(er){ marque('⚠ Dossier : ' + ((er && er.message) || er)); });
         return;
-      }
-      if (t.type === 'checkbox' && t.getAttribute('data-p')) {
-        var d1 = t.closest('.et-sit'), s1 = d1 && sitDe(d1.getAttribute('data-id'));
-        if (s1) { s1.pour[t.getAttribute('data-p')] = t.checked; d1.classList.toggle('horscopie', !s1.pour[qui]); sauver(); }
       }
     });
     ov.addEventListener('focusin', function(e){ var d = e.target.closest && e.target.closest('.et-sit'); if (d) choisir(d.getAttribute('data-id')); });
