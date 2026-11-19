@@ -8,6 +8,27 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1885 - ÉTAT DES MOULAGES (déménagé de Questionnements)
+    ════════════════════════════════════════════════════
+    • Feuillet de la semaine à Marie-Soleil et Marie-Pier : bouton
+      « 📋 État des moulages » à droite de « Ajouter fauteuil roulant »
+      (PC de Daniel seulement — liste ETAT_EMAILS dans le module).
+    • TÉLÉPHONE (menu perso, sous « Mes photos ») : n° de commande +
+      📷 photo / 🎥 vidéo filmée ici en 720p (90 s max, ≈ 15 Mo la minute)
+      / 🖼️ galerie + note → « Envoyer vers mon PC ».
+    • Firebase SEULEMENT en transit : Storage photos/moulages/<n°>/etat/
+      (sous-dossier : invisible dans la colonne photos) et une petite fiche
+      moulageSettings/etatMoulages/<clé> {cmd, note, fichiers}.
+    • Le PC de Daniel reçoit tout seul (si Chrome a gardé l'accès au
+      dossier, sinon à l'ouverture du feuillet) : fichiers écrits dans
+      OneDrive « Back up logiciel\État des moulages\medias », vérifiés,
+      rattachés à la situation de la même commande, PUIS effacés de Firebase.
+    • Les situations vivent dans OneDrive (etat.json), jamais dans Firebase.
+    • Envoi : le courriel est copié (Ctrl+V), Outlook s'ouvre adressé à
+      Marie-Soleil ou Marie-Pier (+ copies), les vidéos vont dans
+      Téléchargements pour être jointes, et la fiche complète (photos et
+      vidéos qui jouent) est écrite dans « État des moulages\Fiches ».
+
     v1884 - AJOUTS AUX ARCHIVES : COPIE AU CLIC + BOUTON « COPIER MAINTENANT »
     ═════════════════════════════════════════════════════════════════
     • Daniel voyait « en attente de la sauvegarde » sans que rien ne se
@@ -1783,7 +1804,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1884</title>
+  <title>PhysiPro Moulages v1885</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -6049,6 +6070,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     <img src="https://raw.githubusercontent.com/Physipro-list/Physipro-serie/main/logo-physiprodemi1.png" class="mobile-home-logo" alt="PhysiPro">
     <button class="mobile-home-btn moulage-btn" onclick="goToMoulageFromHome()">🏭 Moulage</button>
     <button class="mobile-home-btn mesphotos-btn" id="mobileMesPhotosBtn" onclick="openMesPhotosPhone()" style="display:none;">📷 Mes photos<span class="mesphotos-sub">envoi vers mon PC</span></button>
+    <!-- v1885 : visible en même temps que « Mes photos » (règle CSS du module État des moulages) -->
+    <button class="mobile-home-btn mesphotos-btn" id="mobileEtatBtn" onclick="ouvrirEtatPhone()">📋 État des moulages<span class="mesphotos-sub">photos et vidéos des dossiers</span></button>
     <button class="mobile-home-refresh" id="mobileHomeRefreshBtn" onclick="mobileHomeRefresh()" style="margin-top:16px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.3);color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">🔄</button>
   </div>
 
@@ -6188,7 +6211,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         </div>
       </div>
     </div>
-    <div class="tb-create-btn"><button class="btn-pill" onclick="openCreateModal()"><span>+</span><span>Créer moulage</span></button><button class="btn-pill btn-fauteuil-pill" id="btnFauteuil" onclick="event.stopPropagation(); openFauteuilModal()"><span>🦽</span><span>Ajouter fauteuil roulant</span></button></div>
+    <div class="tb-create-btn"><button class="btn-pill" onclick="openCreateModal()"><span>+</span><span>Créer moulage</span></button><button class="btn-pill btn-fauteuil-pill" id="btnFauteuil" onclick="event.stopPropagation(); openFauteuilModal()"><span>🦽</span><span>Ajouter fauteuil roulant</span></button><button class="btn-pill" id="btnEtatMoul" onclick="ouvrirEtatMoulages()" style="display:none" title="Feuillet de la semaine à Marie-Soleil et Marie-Pier"><span>📋</span><span>État des moulages</span><i id="btnEtatMoulN"></i></button></div>
     <!-- v1851 — Les boutons d'entretien « Cache photos » et « Archive & ménage »
          ont été retirés de la barre à la demande de Daniel. Les fonctions
          lancerPassePhotoCache() et lancerArchiveMenage() restent dans le
@@ -7142,7 +7165,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261041;
+    var APP_VERSION = 20261042;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -25072,5 +25095,846 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   };
 })();
 </script>
+<!-- ═══════════════════════════════════════════════════════════════════
+     v1885 — ÉTAT DES MOULAGES (déménagé de Questionnements)
+     Feuillet hebdomadaire à Marie-Soleil et Marie-Pier.
+     • TÉLÉPHONE (menu perso) : n° de commande + photos / vidéos (filmées
+       ici en 720p, ~15-20 Mo la minute) + note → Firebase SEULEMENT en
+       transit : Storage photos/moulages/<commande>/etat/ et une petite
+       fiche moulageSettings/etatMoulages/<clé> {cmd,note,fichiers}.
+     • PC de Daniel : reçoit, écrit dans OneDrive « Back up logiciel\État
+       des moulages\medias », vérifie, PUIS efface de Firebase. Les
+       situations vivent dans OneDrive (etat.json), jamais dans Firebase.
+     • Envoi : courriel (copié, Ctrl+V) + fiche complète dans « Fiches ».
+     ═══════════════════════════════════════════════════════════════════ -->
+<style>
+  #btnEtatMoul{position:relative}
+  #btnEtatMoul i{font-style:normal; position:absolute; top:-6px; right:-6px; min-width:18px; height:18px; padding:0 4px; border-radius:9px; background:#ef4444; color:#fff; font-size:11px; font-weight:800; line-height:18px; text-align:center; display:none}
+  #btnEtatMoul i.on{display:block}
+  #mobileMesPhotosBtn[style*="none"] + #mobileEtatBtn{display:none !important}
+  .et-ov{position:fixed; inset:0; z-index:100050; display:none; flex-direction:column; background:#dfe4ec; font-family:'Segoe UI',Arial,sans-serif; color:#04152C}
+  .et-ov.on{display:flex}
+  .et-barre{flex:0 0 auto; display:flex; align-items:center; flex-wrap:wrap; gap:8px; row-gap:6px; padding:8px 16px; background:#04152C; color:#fff; box-shadow:0 2px 10px rgba(0,0,0,.25)}
+  .et-barre .t{font-size:14px; font-weight:800; letter-spacing:2px; margin-right:14px; white-space:nowrap}
+  .et-barre .lbl{font-size:12px; color:#9fb6d8; margin-left:6px; white-space:nowrap}
+  .et-barre button{border:1px solid rgba(255,255,255,.3); background:transparent; color:#fff; border-radius:6px; padding:6px 14px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap}
+  .et-barre button:hover{background:rgba(255,255,255,.12)}
+  .et-barre button.qui.on{background:#4A8EF5; border-color:#4A8EF5}
+  .et-barre .ressort{flex:1}
+  .et-barre .et-sauve{font-size:11.5px; color:#9fb6d8; white-space:nowrap}
+  .et-barre button.envoi{background:#4A8EF5; border-color:#4A8EF5; padding:7px 18px}
+  .et-extras{display:flex; gap:5px; flex-wrap:wrap}
+  .et-barre .et-extras button{padding:4px 6px 4px 10px; font-size:12px; border-radius:14px; display:inline-flex; align-items:center; gap:6px; opacity:.55}
+  .et-barre .et-extras button.on{opacity:1; background:rgba(74,142,245,.25); border-color:#7CB0F8}
+  .et-barre .et-extras button i{font-style:normal; font-size:15px; line-height:1; color:#ff9b93; padding:0 2px}
+  .et-barre button.ajq{padding:4px 10px; font-size:12px; border-style:dashed; border-radius:14px}
+  .et-ajq{position:relative}
+  .et-ajq-boite{display:none; position:absolute; top:calc(100% + 8px); left:0; z-index:5; width:280px; flex-direction:column; gap:7px; background:#fff; color:#04152C; border:1px solid #c9d6e8; border-radius:8px; padding:12px; box-shadow:0 8px 24px rgba(4,21,44,.3)}
+  .et-ajq-boite.on{display:flex}
+  .et-ajq-boite input{border:1px solid #b9c8d8; border-radius:5px; padding:6px 8px; font:inherit; font-size:13px; color:#04152C}
+  .et-ajq-err{font-size:11.5px; color:#b3261e}
+  .et-ajq-pied{display:flex; justify-content:flex-end; gap:6px}
+  .et-barre .et-ajq-pied button{color:#04152C; border-color:#b9c8d8; padding:5px 12px; font-size:12.5px}
+  .et-barre .et-ajq-pied button.ok{background:#04152C; color:#fff; border-color:#04152C}
+  .et-defile{flex:1 1 auto; overflow:auto; padding:22px 0 40px}
+  .et-feuille{width:816px; margin:0 auto; background:#fff; box-shadow:0 4px 18px rgba(4,21,44,.18)}
+  .et-tete{display:flex; align-items:center; justify-content:space-between; padding:26px 36px 22px; background:#04152C; background-image:linear-gradient(180deg,#04152C 0%,#0d2d5c 55%,#4A8EF5 140%)}
+  .et-tete .marque{font-size:30px; font-weight:800; color:#fff}
+  .et-tete .marque span{color:#4A8EF5}
+  .et-tete .marque small{display:block; font-size:11px; font-weight:600; letter-spacing:2.5px; color:#9fb6d8; margin-top:2px}
+  .et-tete .droite{text-align:right}
+  .et-tete .titre{font-size:22px; font-weight:700; color:#fff}
+  .et-tete input{margin-top:4px; width:300px; text-align:right; background:transparent; border:1px dashed transparent; border-radius:4px; color:#7CB0F8; font:inherit; font-size:13px; font-weight:600; padding:1px 4px}
+  .et-tete input:hover, .et-tete input:focus{border-color:rgba(124,176,248,.6); outline:none}
+  .et-filet{height:4px; background:#4A8EF5}
+  .et-corps{padding:26px 36px 30px}
+  .et-bonjour{font-size:16px; font-weight:700; margin-bottom:8px}
+  .et-corps textarea{width:100%; box-sizing:border-box; min-height:0; border:1px dashed transparent; border-radius:5px; padding:4px 6px; margin-left:-6px; font:inherit; font-size:14.5px; line-height:1.6; color:#04152C; resize:none; overflow:hidden; background:transparent}
+  .et-corps textarea:hover{border-color:#c9d6e8}
+  .et-corps textarea:focus{border-color:#4A8EF5; outline:none; background:#fbfcfe}
+  .et-section{font-size:12px; font-weight:800; letter-spacing:1.8px; color:#4A8EF5; border-bottom:2px solid #4A8EF5; padding-bottom:5px; margin:18px 0 12px}
+  .et-sit{border:1px solid #d5dde8; border-radius:4px; margin-bottom:14px; overflow:hidden}
+  .et-sit.choisie{box-shadow:0 0 0 2px #4A8EF5}
+  .et-sit.horscopie{opacity:.45}
+  .et-sit.cible{box-shadow:0 0 0 3px #22c55e}
+  .et-sit-tete{display:flex; align-items:center; gap:10px; background:#04152C; color:#fff; padding:7px 10px}
+  .et-sit-tete .no{font-size:11px; font-weight:800; color:#9fb6d8}
+  .et-sit-tete input.e-cmd{border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; border-radius:4px; font:inherit; font-size:13.5px; font-weight:700; padding:4px 8px; width:120px; flex:0 0 120px}
+  .et-sit-tete input.e-cmd::placeholder{color:rgba(255,255,255,.45)}
+  .et-pour input{width:auto; margin:0}
+  .et-sitlbl{flex:0 0 auto; background:#4A8EF5; color:#fff; font-size:10.5px; font-weight:800; letter-spacing:1.2px; padding:4px 9px; border-radius:10px}
+  .et-sit-tete select{flex:1; min-width:150px; background:#e6effd; color:#1f4fa3; border:1px solid #e6effd; border-radius:4px; font:inherit; font-size:13.5px; font-weight:700; padding:4px 6px; cursor:pointer}
+  .et-sit-tete select.vide{color:#7b93bd; font-weight:600}
+  .et-sit-tete select option{color:#04152C; background:#fff}
+  .et-pour{display:flex; gap:8px; font-size:11px; font-weight:600; color:#cfe0fb; white-space:nowrap}
+  .et-pour label{display:flex; align-items:center; gap:3px; cursor:pointer}
+  .et-x{border:0; background:transparent; color:#ff9b93; font-size:20px; line-height:1; cursor:pointer; padding:0 4px}
+  .et-sit .e-txt{display:block; margin:0; padding:10px 12px; border:0; border-radius:0; font-size:14px; min-height:44px}
+  .et-medias{display:flex; flex-wrap:wrap; gap:10px; padding:0 12px 12px}
+  .et-m{position:relative; width:338px; border:1px solid #d5dde8; background:#f3f6fb; min-height:60px}
+  .et-m img, .et-m video{display:block; width:100%; height:auto}
+  .et-m video{max-height:420px; background:#000}
+  .et-m .tag{position:absolute; top:6px; left:6px; background:#04152C; color:#fff; font-size:10.5px; font-weight:800; letter-spacing:1px; padding:2px 8px; border-radius:9px}
+  .et-m .ch{padding:30px 10px; text-align:center; color:#5a6f8a; font-size:12.5px}
+  .et-m .mx{position:absolute; top:5px; right:5px; width:24px; height:24px; border-radius:50%; border:0; background:#c0392b; color:#fff; font-size:16px; line-height:24px; cursor:pointer; opacity:.85}
+  .et-aj{width:338px; min-height:56px; border:1.5px dashed #9fb4c8; border-radius:4px; background:#f8fafc; color:#5a6f8a; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer; line-height:1.4}
+  .et-aj:hover{border-color:#4A8EF5; color:#1f4fa3; background:#eaf2fd}
+  .et-plus{width:100%; border:1.5px dashed #4A8EF5; border-radius:4px; background:#f3f7fe; color:#1f4fa3; padding:10px; font:inherit; font-size:14px; font-weight:700; cursor:pointer}
+  .et-signature{font-size:13.5px; line-height:1.5; margin-top:6px}
+  .et-signature span{color:#4A8EF5}
+  .et-pied{height:8px; background:#04152C}
+  .et-acces{max-width:520px; margin:60px auto; background:#fff; border-radius:10px; padding:26px; text-align:center; box-shadow:0 4px 18px rgba(4,21,44,.18); font-size:14px; line-height:1.5}
+  .et-acces button{margin-top:14px; background:#04152C; color:#fff; border:0; border-radius:8px; padding:10px 18px; font:inherit; font-weight:700; cursor:pointer}
+  /* téléphone */
+  .etp-ov{position:fixed; inset:0; z-index:100060; display:none; flex-direction:column; background:#0f172a; color:#e2e8f0; font-family:-apple-system,'Segoe UI',Arial,sans-serif}
+  .etp-ov.on{display:flex}
+  .etp-tete{display:flex; align-items:center; gap:10px; padding:12px 14px; background:#04152C; border-bottom:1px solid #1e293b}
+  .etp-tete b{flex:1; font-size:16px; letter-spacing:.5px}
+  .etp-tete button{background:rgba(255,255,255,.12); border:0; color:#fff; border-radius:8px; padding:8px 12px; font-size:15px}
+  .etp-corps{flex:1; overflow:auto; padding:14px}
+  .etp-corps label{display:block; font-size:12px; font-weight:700; color:#94a3b8; letter-spacing:.8px; margin:12px 0 5px}
+  .etp-corps input, .etp-corps textarea{width:100%; box-sizing:border-box; background:#1e293b; border:1px solid #334155; border-radius:8px; color:#fff; font:inherit; font-size:17px; padding:10px 12px}
+  .etp-corps textarea{min-height:70px; font-size:15px}
+  .etp-btns{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:14px}
+  .etp-btns button{background:#1e3a8a; border:1px solid #3b82f6; color:#fff; border-radius:10px; padding:14px 4px; font-size:14px; font-weight:700}
+  .etp-liste{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px}
+  .etp-it{position:relative; border-radius:8px; overflow:hidden; background:#000; aspect-ratio:4/3}
+  .etp-it img, .etp-it video{width:100%; height:100%; object-fit:cover; display:block}
+  .etp-it .tag{position:absolute; left:6px; bottom:6px; background:rgba(4,21,44,.85); font-size:11px; font-weight:700; padding:2px 7px; border-radius:8px}
+  .etp-it button{position:absolute; top:5px; right:5px; width:28px; height:28px; border-radius:50%; border:0; background:#dc2626; color:#fff; font-size:16px}
+  .etp-msg{margin-top:12px; font-size:13.5px; min-height:18px}
+  .etp-msg.err{color:#fca5a5} .etp-msg.ok{color:#86efac}
+  .etp-pied{padding:12px 14px; border-top:1px solid #1e293b}
+  .etp-pied button{width:100%; background:#22c55e; border:0; color:#04152C; border-radius:10px; padding:15px; font-size:17px; font-weight:800}
+  .etp-pied button:disabled{opacity:.5}
+  .etr-ov{position:fixed; inset:0; z-index:100070; display:none; flex-direction:column; background:#000; color:#fff; font-family:-apple-system,'Segoe UI',Arial,sans-serif}
+  .etr-ov.on{display:flex}
+  .etr-ov video{flex:1; width:100%; object-fit:contain; background:#000}
+  .etr-bas{display:flex; align-items:center; justify-content:space-between; padding:14px 20px 22px}
+  .etr-bas button{background:rgba(255,255,255,.15); border:0; color:#fff; border-radius:10px; padding:10px 14px; font-size:15px}
+  .etr-rond{width:72px; height:72px; border-radius:50% !important; padding:0 !important; border:4px solid #fff !important; background:#dc2626 !important}
+  .etr-rond.rec{border-radius:16px !important; width:60px; height:60px}
+  .etr-temps{font-size:18px; font-weight:700; min-width:90px; text-align:center}
+</style>
+<script>
+(function(){
+  'use strict';
+  /* ───────── réglages ───────── */
+  var ETAT_EMAILS = ['atelieratp@physipro.com'];          // qui a le feuillet (PC) et l'envoi (téléphone)
+  var NOEUD = 'moulageSettings/etatMoulages';             // fiches EN TRANSIT seulement (quelques octets)
+  var DOSSIER = 'État des moulages';                      // dans « Back up logiciel » (le dossier de la sauvegarde)
+  var VID_COURRIEL = 20 * 1024 * 1024;                    // au-delà : trop lourd pour joindre au courriel
+  var VID_MAX = 150 * 1024 * 1024;                        // au-delà : refusé (transfert trop long)
+  var PH_W = 1280, PH_Q = 0.72, PH_B = 320 * 1024;        // photos : assez grandes pour être regardées
+  var REC_MAX_S = 90, REC_BPS = 2000000;                  // vidéo filmée ici : 90 s max, 2 Mb/s (≈ 15 Mo la minute)
+  var REPS = { ms: { nom: 'Marie-Soleil Riverin', courriel: 'mariesoleilr@physipro.com' },
+               mp: { nom: 'Marie-Pier Languedoc', courriel: 'mplanguedoc@physipro.com' } };
+  var INTRO = 'Voici les dossiers de moulage qui sont en attente d’un suivi de ta part. Si tu as des questions, fais-nous signe : nous allons communiquer avec toi pour y répondre.';
+  var FIN = 'Merci, et bonne fin de semaine!';
+  var SITUATIONS_DEFAUT = ['En attente de réponse', 'En attente d’approbation du client', 'Soumission à faire pour le rehaut',
+    'Besoin de réponse de la couture', 'En attente de matériel', 'Moulage à refaire'];
+  var MOIS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+
+  /* ───────── outils ───────── */
+  function el(id){ return document.getElementById(id); }
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function br(t){ return esc(t).replace(/\r?\n/g, '<br>'); }
+  function moi(){ try { return String(((typeof currentUser !== 'undefined' && currentUser) || firebase.auth().currentUser || {}).email || '').toLowerCase(); } catch(e){ return ''; } }
+  function estEtat(){ return ETAT_EMAILS.indexOf(moi()) >= 0; }
+  function mobile(){ return typeof isMobileView === 'function' && isMobileView(); }
+  function toast(m, t){ if (typeof showToast === 'function') showToast(m, t || 'info'); }
+  function prenom(k){ return REPS[k].nom.split(' ')[0]; }
+  function sanFile(s){ return (String(s == null ? '' : s).replace(/[\\\/:*?"<>|#\[\]$.]/g, '-').replace(/\s+/g, '_').trim().substring(0, 60)) || 'x'; }
+  function cmdCle(s){ return String(s || '').replace(/\s+/g, '').toUpperCase(); }
+  function nouvelId(){ return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function ext(nom, type){ var m = /\.([a-z0-9]{2,4})$/i.exec(nom || ''); if (m) return m[1].toLowerCase(); if (/mp4/.test(type || '')) return 'mp4'; if (/webm/.test(type || '')) return 'webm'; if (/quicktime/.test(type || '')) return 'mov'; return /video/.test(type || '') ? 'mp4' : 'jpg'; }
+  function lireDataUrl(b){ return new Promise(function(res){ try { var r = new FileReader(); r.onload = function(){ res(r.result); }; r.onerror = function(){ res(null); }; r.readAsDataURL(b); } catch(e){ res(null); } }); }
+  function lundiDe(d){ d = new Date(d.getFullYear(), d.getMonth(), d.getDate()); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d; }
+  function cleJour(d){ return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function texteSemaine(l){
+    var v = new Date(l); v.setDate(v.getDate() + 4);
+    return l.getMonth() === v.getMonth()
+      ? 'Semaine du ' + l.getDate() + ' au ' + v.getDate() + ' ' + MOIS[v.getMonth()] + ' ' + v.getFullYear()
+      : 'Semaine du ' + l.getDate() + ' ' + MOIS[l.getMonth()] + ' au ' + v.getDate() + ' ' + MOIS[v.getMonth()] + ' ' + v.getFullYear();
+  }
+  function adresse(k){
+    try { var t = (typeof TEAM_MEMBERS !== 'undefined' ? TEAM_MEMBERS : []).filter(function(m){ return m.name === REPS[k].nom; })[0]; if (t && t.email) return t.email; } catch(e){}
+    return REPS[k].courriel;
+  }
+  /* image d'une vidéo, ▶ dessiné dessus (va dans le courriel et la fiche) */
+  function affiche(src){
+    return new Promise(function(res){
+      var v = document.createElement('video'), fini = false;
+      v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = src;
+      function dessiner(){
+        if (fini) return; fini = true;
+        try {
+          var w = 680, h = Math.round(w * (v.videoHeight || 9) / (v.videoWidth || 16));
+          var c = document.createElement('canvas'); c.width = w; c.height = h;
+          var x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, w, h);
+          try { x.drawImage(v, 0, 0, w, h); } catch(e){}
+          x.fillStyle = 'rgba(0,0,0,.25)'; x.fillRect(0, 0, w, h);
+          var r = Math.min(w, h) * 0.13;
+          x.beginPath(); x.arc(w / 2, h / 2, r, 0, Math.PI * 2); x.fillStyle = 'rgba(4,21,44,.78)'; x.fill();
+          x.lineWidth = 4; x.strokeStyle = '#fff'; x.stroke();
+          x.beginPath(); x.moveTo(w / 2 - r * .32, h / 2 - r * .48); x.lineTo(w / 2 - r * .32, h / 2 + r * .48); x.lineTo(w / 2 + r * .52, h / 2); x.closePath();
+          x.fillStyle = '#fff'; x.fill();
+          res(c.toDataURL('image/jpeg', 0.72));
+        } catch(e){ res(''); }
+      }
+      v.addEventListener('loadeddata', function(){ try { v.currentTime = Math.min(0.5, (v.duration || 1) / 3); } catch(e){ dessiner(); } });
+      v.addEventListener('seeked', dessiner);
+      v.addEventListener('error', function(){ if (!fini){ fini = true; res(''); } });
+      setTimeout(dessiner, 5000);
+    });
+  }
+
+  /* ═════════ DOSSIER ONEDRIVE (le même que la sauvegarde) ═════════ */
+  function idbPBkp(mode, v){
+    return new Promise(function(res){
+      try {
+        var q = indexedDB.open('PBkp', 1);
+        q.onupgradeneeded = function(){ try { q.result.createObjectStore('s'); } catch(e){} };
+        q.onsuccess = function(){
+          try {
+            var st = q.result.transaction('s', mode === 'set' ? 'readwrite' : 'readonly').objectStore('s');
+            var r = mode === 'set' ? st.put(v, 'd') : st.get('d');
+            r.onsuccess = function(){ res(mode === 'set' ? true : (r.result || null)); };
+            r.onerror = function(){ res(null); };
+          } catch(e){ res(null); }
+        };
+        q.onerror = function(){ res(null); };
+      } catch(e){ res(null); }
+    });
+  }
+  var racine = null, dEtat = null, dMed = null, dFiches = null;
+  async function acces(demander){
+    if (dEtat) {
+      try { if ((await racine.queryPermission({ mode: 'readwrite' })) === 'granted') return true; } catch(e){}
+    }
+    if (!racine) racine = await idbPBkp('get');
+    if (!racine) {
+      if (!demander || !window.showDirectoryPicker) return false;
+      try { racine = await window.showDirectoryPicker({ id: 'physipro-bkp', mode: 'readwrite' }); await idbPBkp('set', racine); }
+      catch(e){ return false; }
+    }
+    var st = 'denied';
+    try { st = await racine.queryPermission({ mode: 'readwrite' }); } catch(e){}
+    if (st !== 'granted') {
+      if (!demander) return false;
+      try { st = await racine.requestPermission({ mode: 'readwrite' }); } catch(e){ return false; }
+      if (st !== 'granted') return false;
+    }
+    dEtat = await racine.getDirectoryHandle(DOSSIER, { create: true });
+    dMed = await dEtat.getDirectoryHandle('medias', { create: true });
+    dFiches = await dEtat.getDirectoryHandle('Fiches', { create: true });
+    return true;
+  }
+  async function ecrire(dir, nom, blob){
+    var fh = await dir.getFileHandle(nom, { create: true });
+    var w = await fh.createWritable(); await w.write(blob); await w.close();
+    if ((await fh.getFile()).size !== blob.size) throw new Error(nom + ' : vérification de l’écriture échouée');
+  }
+  function nomLibre(base, x){ return base + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + '.' + x; }
+
+  /* ═════════ L'ÉTAT (etat.json dans OneDrive) ═════════ */
+  var E = null, qui = 'ms', choisie = null, minut = null;
+  var URLS = {}, DATAS = {};   // nom de fichier → URL d'affichage / dataURL (photos, pour le courriel)
+  function nouvelleSit(cmd){ return { id: nouvelId(), cmd: cmd || '', sit: '', txt: '', pour: { ms: true, mp: true }, photos: [], videos: [] }; }
+  function base(v){
+    v = v || {};
+    var l = lundiDe(new Date()), cle = cleJour(l);
+    var e = {
+      semaine: v.semaine || '', lundi: v.lundi || '',
+      intro: typeof v.intro === 'string' && !/de notre côté/.test(v.intro) ? v.intro : INTRO,
+      fin: typeof v.fin === 'string' ? v.fin : FIN,
+      sits: Array.isArray(v.sits) ? v.sits.filter(Boolean) : [],
+      situations: Array.isArray(v.situations) && v.situations.length ? v.situations : SITUATIONS_DEFAUT.slice(),
+      extras: Array.isArray(v.extras) ? v.extras.filter(function(x){ return x && x.courriel; }) : []
+    };
+    if (e.lundi !== cle || !e.semaine) { e.lundi = cle; e.semaine = texteSemaine(l); }
+    e.sits.forEach(function(s){
+      s.photos = Array.isArray(s.photos) ? s.photos.filter(Boolean) : [];
+      s.videos = Array.isArray(s.videos) ? s.videos.filter(function(x){ return x && x.nom; }) : [];
+      s.pour = s.pour || { ms: true, mp: true };
+    });
+    if (!e.sits.length) e.sits.push(nouvelleSit());
+    return e;
+  }
+  async function charger(){
+    var v = null;
+    try { v = JSON.parse(await (await (await dEtat.getFileHandle('etat.json')).getFile()).text()); }
+    catch(e){ if (e && e.name !== 'NotFoundError' && !(e instanceof SyntaxError)) throw e; }
+    E = base(v);
+  }
+  async function sauverMaintenant(){
+    if (!E || !dEtat) return;
+    var b = new Blob([JSON.stringify(E, null, 1)], { type: 'application/json' });
+    await ecrire(dEtat, 'etat.json', b);
+  }
+  function sauver(){
+    clearTimeout(minut); marque('…');
+    minut = setTimeout(function(){
+      sauverMaintenant().then(function(){ marque('Enregistré dans OneDrive'); })
+        .catch(function(e){ console.error('État des moulages :', e); marque('⚠ Pas enregistré : ' + ((e && e.message) || e)); });
+    }, 700);
+  }
+  function marque(t){ var m = el('etSauve'); if (m) m.textContent = t; }
+  function sitDe(id){ for (var i = 0; i < E.sits.length; i++) if (E.sits[i].id === id) return E.sits[i]; return null; }
+  function sitDeCmd(cmd){ var k = cmdCle(cmd); if (!k) return null; for (var i = 0; i < E.sits.length; i++) if (cmdCle(E.sits[i].cmd) === k) return E.sits[i]; return null; }
+  async function urlDe(nom){
+    if (URLS[nom]) return URLS[nom];
+    try { var f = await (await dMed.getFileHandle(nom)).getFile(); URLS[nom] = URL.createObjectURL(f); return URLS[nom]; } catch(e){ return null; }
+  }
+  async function dataDe(nom){
+    if (DATAS[nom]) return DATAS[nom];
+    try { var f = await (await dMed.getFileHandle(nom)).getFile(); DATAS[nom] = await lireDataUrl(f); return DATAS[nom]; } catch(e){ return null; }
+  }
+
+  /* ═════════ LA PAGE (PC) — même allure que le courriel ═════════ */
+  function page(){
+    var ov = el('etOv'); if (ov) return ov;
+    ov = document.createElement('div'); ov.id = 'etOv'; ov.className = 'et-ov';
+    ov.innerHTML = '<div class="et-barre">'
+      + '<span class="t">ÉTAT DES MOULAGES</span><span class="lbl">Copie pour :</span>'
+      + '<button type="button" class="qui on" data-qui="ms">Marie-Soleil</button><button type="button" class="qui" data-qui="mp">Marie-Pier</button>'
+      + '<span class="lbl">Copie à :</span><span class="et-extras" id="etExtras"></span>'
+      + '<span class="et-ajq"><button type="button" class="ajq" id="etAjQui" title="Ajouter une personne en copie du courriel">+ Ajouter</button>'
+      +   '<span class="et-ajq-boite" id="etAjBoite"><input type="text" id="etAjNom" placeholder="Nom (ex. Orders)"><input type="text" id="etAjMail" placeholder="Courriel (ex. orders@physipro.com)">'
+      +   '<span class="et-ajq-err" id="etAjErr"></span><span class="et-ajq-pied"><button type="button" id="etAjAnn">Annuler</button><button type="button" class="ok" id="etAjOK">Ajouter</button></span></span></span>'
+      + '<span class="ressort"></span><span class="et-sauve" id="etSauve"></span>'
+      + '<button type="button" class="envoi" id="etEnvoyer">Envoyer l’email</button><button type="button" id="etFermer" title="Fermer (Échap) — tout est gardé">Fermer</button>'
+      + '</div><div class="et-defile"><div class="et-feuille" id="etFeuille"></div></div>'
+      + '<input type="file" id="etFichiers" accept="image/*,video/*" multiple style="display:none">';
+    document.body.appendChild(ov);
+    brancher(ov);
+    return ov;
+  }
+  function optionsSit(val){
+    var l = (E.situations || []).slice(); if (val && l.indexOf(val) < 0) l.unshift(val);
+    return '<option value=""' + (val ? '' : ' selected') + '>— Choisir la situation —</option>'
+      + l.map(function(n){ return '<option value="' + esc(n) + '"' + (n === val ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('')
+      + '<option value="__nouv">+ Nouvelle situation…</option>';
+  }
+  function htmlSit(s, n){
+    var m = s.photos.map(function(nom, k){
+      return '<div class="et-m" data-nom="' + esc(nom) + '"><img alt="" data-src-nom="' + esc(nom) + '"' + (URLS[nom] ? ' src="' + URLS[nom] + '"' : '') + '><button type="button" class="mx" data-k="' + k + '" title="Retirer cette photo">×</button></div>';
+    }).join('') + s.videos.map(function(v, k){
+      return '<div class="et-m" data-nom="' + esc(v.nom) + '">' + (URLS[v.nom] ? '<video controls preload="metadata" src="' + URLS[v.nom] + '"' + (v.poster ? ' poster="' + v.poster + '"' : '') + '></video>' : '<div class="ch" data-vid-nom="' + esc(v.nom) + '">Chargement de la vidéo…</div>')
+        + '<span class="tag">VIDÉO' + (v.taille > VID_COURRIEL ? ' · ' + Math.round(v.taille / 1048576) + ' Mo' : '') + '</span><button type="button" class="mx" data-vk="' + k + '" title="Retirer cette vidéo">×</button></div>';
+    }).join('');
+    return '<div class="et-sit' + (s.id === choisie ? ' choisie' : '') + (s.pour[qui] ? '' : ' horscopie') + '" data-id="' + s.id + '">'
+      + '<div class="et-sit-tete"><span class="no">' + (n + 1) + '</span>'
+      +   '<input class="e-cmd" type="text" placeholder="No de commande" value="' + esc(s.cmd) + '" spellcheck="false" autocomplete="off">'
+      +   '<span class="et-sitlbl">SITUATION</span><select class="e-sit' + (s.sit ? '' : ' vide') + '">' + optionsSit(s.sit) + '</select>'
+      +   '<span class="et-pour"><label><input type="checkbox" data-p="ms"' + (s.pour.ms ? ' checked' : '') + '>' + prenom('ms') + '</label><label><input type="checkbox" data-p="mp"' + (s.pour.mp ? ' checked' : '') + '>' + prenom('mp') + '</label></span>'
+      +   '<button type="button" class="et-x" title="Retirer cette situation (réglée)">×</button></div>'
+      + '<textarea class="e-txt" rows="2" placeholder="Détail, ce qui reste à faire, qui l’attend…">' + esc(s.txt) + '</textarea>'
+      + '<div class="et-medias">' + m + '<button type="button" class="et-aj">+ Photos / vidéo<br><small>ou Ctrl+V / glisser ici — ou du téléphone</small></button></div></div>';
+  }
+  function grandir(t){ t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
+  function rendre(){
+    var f = el('etFeuille'); if (!f || !E) return;
+    f.innerHTML = '<div class="et-tete"><div class="marque">Physi<span>Pro</span><small>ATELIER ORTHOPÉDIQUE · SHERBROOKE</small></div>'
+      + '<div class="droite"><div class="titre">État des moulages</div><input type="text" id="etSemaine" value="' + esc(E.semaine) + '" spellcheck="false"></div></div>'
+      + '<div class="et-filet"></div><div class="et-corps">'
+      + '<div class="et-bonjour">Bonjour ' + esc(prenom(qui)) + ',</div><textarea id="etIntro" rows="2">' + esc(E.intro) + '</textarea>'
+      + '<div class="et-section">DOSSIERS EN SUIVI</div><div id="etSits">' + E.sits.map(htmlSit).join('') + '</div>'
+      + '<button type="button" class="et-plus" id="etPlus">+ Ajouter une situation</button>'
+      + '<textarea id="etFin" rows="1" style="margin-top:22px">' + esc(E.fin) + '</textarea>'
+      + '<div class="et-signature"><b>Daniel Charest</b><br>Atelier · Fabrication des coussins<br><span>atelieratp@physipro.com</span></div>'
+      + '</div><div class="et-pied"></div>';
+    Array.prototype.forEach.call(f.querySelectorAll('textarea'), grandir);
+    var b = el('etEnvoyer'); if (b && !b._occupe) b.textContent = 'Envoyer l’email à ' + prenom(qui);
+    Array.prototype.forEach.call(document.querySelectorAll('#etOv .qui'), function(x){ x.classList.toggle('on', x.getAttribute('data-qui') === qui); });
+    rendreExtras(); remplirMedias();
+  }
+  function remplirMedias(){
+    Array.prototype.forEach.call(document.querySelectorAll('#etFeuille img[data-src-nom]:not([src])'), function(im){
+      urlDe(im.getAttribute('data-src-nom')).then(function(u){ if (u) im.src = u; else im.alt = 'Photo introuvable dans OneDrive'; });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#etFeuille .ch[data-vid-nom]'), function(d){
+      var nom = d.getAttribute('data-vid-nom'), v = null;
+      E.sits.forEach(function(s){ s.videos.forEach(function(x){ if (x.nom === nom) v = x; }); });
+      urlDe(nom).then(function(u){ if (!u) { d.textContent = 'Vidéo introuvable dans OneDrive'; return; } d.outerHTML = '<video controls preload="metadata" src="' + u + '"' + (v && v.poster ? ' poster="' + v.poster + '"' : '') + '></video>'; });
+    });
+    E.sits.forEach(function(s){ s.photos.forEach(function(n){ dataDe(n); }); });   // prêt pour le courriel
+  }
+  function rendreExtras(){
+    var z = el('etExtras'); if (!z) return;
+    z.innerHTML = (E.extras || []).map(function(x, k){
+      return '<button type="button" class="' + (x.on ? 'on' : '') + '" data-k="' + k + '" title="' + esc(x.courriel) + (x.on ? ' — en copie' : ' — pas en copie (clic pour l’ajouter)') + '">' + esc(x.nom || x.courriel) + '<i data-x="' + k + '" title="Retirer">×</i></button>';
+    }).join('');
+  }
+  function lireChamps(){
+    var f = el('etFeuille'); if (!f || !E) return;
+    var se = el('etSemaine'); if (se) E.semaine = se.value;
+    var it = el('etIntro'); if (it) E.intro = it.value;
+    var fi = el('etFin'); if (fi) E.fin = fi.value;
+    Array.prototype.forEach.call(f.querySelectorAll('.et-sit'), function(d){
+      var s = sitDe(d.getAttribute('data-id')); if (!s) return;
+      s.cmd = d.querySelector('.e-cmd').value.trim();
+      var sv = d.querySelector('.e-sit').value; if (sv !== '__nouv') s.sit = sv;
+      s.txt = d.querySelector('.e-txt').value.replace(/\s+$/, '');
+    });
+  }
+  function choisir(id){
+    choisie = id;
+    Array.prototype.forEach.call(document.querySelectorAll('#etFeuille .et-sit'), function(d){ d.classList.toggle('choisie', d.getAttribute('data-id') === id); });
+  }
+
+  /* médias ajoutés au PC (fichier, Ctrl+V, glisser) → écrits dans OneDrive */
+  async function ajouterMedias(id, fichiers){
+    var s = sitDe(id); if (!s) return;
+    var l = Array.prototype.slice.call(fichiers || []).filter(function(f){ return f && /^(image|video)\//.test(f.type); });
+    if (!l.length) { marque('Seulement des images ou des vidéos'); return; }
+    for (var i = 0; i < l.length; i++) {
+      var f = l[i];
+      try {
+        if (/^video\//.test(f.type)) {
+          if (f.size > VID_MAX) { alert('La vidéo « ' + f.name + ' » pèse ' + Math.round(f.size / 1048576) + ' Mo : c’est trop (150 Mo au plus).'); continue; }
+          marque('Vidéo…');
+          var nv = nomLibre(sanFile(s.cmd || 'video'), ext(f.name, f.type));
+          await ecrire(dMed, nv, f);
+          URLS[nv] = URL.createObjectURL(f);
+          var po = await affiche(URLS[nv]);
+          lireChamps(); s.videos.push({ nom: nv, poster: po, taille: f.size, orig: f.name || '' });
+        } else {
+          marque('Photo…');
+          var b = await compressPhotoFile(f, PH_W, PH_Q, PH_B);
+          if (!b) { marque('Photo illisible : ' + (f.name || '')); continue; }
+          var np = nomLibre(sanFile(s.cmd || 'photo'), 'jpg');
+          await ecrire(dMed, np, b);
+          URLS[np] = URL.createObjectURL(b);
+          lireChamps(); s.photos.push(np);
+        }
+      } catch(e){ console.error(e); marque('⚠ ' + ((e && e.message) || e)); }
+    }
+    rendre(); sauver();
+  }
+
+  /* ═════════ LE COURRIEL (et la fiche) ═════════ */
+  function nomVideo(s, v, n){ return ('Commande_' + (s.cmd || 'sans-numero') + (n ? '_' + (n + 1) : '') + '_video.' + ext(v.nom)).replace(/[^\w.\-]+/g, '-'); }
+  function courriel(k, fiche){
+    var P = "Segoe UI,Helvetica,Arial,sans-serif", W = 816, M = 36, C = W - 2 * M, LP = Math.floor((C - 24 - 12) / 2);
+    var sits = E.sits.filter(function(s){ return s.pour[k] && (s.cmd || s.sit || s.txt || s.photos.length || s.videos.length); });
+    var aJoindre = [], H = [];
+    H.push('<table cellpadding="0" cellspacing="0" border="0" width="' + W + '" style="width:' + W + 'px;border-collapse:collapse;font-family:' + P + ';color:#04152C;background:#ffffff">');
+    H.push('<tr><td bgcolor="#04152C" style="background:#04152C;background-image:linear-gradient(180deg,#04152C 0%,#0d2d5c 55%,#4A8EF5 140%);padding:26px ' + M + 'px 22px"><table cellpadding="0" cellspacing="0" border="0" width="100%"><tr>'
+      + '<td valign="middle" style="font-family:' + P + ';font-size:30px;font-weight:bold;color:#ffffff">Physi<span style="color:#4A8EF5">Pro</span><div style="font-size:11px;font-weight:bold;letter-spacing:2.5px;color:#9fb6d8;margin-top:2px">ATELIER ORTHOPÉDIQUE · SHERBROOKE</div></td>'
+      + '<td valign="middle" align="right" style="text-align:right;font-family:' + P + '"><div style="font-size:22px;font-weight:bold;color:#ffffff">État des moulages</div><div style="font-size:13px;font-weight:bold;color:#7CB0F8;margin-top:4px">' + esc(E.semaine) + '</div></td>'
+      + '</tr></table></td></tr>');
+    H.push('<tr><td bgcolor="#4A8EF5" style="background:#4A8EF5;height:4px;line-height:4px;font-size:0">&nbsp;</td></tr>');
+    H.push('<tr><td style="padding:26px ' + M + 'px 4px;font-family:' + P + ';font-size:14.5px;line-height:1.6;color:#04152C"><div style="font-size:16px;font-weight:bold;margin-bottom:8px">Bonjour ' + esc(prenom(k)) + ',</div>' + br(E.intro) + '</td></tr>');
+    H.push('<tr><td style="padding:16px ' + M + 'px 8px"><div style="font-family:' + P + ';font-size:12px;font-weight:bold;letter-spacing:1.8px;color:#4A8EF5;border-bottom:2px solid #4A8EF5;padding-bottom:5px">DOSSIERS EN SUIVI</div></td></tr>');
+    if (!sits.length) H.push('<tr><td style="padding:8px ' + M + 'px;font-family:' + P + ';font-size:14px;color:#5a6f8a">Aucun dossier en suivi cette semaine.</td></tr>');
+    sits.forEach(function(s, n){
+      var t = '<table cellpadding="0" cellspacing="0" border="0" width="' + C + '" style="width:' + C + 'px;border-collapse:collapse;border:1px solid #d5dde8">'
+        + '<tr><td bgcolor="#04152C" style="background:#04152C;padding:8px 12px;font-family:' + P + ';font-size:13.5px;font-weight:bold;color:#ffffff"><span style="color:#9fb6d8;font-size:11px;letter-spacing:1px">' + (n + 1) + '&nbsp;&nbsp;COMMANDE&nbsp;</span>' + esc(s.cmd || '—') + '</td>'
+        + '<td bgcolor="#04152C" align="right" style="background:#04152C;padding:8px 12px;text-align:right">' + (s.sit ? '<span style="display:inline-block;background:#e6effd;color:#1f4fa3;font-family:' + P + ';font-weight:bold;font-size:12px;padding:3px 10px;border-radius:10px">' + esc(s.sit) + '</span>' : '&nbsp;') + '</td></tr>';
+      if (s.txt) t += '<tr><td colspan="2" style="padding:10px 12px;font-family:' + P + ';font-size:14px;line-height:1.55;color:#04152C">' + br(s.txt) + '</td></tr>';
+      var cases = s.photos.map(function(nom){ return { img: DATAS[nom] }; });
+      s.videos.forEach(function(v, j){
+        var nm = nomVideo(s, v, s.videos.length > 1 ? j : 0);
+        aJoindre.push({ v: v, nom: nm });
+        cases.push({ img: v.poster, video: nm, fichier: v.nom });
+      });
+      if (cases.length) {
+        t += '<tr><td colspan="2" style="padding:' + (s.txt ? '0' : '12px') + ' 12px 12px"><table cellpadding="0" cellspacing="0" border="0">';
+        for (var i = 0; i < cases.length; i += 2) {
+          t += '<tr>';
+          [0, 1].forEach(function(d){
+            var c = cases[i + d];
+            t += '<td valign="top" style="padding:' + (i ? '12px' : '0') + ' ' + (d ? '0' : '12px') + ' 0 0;width:' + LP + 'px">';
+            if (!c) t += '&nbsp;';
+            else if (c.video && fiche) t += '<video controls preload="metadata" width="' + LP + '" src="../medias/' + encodeURI(c.fichier) + '"' + (c.img ? ' poster="' + c.img + '"' : '') + ' style="display:block;width:' + LP + 'px;background:#000"></video>';
+            else {
+              if (c.img) t += '<img src="' + c.img + '" width="' + LP + '" alt="' + (c.video ? 'Vidéo' : 'Photo') + '" style="display:block;width:' + LP + 'px;height:auto;border:1px solid #d5dde8">';
+              if (c.video) t += '<div style="font-family:' + P + ';font-size:12px;font-weight:bold;color:#1f4fa3;padding-top:5px">&#9654; Vidéo jointe au courriel : ' + esc(c.video) + '</div>';
+            }
+            t += '</td>';
+          });
+          t += '</tr>';
+        }
+        t += '</table></td></tr>';
+      }
+      H.push('<tr><td style="padding:6px ' + M + 'px 8px">' + t + '</table></td></tr>');
+    });
+    H.push('<tr><td style="padding:20px ' + M + 'px 6px;font-family:' + P + ';font-size:14.5px;line-height:1.6;color:#04152C">' + br(E.fin) + '</td></tr>');
+    H.push('<tr><td style="padding:4px ' + M + 'px 28px;font-family:' + P + ';font-size:13.5px;line-height:1.5;color:#04152C"><b>Daniel Charest</b><br>Atelier · Fabrication des coussins<br><span style="color:#4A8EF5">atelieratp@physipro.com</span></td></tr>');
+    H.push('<tr><td bgcolor="#04152C" style="background:#04152C;height:8px;line-height:8px;font-size:0">&nbsp;</td></tr></table>');
+    var T = ['Bonjour ' + prenom(k) + ',', '', E.intro, '', 'DOSSIERS EN SUIVI — ' + E.semaine];
+    sits.forEach(function(s, n){
+      T.push(''); T.push((n + 1) + ') Commande ' + (s.cmd || '—') + (s.sit ? ' — ' + s.sit : ''));
+      if (s.txt) T.push(s.txt);
+      if (s.photos.length) T.push('(' + s.photos.length + ' photo' + (s.photos.length > 1 ? 's' : '') + ')');
+      s.videos.forEach(function(v, j){ T.push('(vidéo jointe : ' + nomVideo(s, v, s.videos.length > 1 ? j : 0) + ')'); });
+    });
+    T.push(''); T.push(E.fin); T.push(''); T.push('Daniel Charest'); T.push('Atelier · Fabrication des coussins');
+    return { html: H.join(''), texte: T.join('\n'), nb: sits.length, videos: aJoindre };
+  }
+  function enCopie(){ return (E.extras || []).filter(function(x){ return x.on; }).map(function(x){ return x.courriel; }); }
+  async function envoyer(b){
+    lireChamps();
+    var manq = [];
+    E.sits.forEach(function(s){ if (s.pour[qui]) s.photos.forEach(function(n){ if (!DATAS[n]) manq.push(n); }); });
+    if (manq.length) { marque('Préparation des photos…'); for (var i = 0; i < manq.length; i++) await dataDe(manq[i]); }
+    var c = courriel(qui, false);
+    if (!c.nb && !confirm('Aucune situation n’est cochée pour ' + prenom(qui) + '. Envoyer quand même ?')) return;
+    var cc = enCopie();
+    var url = 'mailto:' + adresse(qui) + '?subject=' + encodeURIComponent('État des moulages — ' + E.semaine) + (cc.length ? '&cc=' + cc.join(';') : '');
+    function ouvrir(){
+      var a = document.createElement('a'); a.href = url; a.style.display = 'none'; document.body.appendChild(a); a.click(); a.remove();
+      b._occupe = true; b.textContent = '✓ Copié — fais Ctrl+V dans le courriel';
+      setTimeout(function(){ b._occupe = false; b.textContent = 'Envoyer l’email à ' + prenom(qui); }, 3500);
+      ficheEnvoi(qui);
+      if (c.videos.length) {
+        c.videos.forEach(function(o, i){
+          setTimeout(function(){ urlDe(o.v.nom).then(function(u){ if (!u) return; var a2 = document.createElement('a'); a2.href = u; a2.download = o.nom; a2.style.display = 'none'; document.body.appendChild(a2); a2.click(); a2.remove(); }); }, 900 * (i + 1));
+        });
+        var lourdes = c.videos.filter(function(o){ return o.v.taille > VID_COURRIEL; });
+        setTimeout(function(){
+          alert('Fais Ctrl+V dans le courriel, puis joins ' + (c.videos.length > 1 ? 'les ' + c.videos.length + ' vidéos' : 'la vidéo') + ' :\n\n'
+            + c.videos.map(function(o){ return '  • ' + o.nom + (o.v.taille > VID_COURRIEL ? '  (' + Math.round(o.v.taille / 1048576) + ' Mo — trop lourde pour un courriel)' : ''); }).join('\n')
+            + '\n\n' + (c.videos.length > 1 ? 'Elles sont' : 'Elle est') + ' dans ton dossier Téléchargements : glisse-' + (c.videos.length > 1 ? 'les' : 'la') + ' dans le courriel.'
+            + (lourdes.length ? '\n\nUne vidéo de plus de 20 Mo risque d’être refusée par le courriel.' : ''));
+        }, 900 * c.videos.length + 700);
+      }
+    }
+    function secours(){
+      var d = document.createElement('div'); d.innerHTML = c.html; d.style.cssText = 'position:fixed;left:-99999px;top:0'; document.body.appendChild(d);
+      var sel = window.getSelection(), rg = document.createRange(); rg.selectNodeContents(d); sel.removeAllRanges(); sel.addRange(rg);
+      try { document.execCommand('copy'); } catch(e){}
+      sel.removeAllRanges(); d.remove(); ouvrir();
+    }
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      try { navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([c.html], { type: 'text/html' }), 'text/plain': new Blob([c.texte], { type: 'text/plain' }) })]).then(ouvrir, secours); return; } catch(e){}
+    }
+    secours();
+  }
+  /* la fiche de l'envoi, complète (photos dedans, vidéos qui jouent), dans « Fiches » */
+  async function ficheEnvoi(k){
+    try {
+      var c = courriel(k, true), d = new Date();
+      var nom = cleJour(d) + '_' + ('0' + d.getHours()).slice(-2) + 'h' + ('0' + d.getMinutes()).slice(-2) + '_' + sanFile(prenom(k)) + '.html';
+      var cc = enCopie();
+      var html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>État des moulages — ' + esc(prenom(k)) + ' — ' + esc(E.semaine) + '</title>'
+        + '<style>body{margin:0;background:#dfe4ec;font-family:Segoe UI,Arial,sans-serif}.env{width:816px;margin:18px auto 8px;font-size:12.5px;color:#334155}.f{width:816px;margin:0 auto 30px;box-shadow:0 4px 18px rgba(4,21,44,.18)}</style></head><body>'
+        + '<div class="env">Envoyé le ' + cleJour(d) + ' à ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ' à <b>' + esc(REPS[k].nom) + '</b> (' + esc(adresse(k)) + ')' + (cc.length ? ' — copie : ' + esc(cc.join(', ')) : '') + '</div>'
+        + '<div class="f">' + c.html + '</div></body></html>';
+      await ecrire(dFiches, nom, new Blob([html], { type: 'text/html' }));
+      marque('Fiche enregistrée : Fiches\\' + nom);
+    } catch(e){ console.error(e); marque('⚠ Fiche pas enregistrée : ' + ((e && e.message) || e)); }
+  }
+
+  /* ═════════ BRANCHEMENTS DE LA PAGE ═════════ */
+  function brancher(ov){
+    el('etFermer').onclick = fermer;
+    el('etEnvoyer').onclick = function(){ envoyer(this); };
+    Array.prototype.forEach.call(ov.querySelectorAll('.qui'), function(x){ x.onclick = function(){ lireChamps(); qui = x.getAttribute('data-qui'); rendre(); }; });
+    var boite = el('etAjBoite');
+    function fermerAj(){ boite.classList.remove('on'); }
+    el('etAjQui').onclick = function(e){ e.stopPropagation(); if (boite.classList.toggle('on')) { el('etAjNom').value = ''; el('etAjMail').value = ''; el('etAjErr').textContent = ''; el('etAjNom').focus(); } };
+    boite.onclick = function(e){ e.stopPropagation(); };
+    el('etAjAnn').onclick = fermerAj;
+    function ajouterQui(){
+      var nom = el('etAjNom').value.trim(), mail = el('etAjMail').value.trim();
+      if (!mail && nom) { try { var t = TEAM_MEMBERS.filter(function(m){ return m.name.split(' ')[0].toLowerCase() === nom.toLowerCase() || m.name.toLowerCase() === nom.toLowerCase(); })[0]; if (t) mail = t.email; } catch(e){} }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { el('etAjErr').textContent = 'Écris une adresse courriel valide.'; return; }
+      mail = mail.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+      if (E.extras.some(function(x){ return x.courriel === mail; })) { el('etAjErr').textContent = 'Déjà dans la liste.'; return; }
+      E.extras.push({ nom: nom || mail.split('@')[0], courriel: mail, on: true });
+      fermerAj(); rendreExtras(); sauver();
+    }
+    el('etAjOK').onclick = ajouterQui;
+    ['etAjNom', 'etAjMail'].forEach(function(id){ el(id).addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); ajouterQui(); } if (e.key === 'Escape') { e.stopPropagation(); fermerAj(); } }); });
+    el('etExtras').onclick = function(e){
+      var x = e.target.getAttribute('data-x');
+      if (x !== null) { var p = E.extras[+x]; if (p && confirm('Retirer ' + (p.nom || p.courriel) + ' de la liste ?')) { E.extras.splice(+x, 1); rendreExtras(); sauver(); } return; }
+      var bb = e.target.closest('button[data-k]'); if (!bb) return;
+      var q = E.extras[+bb.getAttribute('data-k')]; if (q) { q.on = !q.on; rendreExtras(); sauver(); }
+    };
+    ov.addEventListener('click', function(){ if (boite.classList.contains('on')) fermerAj(); });
+    ov.addEventListener('input', function(e){ if (e.target.tagName === 'TEXTAREA') grandir(e.target); lireChamps(); sauver(); });
+    ov.addEventListener('change', function(e){
+      var t = e.target;
+      if (t.classList && t.classList.contains('e-sit')) {
+        var d0 = t.closest('.et-sit'), s0 = d0 && sitDe(d0.getAttribute('data-id')); if (!s0) return;
+        if (t.value === '__nouv') {
+          var nv = (prompt('Nouvelle situation (elle restera dans la liste) :', '') || '').trim();
+          if (nv) { if (E.situations.indexOf(nv) < 0) E.situations.push(nv); s0.sit = nv; }
+          lireChamps(); rendre(); sauver(); return;
+        }
+        s0.sit = t.value; t.classList.toggle('vide', !t.value); sauver(); return;
+      }
+      if (t.type === 'checkbox' && t.getAttribute('data-p')) {
+        var d1 = t.closest('.et-sit'), s1 = d1 && sitDe(d1.getAttribute('data-id'));
+        if (s1) { s1.pour[t.getAttribute('data-p')] = t.checked; d1.classList.toggle('horscopie', !s1.pour[qui]); sauver(); }
+      }
+    });
+    ov.addEventListener('focusin', function(e){ var d = e.target.closest && e.target.closest('.et-sit'); if (d) choisir(d.getAttribute('data-id')); });
+    ov.addEventListener('click', function(e){
+      var t = e.target, d = t.closest && t.closest('.et-sit');
+      if (d) choisir(d.getAttribute('data-id'));
+      if (t.id === 'etPlus') {
+        lireChamps(); var ns = nouvelleSit(); E.sits.push(ns); choisie = ns.id; rendre(); sauver();
+        var c = document.querySelector('.et-sit[data-id="' + ns.id + '"] .e-cmd'); if (c) { c.focus(); c.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+        return;
+      }
+      if (!d) return;
+      var s = sitDe(d.getAttribute('data-id')); if (!s) return;
+      if (t.classList.contains('et-x')) {
+        lireChamps();
+        if ((s.cmd || s.sit || s.txt || s.photos.length || s.videos.length) && !confirm('Retirer la situation' + (s.cmd ? ' de la commande ' + s.cmd : '') + ' ?\n(Elle est réglée. Ses photos et vidéos restent dans OneDrive.)')) return;
+        E.sits = E.sits.filter(function(x){ return x !== s; }); if (!E.sits.length) E.sits.push(nouvelleSit());
+        rendre(); sauver(); return;
+      }
+      if (t.classList.contains('mx')) {
+        lireChamps();
+        if (t.hasAttribute('data-vk')) s.videos.splice(+t.getAttribute('data-vk'), 1); else s.photos.splice(+t.getAttribute('data-k'), 1);
+        rendre(); sauver(); return;
+      }
+      if (t.closest('.et-aj')) { var inp = el('etFichiers'); inp._cible = s.id; inp.click(); }
+    });
+    el('etFichiers').onchange = function(){ lireChamps(); ajouterMedias(this._cible, this.files); this.value = ''; };
+  }
+  /* coller / glisser : pendant que la page est ouverte, rien ne va ailleurs dans Moulage */
+  function ouverte(){ var o = el('etOv'); return !!(o && o.classList.contains('on')); }
+  window.addEventListener('paste', function(e){
+    if (!ouverte()) return;
+    var it = e.clipboardData && e.clipboardData.items, f = [];
+    if (it) for (var i = 0; i < it.length; i++) { if (it[i].kind === 'file') { var x = it[i].getAsFile(); if (x) f.push(x); } }
+    e.stopImmediatePropagation();
+    if (!f.length) return;
+    e.preventDefault();
+    if (!choisie || !sitDe(choisie)) { marque('Clique d’abord dans une situation, puis Ctrl+V'); return; }
+    lireChamps(); ajouterMedias(choisie, f);
+  }, true);
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(ev){
+    window.addEventListener(ev, function(e){
+      if (!ouverte()) return;
+      e.stopImmediatePropagation(); e.preventDefault();
+      var d = e.target.closest && e.target.closest('.et-sit');
+      Array.prototype.forEach.call(document.querySelectorAll('.et-sit.cible'), function(x){ if (x !== d || ev === 'drop' || ev === 'dragleave') x.classList.remove('cible'); });
+      if (d && (ev === 'dragenter' || ev === 'dragover')) d.classList.add('cible');
+      if (ev === 'drop' && d && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) { lireChamps(); choisir(d.getAttribute('data-id')); ajouterMedias(d.getAttribute('data-id'), e.dataTransfer.files); }
+    }, true);
+  });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && ouverte() && !document.querySelector('.et-ajq-boite.on')) fermer(); });
+
+  function fermer(){ lireChamps(); if (E && dEtat) sauver(); el('etOv').classList.remove('on'); }
+
+  window.ouvrirEtatMoulages = async function(){
+    if (!estEtat()) return;
+    var ov = page(); ov.classList.add('on');
+    var f = el('etFeuille');
+    if (!(await acces(true))) {
+      f.innerHTML = '<div class="et-acces"><b>Le dossier OneDrive n’est pas accessible.</b><br>Le feuillet est gardé dans « Back up logiciel\\' + DOSSIER + ' », le même dossier que la sauvegarde de Moulage.<br><button type="button" id="etChoisir">📂 Autoriser / choisir le dossier « Back up logiciel »</button></div>';
+      el('etChoisir').onclick = function(){ window.ouvrirEtatMoulages(); };
+      return;
+    }
+    try { if (!E) await charger(); } catch(e){ f.innerHTML = '<div class="et-acces">⚠ etat.json illisible : ' + esc((e && e.message) || e) + '</div>'; return; }
+    rendre(); marque('');
+    recevoir(true);
+  };
+
+  /* ═════════ RÉCEPTION DU TÉLÉPHONE (PC de Daniel) ═════════
+     Firebase → OneDrive, vérifié, PUIS effacé de Firebase. */
+  var ATT = {}, recEnCours = false, recEncore = false, recTimer = null;
+  function majBadge(){
+    var n = Object.keys(ATT).length, i = el('btnEtatMoulN');
+    if (i) { i.textContent = n || ''; i.classList.toggle('on', n > 0); }
+    var b = el('btnEtatMoul'); if (b) b.title = n ? n + ' envoi(s) du téléphone à recevoir — clic pour ouvrir le feuillet' : 'Feuillet de la semaine à Marie-Soleil et Marie-Pier';
+  }
+  async function recevoir(demander){
+    if (recEnCours) { recEncore = true; return; }
+    var cles = Object.keys(ATT).sort();
+    if (!cles.length) return;
+    if (!(await acces(!!demander))) return;
+    recEnCours = true;
+    var faits = 0, rates = 0;
+    try {
+      if (!E) await charger();
+      for (var i = 0; i < cles.length; i++) {
+        var k = cles[i], e = ATT[k]; if (!e) continue;
+        var fichiers = Array.isArray(e.fichiers) ? e.fichiers : [], photos = [], videos = [], manq = 0;
+        for (var j = 0; j < fichiers.length; j++) {
+          var fi = fichiers[j], blob = null;
+          try { blob = await storage.ref(fi.path).getBlob(); }
+          catch(x){ try { if (fi.url) { var r = await fetch(fi.url); if (r.ok) blob = await r.blob(); } } catch(x2){ blob = null; } }
+          if (!blob) { manq++; continue; }
+          var video = /^video\//.test(fi.type || blob.type || '');
+          var nom = nomLibre(sanFile(e.cmd || 'telephone'), ext(fi.nom, fi.type || blob.type));
+          await ecrire(dMed, nom, blob);
+          URLS[nom] = URL.createObjectURL(blob);
+          if (video) videos.push({ nom: nom, poster: await affiche(URLS[nom]), taille: blob.size, orig: fi.nom || '' });
+          else photos.push(nom);
+        }
+        if (manq) { rates++; continue; }   // rien d'effacé : nouvel essai plus tard
+        lireChamps();
+        var s = sitDeCmd(e.cmd);
+        if (!s) { var vide = E.sits.length === 1 && !E.sits[0].cmd && !E.sits[0].txt && !E.sits[0].photos.length && !E.sits[0].videos.length ? E.sits[0] : null; s = vide || nouvelleSit(); if (!vide) E.sits.push(s); s.cmd = e.cmd || ''; }
+        if (e.note) s.txt = s.txt ? s.txt + '\n' + e.note : e.note;
+        Array.prototype.push.apply(s.photos, photos); Array.prototype.push.apply(s.videos, videos);
+        await sauverMaintenant();
+        for (var q = 0; q < fichiers.length; q++) { try { await storage.ref(fichiers[q].path).delete(); } catch(x){} }
+        try { await firebaseDb.ref(NOEUD + '/' + k).remove(); } catch(x){}
+        delete ATT[k]; faits++;
+      }
+    } catch(err){ console.error('État des moulages — réception :', err); toast('⚠ État des moulages : ' + ((err && err.message) || err), 'warning'); }
+    finally {
+      recEnCours = false; majBadge();
+      if (faits) { toast('📋 ' + faits + ' envoi(s) du téléphone rangé(s) dans l’État des moulages', 'success'); if (ouverte()) rendre(); }
+      if (rates) toast('⏳ ' + rates + ' envoi(s) pas encore disponible(s) — nouvel essai bientôt', 'info');
+      if (recEncore) { recEncore = false; clearTimeout(recTimer); recTimer = setTimeout(function(){ recevoir(false); }, 2000); }
+    }
+  }
+  function ecouter(){
+    try {
+      firebaseDb.ref(NOEUD).on('value', function(snap){
+        ATT = snap.val() || {}; majBadge();
+        if (Object.keys(ATT).length) { clearTimeout(recTimer); recTimer = setTimeout(function(){ recevoir(false); }, 2500); }
+      });
+    } catch(e){ console.warn('État des moulages — écoute :', e && e.message); }
+  }
+
+  /* ═════════ TÉLÉPHONE : envoi des photos et vidéos ═════════ */
+  var tel = { items: [], busy: false };
+  function telPanneau(){
+    var ov = el('etpOv'); if (ov) return ov;
+    ov = document.createElement('div'); ov.id = 'etpOv'; ov.className = 'etp-ov';
+    ov.innerHTML = '<div class="etp-tete"><b>📋 État des moulages</b><button type="button" id="etpFermer">Fermer</button></div>'
+      + '<div class="etp-corps"><label>NUMÉRO DE COMMANDE</label><input type="text" id="etpCmd" inputmode="text" autocomplete="off" placeholder="ex. PO130923">'
+      + '<div class="etp-btns"><button type="button" id="etpPhoto">📷 Photo</button><button type="button" id="etpVideo">🎥 Vidéo</button><button type="button" id="etpGal">🖼️ Galerie</button></div>'
+      + '<input type="file" id="etpPhotoIn" accept="image/*" capture="environment" style="display:none"><input type="file" id="etpVidIn" accept="video/*" capture="environment" style="display:none"><input type="file" id="etpGalIn" accept="image/*,video/*" multiple style="display:none">'
+      + '<div class="etp-liste" id="etpListe"></div><label>NOTE (FACULTATIF)</label><textarea id="etpNote" placeholder="Ce qu’on voit, ce qui manque…"></textarea>'
+      + '<div class="etp-msg" id="etpMsg"></div></div>'
+      + '<div class="etp-pied"><button type="button" id="etpEnvoyer">Envoyer vers mon PC</button></div>';
+    document.body.appendChild(ov);
+    el('etpFermer').onclick = telFermer;
+    el('etpPhoto').onclick = function(){ el('etpPhotoIn').click(); };
+    el('etpGal').onclick = function(){ el('etpGalIn').click(); };
+    el('etpVideo').onclick = function(){ if (window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) enregistreur(); else el('etpVidIn').click(); };
+    ['etpPhotoIn', 'etpVidIn', 'etpGalIn'].forEach(function(id){ el(id).onchange = function(){ telAjouter(this.files); this.value = ''; }; });
+    el('etpListe').onclick = function(e){ var b = e.target.closest('button[data-i]'); if (!b || tel.busy) return; var it = tel.items.splice(+b.getAttribute('data-i'), 1)[0]; if (it) URL.revokeObjectURL(it.u); telListe(); };
+    el('etpEnvoyer').onclick = telEnvoyer;
+    return ov;
+  }
+  function telMsg(t, c){ var m = el('etpMsg'); if (m) { m.textContent = t || ''; m.className = 'etp-msg' + (c ? ' ' + c : ''); } }
+  function telListe(){
+    el('etpListe').innerHTML = tel.items.map(function(it, i){
+      return '<div class="etp-it">' + (it.video ? '<video src="' + it.u + '" muted playsinline preload="metadata"></video>' : '<img src="' + it.u + '">')
+        + '<span class="tag">' + (it.video ? '🎥 ' + (it.b.size / 1048576).toFixed(1) + ' Mo' : '📷') + '</span><button type="button" data-i="' + i + '">×</button></div>';
+    }).join('');
+  }
+  async function telAjouter(files){
+    var l = Array.prototype.slice.call(files || []);
+    for (var i = 0; i < l.length; i++) {
+      var f = l[i];
+      if (/^video\//.test(f.type)) {
+        if (f.size > VID_MAX) { telMsg('Vidéo trop lourde (' + Math.round(f.size / 1048576) + ' Mo, 150 Mo au plus). Filme-la avec 🎥 Vidéo : elle sera plus légère.', 'err'); continue; }
+        tel.items.push({ video: true, b: f, u: URL.createObjectURL(f), nom: f.name || 'video.' + ext('', f.type), type: f.type || 'video/mp4' });
+        if (f.size > VID_COURRIEL) telMsg('Vidéo de ' + Math.round(f.size / 1048576) + ' Mo : elle sera transférée, mais elle est trop lourde pour un courriel. Filme avec 🎥 Vidéo pour une vidéo plus légère.', 'err');
+      } else if (/^image\//.test(f.type) || /\.(heic|heif)$/i.test(f.name || '')) {
+        var b = null; try { b = await compressPhotoFile(f, PH_W, PH_Q, PH_B); } catch(e){ b = null; }
+        if (b) tel.items.push({ video: false, b: b, u: URL.createObjectURL(b), nom: 'photo.jpg', type: 'image/jpeg' }); else telMsg('Photo illisible', 'err');
+      }
+    }
+    telListe();
+  }
+  function telFermer(){
+    if (tel.busy) return;
+    if (tel.items.length && !confirm('Fermer sans envoyer ? Les photos et vidéos seront perdues.')) return;
+    tel.items.forEach(function(it){ URL.revokeObjectURL(it.u); }); tel.items = [];
+    el('etpOv').classList.remove('on');
+  }
+  async function telEnvoyer(){
+    if (tel.busy) return;
+    var cmd = el('etpCmd').value.trim(), note = el('etpNote').value.trim();
+    if (!cmd) { telMsg('Écris le numéro de commande.', 'err'); el('etpCmd').focus(); return; }
+    if (!tel.items.length && !note) { telMsg('Ajoute une photo, une vidéo ou une note.', 'err'); return; }
+    tel.busy = true; el('etpEnvoyer').disabled = true;
+    var faits = [], t0 = Date.now(), dossier = 'photos/moulages/' + String(cmd).replace(/[.#$\[\]\/\s]/g, '-') + '/etat/';
+    try {
+      for (var i = 0; i < tel.items.length; i++) {
+        var it = tel.items[i], chemin = dossier + t0 + '_' + (i + 1) + '.' + ext(it.nom, it.type);
+        var ref = storage.ref(chemin);
+        await new Promise(function(res, rej){
+          var task = ref.put(it.b, { contentType: it.type });
+          task.on('state_changed', function(sn){ telMsg('Envoi ' + (i + 1) + ' / ' + tel.items.length + ' — ' + Math.round(100 * sn.bytesTransferred / (sn.totalBytes || 1)) + ' %'); }, rej, res);
+        });
+        faits.push({ path: chemin, url: await ref.getDownloadURL(), type: it.type, nom: it.nom, taille: it.b.size });
+      }
+      var d = new Date();
+      await firebaseDb.ref(NOEUD).push({ at: t0, date: cleJour(d) + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2), par: moi(), cmd: cmd, note: note, fichiers: faits });
+      tel.items.forEach(function(x){ URL.revokeObjectURL(x.u); }); tel.items = [];
+      el('etpNote').value = ''; telListe();
+      telMsg('✅ Envoyé pour la commande ' + cmd + '. Ton PC le range dans l’État des moulages (OneDrive) et l’efface de Firebase.', 'ok');
+    } catch(e){
+      for (var j = 0; j < faits.length; j++) { try { await storage.ref(faits[j].path).delete(); } catch(x){} }
+      var m = (e && (e.code || e.message)) || String(e);
+      telMsg('❌ ' + (/unauthorized|permission|denied|403/i.test(m) ? 'Firebase a refusé l’envoi (règles Storage : taille ou type de fichier). Avise Daniel.' : m), 'err');
+    } finally { tel.busy = false; el('etpEnvoyer').disabled = false; }
+  }
+  window.ouvrirEtatPhone = function(){
+    if (!moi()) { toast('⏳ Connexion en cours…', 'info'); return; }
+    if (!estEtat()) return;
+    telPanneau().classList.add('on'); telMsg('');
+  };
+
+  /* enregistreur vidéo 720p (≈ 15 Mo la minute) */
+  async function enregistreur(){
+    var ov = el('etrOv');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'etrOv'; ov.className = 'etr-ov';
+      ov.innerHTML = '<video id="etrVue" autoplay muted playsinline></video><div class="etr-bas"><button type="button" id="etrAnn">Annuler</button><button type="button" class="etr-rond" id="etrRec" title="Enregistrer"></button><span class="etr-temps" id="etrTemps">0:00</span></div>';
+      document.body.appendChild(ov);
+    }
+    var flux = null, rec = null, morceaux = [], minuterie = null, debut = 0, annule = false;
+    function arreterFlux(){ if (flux) flux.getTracks().forEach(function(t){ t.stop(); }); flux = null; clearInterval(minuterie); el('etrVue').srcObject = null; ov.classList.remove('on'); el('etrRec').classList.remove('rec'); el('etrTemps').textContent = '0:00'; }
+    var cv = { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
+    try { flux = await navigator.mediaDevices.getUserMedia({ video: cv, audio: true }); }
+    catch(e){ try { flux = await navigator.mediaDevices.getUserMedia({ video: cv, audio: false }); } catch(e2){ el('etpVidIn').click(); return; } }
+    ov.classList.add('on'); el('etrVue').srcObject = flux;
+    var types = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    var mime = types.filter(function(t){ try { return MediaRecorder.isTypeSupported(t); } catch(e){ return false; } })[0] || '';
+    el('etrAnn').onclick = function(){ annule = true; if (rec && rec.state !== 'inactive') rec.stop(); else arreterFlux(); };
+    el('etrRec').onclick = function(){
+      if (rec && rec.state === 'recording') { rec.stop(); return; }
+      morceaux = []; annule = false;
+      try { rec = new MediaRecorder(flux, mime ? { mimeType: mime, videoBitsPerSecond: REC_BPS, audioBitsPerSecond: 64000 } : { videoBitsPerSecond: REC_BPS }); }
+      catch(e){ rec = new MediaRecorder(flux); }
+      rec.ondataavailable = function(ev){ if (ev.data && ev.data.size) morceaux.push(ev.data); };
+      rec.onstop = function(){
+        var type = (rec.mimeType || mime || 'video/webm').split(';')[0];
+        var b = new Blob(morceaux, { type: type });
+        arreterFlux();
+        if (annule || !b.size) return;
+        var f = new File([b], 'video.' + ext('', type), { type: type });
+        telAjouter([f]);
+      };
+      rec.start(1000); debut = Date.now(); el('etrRec').classList.add('rec');
+      minuterie = setInterval(function(){
+        var s = Math.floor((Date.now() - debut) / 1000);
+        el('etrTemps').textContent = Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2) + ' / ' + Math.floor(REC_MAX_S / 60) + ':' + ('0' + REC_MAX_S % 60).slice(-2);
+        if (s >= REC_MAX_S && rec.state === 'recording') rec.stop();
+      }, 250);
+    };
+  }
+
+  /* ═════════ DÉMARRAGE : après la connexion ═════════ */
+  var demarre = false;
+  var attente = setInterval(function(){
+    if (!moi() || typeof firebaseDb === 'undefined' || !firebaseDb) return;
+    clearInterval(attente);
+    if (!estEtat()) return;
+    if (!mobile() && window.showDirectoryPicker) {
+      var b = el('btnEtatMoul'); if (b) b.style.display = '';
+      if (!demarre) { demarre = true; ecouter(); }
+    }
+  }, 1500);
+})();
+</script>
+
 </body>
 </html>
