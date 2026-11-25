@@ -8,6 +8,34 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1900 - ÉTAT DES MOULAGES : SORTI DE L'ATTENTE = RÉGLÉ, LE DOSSIER DISPARAÎT
+    ════════════════════════════════════════════════════
+    • Un dossier venu de la colonne En attente disparaît dès que le moulage
+      sort de l'attente, même s'il avait du texte, des photos ou des vidéos.
+      Comme avec le ×, son dossier OneDrive « Situation » (s'il existe) est
+      marqué « Réglée » et garde ses photos et vidéos. Plus de bande orange.
+
+    v1899 - ÉTAT DES MOULAGES : UNE LISTE PAR REPRÉSENTANTE + SYNCHRO « EN ATTENTE »
+    ════════════════════════════════════════════════════
+    • Les boutons Marie-Soleil / Marie-Pier du haut choisissent la LISTE
+      affichée (un seul à la fois) ; le courriel part à celle qui est choisie.
+      Le chiffre sur chaque bouton = nombre de dossiers de sa liste.
+    • À l'ouverture (et à chaque changement de liste), chaque moulage de la
+      colonne En attente dont la carte a une représentante (card.representante)
+      devient un dossier de sa liste : no de commande, bénéficiaire (c.name)
+      et SITUATION = raison de l'attente (c.raisonAttente), tenue à jour.
+      Daniel ajoute les photos et le texte.
+    • Un moulage qui sort de l'attente : son dossier disparaît s'il est vide
+      (ni texte, ni photo, ni vidéo) ; sinon il reste avec une bande orange
+      « n'est plus en attente » jusqu'à ce qu'on le retire (×).
+    • Un dossier retiré (×) pendant que le moulage est encore en attente ne
+      revient pas (E.ignores) ; il pourra revenir après une sortie de l'attente.
+    • Chaque dossier a « Pour : Marie-Soleil / Marie-Pier / Les deux ».
+      Les anciens dossiers sans représentante sont « Les deux ».
+    • Moulages en attente sans représentante : signalés dans la barre.
+    • Les dossiers OneDrive « Situation » ne sont créés que pour les dossiers
+      qui ont du contenu (photo, vidéo, texte) ou qui ont été ajoutés à la main.
+
     v1898 - STATISTIQUES : « 📋 RAPPORT DES MOULAGES » (POUR LA DIRECTION)
     ════════════════════════════════════════════════════
     • Le bouton « Tableau essayages » devient « 📋 Rapport des moulages ».
@@ -1954,7 +1982,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1898</title>
+  <title>PhysiPro Moulages v1900</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7329,7 +7357,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261055;
+    var APP_VERSION = 20261057;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -25670,6 +25698,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   .et-barre button{border:1px solid rgba(255,255,255,.3); background:transparent; color:#fff; border-radius:6px; padding:6px 14px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap}
   .et-barre button:hover{background:rgba(255,255,255,.12)}
   .et-barre button.qui.on{background:#4A8EF5; border-color:#4A8EF5}
+  .et-barre button.qui b{display:inline-block; min-width:18px; margin-left:6px; padding:0 6px; border-radius:9px; background:rgba(255,255,255,.22); font-size:11.5px}
+  .et-sansrep{font-size:11.5px; color:#ffcf7a; white-space:nowrap}
+  .et-hors{background:#fff4e0; color:#8a5a00; font-size:12px; font-weight:700; padding:5px 12px; border-bottom:1px solid #f3d9a4}
+  .et-att{display:inline-block; margin-left:6px; padding:1px 7px; border-radius:9px; background:#fdf1d8; color:#8a5a00; font-size:10.5px; font-weight:800; letter-spacing:.3px; white-space:nowrap}
+  .e-rep{margin-left:6px; height:24px; border-radius:5px; border:1px solid rgba(255,255,255,.35); background:#0d2d5c; color:#fff; font:inherit; font-size:11.5px; font-weight:700; padding:0 4px; cursor:pointer}
   .et-barre .ressort{flex:1}
   .et-barre .et-sauve{font-size:11.5px; color:#9fb6d8; white-space:nowrap}
   .et-barre button.envoi{background:#4A8EF5; border-color:#4A8EF5; padding:7px 18px}
@@ -25791,9 +25824,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   function toast(m, t){ if (typeof showToast === 'function') showToast(m, t || 'info'); }
   function prenom(k){ return REPS[k].nom.split(' ')[0]; }
   /* v1889 : à qui part le courriel (boutons du haut) et la phrase qui compte les dossiers */
-  function dest(){ var l = (E && Array.isArray(E.qui) ? E.qui : []).filter(function(k){ return REPS[k]; }); return l.length ? l : ['ms']; }
+  function dest(){ return [vue()]; }   // v1899 : le courriel part à la représentante dont la liste est affichée
   function nomsDest(l){ var p = l.map(prenom); return p.length > 1 ? p.slice(0, -1).join(', ') + ' et ' + p[p.length - 1] : p[0]; }
-  function sitsPleines(){ return E.sits.filter(function(s){ return s.cmd || s.ben || s.sit || s.txt || s.photos.length || s.videos.length; }); }
+  function sitsPleines(){ return sitsVue().filter(function(s){ return s.cmd || s.ben || s.sit || s.txt || s.photos.length || s.videos.length; }); }
   function texteIntro(l, n){
     var plur = l.length > 1, part = plur ? 'de votre part' : 'de ta part';
     var debut = n === 0 ? 'Aucun dossier de moulage n\u2019est en attente d\u2019un suivi ' + part + ' cette semaine.'
@@ -25996,13 +26029,58 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   /* ═════════ L'ÉTAT (État des moulages\etat.json — PC de Daniel) ═════════ */
   var E = null, choisie = null, minut = null;
   var URLS = {}, DATAS = {};   // chemin → URL d'affichage / dataURL (photos, pour le courriel)
-  function nouvelleSit(cmd){ return { id: nouvelId(), cmd: cmd || '', ben: '', sit: '', txt: '', photos: [], videos: [] }; }
+  function nouvelleSit(cmd, r){ return { id: nouvelId(), cmd: cmd || '', ben: '', sit: '', txt: '', photos: [], videos: [], rep: r === undefined ? vue() : r }; }
+  /* v1899 : une liste par représentante ; les moulages « En attente » y entrent tout seuls */
+  function vue(){ return (E && REPS[E.vue]) ? E.vue : 'ms'; }
+  function dansVue(s, k){ k = k || vue(); return !s.rep || s.rep === k; }
+  function sitsVue(k){ return E.sits.filter(function(s){ return dansVue(s, k); }); }
+  function repDe(v){ v = String(v || '').toLowerCase(); return /soleil/.test(v) ? 'ms' : /pier/.test(v) ? 'mp' : ''; }
+  function aContenu(s){ return !!(String(s.txt || '').trim() || s.photos.length || s.videos.length); }
+  var SANS_REP = 0;
+  function synchroAttente(){
+    if (!E) return;
+    var cd = {}; try { cd = (typeof cardsData !== 'undefined' && cardsData) || {}; } catch(e){}
+    var att = {}; SANS_REP = 0;
+    Object.keys(cd).forEach(function(id){
+      var c = cd[id];
+      if (!c || typeof c !== 'object' || c.isNote || c.isFauteuil || c.colonne !== 'colAttente') return;
+      var k = cmdCle(c.order); if (!k) return;
+      var r = repDe(c.representante); if (!r) { SANS_REP++; return; }
+      att[k] = { c: c, r: r };
+    });
+    E.ignores = (E.ignores || []).filter(function(k){ return att[k]; });   // sorti de l'attente → peut revenir plus tard
+    var vus = {};
+    E.sits = E.sits.filter(function(s){
+      var k = cmdCle(s.cmd), a = k && att[k];
+      if (a) {
+        vus[k] = 1; s.auto = true; s.horsAttente = false;
+        if (!s.rep) s.rep = a.r;
+        var raison = String(a.c.raisonAttente || '').trim(); if (raison) s.sit = raison;
+        if (!s.ben) s.ben = String(a.c.name || '').trim();
+        return true;
+      }
+      if (s.auto) {                                           // v1900 : sorti de l'attente = réglé
+        if (s.dossier) ecrireResume(s, true).catch(function(er){ console.warn(er); });
+        return false;
+      }
+      return true;
+    });
+    Object.keys(att).forEach(function(k){
+      if (vus[k] || E.ignores.indexOf(k) >= 0) return;
+      var a = att[k], ns = nouvelleSit(String(a.c.order).trim(), a.r);
+      ns.ben = String(a.c.name || '').trim(); ns.sit = String(a.c.raisonAttente || '').trim(); ns.auto = true;
+      E.sits.push(ns);
+    });
+    E.sits.sort(function(x, y){ return (x.auto ? 0 : 1) - (y.auto ? 0 : 1) || cmdCle(x.cmd).localeCompare(cmdCle(y.cmd), 'fr', { numeric: true }); });
+  }
   function base(v){
     v = v || {};
     var l = lundiDe(new Date()), cle = cleJour(l);
     var e = {
       semaine: v.semaine || '', lundi: v.lundi || '',
       qui: Array.isArray(v.qui) && v.qui.length ? v.qui.slice() : ['ms'],   // v1889 : destinataires choisis en haut
+      vue: REPS[v.vue] ? v.vue : ((Array.isArray(v.qui) && REPS[v.qui[0]]) ? v.qui[0] : 'ms'),   // v1899 : la liste affichée
+      ignores: Array.isArray(v.ignores) ? v.ignores.slice() : [],
       fin: typeof v.fin === 'string' ? v.fin : FIN,
       sits: Array.isArray(v.sits) ? v.sits.filter(Boolean) : [],
       situations: Array.isArray(v.situations) && v.situations.length ? v.situations : SITUATIONS_DEFAUT.slice(),
@@ -26013,8 +26091,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       s.photos = Array.isArray(s.photos) ? s.photos.filter(Boolean) : [];
       s.videos = Array.isArray(s.videos) ? s.videos.filter(function(x){ return x && x.nom; }) : [];
       delete s.pour; s.ben = s.ben || '';
+      if (s.rep !== 'ms' && s.rep !== 'mp') s.rep = '';
     });
-    if (!e.sits.length) e.sits.push(nouvelleSit());
+    e.sits = e.sits.filter(function(s){ return s.cmd || s.ben || s.sit || s.txt || s.photos.length || s.videos.length; });   // v1899 : plus de case vide
     return e;
   }
   async function charger(){
@@ -26051,8 +26130,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     var ov = el('etOv'); if (ov) return ov;
     ov = document.createElement('div'); ov.id = 'etOv'; ov.className = 'et-ov';
     ov.innerHTML = '<div class="et-barre">'
-      + '<span class="t">ÉTAT DES MOULAGES</span><span class="lbl">Envoyer à :</span>'
+      + '<span class="t">ÉTAT DES MOULAGES</span><span class="lbl">Liste de :</span>'
       + '<button type="button" class="qui" data-qui="ms" title="Le courriel part à Marie-Soleil (clic pour ajouter / retirer)">Marie-Soleil</button><button type="button" class="qui" data-qui="mp" title="Le courriel part à Marie-Pier (clic pour ajouter / retirer)">Marie-Pier</button>'
+      + '<span class="et-sansrep" id="etSansRep"></span>'
       + '<span class="lbl">Copie à :</span><span class="et-extras" id="etExtras"></span>'
       + '<span class="et-ajq"><button type="button" class="ajq" id="etAjQui" title="Ajouter une personne en copie du courriel">+ Ajouter</button>'
       +   '<span class="et-ajq-boite" id="etAjBoite"><input type="text" id="etAjNom" placeholder="Nom (ex. Orders)"><input type="text" id="etAjMail" placeholder="Courriel (ex. orders@physipro.com)">'
@@ -26086,7 +26166,10 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       +   '<input class="e-cmd" type="text" placeholder="No de commande" value="' + esc(s.cmd) + '" spellcheck="false" autocomplete="off">'
       +   '<input class="e-ben" type="text" placeholder="Bénéficiaire" value="' + esc(s.ben || nm) + '" spellcheck="false" autocomplete="off" title="Bénéficiaire (rempli d\u2019après le moulage)">'
       +   '<span class="et-sitlbl">SITUATION</span><select class="e-sit' + (s.sit ? '' : ' vide') + '">' + optionsSit(s.sit) + '</select>'
+      +   (s.auto && !s.horsAttente ? '<span class="et-att" title="Moulage dans la colonne En attente : la situation suit la raison de l\u2019attente">⏳ EN ATTENTE</span>' : '')
+      +   '<select class="e-rep" title="Dans la liste de qui">' + [['ms', 'Pour : Marie-Soleil'], ['mp', 'Pour : Marie-Pier'], ['', 'Pour : les deux']].map(function(o){ return '<option value="' + o[0] + '"' + ((s.rep || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>'
       +   '<button type="button" class="et-x" title="Retirer cette situation (réglée)">×</button></div>'
+      + (s.horsAttente ? '<div class="et-hors">⚠ Ce moulage n\u2019est plus en attente au tableau — retire ce dossier (×) s\u2019il est réglé.</div>' : '')
       + (s.dossier ? '<div class="et-dos" title="Dossier OneDrive de la situation">📁 ' + esc(s.dossier.replace(/\//g, ' › ')) + '</div>' : '')
       + '<textarea class="e-txt" rows="2" placeholder="Détail, ce qui reste à faire, qui l’attend…">' + esc(s.txt) + '</textarea>'
       + (DEMS[s.id] ? '<div class="et-dem">' + (DEMS[s.id].status === 'done' ? '📥 Reçu du téléphone — rangement dans OneDrive…' : (DEMS[s.id].mode === 'video' ? '⏳ Vidéo demandée au téléphone (' + (DEMS[s.id].maxSec || '') + ' s ou ' + mo(DEMS[s.id].maxOctets || 0) + ' au plus)' : '⏳ Photos demandées au téléphone') + ' — Moulage ouvert sur ton téléphone') + '<button type="button" class="et-dem-ann">Annuler</button></div>' : '')
@@ -26100,7 +26183,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       + '<div class="droite"><div class="titre">État des moulages</div><input type="text" id="etSemaine" value="' + esc(E.semaine) + '" spellcheck="false"></div></div>'
       + '<div class="et-filet"></div><div class="et-corps">'
       + '<div class="et-bonjour" id="etBonjour">Bonjour ' + esc(nomsDest(dest())) + ',</div><div class="et-intro" id="etIntroTxt" title="Phrase automatique : le nombre de dossiers se met à jour tout seul">' + esc(texteIntro(dest(), sitsPleines().length)) + '</div>'
-      + '<div class="et-section">DOSSIERS EN SUIVI</div><div id="etSits">' + E.sits.map(htmlSit).join('') + '</div>'
+      + '<div class="et-section">DOSSIERS EN SUIVI</div><div id="etSits">' + (sitsVue().length ? sitsVue().map(htmlSit).join('') : '<div style="padding:10px 2px;color:#5a6f8a;font-size:13.5px">Aucun dossier dans la liste de ' + esc(prenom(vue())) + '.</div>') + '</div>'
       + '<button type="button" class="et-plus" id="etPlus">+ Ajouter une situation</button>'
       + '<textarea id="etFin" rows="1" style="margin-top:22px">' + esc(E.fin) + '</textarea>'
       + '<div class="et-signature"><b>Daniel Charest</b><br>Atelier · Fabrication des coussins<br><span>atelieratp@physipro.com</span></div>'
@@ -26128,7 +26211,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   function majDest(){
     var l = dest();
     var b = el('etEnvoyer'); if (b && !b._occupe) b.textContent = 'Envoyer l\u2019email \u00e0 ' + nomsDest(l);
-    Array.prototype.forEach.call(document.querySelectorAll('#etOv .qui'), function(x){ x.classList.toggle('on', l.indexOf(x.getAttribute('data-qui')) >= 0); });
+    Array.prototype.forEach.call(document.querySelectorAll('#etOv .qui'), function(x){
+      var k = x.getAttribute('data-qui');
+      x.classList.toggle('on', l.indexOf(k) >= 0);
+      x.innerHTML = esc(prenom(k)) + '<b>' + sitsVue(k).filter(function(s){ return s.cmd || s.ben || s.sit || s.txt || s.photos.length || s.videos.length; }).length + '</b>';
+      x.title = 'Afficher la liste de ' + prenom(k) + ' — le courriel lui sera envoyé';
+    });
+    var sr = el('etSansRep'); if (sr) sr.textContent = SANS_REP ? '⚠ ' + SANS_REP + ' moulage' + (SANS_REP > 1 ? 's' : '') + ' en attente sans représentante' : '';
     var bj = el('etBonjour'); if (bj) bj.textContent = 'Bonjour ' + nomsDest(l) + ',';
     var it = el('etIntroTxt'); if (it) it.textContent = texteIntro(l, sitsPleines().length);
   }
@@ -26151,7 +26240,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   /* dossiers « Situation » créés pour chaque situation qui a un numéro (à la fermeture, à l'envoi, à l'ajout d'une photo) */
   async function assurerTous(){
     var cree = 0;
-    for (var i = 0; i < E.sits.length; i++) { var s = E.sits[i]; if (!s.dossier && s.cmd) { try { await assurerDossier(s); cree++; } catch(e){ console.warn('Dossier situation :', e && e.message); } } }
+    for (var i = 0; i < E.sits.length; i++) { var s = E.sits[i]; if (!s.dossier && s.cmd && (!s.auto || aContenu(s))) { try { await assurerDossier(s); cree++; } catch(e){ console.warn('Dossier situation :', e && e.message); } } }
     if (cree) await sauverMaintenant();
   }
 
@@ -26307,10 +26396,9 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     el('etFermer').onclick = fermer;
     el('etEnvoyer').onclick = function(){ envoyer(this); };
     Array.prototype.forEach.call(ov.querySelectorAll('.qui'), function(x){ x.onclick = function(){
-      var k = x.getAttribute('data-qui'), l = dest().slice(), i = l.indexOf(k);
-      if (i >= 0) { if (l.length === 1) return; l.splice(i, 1); } else l.push(k);   // au moins une
-      E.qui = ['ms', 'mp'].filter(function(z){ return l.indexOf(z) >= 0; });
-      majDest(); sauver();
+      var k = x.getAttribute('data-qui');   // v1899 : une liste à la fois
+      lireChamps(); E.vue = k; E.qui = [k]; choisie = null;
+      synchroAttente(); rendre(); sauver();
     }; });
     var boite = el('etAjBoite');
     function fermerAj(){ boite.classList.remove('on'); }
@@ -26347,17 +26435,21 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         }
         s0.sit = t.value; t.classList.toggle('vide', !t.value); sauver(); return;
       }
+      if (t.classList && t.classList.contains('e-rep')) {   // v1899
+        var d4 = t.closest('.et-sit'), s4 = d4 && sitDe(d4.getAttribute('data-id')); if (!s4) return;
+        lireChamps(); s4.rep = t.value; rendre(); sauver(); return;
+      }
       if (t.classList && t.classList.contains('e-ben')) {   // v1889 : bénéficiaire écrit → le dossier peut porter son nom
         var d3 = t.closest('.et-sit'), s3 = d3 && sitDe(d3.getAttribute('data-id'));
         lireChamps();
-        if (s3 && s3.cmd && s3.ben && !s3.dossier) assurerDossier(s3).then(function(){ rendre(); sauver(); }).catch(function(er){ marque('\u26a0 Dossier : ' + ((er && er.message) || er)); });
+        if (s3 && s3.cmd && s3.ben && !s3.auto && !s3.dossier) assurerDossier(s3).then(function(){ rendre(); sauver(); }).catch(function(er){ marque('\u26a0 Dossier : ' + ((er && er.message) || er)); });
         return;
       }
       if (t.classList && t.classList.contains('e-cmd')) {   // numéro entré : le dossier « Situation » du moulage est créé
         var d2 = t.closest('.et-sit'), s2 = d2 && sitDe(d2.getAttribute('data-id'));
         lireChamps();
         if (s2 && s2.cmd && !s2.ben && nomMoulage(s2.cmd)) { s2.ben = nomMoulage(s2.cmd); var be2 = d2.querySelector('.e-ben'); if (be2) be2.value = s2.ben; sauver(); }   // v1889
-        if (s2 && s2.cmd && !s2.dossier && (s2.ben || nomMoulage(s2.cmd))) assurerDossier(s2).then(function(){ rendre(); sauver(); }).catch(function(er){ marque('⚠ Dossier : ' + ((er && er.message) || er)); });
+        if (s2 && s2.cmd && !s2.auto && !s2.dossier && (s2.ben || nomMoulage(s2.cmd))) assurerDossier(s2).then(function(){ rendre(); sauver(); }).catch(function(er){ marque('⚠ Dossier : ' + ((er && er.message) || er)); });
         return;
       }
     });
@@ -26376,7 +26468,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         lireChamps();
         if ((s.cmd || s.sit || s.txt || s.photos.length || s.videos.length) && !confirm('Retirer la situation' + (s.cmd ? ' de la commande ' + s.cmd : '') + ' ?\n(Elle est réglée. Son dossier, ses photos et ses vidéos restent dans OneDrive.)')) return;
         if (s.dossier) ecrireResume(s, true).catch(function(er){ console.warn(er); });
-        E.sits = E.sits.filter(function(x){ return x !== s; }); if (!E.sits.length) E.sits.push(nouvelleSit());
+        if (s.auto && !s.horsAttente && cmdCle(s.cmd) && E.ignores.indexOf(cmdCle(s.cmd)) < 0) E.ignores.push(cmdCle(s.cmd));   // v1899
+        E.sits = E.sits.filter(function(x){ return x !== s; });
         rendre(); sauver(); return;
       }
       if (t.classList.contains('mx')) {
@@ -26430,7 +26523,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       return;
     }
     try { if (!E) await charger(); } catch(e){ f.innerHTML = '<div class="et-acces">⚠ etat.json illisible : ' + esc((e && e.message) || e) + '</div>'; return; }
-    rendre(); marque('');
+    synchroAttente(); rendre(); marque(''); sauver();   // v1899 : moulages en attente → listes
     reprendreDemandes();   // v1893
   };
 
