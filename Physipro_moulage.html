@@ -8,6 +8,17 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1907 - MOULAGES À RÉGLER : TOUTES LES CARTES EN ATTENTE APPARAISSENT
+    ════════════════════════════════════════════════════
+    • Une carte en attente n'est plus jamais écartée faute de représentante
+      ou de numéro de commande (cas MERDITH GRAHAM 300246).
+    • Représentante : celle de la carte ; sinon, celle nommée dans la raison
+      de l'attente (« Attente info Marie-Pier » → Marie-Pier) ; sinon le
+      dossier va dans LES DEUX listes, avec l'étiquette « ⚠ REPRÉSENTANTE ? »
+      — « Pour : » permet de la choisir.
+    • Seuls les dossiers retirés avec × restent hors des listes (bouton
+      orange → « Remettre dans la liste »).
+
     v1906 - MOULAGES À RÉGLER : CHAQUE CARTE EN ATTENTE = SON DOSSIER + « POURQUOI ABSENTS »
     ════════════════════════════════════════════════════
     • Cause trouvée : la synchro regroupait par NUMÉRO DE COMMANDE. Deux
@@ -2044,7 +2055,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1906</title>
+  <title>PhysiPro Moulages v1907</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7419,7 +7430,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261063;
+    var APP_VERSION = 20261064;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -26226,30 +26237,30 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     Object.keys(cd).forEach(function(id){
       var c = cd[id];
       if (!c || typeof c !== 'object' || c.isNote || c.isFauteuil || c.colonne !== 'colAttente') return;
-      var no = String(c.order == null ? '' : c.order).trim(), r = repDe(c.representante);
-      var info = { id: id, no: no, nom: String(c.name || '').trim(), item: String(c.item || '').trim(), rep: String(c.representante || '').trim() };
-      if (!no) { info.pourquoi = 'Pas de numéro de commande sur la carte'; ABSENTS.push(info); return; }
-      if (!r) { info.pourquoi = info.rep ? 'Représentante « ' + info.rep + ' » : ni Marie-Soleil ni Marie-Pier' : 'Pas de représentante sur la carte'; ABSENTS.push(info); return; }
+      // v1907 : toute carte en attente entre — représentante de la carte, sinon celle nommée dans la raison, sinon les deux listes
+      var no = String(c.order == null ? '' : c.order).trim();
+      var r = repDe(c.representante) || repDe(c.raisonAttente) || '';
       att[id] = { c: c, r: r, k: cmdCle(no) };
-      (parCmd[cmdCle(no)] = parCmd[cmdCle(no)] || []).push(id);
+      if (no) (parCmd[cmdCle(no)] = parCmd[cmdCle(no)] || []).push(id);
     });
-    SANS_REP = ABSENTS.length;
+    SANS_REP = 0;
     // ignores : id de carte (v1906) ou ancien numéro (v1899) — on oublie ceux qui ne sont plus en attente
     E.ignores = (E.ignores || []).filter(function(k){ return att[k] || parCmd[k]; });
-    function ignore(id){ return E.ignores.indexOf(id) >= 0 || E.ignores.indexOf(att[id].k) >= 0; }
+    function ignore(id){ return E.ignores.indexOf(id) >= 0 || (!!att[id].k && E.ignores.indexOf(att[id].k) >= 0); }
     // anciens dossiers sans carte : rattachés à la 1re carte libre de leur numéro
     var pris = {};
     E.sits.forEach(function(s){ if (s.cardId && att[s.cardId]) pris[s.cardId] = 1; });
     E.sits.forEach(function(s){
       if (s.cardId) return;
-      var l = parCmd[cmdCle(s.cmd)] || [];
+      var l = cmdCle(s.cmd) ? (parCmd[cmdCle(s.cmd)] || []) : [];
       for (var i = 0; i < l.length; i++) if (!pris[l[i]]) { s.cardId = l[i]; pris[l[i]] = 1; break; }
     });
     E.sits = E.sits.filter(function(s){
       var a = s.cardId && att[s.cardId];
       if (a) {
         s.auto = true; s.horsAttente = false;
-        if (!s.rep) s.rep = a.r;
+        if (!s.rep && a.r) s.rep = a.r;
+        s.sansRep = !s.rep && !a.r;
         var raison = String(a.c.raisonAttente || '').trim(); if (raison) s.sit = raison;
         if (!s.ben) s.ben = String(a.c.name || '').trim();
         s.item = String(a.c.item || '').trim();
@@ -26267,7 +26278,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       if (ignore(id)) { var a0 = att[id]; ABSENTS.push({ id: id, no: String(a0.c.order).trim(), nom: String(a0.c.name || '').trim(), item: String(a0.c.item || '').trim(), rep: String(a0.c.representante || '').trim(), pourquoi: 'Retiré avec × pendant qu’il est en attente', ign: true }); return; }
       var a = att[id], ns = nouvelleSit(String(a.c.order).trim(), a.r);
       ns.ben = String(a.c.name || '').trim(); ns.sit = String(a.c.raisonAttente || '').trim(); ns.auto = true;
-      ns.cardId = id; ns.item = String(a.c.item || '').trim();
+      ns.cardId = id; ns.item = String(a.c.item || '').trim(); ns.sansRep = !a.r;
       E.sits.push(ns);
     });
     E.sits.sort(function(x, y){ return (x.auto ? 0 : 1) - (y.auto ? 0 : 1) || cmdCle(x.cmd).localeCompare(cmdCle(y.cmd), 'fr', { numeric: true }) || String(x.item || '').localeCompare(String(y.item || ''), 'fr'); });
@@ -26398,6 +26409,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       +   '<input class="e-ben" type="text" placeholder="Bénéficiaire" value="' + esc(s.ben || nm) + '" spellcheck="false" autocomplete="off" title="Bénéficiaire (rempli d\u2019après le moulage)">'
       +   (s.item ? '<span class="et-item" title="Item de la carte">' + esc(s.item) + '</span>' : '')
       +   '<span class="et-sitlbl">SITUATION</span><select class="e-sit' + (s.sit ? '' : ' vide') + '">' + optionsSit(s.sit) + '</select>'
+      +   (s.auto && s.sansRep && !s.rep ? '<span class="et-att" style="background:#fde2e2;color:#b91c1c" title="Pas de représentante sur la carte : le dossier est dans les deux listes — choisis-la avec « Pour : »">⚠ REPRÉSENTANTE ?</span>' : '')
       +   (s.auto && !s.horsAttente ? '<span class="et-att" title="Moulage dans la colonne En attente : la situation suit la raison de l\u2019attente">⏳ EN ATTENTE</span>' : '')
       +   '<button type="button" class="et-mail" title="Envoyer ce dossier par courriel à une ou plusieurs personnes">✉️ Courriel</button>'
       +   '<select class="e-rep" title="Dans la liste de qui">' + [['ms', 'Pour : Marie-Soleil'], ['mp', 'Pour : Marie-Pier'], ['', 'Pour : les deux']].map(function(o){ return '<option value="' + o[0] + '"' + ((s.rep || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>'
@@ -26450,7 +26462,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       x.innerHTML = esc(prenom(k)) + '<b>' + sitsVue(k).filter(function(s){ return s.cmd || s.ben || s.sit || s.txt || s.photos.length || s.videos.length; }).length + '</b>';
       x.title = 'Afficher la liste de ' + prenom(k) + ' — le courriel lui sera envoyé';
     });
-    var sr = el('etSansRep'); if (sr) { sr.textContent = ABSENTS.length ? '⚠ ' + ABSENTS.length + ' en attente hors des listes — pourquoi ?' : ''; sr.style.display = ABSENTS.length ? '' : 'none'; }
+    var sr = el('etSansRep'); if (sr) { sr.textContent = ABSENTS.length ? '⚠ ' + ABSENTS.length + ' retiré' + (ABSENTS.length > 1 ? 's' : '') + ' avec × — remettre ?' : ''; sr.style.display = ABSENTS.length ? '' : 'none'; }
     var bj = el('etBonjour'); if (bj) bj.textContent = 'Bonjour ' + nomsDest(l) + ',';
     var it = el('etIntroTxt'); if (it) it.textContent = texteIntro(l, sitsPleines().length);
   }
