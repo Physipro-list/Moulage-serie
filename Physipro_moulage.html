@@ -8,6 +8,13 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1904 - MOULAGES À RÉGLER : ROTATION DES PHOTOS
+    ════════════════════════════════════════════════════
+    • Chaque photo a « ↺ » et « ↻ » (quart de tour à gauche / à droite).
+      La photo est tournée pour de vrai : le fichier JPEG est réécrit au
+      même endroit dans OneDrive (qualité 0.92), donc l'écran, le courriel
+      et la fiche la montrent tournée. Le choix pleine largeur est gardé.
+
     v1903 - MOULAGES À RÉGLER : PHOTO PLEINE LARGEUR OU PETITE, AU CHOIX
     ════════════════════════════════════════════════════
     • Chaque photo a un bouton « ⤢ Pleine largeur » / « ⤡ Petite ».
@@ -2012,7 +2019,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1903</title>
+  <title>PhysiPro Moulages v1904</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7387,7 +7394,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261060;
+    var APP_VERSION = 20261061;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -25814,6 +25821,10 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   .et-m.grande{width:100%; flex:0 0 100%}
   .et-m .mg{position:absolute; left:6px; bottom:6px; border:0; border-radius:12px; background:rgba(4,21,44,.82); color:#fff; font:inherit; font-size:11.5px; font-weight:800; padding:4px 10px; cursor:pointer}
   .et-m .mg:hover{background:#4A8EF5}
+  .et-m .mr{position:absolute; bottom:6px; width:30px; height:26px; border:0; border-radius:12px; background:rgba(4,21,44,.82); color:#fff; font-size:16px; line-height:26px; padding:0; cursor:pointer}
+  .et-m .mr:hover{background:#4A8EF5}
+  .et-m .mr.g{right:42px} .et-m .mr.d{right:6px}
+  .et-m.tourne img{opacity:.45}
   .et-m video{max-height:420px; background:#000}
   .et-m .tag{position:absolute; top:6px; left:6px; background:#04152C; color:#fff; font-size:10.5px; font-weight:800; letter-spacing:1px; padding:2px 8px; border-radius:9px}
   .et-m .ch{padding:30px 10px; text-align:center; color:#5a6f8a; font-size:12.5px}
@@ -26023,6 +26034,30 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     var c = chemin(n), i = c.lastIndexOf('/');
     return (await (await dirChemin(c.slice(0, i))).getFileHandle(c.slice(i + 1))).getFile();
   }
+  /* v1904 : quart de tour — le JPEG est réécrit au même endroit (OneDrive) */
+  var TOURNE = {};
+  async function tournerPhoto(n, sens, boite){
+    var c = chemin(n); if (TOURNE[c]) return;
+    TOURNE[c] = 1; if (boite) boite.classList.add('tourne'); marque('Rotation…');
+    try {
+      var f = await fichier(n);
+      var bmp = await createImageBitmap(f);
+      var cv = document.createElement('canvas'); cv.width = bmp.height; cv.height = bmp.width;
+      var x = cv.getContext('2d');
+      x.translate(cv.width / 2, cv.height / 2); x.rotate(sens * Math.PI / 2);
+      x.drawImage(bmp, -bmp.width / 2, -bmp.height / 2);
+      if (bmp.close) bmp.close();
+      var b = await new Promise(function(res){ cv.toBlob(res, 'image/jpeg', 0.92); });
+      if (!b) throw new Error('image illisible');
+      var i = c.lastIndexOf('/');
+      await ecrire(await dirChemin(c.slice(0, i), true), c.slice(i + 1), b);
+      if (URLS[c]) { try { URL.revokeObjectURL(URLS[c]); } catch(e){} }
+      URLS[c] = URL.createObjectURL(b); delete DATAS[c]; dataDe(n);
+      marque('Photo tournée');
+      rendre();
+    } catch(e){ console.error(e); marque('⚠ Rotation impossible : ' + ((e && e.message) || e)); if (boite) boite.classList.remove('tourne'); }
+    finally { delete TOURNE[c]; }
+  }
   function nomLibre(base, x){ return base + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + '.' + x; }
 
   /* ═════════ DOSSIER DU MOULAGE + DOSSIER « Situation AAAA-MM-JJ » ═════════
@@ -26209,6 +26244,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       var c = chemin(p);
       var gr = (s.grandes || []).indexOf(p) >= 0;   // v1903
       return '<div class="et-m' + (gr ? ' grande' : '') + '"><img alt="" data-ch="' + esc(p) + '"' + (URLS[c] ? ' src="' + URLS[c] + '"' : '') + '><button type="button" class="mx" data-k="' + k + '" title="Retirer cette photo du feuillet (elle reste dans OneDrive)">×</button>'
+        + '<button type="button" class="mr g" data-rk="' + k + '" data-sens="-1" title="Tourner d\u2019un quart de tour vers la gauche">↺</button>'
+        + '<button type="button" class="mr d" data-rk="' + k + '" data-sens="1" title="Tourner d\u2019un quart de tour vers la droite">↻</button>'
         + '<button type="button" class="mg" data-gk="' + k + '" title="' + (gr ? 'Remettre en petite photo (deux par rangée)' : 'Mettre cette photo sur toute la largeur') + '">' + (gr ? '⤡ Petite' : '⤢ Pleine largeur') + '</button></div>';
     }).join('') + s.videos.map(function(v, k){
       var c = chemin(v.nom);
@@ -26640,6 +26677,11 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         if (s.auto && !s.horsAttente && cmdCle(s.cmd) && E.ignores.indexOf(cmdCle(s.cmd)) < 0) E.ignores.push(cmdCle(s.cmd));   // v1899
         E.sits = E.sits.filter(function(x){ return x !== s; });
         rendre(); sauver(); return;
+      }
+      if (t.classList.contains('mr') && t.hasAttribute('data-rk')) {   // v1904
+        var pr = s.photos[+t.getAttribute('data-rk')]; if (!pr) return;
+        tournerPhoto(pr, +t.getAttribute('data-sens'), t.closest('.et-m'));
+        return;
       }
       if (t.classList.contains('mg') && t.hasAttribute('data-gk')) {   // v1903
         lireChamps();
