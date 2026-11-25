@@ -8,6 +8,20 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1906 - MOULAGES À RÉGLER : CHAQUE CARTE EN ATTENTE = SON DOSSIER + « POURQUOI ABSENTS »
+    ════════════════════════════════════════════════════
+    • Cause trouvée : la synchro regroupait par NUMÉRO DE COMMANDE. Deux
+      cartes en attente de la même commande (ex. siège + dossier) ne
+      donnaient qu'un seul dossier. Maintenant : un dossier par CARTE
+      (s.cardId), avec l'item (s.item) affiché à côté du bénéficiaire
+      (écran, courriel, fiche). Les anciens dossiers se rattachent à la
+      première carte de leur numéro.
+    • Le bouton orange de la barre « ⚠ N en attente hors des listes » ouvre
+      la liste de chaque moulage en attente qui n'apparaît pas, avec la
+      raison : pas de représentante, représentante inconnue (« X »), pas de
+      numéro de commande, ou retiré avec × (bouton « Remettre »).
+    • E.ignores garde des id de carte (les anciens numéros restent compris).
+
     v1905 - MOULAGES À RÉGLER : ZOOM D'UNE SECTION (COMME QUESTIONNEMENT)
     ════════════════════════════════════════════════════
     • « 🔍 Zoom » sur chaque photo : on clique sur la photo et on tire un
@@ -2030,7 +2044,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1905</title>
+  <title>PhysiPro Moulages v1906</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7405,7 +7419,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261062;
+    var APP_VERSION = 20261063;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -25747,7 +25761,13 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   .et-barre button:hover{background:rgba(255,255,255,.12)}
   .et-barre button.qui.on{background:#4A8EF5; border-color:#4A8EF5}
   .et-barre button.qui b{display:inline-block; min-width:18px; margin-left:6px; padding:0 6px; border-radius:9px; background:rgba(255,255,255,.22); font-size:11.5px}
-  .et-sansrep{font-size:11.5px; color:#ffcf7a; white-space:nowrap}
+  .et-barre button.et-sansrep{font-size:12px; color:#04152C; background:#ffcf7a; border-color:#ffcf7a; padding:4px 10px}
+  .et-abs{width:340px}
+  .et-abs .ab{padding:7px 12px; border-bottom:1px solid #eef2f7; font-size:13px}
+  .et-abs .ab i{font-style:normal; color:#5a6f86; font-size:11.5px}
+  .et-abs .ab .pq{color:#b45309; font-size:12px; font-weight:700; margin-top:2px}
+  .et-abs .ab button{margin-top:5px; border:1px solid #c6ddfa; background:#fff; color:#123a78; border-radius:6px; padding:3px 9px; font:inherit; font-size:12px; font-weight:800; cursor:pointer}
+  .et-item{flex:0 0 auto; background:rgba(255,255,255,.14); color:#dbe7fa; font-size:11.5px; font-weight:800; padding:3px 9px; border-radius:10px; white-space:nowrap}
   .et-hors{background:#fff4e0; color:#8a5a00; font-size:12px; font-weight:700; padding:5px 12px; border-bottom:1px solid #f3d9a4}
   .et-att{display:inline-block; margin-left:6px; padding:1px 7px; border-radius:9px; background:#fdf1d8; color:#8a5a00; font-size:10.5px; font-weight:800; letter-spacing:.3px; white-space:nowrap}
   .et-sit-tete select.e-rep{flex:0 0 auto; min-width:0}
@@ -26198,27 +26218,42 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   function sitsVue(k){ return E.sits.filter(function(s){ return dansVue(s, k); }); }
   function repDe(v){ v = String(v || '').toLowerCase(); return /soleil/.test(v) ? 'ms' : /pier/.test(v) ? 'mp' : ''; }
   function aContenu(s){ return !!(String(s.txt || '').trim() || s.photos.length || s.videos.length); }
-  var SANS_REP = 0;
-  function synchroAttente(){
+  var SANS_REP = 0, ABSENTS = [];
+  function synchroAttente(){   // v1906 : un dossier par CARTE en attente
     if (!E) return;
     var cd = {}; try { cd = (typeof cardsData !== 'undefined' && cardsData) || {}; } catch(e){}
-    var att = {}; SANS_REP = 0;
+    var att = {}, parCmd = {}; ABSENTS = [];
     Object.keys(cd).forEach(function(id){
       var c = cd[id];
       if (!c || typeof c !== 'object' || c.isNote || c.isFauteuil || c.colonne !== 'colAttente') return;
-      var k = cmdCle(c.order); if (!k) return;
-      var r = repDe(c.representante); if (!r) { SANS_REP++; return; }
-      att[k] = { c: c, r: r };
+      var no = String(c.order == null ? '' : c.order).trim(), r = repDe(c.representante);
+      var info = { id: id, no: no, nom: String(c.name || '').trim(), item: String(c.item || '').trim(), rep: String(c.representante || '').trim() };
+      if (!no) { info.pourquoi = 'Pas de numéro de commande sur la carte'; ABSENTS.push(info); return; }
+      if (!r) { info.pourquoi = info.rep ? 'Représentante « ' + info.rep + ' » : ni Marie-Soleil ni Marie-Pier' : 'Pas de représentante sur la carte'; ABSENTS.push(info); return; }
+      att[id] = { c: c, r: r, k: cmdCle(no) };
+      (parCmd[cmdCle(no)] = parCmd[cmdCle(no)] || []).push(id);
     });
-    E.ignores = (E.ignores || []).filter(function(k){ return att[k]; });   // sorti de l'attente → peut revenir plus tard
-    var vus = {};
+    SANS_REP = ABSENTS.length;
+    // ignores : id de carte (v1906) ou ancien numéro (v1899) — on oublie ceux qui ne sont plus en attente
+    E.ignores = (E.ignores || []).filter(function(k){ return att[k] || parCmd[k]; });
+    function ignore(id){ return E.ignores.indexOf(id) >= 0 || E.ignores.indexOf(att[id].k) >= 0; }
+    // anciens dossiers sans carte : rattachés à la 1re carte libre de leur numéro
+    var pris = {};
+    E.sits.forEach(function(s){ if (s.cardId && att[s.cardId]) pris[s.cardId] = 1; });
+    E.sits.forEach(function(s){
+      if (s.cardId) return;
+      var l = parCmd[cmdCle(s.cmd)] || [];
+      for (var i = 0; i < l.length; i++) if (!pris[l[i]]) { s.cardId = l[i]; pris[l[i]] = 1; break; }
+    });
     E.sits = E.sits.filter(function(s){
-      var k = cmdCle(s.cmd), a = k && att[k];
+      var a = s.cardId && att[s.cardId];
       if (a) {
-        vus[k] = 1; s.auto = true; s.horsAttente = false;
+        s.auto = true; s.horsAttente = false;
         if (!s.rep) s.rep = a.r;
         var raison = String(a.c.raisonAttente || '').trim(); if (raison) s.sit = raison;
         if (!s.ben) s.ben = String(a.c.name || '').trim();
+        s.item = String(a.c.item || '').trim();
+        s.cmd = String(a.c.order).trim();
         return true;
       }
       if (s.auto) {                                           // v1900 : sorti de l'attente = réglé
@@ -26227,13 +26262,40 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
       return true;
     });
-    Object.keys(att).forEach(function(k){
-      if (vus[k] || E.ignores.indexOf(k) >= 0) return;
-      var a = att[k], ns = nouvelleSit(String(a.c.order).trim(), a.r);
+    Object.keys(att).forEach(function(id){
+      if (pris[id]) return;
+      if (ignore(id)) { var a0 = att[id]; ABSENTS.push({ id: id, no: String(a0.c.order).trim(), nom: String(a0.c.name || '').trim(), item: String(a0.c.item || '').trim(), rep: String(a0.c.representante || '').trim(), pourquoi: 'Retiré avec × pendant qu’il est en attente', ign: true }); return; }
+      var a = att[id], ns = nouvelleSit(String(a.c.order).trim(), a.r);
       ns.ben = String(a.c.name || '').trim(); ns.sit = String(a.c.raisonAttente || '').trim(); ns.auto = true;
+      ns.cardId = id; ns.item = String(a.c.item || '').trim();
       E.sits.push(ns);
     });
-    E.sits.sort(function(x, y){ return (x.auto ? 0 : 1) - (y.auto ? 0 : 1) || cmdCle(x.cmd).localeCompare(cmdCle(y.cmd), 'fr', { numeric: true }); });
+    E.sits.sort(function(x, y){ return (x.auto ? 0 : 1) - (y.auto ? 0 : 1) || cmdCle(x.cmd).localeCompare(cmdCle(y.cmd), 'fr', { numeric: true }) || String(x.item || '').localeCompare(String(y.item || ''), 'fr'); });
+  }
+  function voirAbsents(btn){
+    var b = el('etAbsBoite');
+    if (b && b.classList.contains('on')) { b.classList.remove('on'); return; }
+    if (!b) { b = document.createElement('div'); b.id = 'etAbsBoite'; b.className = 'et-mailb et-abs'; b.addEventListener('click', function(e){ e.stopPropagation(); }); el('etOv').appendChild(b); }
+    var H = '<div class="mt">Moulages en attente qui ne sont dans aucune liste<small>Corrige la carte dans Moulage, puis change de liste ou rouvre la fenêtre</small></div><div class="ml">';
+    ABSENTS.forEach(function(x, i){
+      H += '<div class="ab"><b>' + esc(x.no || '(sans numéro)') + '</b>' + (x.nom ? ' — ' + esc(x.nom) : '') + (x.item ? ' <i>' + esc(x.item) + '</i>' : '')
+        + '<div class="pq">' + esc(x.pourquoi) + '</div>'
+        + (x.ign ? '<button type="button" data-rem="' + i + '">Remettre dans la liste</button>' : '') + '</div>';
+    });
+    if (!ABSENTS.length) H += '<div class="ab">Tous les moulages en attente sont dans les listes.</div>';
+    H += '</div><div class="mp"><button type="button" class="an">Fermer</button></div>';
+    b.innerHTML = H;
+    b.querySelector('.an').onclick = function(){ b.classList.remove('on'); };
+    Array.prototype.forEach.call(b.querySelectorAll('button[data-rem]'), function(x){
+      x.onclick = function(){
+        var a = ABSENTS[+x.getAttribute('data-rem')]; if (!a) return;
+        E.ignores = E.ignores.filter(function(k){ return k !== a.id && k !== cmdCle(a.no); });
+        b.classList.remove('on'); lireChamps(); synchroAttente(); rendre(); sauver();
+      };
+    });
+    b.classList.add('on');
+    var r = btn.getBoundingClientRect();
+    b.style.top = (r.bottom + 6) + 'px'; b.style.left = Math.max(8, Math.min(window.innerWidth - 348, r.left)) + 'px';
   }
   function base(v){
     v = v || {};
@@ -26294,7 +26356,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     ov.innerHTML = '<div class="et-barre">'
       + '<span class="t">MOULAGES À RÉGLER</span><span class="lbl">Liste de :</span>'
       + '<button type="button" class="qui" data-qui="ms" title="Le courriel part à Marie-Soleil (clic pour ajouter / retirer)">Marie-Soleil</button><button type="button" class="qui" data-qui="mp" title="Le courriel part à Marie-Pier (clic pour ajouter / retirer)">Marie-Pier</button>'
-      + '<span class="et-sansrep" id="etSansRep"></span>'
+      + '<button type="button" class="et-sansrep" id="etSansRep" style="display:none" title="Voir pourquoi ces moulages en attente ne sont pas dans les listes"></button>'
       + '<span class="lbl">Copie à :</span><span class="et-extras" id="etExtras"></span>'
       + '<span class="et-ajq"><button type="button" class="ajq" id="etAjQui" title="Ajouter une personne en copie du courriel">+ Ajouter</button>'
       +   '<span class="et-ajq-boite" id="etAjBoite"><input type="text" id="etAjNom" placeholder="Nom (ex. Orders)"><input type="text" id="etAjMail" placeholder="Courriel (ex. orders@physipro.com)">'
@@ -26334,6 +26396,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       + '<div class="et-sit-tete"><span class="no">' + (n + 1) + '</span>'
       +   '<input class="e-cmd" type="text" placeholder="No de commande" value="' + esc(s.cmd) + '" spellcheck="false" autocomplete="off">'
       +   '<input class="e-ben" type="text" placeholder="Bénéficiaire" value="' + esc(s.ben || nm) + '" spellcheck="false" autocomplete="off" title="Bénéficiaire (rempli d\u2019après le moulage)">'
+      +   (s.item ? '<span class="et-item" title="Item de la carte">' + esc(s.item) + '</span>' : '')
       +   '<span class="et-sitlbl">SITUATION</span><select class="e-sit' + (s.sit ? '' : ' vide') + '">' + optionsSit(s.sit) + '</select>'
       +   (s.auto && !s.horsAttente ? '<span class="et-att" title="Moulage dans la colonne En attente : la situation suit la raison de l\u2019attente">⏳ EN ATTENTE</span>' : '')
       +   '<button type="button" class="et-mail" title="Envoyer ce dossier par courriel à une ou plusieurs personnes">✉️ Courriel</button>'
@@ -26387,7 +26450,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       x.innerHTML = esc(prenom(k)) + '<b>' + sitsVue(k).filter(function(s){ return s.cmd || s.ben || s.sit || s.txt || s.photos.length || s.videos.length; }).length + '</b>';
       x.title = 'Afficher la liste de ' + prenom(k) + ' — le courriel lui sera envoyé';
     });
-    var sr = el('etSansRep'); if (sr) sr.textContent = SANS_REP ? '⚠ ' + SANS_REP + ' moulage' + (SANS_REP > 1 ? 's' : '') + ' en attente sans représentante' : '';
+    var sr = el('etSansRep'); if (sr) { sr.textContent = ABSENTS.length ? '⚠ ' + ABSENTS.length + ' en attente hors des listes — pourquoi ?' : ''; sr.style.display = ABSENTS.length ? '' : 'none'; }
     var bj = el('etBonjour'); if (bj) bj.textContent = 'Bonjour ' + nomsDest(l) + ',';
     var it = el('etIntroTxt'); if (it) it.textContent = texteIntro(l, sitsPleines().length);
   }
@@ -26465,7 +26528,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     if (!sits.length) H.push('<tr><td style="padding:8px ' + M + 'px;font-family:' + P + ';font-size:14px;color:#5a6f8a">Aucun dossier en suivi cette semaine.</td></tr>');
     sits.forEach(function(s, n){
       var t = '<table cellpadding="0" cellspacing="0" border="0" width="' + C + '" style="width:' + C + 'px;border-collapse:collapse;border:1px solid #d5dde8">'
-        + '<tr><td bgcolor="#04152C" style="background:#04152C;padding:8px 12px;font-family:' + P + ';font-size:13.5px;font-weight:bold;color:#ffffff"><span style="color:#9fb6d8;font-size:11px;letter-spacing:1px">' + (n + 1) + '&nbsp;&nbsp;COMMANDE&nbsp;</span>' + esc(s.cmd || '—') + ((s.ben || nomMoulage(s.cmd)) ? '<span style="color:#9fb6d8;font-size:11px;letter-spacing:1px">&nbsp;&nbsp;&middot;&nbsp;&nbsp;B&Eacute;N&Eacute;FICIAIRE&nbsp;</span><span style="font-size:17px;font-weight:bold;color:#ffffff;letter-spacing:.3px">' + esc(s.ben || nomMoulage(s.cmd)) + '</span>' : '') + '</td>'
+        + '<tr><td bgcolor="#04152C" style="background:#04152C;padding:8px 12px;font-family:' + P + ';font-size:13.5px;font-weight:bold;color:#ffffff"><span style="color:#9fb6d8;font-size:11px;letter-spacing:1px">' + (n + 1) + '&nbsp;&nbsp;COMMANDE&nbsp;</span>' + esc(s.cmd || '—') + ((s.ben || nomMoulage(s.cmd)) ? '<span style="color:#9fb6d8;font-size:11px;letter-spacing:1px">&nbsp;&nbsp;&middot;&nbsp;&nbsp;B&Eacute;N&Eacute;FICIAIRE&nbsp;</span><span style="font-size:17px;font-weight:bold;color:#ffffff;letter-spacing:.3px">' + esc(s.ben || nomMoulage(s.cmd)) + '</span>' : '') + (s.item ? '<span style="color:#9fb6d8;font-size:12px;font-weight:bold">&nbsp;&nbsp;&middot;&nbsp;&nbsp;' + esc(s.item) + '</span>' : '') + '</td>'
         + '<td bgcolor="#04152C" align="right" style="background:#04152C;padding:8px 12px;text-align:right">' + (s.sit ? '<span style="display:inline-block;background:#e6effd;color:#1f4fa3;font-family:' + P + ';font-weight:bold;font-size:12px;padding:3px 10px;border-radius:10px">' + esc(s.sit) + '</span>' : '&nbsp;') + '</td></tr>';
       if (s.txt) t += '<tr><td colspan="2" style="padding:10px 12px;font-family:' + P + ';font-size:14px;line-height:1.55;color:#04152C">' + br(s.txt) + '</td></tr>';
       var cases = s.photos.map(function(p){ return { img: DATAS[chemin(p)], grande: (s.grandes || []).indexOf(p) >= 0 }; });
@@ -26514,7 +26577,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     H.push('<tr><td bgcolor="#04152C" style="background:#04152C;height:8px;line-height:8px;font-size:0">&nbsp;</td></tr></table>');
     var T = ['Bonjour ' + BJ + ',', '', IN, '', 'DOSSIERS EN SUIVI — ' + E.semaine];
     sits.forEach(function(s, n){
-      T.push(''); T.push((n + 1) + ') Commande ' + (s.cmd || '—') + ((s.ben || nomMoulage(s.cmd)) ? ' — bénéficiaire ' + (s.ben || nomMoulage(s.cmd)) : '') + (s.sit ? ' — ' + s.sit : ''));
+      T.push(''); T.push((n + 1) + ') Commande ' + (s.cmd || '—') + ((s.ben || nomMoulage(s.cmd)) ? ' — bénéficiaire ' + (s.ben || nomMoulage(s.cmd)) : '') + (s.item ? ' (' + s.item + ')' : '') + (s.sit ? ' — ' + s.sit : ''));
       if (s.txt) T.push(s.txt);
       if (s.photos.length) T.push('(' + s.photos.length + ' photo' + (s.photos.length > 1 ? 's' : '') + ')');
       s.videos.forEach(function(v, j){ T.push('(vidéo jointe : ' + nomVideo(s, v, s.videos.length > 1 ? j : 0) + ')'); });
@@ -26676,6 +26739,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
   /* ═════════ BRANCHEMENTS DE LA PAGE ═════════ */
   function brancher(ov){
     el('etFermer').onclick = fermer;
+    el('etSansRep').onclick = function(e){ e.stopPropagation(); voirAbsents(this); };   // v1906
+    ov.addEventListener('click', function(){ var ab = el('etAbsBoite'); if (ab) ab.classList.remove('on'); });
     el('etEnvoyer').onclick = function(){ envoyer(this); };
     Array.prototype.forEach.call(ov.querySelectorAll('.qui'), function(x){ x.onclick = function(){
       var k = x.getAttribute('data-qui');   // v1899 : une liste à la fois
@@ -26751,7 +26816,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
         lireChamps();
         if ((s.cmd || s.sit || s.txt || s.photos.length || s.videos.length) && !confirm('Retirer la situation' + (s.cmd ? ' de la commande ' + s.cmd : '') + ' ?\n(Elle est réglée. Son dossier, ses photos et ses vidéos restent dans OneDrive.)')) return;
         if (s.dossier) ecrireResume(s, true).catch(function(er){ console.warn(er); });
-        if (s.auto && !s.horsAttente && cmdCle(s.cmd) && E.ignores.indexOf(cmdCle(s.cmd)) < 0) E.ignores.push(cmdCle(s.cmd));   // v1899
+        if (s.auto && s.cardId && E.ignores.indexOf(s.cardId) < 0) E.ignores.push(s.cardId);   // v1906 : par carte
         E.sits = E.sits.filter(function(x){ return x !== s; });
         rendre(); sauver(); return;
       }
