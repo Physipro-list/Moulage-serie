@@ -8,6 +8,20 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1898 - STATISTIQUES : « 📋 RAPPORT DES MOULAGES » (POUR LA DIRECTION)
+    ════════════════════════════════════════════════════
+    • Le bouton « Tableau essayages » devient « 📋 Rapport des moulages ».
+    • En haut : total au tableau (sans l'expédition), en circulation, en
+      attente, en essayage, essayages de 30 jours et plus, moyenne de jours
+      en essayage, puis le compte par région.
+    • Sections séparées, dans l'ordre : Essayage, Robot, Dégauchage,
+      Atelier, Couture, Peinture, En attente (+ Colonne inconnue au besoin).
+      Colonnes : Bénéficiaire · No de commande · Région · Jours dans le
+      département (tracking.<dept>.entree) ; Robot ajoute l'Étape ;
+      En attente montre la Raison au lieu des jours.
+    • Tableaux centrés, titres et cellules centrés, largeur ajustée au
+      contenu. Le même rapport sert à l'écran, à l'impression et au courriel.
+
     v1897 - STATISTIQUES : BOUTON « 👔 TABLEAU ESSAYAGES »
     ════════════════════════════════════════════════════
     • Fenêtre « 📊 Statistiques », barre d'outils : « 👔 Tableau essayages ».
@@ -1940,7 +1954,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1897</title>
+  <title>PhysiPro Moulages v1898</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7315,7 +7329,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261054;
+    var APP_VERSION = 20261055;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -10176,7 +10190,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
                 '<button type="button" class="statImp" data-col="_tout" ' +
                   'title="Imprimer toutes les sections">🖨 Imprimer tout</button>' +
                 '<button type="button" class="statImp statMail" id="statTabEss" ' +
-                  'title="Voir seulement le tableau des commandes en essayage">👔 Tableau essayages</button>' +
+                  'title="Rapport à imprimer ou envoyer : essayages en premier, puis chaque département">📋 Rapport des moulages</button>' +
                 '<button type="button" class="statImp statMail" id="statMailEss" ' +
                   'title="Copier le tableau des commandes en essayage et ouvrir Outlook">✉️ Courriel essayages</button>' +
               '</div>';
@@ -10449,58 +10463,160 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       secours();
     }
 
-    // v1897 — TABLEAU DES ESSAYAGES : Bénéficiaire · No de commande · Région ·
-    //   Jours en essayage. Un seul tableau (styles en ligne) sert à l'écran,
-    //   à l'impression et au courriel.
-    function _statEssTableau(L){
+    // v1898 — RAPPORT DES MOULAGES : sommaire + une section par département,
+    //   l'essayage en premier. Styles en ligne (écran, impression, Outlook).
+    var RAP_ORDRE = [
+      ['colEssayage',   '👔 Essayage',     'essayage'],
+      ['colRobot',      '⚙️ Robot (CNC)',  'robot'],
+      ['colDegauchage', '🪚 Dégauchage',   'degauchage'],
+      ['colAtelier',    '🔧 Atelier',      'atelier'],
+      ['colCouture',    '🧵 Couture',      'couture'],
+      ['colPeinture',   '🎨 Peinture',     'peinture'],
+      ['colAttente',    '⏳ En attente',   '']
+    ];
+    function _rapJours(c, tk){
+      var ent = tk && c.tracking && c.tracking[tk] && c.tracking[tk].entree;
+      var m = ent && String(ent).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return null;
+      var debut = new Date(+m[1], +m[2] - 1, +m[3]);
+      var auj = new Date(); auj.setHours(0, 0, 0, 0);
+      return Math.max(0, Math.round((auj - debut) / 86400000));
+    }
+    function _rapDonnees(){
+      var secs = {}, connus = {};
+      RAP_ORDRE.forEach(function(d){ secs[d[0]] = []; connus[d[0]] = 1; });
+      secs[STAT_AUTRE] = [];
+      if (typeof cardsData === 'object' && cardsData){
+        Object.keys(cardsData).forEach(function(k){
+          var c = cardsData[k];
+          if (!c || typeof c !== 'object' || c.isNote || c.isFauteuil) return;
+          if (c.colonne === 'colExpedition') return;
+          var d = RAP_ORDRE.filter(function(x){ return x[0] === c.colonne; })[0];
+          (connus[c.colonne] ? secs[c.colonne] : secs[STAT_AUTRE]).push({
+            no: (c.order == null ? '' : String(c.order).trim()),
+            ben: String(c.name || '').trim(),
+            prov: normalizeRegion(c.region),
+            jours: d ? _rapJours(c, d[2]) : null,
+            etat: String(c.etat || '').trim(),
+            raison: String(c.raisonAttente || '').trim(),
+            col: c.colonne || ''
+          });
+        });
+      }
+      Object.keys(secs).forEach(function(id){
+        secs[id].sort(function(a, b){
+          if ((a.jours === null) !== (b.jours === null)) return a.jours === null ? 1 : -1;
+          if (a.jours !== b.jours) return b.jours - a.jours;
+          return a.no.localeCompare(b.no, 'fr', { numeric: true });
+        });
+      });
+      return secs;
+    }
+    function _statRapport(){
+      var S = _rapDonnees(), E = '-webkit-print-color-adjust:exact;print-color-adjust:exact;';
+      var F = 'font-family:Segoe UI,Arial,sans-serif;';
       var COUL = { 'Québec': '#1a3a5a', 'Ontario': '#8a5a1c', 'Maritime': '#8D2E6A' };
-      var parProv = {};
-      L.forEach(function(e){ parProv[e.prov] = (parProv[e.prov] || 0) + 1; });
+      var maint = new Date();
+      var quand = maint.toLocaleDateString('fr-CA') + ' à ' +
+                  maint.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+      var total = 0, parProv = {};
+      Object.keys(S).forEach(function(id){ total += S[id].length;
+        S[id].forEach(function(e){ parProv[e.prov] = (parProv[e.prov] || 0) + 1; }); });
+      var att = S.colAttente.length, circ = total - att, ess = S.colEssayage;
+      var avecJ = ess.filter(function(e){ return e.jours !== null; });
+      var p30 = avecJ.filter(function(e){ return e.jours >= 30; }).length;
+      var moy = avecJ.length ? Math.round(avecJ.reduce(function(t, e){ return t + e.jours; }, 0) / avecJ.length) : null;
       var ordreP = REGIONS.slice();
       Object.keys(parProv).forEach(function(p){ if (ordreP.indexOf(p) < 0) ordreP.push(p); });
-      var resume = ordreP.filter(function(p){ return parProv[p]; }).map(function(p){ return p + ' : ' + parProv[p]; }).join(' · ');
-      var jour = new Date().toLocaleDateString('fr-CA');
-      var td = 'padding:6px 12px;border:1px solid #cfd8e3;font-family:Segoe UI,Arial,sans-serif;font-size:13px;';
-      var th = td + 'background:#04152c;color:#ffffff;font-weight:bold;text-align:left;' +
-               '-webkit-print-color-adjust:exact;print-color-adjust:exact;';
-      var titre = 'Moulages en essayage — ' + jour;
-      var sous = L.length + ' commande' + (L.length > 1 ? 's' : '') + ' en essayage' + (resume ? ' (' + resume + ')' : '');
-      var H = '<div style="font-family:Segoe UI,Arial,sans-serif;font-size:13px;color:#1c2b36;">' +
-              '<p style="margin:0 0 4px;font-size:15px;font-weight:bold;color:#04152c;">' + _statEch(titre) + '</p>' +
-              '<p style="margin:0 0 10px;">' + _statEch(sous) + '</p>' +
-              '<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;">' +
-              '<tr><th style="' + th + '">Bénéficiaire</th><th style="' + th + '">No de commande</th>' +
-              '<th style="' + th + '">Région</th><th style="' + th + 'text-align:center;">Jours en essayage</th></tr>';
-      var T = [titre, sous, '', 'Bénéficiaire\tNo de commande\tRégion\tJours en essayage'];
-      L.forEach(function(e, i){
-        var fond = 'background:' + (i % 2 ? '#f4f7fb' : '#ffffff') + ';-webkit-print-color-adjust:exact;print-color-adjust:exact;';
-        var jTxt = e.jours === null ? 'non inscrite' : String(e.jours);
-        var jSty = e.jours === null ? 'color:#b91c1c;font-style:italic;' : 'font-weight:bold;' + (e.jours >= 30 ? 'color:#b91c1c;' : '');
-        H += '<tr><td style="' + td + fond + '">' + _statEch(e.ben || '—') + '</td>' +
-             '<td style="' + td + fond + 'font-weight:bold;">' + _statEch(e.no || '(sans numéro)') + '</td>' +
-             '<td style="' + td + fond + 'color:' + (COUL[e.prov] || '#1c2b36') + ';font-weight:bold;">' + _statEch(e.prov) + '</td>' +
-             '<td style="' + td + fond + 'text-align:center;' + jSty + '">' + jTxt + '</td></tr>';
-        T.push((e.ben || '—') + '\t' + (e.no || '(sans numéro)') + '\t' + e.prov + '\t' + jTxt);
+      var titre = 'Rapport des moulages — ' + maint.toLocaleDateString('fr-CA');
+      var T = [titre, 'Produit le ' + quand, ''];
+
+      // --- en-tête
+      var H = '<div style="' + F + 'color:#1c2b36;text-align:center;">' +
+        '<div style="font-size:19px;font-weight:bold;color:#04152c;letter-spacing:.3px;">Rapport des moulages</div>' +
+        '<div style="font-size:11.5px;color:#5a6f86;margin:2px 0 12px;">PhysiPro — atelier de moulage · produit le ' + _statEch(quand) + '</div>';
+
+      // --- sommaire (cases)
+      function caseS(val, lib, fond, coul){
+        return '<td align="center" style="' + F + 'padding:7px 12px;background:' + fond + ';border:1px solid #cfd8e3;' + E + 'min-width:92px;">' +
+               '<div style="font-size:21px;font-weight:bold;color:' + coul + ';line-height:1.1;">' + val + '</div>' +
+               '<div style="font-size:9.5px;font-weight:bold;color:' + (fond === '#04152c' ? '#bcd3f7' : '#5a6f86') + ';text-transform:uppercase;letter-spacing:.4px;">' + lib + '</div></td>';
+      }
+      H += '<table align="center" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 auto 6px;">' +
+        '<tr>' + caseS(total, 'Moulages au total', '#04152c', '#ffffff') +
+                 caseS(circ, 'En circulation', '#f4f7fb', '#04152c') +
+                 caseS(att, 'En attente', '#fdf1d8', '#8a5a00') +
+                 caseS(ess.length, 'En essayage', '#eef4ff', '#123a78') +
+                 caseS(p30, 'Essayage 30 j et plus', p30 ? '#fdecec' : '#f4f7fb', p30 ? '#b91c1c' : '#04152c') +
+                 caseS(moy === null ? '—' : moy + ' j', 'Moyenne essayage', '#f4f7fb', '#04152c') + '</tr></table>';
+      H += '<div style="font-size:11.5px;color:#4b5d6b;margin:0 0 4px;">Par région : ' +
+        ordreP.map(function(p){ return '<b style="color:' + (COUL[p] || '#1c2b36') + ';">' + _statEch(p) + '</b> ' + (parProv[p] || 0); }).join(' &nbsp;·&nbsp; ') +
+        ' &nbsp;—&nbsp; l\'expédition n\'est pas comptée</div>';
+      T.push('Moulages au total : ' + total + ' (en circulation : ' + circ + ', en attente : ' + att + ')',
+             'En essayage : ' + ess.length + ' — 30 jours et plus : ' + p30 + ' — moyenne : ' + (moy === null ? '—' : moy + ' jours'),
+             'Par région : ' + ordreP.map(function(p){ return p + ' ' + (parProv[p] || 0); }).join(' · '));
+
+      // --- sections
+      var liste = RAP_ORDRE.slice();
+      if (S[STAT_AUTRE].length) liste.push([STAT_AUTRE, '⚠️ Colonne inconnue', '']);
+      liste.forEach(function(d, iSec){
+        var L = S[d[0]], robot = d[0] === 'colRobot', attente = d[0] === 'colAttente', autre = d[0] === STAT_AUTRE;
+        var essai = d[0] === 'colEssayage';
+        var bande = essai ? '#123a78' : attente ? '#8a5a00' : autre ? '#b91c1c' : '#04152c';
+        H += '<div style="margin:18px auto 0;max-width:640px;border-top:2px solid ' + bande + ';' + E + '"></div>' +
+             '<div style="font-size:15px;font-weight:bold;color:' + bande + ';margin:8px 0 6px;">' + _statEch(d[1]) +
+             ' <span style="display:inline-block;min-width:24px;padding:1px 9px;border-radius:10px;background:' + bande + ';color:#fff;font-size:12.5px;' + E + '">' + L.length + '</span></div>';
+        T.push('', '──────────', d[1].replace(/^\S+\s/, '') + ' : ' + L.length);
+        if (!L.length){
+          H += '<div style="font-size:11.5px;color:#8a9aa8;font-style:italic;">Aucun moulage</div>';
+          return;
+        }
+        var td = F + 'padding:4px 10px;border:1px solid #cfd8e3;font-size:12px;text-align:center;';
+        var th = td + 'background:' + bande + ';color:#ffffff;font-weight:bold;font-size:11.5px;' + E;
+        var cDern = attente ? 'Raison' : autre ? 'Colonne' : 'Jours au département';
+        if (essai) cDern = 'Jours en essayage';
+        H += '<table align="center" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 auto;">' +
+             '<tr><th style="' + th + '">Bénéficiaire</th><th style="' + th + '">No de commande</th><th style="' + th + '">Région</th>' +
+             (robot ? '<th style="' + th + '">Étape</th>' : '') + '<th style="' + th + '">' + cDern + '</th></tr>';
+        T.push(['Bénéficiaire', 'No de commande', 'Région'].concat(robot ? ['Étape'] : [], [cDern]).join('\t'));
+        L.forEach(function(e, i){
+          var fond = 'background:' + (i % 2 ? '#f4f7fb' : '#ffffff') + ';' + E;
+          var der, derSty = '';
+          if (attente){ der = e.raison || '—'; }
+          else if (autre){ der = e.col || 'aucune colonne'; }
+          else {
+            der = e.jours === null ? 'non inscrite' : String(e.jours);
+            derSty = e.jours === null ? 'color:#b91c1c;font-style:italic;' :
+                     'font-weight:bold;' + (essai && e.jours >= 30 ? 'color:#b91c1c;' : '');
+          }
+          H += '<tr><td style="' + td + fond + '">' + _statEch(e.ben || '—') + '</td>' +
+               '<td style="' + td + fond + 'font-weight:bold;">' + _statEch(e.no || '(sans numéro)') + '</td>' +
+               '<td style="' + td + fond + 'color:' + (COUL[e.prov] || '#1c2b36') + ';font-weight:bold;">' + _statEch(e.prov) + '</td>' +
+               (robot ? '<td style="' + td + fond + '">' + _statEch(e.etat || '—') + '</td>' : '') +
+               '<td style="' + td + fond + derSty + '">' + _statEch(der) + '</td></tr>';
+          T.push([e.ben || '—', e.no || '(sans numéro)', e.prov].concat(robot ? [e.etat || '—'] : [], [der]).join('\t'));
+        });
+        H += '</table>';
+        if (essai) H += '<div style="font-size:10.5px;color:#5a6f86;margin-top:4px;">Du plus ancien au plus récent · en rouge : 30 jours et plus</div>';
       });
-      H += '</table></div>';
-      return { html: H, texte: T.join('\n'), titre: titre };
+      H += '<div style="margin:18px auto 0;max-width:640px;border-top:1px solid #cfd8e3;"></div>' +
+           '<div style="font-size:10px;color:#8a9aa8;font-style:italic;margin-top:5px;">Chiffres au moment où le rapport a été produit.</div></div>';
+      return { html: H, texte: T.join('\n'), titre: titre, nb: total };
     }
 
     function _statVueEssayages(){
-      var L = _statEssayages(), tb = _statEssTableau(L);
+      var tb = _statRapport();
       var corps = document.getElementById('statCorps');
       corps.innerHTML =
         '<div class="statOutils" style="justify-content:space-between;">' +
           '<button type="button" class="statImp" id="statEssRetour">← Retour aux statistiques</button>' +
           '<span style="display:flex;gap:6px;">' +
-            '<button type="button" class="statImp" id="statEssImp"' + (L.length ? '' : ' disabled') + '>🖨 Imprimer</button>' +
-            '<button type="button" class="statImp statMail" id="statEssMail"' + (L.length ? '' : ' disabled') +
-              ' title="Copier ce tableau et ouvrir Outlook">✉️ Courriel</button>' +
+            '<button type="button" class="statImp" id="statEssImp"' + (tb.nb ? '' : ' disabled') + '>🖨 Imprimer</button>' +
+            '<button type="button" class="statImp statMail" id="statEssMail"' + (tb.nb ? '' : ' disabled') +
+              ' title="Copier ce rapport et ouvrir Outlook">✉️ Courriel</button>' +
           '</span>' +
         '</div>' +
-        '<div style="margin-top:8px;">' +
-          (L.length ? tb.html : '<div class="statExpMsg" style="padding:14px 4px;">Aucune commande en essayage en ce moment.</div>') +
-        '</div>';
+        '<div style="margin-top:10px;">' + tb.html + '</div>';
       corps.scrollTop = 0;
       document.getElementById('statEssRetour').onclick = ouvrirStats;
       document.getElementById('statEssImp').onclick = function(){ _statEssImprimer(tb); };
@@ -10517,7 +10633,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       }
       w.document.open();
       w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>' + _statEch(tb.titre) +
-                '</title><style>@page{size:letter;margin:12mm}body{margin:0}tr{break-inside:avoid}</style></head><body>' + tb.html +
+                '</title><style>@page{size:letter;margin:12mm}body{margin:0}tr{break-inside:avoid}th{break-after:avoid}</style></head><body>' + tb.html +
                 '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},350);};</scr' + 'ipt>' +
                 '</body></html>');
       w.document.close();
