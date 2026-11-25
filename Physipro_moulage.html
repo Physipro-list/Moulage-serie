@@ -8,6 +8,18 @@
     La version actuelle est définie par « var APP_VERSION » dans le 1er bloc de script sous le titre.
     ═══════════════════════════════════════════════════════════════════
 
+    v1897 - STATISTIQUES : BOUTON « 👔 TABLEAU ESSAYAGES »
+    ════════════════════════════════════════════════════
+    • Fenêtre « 📊 Statistiques », barre d'outils : « 👔 Tableau essayages ».
+      Le clic remplace le contenu de la fenêtre par un tableau des seules
+      commandes en Essayage : Bénéficiaire · No de commande · Région ·
+      Jours en essayage (même calcul que _statEssayages / v1895).
+      Plus vieux en premier, 30 jours et plus en rouge, sans date à la fin.
+    • Dans cette vue : « ← Retour aux statistiques », « 🖨 Imprimer »
+      (onglet + impression, comme Imprimer tout) et « ✉️ Courriel »
+      (le même tableau copié, Ctrl+V dans Outlook).
+    • Rien n'est lu ni écrit dans Firebase.
+
     v1896 - STATISTIQUES : BÉNÉFICIAIRE DANS LE COURRIEL + ZONE « EXPÉDIÉS PAR ANNÉE »
     ════════════════════════════════════════════════════
     • Courriel essayages : colonne « Bénéficiaire » (nom du moulage, c.name)
@@ -1928,7 +1940,7 @@
 
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhysiPro Moulages v1896</title>
+  <title>PhysiPro Moulages v1897</title>
 
   <!-- ===== PWA CONFIGURATION ===== -->
   <!-- Couleur du thème (barre de statut Android) -->
@@ -7303,7 +7315,7 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME DE PROTECTION DE VERSION — Standard PhysiPro
     // ═══════════════════════════════════════════════════════════════════
-    var APP_VERSION = 20261053;
+    var APP_VERSION = 20261054;
     var APP_MODULE = 'moulage';
     // v1832 — dit tout de suite quelle version le navigateur a chargée
     console.log('🏷️ PhysiPro Moulages — APP_VERSION ' + APP_VERSION + ' — ' + document.title);
@@ -10163,6 +10175,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
                   'title="Copier tous les numéros, section par section">⧉ Copier tout</button>' +
                 '<button type="button" class="statImp" data-col="_tout" ' +
                   'title="Imprimer toutes les sections">🖨 Imprimer tout</button>' +
+                '<button type="button" class="statImp statMail" id="statTabEss" ' +
+                  'title="Voir seulement le tableau des commandes en essayage">👔 Tableau essayages</button>' +
                 '<button type="button" class="statImp statMail" id="statMailEss" ' +
                   'title="Copier le tableau des commandes en essayage et ouvrir Outlook">✉️ Courriel essayages</button>' +
               '</div>';
@@ -10205,6 +10219,8 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
       _statExpRemplir();
       var bMail = document.getElementById('statMailEss');
       if (bMail) bMail.onclick = function(){ _statCourrielEssayage(bMail); };
+      var bTab = document.getElementById('statTabEss');
+      if (bTab) bTab.onclick = _statVueEssayages;
     }
 
     // v1878 — impression sur une feuille lettre propre.
@@ -10427,6 +10443,108 @@ html.force-mobile .main-container, html.force-mobile .fiche-container { height: 
           navigator.clipboard.write([new ClipboardItem({
             'text/html':  new Blob([html],  { type: 'text/html' }),
             'text/plain': new Blob([texte], { type: 'text/plain' }) })]).then(ouvrir, secours);
+          return;
+        } catch(e){}
+      }
+      secours();
+    }
+
+    // v1897 — TABLEAU DES ESSAYAGES : Bénéficiaire · No de commande · Région ·
+    //   Jours en essayage. Un seul tableau (styles en ligne) sert à l'écran,
+    //   à l'impression et au courriel.
+    function _statEssTableau(L){
+      var COUL = { 'Québec': '#1a3a5a', 'Ontario': '#8a5a1c', 'Maritime': '#8D2E6A' };
+      var parProv = {};
+      L.forEach(function(e){ parProv[e.prov] = (parProv[e.prov] || 0) + 1; });
+      var ordreP = REGIONS.slice();
+      Object.keys(parProv).forEach(function(p){ if (ordreP.indexOf(p) < 0) ordreP.push(p); });
+      var resume = ordreP.filter(function(p){ return parProv[p]; }).map(function(p){ return p + ' : ' + parProv[p]; }).join(' · ');
+      var jour = new Date().toLocaleDateString('fr-CA');
+      var td = 'padding:6px 12px;border:1px solid #cfd8e3;font-family:Segoe UI,Arial,sans-serif;font-size:13px;';
+      var th = td + 'background:#04152c;color:#ffffff;font-weight:bold;text-align:left;' +
+               '-webkit-print-color-adjust:exact;print-color-adjust:exact;';
+      var titre = 'Moulages en essayage — ' + jour;
+      var sous = L.length + ' commande' + (L.length > 1 ? 's' : '') + ' en essayage' + (resume ? ' (' + resume + ')' : '');
+      var H = '<div style="font-family:Segoe UI,Arial,sans-serif;font-size:13px;color:#1c2b36;">' +
+              '<p style="margin:0 0 4px;font-size:15px;font-weight:bold;color:#04152c;">' + _statEch(titre) + '</p>' +
+              '<p style="margin:0 0 10px;">' + _statEch(sous) + '</p>' +
+              '<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;">' +
+              '<tr><th style="' + th + '">Bénéficiaire</th><th style="' + th + '">No de commande</th>' +
+              '<th style="' + th + '">Région</th><th style="' + th + 'text-align:center;">Jours en essayage</th></tr>';
+      var T = [titre, sous, '', 'Bénéficiaire\tNo de commande\tRégion\tJours en essayage'];
+      L.forEach(function(e, i){
+        var fond = 'background:' + (i % 2 ? '#f4f7fb' : '#ffffff') + ';-webkit-print-color-adjust:exact;print-color-adjust:exact;';
+        var jTxt = e.jours === null ? 'non inscrite' : String(e.jours);
+        var jSty = e.jours === null ? 'color:#b91c1c;font-style:italic;' : 'font-weight:bold;' + (e.jours >= 30 ? 'color:#b91c1c;' : '');
+        H += '<tr><td style="' + td + fond + '">' + _statEch(e.ben || '—') + '</td>' +
+             '<td style="' + td + fond + 'font-weight:bold;">' + _statEch(e.no || '(sans numéro)') + '</td>' +
+             '<td style="' + td + fond + 'color:' + (COUL[e.prov] || '#1c2b36') + ';font-weight:bold;">' + _statEch(e.prov) + '</td>' +
+             '<td style="' + td + fond + 'text-align:center;' + jSty + '">' + jTxt + '</td></tr>';
+        T.push((e.ben || '—') + '\t' + (e.no || '(sans numéro)') + '\t' + e.prov + '\t' + jTxt);
+      });
+      H += '</table></div>';
+      return { html: H, texte: T.join('\n'), titre: titre };
+    }
+
+    function _statVueEssayages(){
+      var L = _statEssayages(), tb = _statEssTableau(L);
+      var corps = document.getElementById('statCorps');
+      corps.innerHTML =
+        '<div class="statOutils" style="justify-content:space-between;">' +
+          '<button type="button" class="statImp" id="statEssRetour">← Retour aux statistiques</button>' +
+          '<span style="display:flex;gap:6px;">' +
+            '<button type="button" class="statImp" id="statEssImp"' + (L.length ? '' : ' disabled') + '>🖨 Imprimer</button>' +
+            '<button type="button" class="statImp statMail" id="statEssMail"' + (L.length ? '' : ' disabled') +
+              ' title="Copier ce tableau et ouvrir Outlook">✉️ Courriel</button>' +
+          '</span>' +
+        '</div>' +
+        '<div style="margin-top:8px;">' +
+          (L.length ? tb.html : '<div class="statExpMsg" style="padding:14px 4px;">Aucune commande en essayage en ce moment.</div>') +
+        '</div>';
+      corps.scrollTop = 0;
+      document.getElementById('statEssRetour').onclick = ouvrirStats;
+      document.getElementById('statEssImp').onclick = function(){ _statEssImprimer(tb); };
+      var bm = document.getElementById('statEssMail');
+      bm.onclick = function(){ _statEssCourriel(bm, tb); };
+    }
+
+    function _statEssImprimer(tb){
+      var w = window.open('', '_blank');
+      if (!w){
+        if (typeof showToast === 'function') showToast('⚠️ Le navigateur a bloqué la fenêtre d\'impression — autorise les pop-ups', 'error');
+        else alert('Le navigateur a bloqué la fenêtre d\'impression — autorise les pop-ups.');
+        return;
+      }
+      w.document.open();
+      w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>' + _statEch(tb.titre) +
+                '</title><style>@page{size:letter;margin:12mm}body{margin:0}tr{break-inside:avoid}</style></head><body>' + tb.html +
+                '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},350);};</scr' + 'ipt>' +
+                '</body></html>');
+      w.document.close();
+    }
+
+    function _statEssCourriel(btn, tb){
+      var url = 'mailto:?subject=' + encodeURIComponent(tb.titre);
+      var lib = btn.textContent;
+      function ouvrir(){
+        var a = document.createElement('a'); a.href = url; a.style.display = 'none';
+        document.body.appendChild(a); a.click(); a.remove();
+        btn.textContent = '✓ Copié — Ctrl+V dans le courriel'; btn.classList.add('ok');
+        setTimeout(function(){ btn.textContent = lib; btn.classList.remove('ok'); }, 3500);
+      }
+      function secours(){
+        var d = document.createElement('div'); d.innerHTML = tb.html;
+        d.style.cssText = 'position:fixed;left:-99999px;top:0'; document.body.appendChild(d);
+        var sel = window.getSelection(), rg = document.createRange();
+        rg.selectNodeContents(d); sel.removeAllRanges(); sel.addRange(rg);
+        try { document.execCommand('copy'); } catch(e){}
+        sel.removeAllRanges(); d.remove(); ouvrir();
+      }
+      if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write){
+        try {
+          navigator.clipboard.write([new ClipboardItem({
+            'text/html':  new Blob([tb.html],  { type: 'text/html' }),
+            'text/plain': new Blob([tb.texte], { type: 'text/plain' }) })]).then(ouvrir, secours);
           return;
         } catch(e){}
       }
